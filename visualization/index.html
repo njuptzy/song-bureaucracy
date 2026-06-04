@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>宋代官制四表数据可视化面板</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>宋代官制四表数据可视化面板</h1>
+      <p id="sourceLine">正在加载 SQLite 导出数据...</p>
+    </div>
+    <nav class="view-tabs" aria-label="视图切换">
+      <button class="tab active" data-view="overview">总览</button>
+      <button class="tab" data-view="entities">实体视图</button>
+      <button class="tab" data-view="network">关系网络</button>
+      <button class="tab" data-view="timeline">时间线</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="control-band">
+      <label class="search-box">
+        <span>全局搜索</span>
+        <input id="globalSearch" type="search" placeholder="实体、辞典标题、引用原文">
+      </label>
+      <label>
+        <span>实体类型</span>
+        <select id="typeFilter">
+          <option value="all">全部</option>
+          <option value="机构">机构</option>
+          <option value="官职">官职</option>
+        </select>
+      </label>
+      <label>
+        <span>关系类型</span>
+        <select id="relationFilter">
+          <option value="all">全部</option>
+        </select>
+      </label>
+    </section>
+
+    <section id="overview" class="view active">
+      <div id="metricCards" class="metric-grid"></div>
+      <div class="dashboard-grid">
+        <section class="panel">
+          <header class="panel-title">
+            <h2>实体类型分布</h2>
+          </header>
+          <svg id="entityTypeChart" class="chart"></svg>
+        </section>
+        <section class="panel">
+          <header class="panel-title">
+            <h2>关系类型分布</h2>
+          </header>
+          <svg id="relationTypeChart" class="chart"></svg>
+        </section>
+        <section class="panel wide">
+          <header class="panel-title">
+            <h2>结构概况</h2>
+          </header>
+          <svg id="structureChart" class="wide-chart"></svg>
+        </section>
+      </div>
+    </section>
+
+    <section id="entities" class="view">
+      <div class="three-column">
+        <section class="panel list-panel">
+          <header class="panel-title">
+            <h2>实体列表</h2>
+            <span id="entityCountLabel"></span>
+          </header>
+          <div id="entityList" class="entity-list"></div>
+        </section>
+        <section class="panel detail-panel">
+          <header class="panel-title">
+            <h2>实体详情</h2>
+          </header>
+          <div id="entityDetail" class="detail-content"></div>
+        </section>
+        <section class="panel reference-panel">
+          <header class="panel-title">
+            <h2>辞典对照</h2>
+          </header>
+          <div id="dictionaryDetail" class="detail-content"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="network" class="view">
+      <div class="network-layout">
+        <section class="panel graph-panel">
+          <header class="panel-title">
+            <h2>关系网络</h2>
+            <span id="networkStatus"></span>
+          </header>
+          <svg id="networkGraph"></svg>
+        </section>
+        <section class="panel side-detail">
+          <header class="panel-title">
+            <h2>选中关系 / 节点</h2>
+          </header>
+          <div id="networkDetail" class="detail-content"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="timeline" class="view">
+      <div class="timeline-layout">
+        <section class="panel">
+          <header class="panel-title">
+            <h2>实体时间线</h2>
+          </header>
+          <div id="timelineDetail" class="timeline-detail"></div>
+        </section>
+        <section class="panel">
+          <header class="panel-title">
+            <h2>前后演变关系</h2>
+          </header>
+          <svg id="evolutionGraph" class="timeline-graph"></svg>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
