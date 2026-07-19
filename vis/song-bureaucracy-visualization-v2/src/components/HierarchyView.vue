@@ -566,7 +566,9 @@ const canvasLayout = computed(() => {
   if (!visualTree.value) return empty;
 
   const root = d3Hierarchy(visualTree.value.root, (data) => data.children);
-  d3Tree().nodeSize([X_SEP, Y_SEP])(root);
+  // separation 统一为 1：默认布局会让不同父节点的子树拉开双倍间距，
+  // 深层节点少时留出大段空档；节点同宽，统一间距后相邻节点不会重叠。
+  d3Tree().nodeSize([X_SEP, Y_SEP]).separation(() => 1)(root);
   const nodes = root.descendants().map((node) =>
     Object.assign(node, { key: node.data.key || String(node.data.id) })
   );
