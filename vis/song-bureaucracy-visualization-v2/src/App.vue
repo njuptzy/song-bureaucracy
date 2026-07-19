@@ -39,9 +39,9 @@
         <div class="period-heading">
           <span class="section-kicker">当前历史区间</span>
           <div class="period-line">
-            <button type="button" class="year-step" @click="shiftRange(-1)" aria-label="上一年">‹</button>
+            <button type="button" class="year-step" @click="adjustRange('extend-left')" aria-label="左侧增加一年">‹</button>
             <h2>{{ rangeTitle }}</h2>
-            <button type="button" class="year-step" @click="shiftRange(1)" aria-label="下一年">›</button>
+            <button type="button" class="year-step" @click="adjustRange('extend-right')" aria-label="右侧增加一年">›</button>
           </div>
           <p :title="reignTitle">{{ reignTitle }}</p>
         </div>
@@ -677,10 +677,15 @@ function setRange(range) {
   scrollRailToRange();
 }
 
-function shiftRange(offset) {
-  const width = selectedRange.value[1] - selectedRange.value[0];
-  let start = Math.max(960, Math.min(1279 - width, selectedRange.value[0] + offset));
-  setRange([start, start + width]);
+function adjustRange(action) {
+  const [start, end] = selectedRange.value;
+  if (action === "extend-left") {
+    setRange([Math.max(960, start - 1), end]);
+    return;
+  }
+  if (action === "extend-right") {
+    setRange([start, Math.min(1279, end + 1)]);
+  }
 }
 
 // 第一次点击：词条卡片从左侧渐进移动到中央展开；再次点击：打开详情
