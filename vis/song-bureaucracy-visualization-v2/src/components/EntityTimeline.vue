@@ -703,20 +703,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
   animation: card-in 360ms ease both;
 
-  &.event-established,
-  &.event-restored {
-    border-left-color: var(--teal);
-  }
-
-  &.event-abolished {
-    border-left-color: var(--rust);
-  }
-
-  &.event-renamed,
-  &.event-merged {
-    border-left-color: var(--line);
-  }
-
   &:hover {
     border-color: var(--ink-soft);
   }
