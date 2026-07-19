@@ -372,7 +372,7 @@ onMounted(async () => {
   if (view === "hierarchy" || view === "timeline") viewMode.value = view;
   const entityId = Number(params.get("entity"));
   if (entityId) {
-    if (view === "timeline") timelineEntityId.value = entityId;
+    if (view === "timeline") onTimelineEntity(entityId);
     else selectedEntityId.value = entityId;
   }
   scrollRailToRange();
@@ -625,6 +625,8 @@ watch(viewMode, (mode) => {
 function onTimelineEntity(id) {
   timelineEntityId.value = id;
   timelineEvent.value = null;
+  const entityRange = rangeForEntity(id);
+  if (entityRange) setRange(entityRange);
 }
 
 function onTimelineEvent(event) {
@@ -640,6 +642,21 @@ function rangeForEvent(event) {
   const start = Math.max(960, Math.min(1279, event.yearStart));
   const end = Math.max(start, Math.min(1279, rawEnd));
   return [start, end];
+}
+
+// 以该实体全部带纪年的记录（含范围纪年）计算宋代范围内的完整生命期。
+function rangeForEntity(entityId) {
+  if (!dataset.value || entityId == null) return null;
+  let start = Infinity;
+  let end = -Infinity;
+  for (const event of dataset.value.events) {
+    if (event.entityId !== entityId) continue;
+    const eventRange = rangeForEvent(event);
+    if (!eventRange) continue;
+    start = Math.min(start, eventRange[0]);
+    end = Math.max(end, eventRange[1]);
+  }
+  return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
 }
 
 function setRange(range) {
