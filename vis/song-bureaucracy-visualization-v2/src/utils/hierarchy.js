@@ -102,6 +102,12 @@ export function buildEntityGraph(dataset, range = null) {
       quota: rel.staffQuota,
       staffType: rel.staffType,
       relationId: rel.id,
+      relationIds: [rel.id],
+      hasUndated: rel.yearStart == null,
+      periods:
+        rel.yearStart == null
+          ? []
+          : [{ start: rel.yearStart, end: rel.yearEnd ?? rel.yearStart }],
     });
     if (!parentRelsOf.has(child)) parentRelsOf.set(child, []);
     parentRelsOf.get(child).push({ entityId: parent, via: rel.type, relationId: rel.id });
@@ -113,12 +119,29 @@ export function buildEntityGraph(dataset, range = null) {
     for (const item of list) {
       const key = `${item.entityId}|${item.via}`;
       const existing = deduped.get(key);
-      if (!existing || (existing.quota == null && item.quota != null)) {
+      if (!existing) {
         deduped.set(key, item);
+        continue;
+      }
+      for (const relationId of item.relationIds) {
+        if (!existing.relationIds.includes(relationId)) existing.relationIds.push(relationId);
+      }
+      for (const period of item.periods) {
+        if (!existing.periods.some((p) => p.start === period.start && p.end === period.end)) {
+          existing.periods.push(period);
+        }
+      }
+      existing.hasUndated ||= item.hasUndated;
+      if (existing.quota == null && item.quota != null) {
+        existing.quota = item.quota;
+        existing.staffType = item.staffType;
       }
     }
     list.length = 0;
-    list.push(...deduped.values());
+    for (const item of deduped.values()) {
+      item.periods.sort((a, b) => a.start - b.start || a.end - b.end);
+      list.push(item);
+    }
     list.sort((a, b) => compareEntities(entityById)(a.entityId, b.entityId));
   }
 

@@ -2,7 +2,24 @@
   <div class="hierarchy-view">
     <div class="hierarchy-toolbar">
       <span class="toolbar-stats">
-        {{ listedEntities.length }} 个本期有层级实体 · {{ isolatedEntities.length }} 个{{ range ? "本期" : "" }}无层级
+        {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}有层级实体
+        · {{ isolatedEntities.length }} 个无层级实体
+      </span>
+      <span class="scope-switch" aria-label="层级结构时间范围">
+        <button
+          type="button"
+          :class="{ active: structureScope === 'current' }"
+          @click="structureScope = 'current'"
+        >
+          所选时段结构
+        </button>
+        <button
+          type="button"
+          :class="{ active: structureScope === 'history' }"
+          @click="structureScope = 'history'"
+        >
+          历时全貌
+        </button>
       </span>
       <span class="toolbar-legend" aria-hidden="true">
         <span class="legend-node org">机构</span>
@@ -19,7 +36,7 @@
           <i class="edge-line"></i>
           <svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg>统称与实例
         </span>
-        <span class="active-legend">● 本年在档</span>
+        <span class="active-legend">● 所选时段有记录</span>
       </span>
     </div>
     <div class="hierarchy-body">
@@ -43,9 +60,11 @@
           >
             <span class="item-shape" aria-hidden="true"></span>
             <span class="item-title">{{ item.title }}</span>
-            <span v-if="activeEntities.has(item.id)" class="item-dot" title="本年在档">●</span>
+            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
           </button>
-          <div v-if="isolatedEntities.length" class="list-divider">本期无层级关系</div>
+          <div v-if="isolatedEntities.length" class="list-divider">
+            {{ structureScope === "current" ? "所选时段无层级关系" : "历时无层级关系" }}
+          </div>
           <button
             v-for="item in isolatedEntities"
             :key="item.id"
@@ -56,13 +75,13 @@
           >
             <span class="item-shape" aria-hidden="true"></span>
             <span class="item-title">{{ item.title }}</span>
-            <span v-if="activeEntities.has(item.id)" class="item-dot" title="本年在档">●</span>
+            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
           </button>
         </div>
         <div class="rail-legend" aria-hidden="true">
           <span><i class="item-shape"></i>机构</span>
           <span><i class="item-shape office"></i>官职</span>
-          <span><i class="item-dot">●</i>本年在档</span>
+          <span><i class="item-dot">●</i>所选时段有记录</span>
         </div>
       </aside>
 
@@ -130,7 +149,7 @@
                     >
                       <svg viewBox="0 0 16 16"><path :d="VIA_ICONS[viaClass(row)]" /></svg>
                     </span>
-                    <span v-if="isActiveId(row.id)" class="node-dot" title="本年在档">●</span>
+                    <span v-if="isActiveId(row.id)" class="node-dot" title="所选时段有记录">●</span>
                     <span class="node-title">{{ row.title }}</span>
                     <small v-if="rowBadge(row)" class="node-badge">{{ rowBadge(row) }}</small>
                   </button>
@@ -147,7 +166,7 @@
                     v-if="row.edge"
                     type="button"
                     class="evidence-btn"
-                    :class="{ open: evidenceCard?.relation.id === row.edge.relationId }"
+                    :class="{ open: evidenceCard?.key === relationKey(row.edge) }"
                     title="查看关系证据"
                     @click.stop="toggleRowEvidence(row)"
                   >
@@ -160,22 +179,23 @@
 
           <aside v-if="evidenceCard" class="evidence-panel">
             <div class="evidence-head">
-              <span>
-                {{ evidenceCard.relation.type }}
-                <template v-if="evidenceCard.relation.yearStart != null">
-                  · {{ evidenceCard.relation.yearStart }}—{{ evidenceCard.relation.yearEnd ?? evidenceCard.relation.yearStart }}年有记录
-                </template>
-              </span>
+              <span>{{ evidenceCard.relations[0].type }} · {{ evidencePeriodLabel(evidenceCard.relations) }}</span>
               <button type="button" aria-label="关闭" @click="evidenceCard = null">×</button>
             </div>
             <p class="evidence-pair">
-              {{ evidenceCard.relation.subjectTitle }} → {{ evidenceCard.relation.objectTitle }}
+              {{ evidenceCard.relations[0].subjectTitle }} → {{ evidenceCard.relations[0].objectTitle }}
             </p>
-            <article v-for="(citation, i) in evidenceCard.relation.citations" :key="i">
-              <cite>{{ citation.citation }}</cite>
-              <blockquote>{{ citation.quotation }}</blockquote>
-              <p v-if="citation.note">{{ citation.note }}</p>
-            </article>
+            <div v-for="relation in evidenceCard.relations" :key="relation.id" class="evidence-record">
+              <p v-if="evidenceCard.relations.length > 1" class="evidence-period">
+                {{ relationPeriodLabel(relation) }}
+              </p>
+              <article v-for="(citation, i) in relation.citations" :key="i">
+                <cite>{{ citation.citation }}</cite>
+                <blockquote>{{ citation.quotation }}</blockquote>
+                <p v-if="citation.note">{{ citation.note }}</p>
+              </article>
+              <p v-if="!relation.citations.length" class="quiet-text">该期关系暂无引文记录。</p>
+            </div>
           </aside>
         </template>
       </div>
@@ -185,9 +205,10 @@
 
 <script setup>
 // 官制层级结构浏览（左列表 + 缩进树）：
+// - “所选时段结构”按底部时间范围过滤关系，“历时全貌”展示全部时期关系；
 // - 左侧词条列表按与当前时间区间的匹配程度从上到下排列（可收起）：
-//   本年在档（青绿圆点）优先，其余有层级关系的实体按记录数随后，
-//   本期无层级关系的实体列在最末分隔线之下；
+//   所选时段有记录（青绿圆点）优先，其余有层级关系的实体按记录数随后，
+//   无层级关系的实体列在最末分隔线之下；
 // - 点击左侧词条或通过搜索定位：该词条成为焦点，下级树以缩进树整棵展开
 //   （默认全展开，点 ▸/▾ 收起/展开单层）；子节点按关系类型归组排序
 //   （上下级机构 → 编制隶属 → 统称与实例），父子之间用直角肘线连接，不存在交叉线；
@@ -198,7 +219,7 @@
 //   三通道区分（上下级机构=深褐实线+建筑、编制隶属=橙色虚线+人形、
 //   统称与实例=灰褐点线+交叠方框），图例见顶部工具栏；
 // - 行内「证」按钮在右侧栏显示证明该关系的引文；
-// - 树只保留当前区间有记录依据的层级边（无纪年边按两端实体存续期判断）。
+// - 所选时段模式只保留区间内有记录依据的层级边；历时模式保留全部边并标注纪年。
 import { computed, reactive, ref, watch } from "vue";
 import { buildEntityGraph } from "@/utils/hierarchy";
 
@@ -221,8 +242,12 @@ const VIA_ICONS = {
   evolve: "M2 8h9.5M8.5 4.5L12.5 8l-4 3.5",
 };
 
-// 当前时间区间过滤后的实体级层级图
-const graph = computed(() => buildEntityGraph(props.dataset, props.range));
+const structureScope = ref("current");
+
+// 所选时段模式按底部时间范围过滤；历时模式取消关系时间过滤。
+const graph = computed(() =>
+  buildEntityGraph(props.dataset, structureScope.value === "current" ? props.range : null)
+);
 
 // —— 左侧列表：按与当前区间的匹配程度排序 ——
 const linkedIds = computed(
@@ -268,17 +293,25 @@ const expanded = reactive(new Set()); // 已展开的下级节点（实体 id）
 const listCollapsed = ref(false); // 左侧词条栏收起状态
 
 // —— 关系证据栏：点击行内「证」按钮，在舞台右侧固定栏显示证明该关系的引文 ——
-const evidenceCard = ref(null); // { relation }
+const evidenceCard = ref(null); // { key, relations }
 const relationById = computed(() => new Map(props.dataset.relations.map((r) => [r.id, r])));
 
+function relationKey(edge) {
+  return (edge.relationIds || [edge.relationId]).join(",");
+}
+
 function toggleRowEvidence(row) {
-  if (evidenceCard.value?.relation.id === row.edge.relationId) {
+  const key = relationKey(row.edge);
+  if (evidenceCard.value?.key === key) {
     evidenceCard.value = null;
     return;
   }
-  const relation = relationById.value.get(row.edge.relationId);
-  if (!relation) return;
-  evidenceCard.value = { relation };
+  const relations = (row.edge.relationIds || [row.edge.relationId])
+    .map((id) => relationById.value.get(id))
+    .filter(Boolean)
+    .sort((a, b) => (a.yearStart ?? Infinity) - (b.yearStart ?? Infinity) || a.id - b.id);
+  if (!relations.length) return;
+  evidenceCard.value = { key, relations };
 }
 
 function onItemClick(item) {
@@ -295,9 +328,15 @@ function focusEntity(id) {
   if (id == null) return;
   focusId.value = id;
   evidenceCard.value = null;
+  expandFocusedTree();
+  // 树重新聚焦时，详情同步到新中心，避免中央结构和右侧内容指向不同实体。
+  if (props.selectedEntityId !== id) emit("select-entity", id);
+}
+
+function expandFocusedTree() {
   expanded.clear();
-  // 点击即整棵下级树全展开（沿 childrenOf 遍历，带环保护）
-  const stack = [id];
+  // 整棵下级树全展开（沿 childrenOf 遍历，带环保护）
+  const stack = [focusId.value];
   while (stack.length) {
     const current = stack.pop();
     if (expanded.has(current)) continue;
@@ -306,8 +345,6 @@ function focusEntity(id) {
       stack.push(child.entityId);
     }
   }
-  // 树重新聚焦时，详情同步到新中心，避免中央结构和右侧内容指向不同实体。
-  if (props.selectedEntityId !== id) emit("select-entity", id);
 }
 
 // 树节点点击只选中看详情，不触发 selectedEntityId 的外部定位逻辑。
@@ -408,11 +445,39 @@ function viaClass(row) {
 
 function rowBadge(row) {
   const bits = [];
+  if (structureScope.value === "history" && row.edge) {
+    bits.push(edgePeriodLabel(row.edge));
+  }
   if (row.edge?.via === "编制隶属" && row.edge?.quota != null) {
     bits.push(`${row.edge.quota}${row.edge.staffType || "员"}`);
   }
   if (row.extra?.length) bits.push(`另有${row.extra.length}个上级`);
   return bits.join(" · ");
+}
+
+function periodText(start, end) {
+  return start === end ? `${start}年` : `${start}—${end}年`;
+}
+
+function edgePeriodLabel(edge) {
+  const periods = edge.periods || [];
+  if (!periods.length) return "时间未明";
+  const suffix = edge.hasUndated ? "、另有时间未明记录" : "";
+  if (periods.length <= 2) {
+    return `${periods.map((p) => periodText(p.start, p.end)).join("、")}${suffix}`;
+  }
+  return `${periodText(periods[0].start, periods[0].end)}等${periods.length}期${suffix}`;
+}
+
+function relationPeriodLabel(relation) {
+  if (relation.yearStart == null) return "时间未明";
+  return periodText(relation.yearStart, relation.yearEnd ?? relation.yearStart);
+}
+
+function evidencePeriodLabel(relations) {
+  const labels = [...new Set(relations.map(relationPeriodLabel))];
+  if (labels.length <= 2) return labels.join("、");
+  return `${labels[0]}等${labels.length}期记录`;
 }
 
 function rowTooltip(row) {
@@ -438,6 +503,11 @@ watch(
   }
 );
 
+watch(structureScope, () => {
+  evidenceCard.value = null;
+  if (focusId.value != null) expandFocusedTree();
+});
+
 // 深链：?view=hierarchy&entity=实体ID
 if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
 </script>
@@ -461,6 +531,36 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
   color: rgba(90, 58, 32, 0.56);
   font-size: 11px;
   letter-spacing: 0.14em;
+
+  .scope-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: 14px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    letter-spacing: 0;
+
+    button {
+      border: 0;
+      border-right: 1px solid var(--line-light);
+      padding: 2px 7px;
+      color: rgba(90, 58, 32, 0.58);
+      background: transparent;
+      font-family: "FZQINGKBYSJF", serif;
+      font-size: 10px;
+      cursor: pointer;
+
+      &:last-child {
+        border-right: 0;
+      }
+
+      &.active {
+        color: var(--paper);
+        background: var(--ink-soft);
+      }
+    }
+  }
 
   .toolbar-legend {
     display: flex;
@@ -1087,6 +1187,19 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
     font-family: "FZQINGKBYSJF", serif;
     font-size: 14px;
     line-height: 1.5;
+  }
+
+  .evidence-record + .evidence-record {
+    margin-top: 8px;
+    border-top: 1px dashed var(--line);
+    padding-top: 5px;
+  }
+
+  .evidence-period {
+    margin: 0;
+    color: var(--rust);
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 11px;
   }
 
   article {
