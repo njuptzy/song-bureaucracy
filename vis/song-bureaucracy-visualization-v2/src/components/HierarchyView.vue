@@ -398,7 +398,7 @@ const VIA_ICONS = {
   alias: "M2.5 2.5h7v7h-7zM6.5 6.5h7v7h-7z",
 };
 const NODE_WIDTH = 42;
-const NODE_HEIGHT_MAX = 124;
+const NODE_HEIGHT = 124;
 const OVERVIEW_CHILD_LIMIT = 24;
 const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
@@ -741,8 +741,8 @@ function nodeWidth(data) {
 
 function nodeHeight(data) {
   if (data.overflow) return 70;
-  // 高度按竖排字数给足，标题不溢出卡片
-  return Math.max(68, Math.min(NODE_HEIGHT_MAX, data.displayChars.length * 15 + 26));
+  // 全部节点统一高度：行距与总线对齐，视觉上更整齐（124 可容纳最长 7 字竖排标题）
+  return NODE_HEIGHT;
 }
 
 function titleStart(data) {
