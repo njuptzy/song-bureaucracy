@@ -659,8 +659,21 @@ function rangeForEntity(entityId) {
   return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
 }
 
+function eventOverlapsRange(event, range) {
+  if (!event || event.yearStart == null || !range) return false;
+  const eventEnd = event.yearEnd ?? event.yearStart;
+  return event.yearStart <= range[1] && eventEnd >= range[0];
+}
+
 function setRange(range) {
   selectedRange.value = range;
+  if (
+    viewMode.value === "timeline" &&
+    timelineEvent.value &&
+    !eventOverlapsRange(timelineEvent.value, range)
+  ) {
+    timelineEvent.value = null;
+  }
   scrollRailToRange();
 }
 
