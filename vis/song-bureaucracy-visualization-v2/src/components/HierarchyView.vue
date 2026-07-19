@@ -150,33 +150,12 @@
 
         <g :transform="worldTransform">
           <g class="secondary-edges" aria-hidden="true">
-            <g v-for="edge in visibleSecondaryEdges" :key="edge.key">
-              <path
-                :d="secondaryEdgePath(edge)"
-                :class="['canvas-edge', 'secondary', `via-${viaClass(edge)}`]"
-              />
-              <g
-                v-if="structureScope === 'history' && edge.data"
-                class="edge-time-label secondary-time-label"
-                :transform="edgeTimeTransform(edge, true)"
-              >
-                <rect
-                  :x="-edgeTimeWidth(edge.data) / 2"
-                  :y="-edgeTimeHeight(edge.data) / 2"
-                  :width="edgeTimeWidth(edge.data)"
-                  :height="edgeTimeHeight(edge.data)"
-                  rx="3"
-                />
-                <text text-anchor="middle">
-                  <tspan
-                    v-for="(label, index) in edgeTimeLines(edge.data)"
-                    :key="`${label}-${index}`"
-                    x="0"
-                    :dy="index === 0 ? edgeTimeFirstDy(edge.data) : 10"
-                  >{{ label }}</tspan>
-                </text>
-              </g>
-            </g>
+            <path
+              v-for="edge in visibleSecondaryEdges"
+              :key="edge.key"
+              :d="secondaryEdgePath(edge)"
+              :class="['canvas-edge', 'secondary', `via-${viaClass(edge)}`]"
+            />
           </g>
 
           <g class="primary-buses" aria-hidden="true">
@@ -209,24 +188,17 @@
               </g>
               <g
                 v-if="structureScope === 'history' && edge.data"
-                class="edge-time-label"
+                class="edge-time-pill"
                 :transform="edgeTimeTransform(edge)"
               >
                 <rect
                   :x="-edgeTimeWidth(edge.data) / 2"
-                  :y="-edgeTimeHeight(edge.data) / 2"
+                  y="-7"
                   :width="edgeTimeWidth(edge.data)"
-                  :height="edgeTimeHeight(edge.data)"
-                  rx="3"
+                  height="14"
+                  rx="7"
                 />
-                <text text-anchor="middle">
-                  <tspan
-                    v-for="(label, index) in edgeTimeLines(edge.data)"
-                    :key="`${label}-${index}`"
-                    x="0"
-                    :dy="index === 0 ? edgeTimeFirstDy(edge.data) : 10"
-                  >{{ label }}</tspan>
-                </text>
+                <text text-anchor="middle" dy="3">{{ edgeTimeText(edge.data) }}</text>
               </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
@@ -680,11 +652,42 @@ function stemPath(edge) {
 }
 
 function secondaryEdgePath(edge) {
-  if (!edge.source || !edge.target) return "";
-  const sourceY = edge.source.y + nodeHeight(edge.source.data) / 2 + 8;
-  const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
-  const middleY = sourceY + (targetY - sourceY) * 0.48;
-  return `M${edge.source.x},${sourceY}V${middleY}H${edge.target.x}V${targetY}`;
+  const points = secondaryEdgePoints(edge);
+  if (!points) return "";
+  return `M${points.start.x},${points.start.y}L${points.end.x},${points.end.y}`;
+}
+
+// “其他上级”不是主树总线的一部分，直接用一条直线连接两个节点边缘，
+// 避免每条辅助关系各自生成一层竖—横—竖折线。
+function secondaryEdgePoints(edge) {
+  if (!edge.source || !edge.target) return null;
+  const dx = edge.target.x - edge.source.x;
+  const dy = edge.target.y - edge.source.y;
+  const distance = Math.hypot(dx, dy);
+  if (!distance) return null;
+
+  const sourceScale = 1 / Math.max(
+    Math.abs(dx) / (nodeWidth(edge.source.data) / 2),
+    Math.abs(dy) / (nodeHeight(edge.source.data) / 2)
+  );
+  const targetScale = 1 / Math.max(
+    Math.abs(dx) / (nodeWidth(edge.target.data) / 2),
+    Math.abs(dy) / (nodeHeight(edge.target.data) / 2)
+  );
+  const ux = dx / distance;
+  const uy = dy / distance;
+  const gap = 7;
+
+  return {
+    start: {
+      x: edge.source.x + dx * sourceScale + ux * gap,
+      y: edge.source.y + dy * sourceScale + uy * gap,
+    },
+    end: {
+      x: edge.target.x - dx * targetScale - ux * gap,
+      y: edge.target.y - dy * targetScale - uy * gap,
+    },
+  };
 }
 
 function viaClass(edge) {
@@ -750,11 +753,9 @@ function edgeTimeFirstDy(edge) {
 
 function edgeTimeTransform(edge, secondary = false) {
   if (secondary) {
-    const sourceY = edge.source.y + nodeHeight(edge.source.data) / 2 + 8;
-    const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
-    const y = sourceY + (targetY - sourceY) * 0.48;
-    const x = (edge.source.x + edge.target.x) / 2;
-    return `translate(${x} ${y})`;
+    const points = secondaryEdgePoints(edge);
+    if (!points) return "translate(0 0)";
+    return `translate(${(points.start.x + points.end.x) / 2} ${(points.start.y + points.end.y) / 2})`;
   }
   const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
   const y = edge.busY + (targetY - edge.busY) * 0.52;
