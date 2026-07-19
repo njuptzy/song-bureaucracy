@@ -628,7 +628,18 @@ function onTimelineEntity(id) {
 }
 
 function onTimelineEvent(event) {
+  const eventRange = rangeForEvent(event);
+  if (eventRange) setRange(eventRange);
   timelineEvent.value = timelineEvent.value?.id === event.id ? null : event;
+}
+
+function rangeForEvent(event) {
+  if (event?.yearStart == null) return null;
+  const rawEnd = event.yearEnd ?? event.yearStart;
+  if (rawEnd < 960 || event.yearStart > 1279) return null;
+  const start = Math.max(960, Math.min(1279, event.yearStart));
+  const end = Math.max(start, Math.min(1279, rawEnd));
+  return [start, end];
 }
 
 function setRange(range) {
@@ -721,6 +732,8 @@ function followRelation(relation) {
     const target = eventIndex.value.get(relation.otherId);
     if (!target) return;
     if (target.entityId !== timelineEntityId.value) onTimelineEntity(target.entityId);
+    const targetRange = rangeForEvent(target);
+    if (targetRange) setRange(targetRange);
     timelineEvent.value = target;
     return;
   }

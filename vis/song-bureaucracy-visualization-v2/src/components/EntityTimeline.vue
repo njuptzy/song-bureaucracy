@@ -11,12 +11,18 @@
           :key="item.id"
           type="button"
           class="entity-item"
-          :class="{ active: item.id === entityId, office: item.type === '官职' }"
+          :class="{
+            active: item.id === entityId,
+            office: item.type === '官职',
+            'in-range': item.rangeEventCount > 0,
+          }"
           @click="emit('select-entity', item.id)"
         >
           <span class="item-shape" aria-hidden="true"></span>
           <span class="item-title" :title="item.title">{{ item.title }}</span>
-          <small>{{ item.eventCount }}</small>
+          <small :title="`当前时段 ${item.rangeEventCount} 条，共 ${item.eventCount} 条`">
+            <template v-if="item.rangeEventCount">{{ item.rangeEventCount }}/</template>{{ item.eventCount }}
+          </small>
         </button>
       </div>
       <div class="rail-legend" aria-hidden="true">
@@ -35,6 +41,7 @@
             {{ exactEvents.length }} 条纪年
             <template v-if="undatedEvents.length"> · {{ undatedEvents.length }} 条无精确纪年</template>
           </small>
+          <small class="range-summary">{{ rangeLabel }} · {{ rangeMatchedEvents.length }} 条命中</small>
         </div>
         <span class="head-legend" aria-hidden="true">
           <span><i class="legend-marker mk-established"></i>设置/恢复</span>
@@ -76,7 +83,11 @@
             <div
               v-else
               class="tl-row event-row"
-              :class="{ first: index === 0, last: index === rows.length - 1 }"
+              :class="{
+                first: index === 0,
+                last: index === rows.length - 1,
+                'in-range': eventOverlapsRange(row.event),
+              }"
               :data-event-id="row.event.id"
             >
               <div class="spine-track">
@@ -116,7 +127,10 @@
             :key="event.id"
             type="button"
             class="undated-row"
-            :class="{ selected: selectedEvent?.id === event.id }"
+            :class="{
+              selected: selectedEvent?.id === event.id,
+              'in-range': eventOverlapsRange(event),
+            }"
             :data-event-id="event.id"
             @click="onCardClick(event)"
           >
@@ -173,10 +187,40 @@ const playing = ref(false);
 let playTimer = null;
 let playIndex = -1;
 
+const rangeLabel = computed(() => {
+  if (!props.range) return "未选择时段";
+  const [start, end] = props.range;
+  return start === end ? `${start}年` : `${start}—${end}年`;
+});
+
+function eventOverlapsRange(event) {
+  if (!props.range || event.yearStart == null) return false;
+  const [start, end] = props.range;
+  return event.yearStart <= end && (event.yearEnd ?? event.yearStart) >= start;
+}
+
+const rangeCountByEntity = computed(() => {
+  const counts = new Map();
+  for (const event of props.dataset.events) {
+    if (!eventOverlapsRange(event)) continue;
+    counts.set(event.entityId, (counts.get(event.entityId) || 0) + 1);
+  }
+  return counts;
+});
+
 const entityList = computed(() =>
   [...props.dataset.entities]
     .filter((entity) => entity.eventCount > 0)
-    .sort((a, b) => b.eventCount - a.eventCount || a.title.localeCompare(b.title, "zh"))
+    .map((entity) => ({
+      ...entity,
+      rangeEventCount: rangeCountByEntity.value.get(entity.id) || 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.rangeEventCount - a.rangeEventCount ||
+        b.eventCount - a.eventCount ||
+        a.title.localeCompare(b.title, "zh")
+    )
 );
 
 const entity = computed(() =>
@@ -197,6 +241,8 @@ const exactEvents = computed(() =>
 const undatedEvents = computed(() =>
   entityEvents.value.filter((event) => event.timeType !== "exact" || event.yearStart == null)
 );
+
+const rangeMatchedEvents = computed(() => entityEvents.value.filter(eventOverlapsRange));
 
 // 行序列：事件行 + 「隔 N 年」压缩行 + 1127 分隔行
 const rows = computed(() => {
@@ -278,6 +324,31 @@ watch(
   (event) => {
     if (event && !playing.value) scrollToEvent(event.id);
   }
+);
+
+// 底部时间段变化后，定位到该实体在区间内的第一条记录；没有命中时定位到最近记录。
+watch(
+  () => props.range,
+  () => {
+    if (playing.value || !props.range || !entityEvents.value.length) return;
+    const matched = rangeMatchedEvents.value[0];
+    if (matched) {
+      scrollToEvent(matched.id);
+      return;
+    }
+    const center = (props.range[0] + props.range[1]) / 2;
+    const nearest = entityEvents.value
+      .filter((event) => event.yearStart != null)
+      .reduce(
+        (best, event) =>
+          !best || Math.abs(event.yearStart - center) < Math.abs(best.yearStart - center)
+            ? event
+            : best,
+        null
+      );
+    if (nearest) scrollToEvent(nearest.id);
+  },
+  { deep: true }
 );
 
 onBeforeUnmount(() => {
@@ -382,6 +453,10 @@ onBeforeUnmount(() => {
     background: rgba(106, 74, 42, 0.1);
   }
 
+  &.in-range small {
+    color: var(--teal);
+  }
+
   .item-shape {
     width: 9px;
     height: 9px;
@@ -395,6 +470,11 @@ onBeforeUnmount(() => {
     border-color: var(--line);
     border-radius: 50%;
     background: rgba(106, 74, 42, 0.03);
+  }
+
+  &.in-range .item-shape {
+    border-color: var(--teal);
+    background: var(--teal);
   }
 
   .item-title {
@@ -451,6 +531,12 @@ onBeforeUnmount(() => {
       font-family: "FZQINGKBYSJF", serif;
       font-size: 11px;
       white-space: nowrap;
+    }
+
+    .range-summary {
+      border-left: 1px solid var(--line-light);
+      padding-left: 8px;
+      color: var(--teal);
     }
   }
 
@@ -567,6 +653,17 @@ onBeforeUnmount(() => {
   &.event-renamed,
   &.event-merged {
     border-radius: 0;
+  }
+}
+
+.event-row.in-range {
+  .spine-dot {
+    box-shadow: 0 0 0 4px rgba(111, 150, 144, 0.18);
+  }
+
+  .event-card {
+    border-color: rgba(111, 150, 144, 0.75);
+    background: rgba(111, 150, 144, 0.1);
   }
 }
 
@@ -770,6 +867,12 @@ onBeforeUnmount(() => {
     &:hover,
     &.selected {
       background: var(--wash);
+    }
+
+    &.in-range {
+      border-bottom-color: rgba(111, 150, 144, 0.75);
+      background: rgba(111, 150, 144, 0.1);
+      box-shadow: inset 3px 0 0 var(--teal);
     }
 
     .u-time {
