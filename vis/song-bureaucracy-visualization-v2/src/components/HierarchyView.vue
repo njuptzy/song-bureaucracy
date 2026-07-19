@@ -228,7 +228,7 @@
                   v-for="(char, index) in node.data.displayChars"
                   :key="index"
                   x="0"
-                  :dy="index === 0 ? titleStart(node.data) : 15"
+                  :dy="index === 0 ? titleStart(node.data) : 14"
                 >{{ char }}</tspan>
               </text>
               <g
@@ -397,14 +397,14 @@ const VIA_ICONS = {
   staff: "M8 7.2a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2zM3 13.5c.6-3 2.6-4.3 5-4.3s4.4 1.3 5 4.3",
   alias: "M2.5 2.5h7v7h-7zM6.5 6.5h7v7h-7z",
 };
-const NODE_WIDTH = 42;
-const NODE_HEIGHT = 124;
+const NODE_WIDTH = 40;
+const NODE_HEIGHT = 112;
 const OVERVIEW_CHILD_LIMIT = 24;
 const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
 const FOCUS_MAX_DEPTH = 2;
-const X_SEP = 84;
-const Y_SEP = 190;
+const X_SEP = 60;
+const Y_SEP = 155;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3;
 
@@ -744,12 +744,12 @@ function nodeWidth(data) {
 
 function nodeHeight(data) {
   if (data.overflow) return 70;
-  // 全部节点统一高度：行距与总线对齐，视觉上更整齐（124 可容纳最长 7 字竖排标题）
+  // 全部节点统一高度：行距与总线对齐，视觉上更整齐（112 可容纳 7 字竖排标题，字距 14）
   return NODE_HEIGHT;
 }
 
 function titleStart(data) {
-  return -((data.displayChars.length - 1) * 15) / 2 + 4;
+  return -((data.displayChars.length - 1) * 14) / 2 + 4;
 }
 
 function busPath(bus) {
