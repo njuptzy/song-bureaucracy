@@ -357,7 +357,7 @@ const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
 const FOCUS_MAX_DEPTH = 2;
 const X_SEP = 84;
-const Y_SEP = 190;
+const Y_SEP = 205;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3;
 
@@ -651,10 +651,20 @@ function stemPath(edge) {
   return `M${edge.target.x},${edge.busY}V${targetY}`;
 }
 
+// 其他上级辅助线：沿节点边缘裁剪后画一条平滑弧线（垂直方向微弯），
+// 与主层级的直角总线在形态上区分开，不挂任何文本。
 function secondaryEdgePath(edge) {
   const points = secondaryEdgePoints(edge);
   if (!points) return "";
-  return `M${points.start.x},${points.start.y}L${points.end.x},${points.end.y}`;
+  const { start, end } = points;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.hypot(dx, dy);
+  if (!distance) return "";
+  const bow = Math.min(30, Math.max(12, distance * 0.16));
+  const cx = (start.x + end.x) / 2 - (dy / distance) * bow;
+  const cy = (start.y + end.y) / 2 + (dx / distance) * bow;
+  return `M${start.x},${start.y} Q${cx},${cy} ${end.x},${end.y}`;
 }
 
 // “其他上级”不是主树总线的一部分，直接用一条直线连接两个节点边缘，
@@ -732,33 +742,27 @@ function edgePeriodLabel(edge) {
   return `${periodText(periods[0].start, periods[0].end)}等${periods.length}期${suffix}`;
 }
 
-function edgeTimeLines(edge) {
-  const lines = (edge?.periods || []).map((period) => periodText(period.start, period.end));
-  if (!lines.length || edge?.hasUndated) lines.push("时间未明");
-  return lines;
+// 历时模式下挂在主连线（竖线）中段的时间胶囊：单行、紧凑。
+// ≤2 期全列（"978、1126—1127"），更多期压缩为"978等3期"；无纪年显示"未明"。
+function edgeTimeText(edge) {
+  const periods = edge?.periods || [];
+  if (!periods.length) return "未明";
+  const labels = periods.map((period) =>
+    period.start === period.end ? `${period.start}` : `${period.start}—${period.end}`
+  );
+  if (labels.length <= 2) return labels.join("、");
+  return `${labels[0]}等${labels.length}期`;
 }
 
 function edgeTimeWidth(edge) {
-  const longest = Math.max(...edgeTimeLines(edge).map((label) => [...label].length));
-  return Math.max(38, longest * 8 + 10);
+  let width = 12;
+  for (const char of edgeTimeText(edge)) width += /[0-9—]/.test(char) ? 5 : 9;
+  return Math.max(34, width);
 }
 
-function edgeTimeHeight(edge) {
-  return edgeTimeLines(edge).length * 10 + 6;
-}
-
-function edgeTimeFirstDy(edge) {
-  return 3 - ((edgeTimeLines(edge).length - 1) * 10) / 2;
-}
-
-function edgeTimeTransform(edge, secondary = false) {
-  if (secondary) {
-    const points = secondaryEdgePoints(edge);
-    if (!points) return "translate(0 0)";
-    return `translate(${(points.start.x + points.end.x) / 2} ${(points.start.y + points.end.y) / 2})`;
-  }
+function edgeTimeTransform(edge) {
   const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
-  const y = edge.busY + (targetY - edge.busY) * 0.52;
+  const y = edge.busY + (targetY - edge.busY) * 0.55;
   return `translate(${edge.target.x} ${y})`;
 }
 
@@ -1180,14 +1184,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 }
 
-.edge-time-label {
+.edge-time-pill {
   color: var(--ink-soft);
   pointer-events: none;
 
   rect {
     fill: rgba(244, 241, 234, 0.94);
-    stroke: rgba(90, 58, 32, 0.28);
-    stroke-width: 0.6;
+    stroke: rgba(90, 58, 32, 0.3);
+    stroke-width: 0.7;
   }
 
   text {
@@ -1196,10 +1200,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     font-size: 8px;
     letter-spacing: 0.02em;
   }
+}
 
-  &.secondary-time-label {
-    color: var(--rust);
-  }
+.edge-group.via-staff .edge-time-pill {
+  color: #a56038;
+}
+
+.edge-group.via-alias .edge-time-pill {
+  color: #7a6e62;
 }
 
 .edge-group.via-staff .edge-mark circle,
@@ -1220,9 +1228,9 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 
 .secondary-edges .canvas-edge {
   stroke: var(--rust);
-  stroke-dasharray: 5 5;
+  stroke-dasharray: 3 4;
   stroke-width: 1;
-  opacity: 0.62;
+  opacity: 0.55;
 }
 
 #hierarchy-arrow path {
