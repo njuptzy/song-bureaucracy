@@ -21,11 +21,11 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.0.0"
+NORMALIZATION_VERSION = "1.1.0"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
-        "https://dict.revised.moe.edu.tw/appendix.jsp?ID=3&page=5&ver=5",
+        "https://dict.revised.moe.edu.tw/appendix.jsp?ID=3&page=4&la=0&powerMode=0&SN=%E5%AE%8B%20(%E8%A5%BF%E5%85%83960%EF%BD%9E1279)",
     ),
     "calendar_reference": (
         "中央研究院数位文化中心：两千年中西历转换",
@@ -145,6 +145,68 @@ PRE_SONG_MARKERS = (
     "长安",
 )
 KNOWN_INVALID_TIMES = {"北宋东京", "南宋官品", "南宋宣庆二年"}
+
+# 可审计的宽时间表达。这里的 range 表示“史料只把事件约束在该区间内”，
+# 不是断言事件或制度在整个区间持续存在。帝王在位期按公元年粒度记录，
+# 即位/退位发生的边界年允许相邻区间重叠，避免伪造月日精度。
+NAMED_TIME_RANGES: dict[str, tuple[int, int, str]] = {
+    # 朝代范围
+    "两宋": (960, 1279, "两宋朝代范围"),
+    "北宋": (960, 1127, "北宋朝代范围"),
+    "北宋时期": (960, 1127, "北宋朝代范围"),
+    "北宋（未载具体年月）": (960, 1127, "未载具体年月，仅能约束在北宋"),
+    "南宋": (1127, 1279, "南宋朝代范围"),
+    "南宋时": (1127, 1279, "南宋朝代范围"),
+    "南宋时期": (1127, 1279, "南宋朝代范围"),
+    "南宋（未载具体年月）": (1127, 1279, "未载具体年月，仅能约束在南宋"),
+    "南宋临安府（未载具体年月）": (1127, 1279, "未载具体年月，仅能约束在南宋"),
+    "宋代": (960, 1279, "宋代朝代范围"),
+    "宋代千户以上县": (960, 1279, "时间字段含宋代制度描述，仅能约束在宋代"),
+    "宋代逐县置一员": (960, 1279, "时间字段含宋代制度描述，仅能约束在宋代"),
+    "宋代（县分十等）": (960, 1279, "时间字段含宋代制度描述，仅能约束在宋代"),
+    "宋代（未载具体年月）": (960, 1279, "未载具体年月，仅能约束在宋代"),
+
+    # 帝王在位期与复合年号期
+    "北宋仁宗朝": (1022, 1063, "仁宗在位期，按公元年粒度"),
+    "北宋哲宗朝": (1085, 1100, "哲宗在位期，按公元年粒度"),
+    "北宋太宗、真宗亲王时期": (976, 1022, "太宗至真宗在位期，按公元年粒度"),
+    "北宋太祖、太宗朝": (960, 997, "太祖至太宗在位期，按公元年粒度"),
+    "北宋太祖太宗朝": (960, 997, "太祖至太宗在位期，按公元年粒度"),
+    "北宋徽宗朝": (1100, 1125, "徽宗在位期，按公元年粒度"),
+    "徽宗朝": (1100, 1125, "徽宗在位期，按公元年粒度"),
+    "北宋真宗朝": (997, 1022, "真宗在位期，按公元年粒度"),
+    "真宗朝": (997, 1022, "真宗在位期，按公元年粒度"),
+    "北宋神宗朝": (1067, 1085, "神宗在位期，按公元年粒度"),
+    "北宋熙丰间": (1068, 1085, "熙宁、元丰复合时期"),
+    "北宋熙丰时期": (1068, 1085, "熙宁、元丰复合时期"),
+
+    # 有明确朝代上下文的相对时间。边界年保留重叠以反映年粒度。
+    "元祐后": (1094, 1127, "元祐以后，约束在北宋"),
+    "元祐后（约北宋哲宗元祐年间及以后）": (1094, 1127, "元祐以后，约束在北宋"),
+    "北宋元丰后": (1085, 1127, "元丰以后，约束在北宋"),
+    "北宋太宗朝后": (997, 1127, "太宗朝以后，约束在北宋"),
+    "北宋徽宗朝后": (1125, 1127, "徽宗朝以后，约束在北宋"),
+    "北宋景德后": (1007, 1127, "景德以后，约束在北宋"),
+    "北宋熙宁后": (1077, 1127, "熙宁以后，约束在北宋"),
+    "北宋真宗朝后": (1022, 1127, "真宗朝以后，约束在北宋"),
+    "北宋神宗朝起": (1067, 1127, "自神宗朝起，约束在北宋"),
+    "北宋英宗即位前": (960, 1063, "英宗即位以前，约束在北宋"),
+    "北宋英宗即位后": (1063, 1127, "英宗即位以后，约束在北宋"),
+    "北宋英宗治平后": (1067, 1127, "治平以后，约束在北宋"),
+    "南宋乾道以后": (1173, 1279, "乾道以后，约束在南宋"),
+    "南宋孝宗朝以后": (1189, 1279, "孝宗朝以后，约束在南宋"),
+    "南宋开禧后": (1207, 1279, "开禧以后，约束在南宋"),
+    "南宋绍兴后": (1162, 1279, "绍兴以后，约束在南宋"),
+    "南宋绍熙后": (1194, 1279, "绍熙以后，约束在南宋"),
+    "南宋隆兴后": (1164, 1279, "隆兴以后，约束在南宋"),
+    "隆兴以后": (1164, 1279, "隆兴以后，约束在南宋"),
+    "天圣前": (960, 1023, "天圣以前，约束在北宋"),
+    "政和前": (960, 1111, "政和以前，约束在北宋"),
+}
+
+NAMED_EXACT_YEARS: dict[str, tuple[int, str]] = {
+    "北宋英宗即位": (1063, "英宗即位年，当前仅精确到公元年"),
+}
 
 
 @dataclass(frozen=True)
@@ -285,12 +347,33 @@ def make_sort_order(year: int, month: int | None, leap: int, day: int | None) ->
     return year * 100_000 + month_order * 100 + (day or 0)
 
 
+def make_year_range(start: int, end: int, note: str) -> Normalized:
+    return Normalized(
+        start, end, None, 0, None, None, 0, None,
+        None, None, None, None,
+        make_sort_order(start, None, 0, None), "range", note,
+    )
+
+
 def normalize_time(raw: str) -> Normalized:
     raw = raw.strip()
     if raw in KNOWN_INVALID_TIMES:
         return Normalized(None, None, None, 0, None, None, 0, None,
                           None, None, None, None, None, "unresolved",
                           "字段内容不是可直接使用的宋代纪年")
+
+    named_exact = NAMED_EXACT_YEARS.get(raw)
+    if named_exact:
+        year, note = named_exact
+        return Normalized(
+            year, year, None, 0, None, None, 0, None,
+            None, None, None, None,
+            make_sort_order(year, None, 0, None), "exact", note,
+        )
+
+    named_range = NAMED_TIME_RANGES.get(raw)
+    if named_range:
+        return make_year_range(*named_range)
 
     split = range_split(raw)
     if split:
@@ -356,6 +439,17 @@ def create_working_copy(source: Path, output: Path) -> None:
         source_conn.close()
 
 
+def normalized_values(timepoint_id: int, raw_time: str, item: Normalized) -> tuple:
+    return (
+        timepoint_id, raw_time, item.year_start, item.year_end,
+        item.month, item.is_leap_month, item.day,
+        item.end_month, item.end_is_leap_month, item.end_day,
+        item.month_text, item.day_text,
+        item.end_month_text, item.end_day_text,
+        item.sort_order, item.time_type, item.parse_note,
+    )
+
+
 def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
     conn = sqlite3.connect(output)
     try:
@@ -403,14 +497,7 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
                     sort_order, time_type, parse_note
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    timepoint_id, raw_time, item.year_start, item.year_end,
-                    item.month, item.is_leap_month, item.day,
-                    item.end_month, item.end_is_leap_month, item.end_day,
-                    item.month_text, item.day_text,
-                    item.end_month_text, item.end_day_text,
-                    item.sort_order, item.time_type, item.parse_note,
-                ),
+                normalized_values(timepoint_id, raw_time, item),
             )
         conn.execute(
             "CREATE INDEX idx_normalized_times_year ON NormalizedTimes(year_start, sort_order)"
@@ -431,8 +518,9 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source_database": str(source),
             "rule_summary": (
-                "年号换算公元年；农历月、闰月、日仅用于同年排序；"
-                "不进行农历到公历月日转换；原始 Timepoints.time 保持不变"
+                "年号换算公元年；朝代、帝王在位期、复合年号期及有明确上下文的相对时间"
+                "转换为可审计区间；区间表示史料时间约束，不表示全程持续；"
+                "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
             ),
             "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
             "reference_calendar": " | ".join(REFERENCE_SOURCES["calendar_reference"]),
@@ -446,6 +534,94 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
         )
         conn.commit()
         return counts
+    finally:
+        conn.close()
+
+
+def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[str, str], int], int]:
+    """在现有工作库内原子刷新 NormalizedTimes，不复制或重建其他业务表。"""
+    conn = sqlite3.connect(output)
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT
+                t.id, COALESCE(t.time, ''), COALESCE(n.time_type, 'missing'),
+                n.raw_time, n.year_start, n.year_end,
+                n.month, n.is_leap_month, n.day,
+                n.end_month, n.end_is_leap_month, n.end_day,
+                n.month_text, n.day_text, n.end_month_text, n.end_day_text,
+                n.sort_order, n.time_type, n.parse_note
+            FROM Timepoints t
+            LEFT JOIN NormalizedTimes n ON n.timepoint_id = t.id
+            ORDER BY t.id
+            """
+        ).fetchall()
+        counts: dict[str, int] = {}
+        transitions: dict[tuple[str, str], int] = {}
+        changed = 0
+        for row in rows:
+            timepoint_id, raw_time, old_type = row[:3]
+            item = normalize_time(raw_time)
+            counts[item.time_type] = counts.get(item.time_type, 0) + 1
+            transition = (old_type, item.time_type)
+            transitions[transition] = transitions.get(transition, 0) + 1
+            new_values = normalized_values(timepoint_id, raw_time, item)
+            old_values = (timepoint_id, *row[3:])
+            if old_values != new_values:
+                changed += 1
+            conn.execute(
+                """
+                INSERT INTO NormalizedTimes (
+                    timepoint_id, raw_time, year_start, year_end,
+                    month, is_leap_month, day,
+                    end_month, end_is_leap_month, end_day,
+                    month_text, day_text, end_month_text, end_day_text,
+                    sort_order, time_type, parse_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(timepoint_id) DO UPDATE SET
+                    raw_time=excluded.raw_time,
+                    year_start=excluded.year_start,
+                    year_end=excluded.year_end,
+                    month=excluded.month,
+                    is_leap_month=excluded.is_leap_month,
+                    day=excluded.day,
+                    end_month=excluded.end_month,
+                    end_is_leap_month=excluded.end_is_leap_month,
+                    end_day=excluded.end_day,
+                    month_text=excluded.month_text,
+                    day_text=excluded.day_text,
+                    end_month_text=excluded.end_month_text,
+                    end_day_text=excluded.end_day_text,
+                    sort_order=excluded.sort_order,
+                    time_type=excluded.time_type,
+                    parse_note=excluded.parse_note
+                """,
+                new_values,
+            )
+        metadata_updates = {
+            "normalization_version": NORMALIZATION_VERSION,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "rule_summary": (
+                "年号换算公元年；朝代、帝王在位期、复合年号期及有明确上下文的相对时间"
+                "转换为可审计区间；区间表示史料时间约束，不表示全程持续；"
+                "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
+            ),
+            "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
+        }
+        conn.executemany(
+            """
+            INSERT INTO TimeNormalizationMetadata(key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            metadata_updates.items(),
+        )
+        conn.commit()
+        return counts, transitions, changed
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -535,10 +711,31 @@ def main() -> None:
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="仅原子刷新现有工作库的 NormalizedTimes，不复制源库或重建业务表",
+    )
     args = parser.parse_args()
 
-    source = args.source.resolve()
     output = args.output.resolve()
+    if args.in_place:
+        if not output.exists():
+            raise FileNotFoundError(output)
+        counts, transitions, changed = refresh_normalized_times(output)
+        validate(output)
+        write_report(output, args.report.resolve(), counts)
+        print(f"已原子刷新可视化工作库: {output}")
+        print(f"实际变化的标准化记录: {changed}")
+        print("类型迁移:")
+        for (old_type, new_type), count in sorted(transitions.items()):
+            print(f"  {old_type} -> {new_type}: {count}")
+        print("转换结果:")
+        for key in ("exact", "range", "undated", "pre_song", "unresolved"):
+            print(f"  {key}: {counts.get(key, 0)}")
+        return
+
+    source = args.source.resolve()
     if not source.exists():
         raise FileNotFoundError(source)
     if source == output:

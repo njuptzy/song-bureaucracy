@@ -41,11 +41,65 @@ class NormalizeTimesTest(unittest.TestCase):
         self.assertEqual(item.time_type, "range")
 
     def test_undated_and_pre_song(self):
-        self.assertEqual(normalize_time("宋代（未载具体年月）").time_type, "undated")
+        song = normalize_time("宋代（未载具体年月）")
+        self.assertEqual((song.year_start, song.year_end), (960, 1279))
+        self.assertEqual(song.time_type, "range")
         self.assertEqual(normalize_time("魏文帝黄初三年").time_type, "pre_song")
 
     def test_known_invalid(self):
         self.assertEqual(normalize_time("南宋宣庆二年").time_type, "unresolved")
+
+    def test_dynasty_ranges(self):
+        expected = {
+            "北宋": (960, 1127),
+            "北宋（未载具体年月）": (960, 1127),
+            "南宋时期": (1127, 1279),
+            "宋代（未载具体年月）": (960, 1279),
+            "两宋": (960, 1279),
+        }
+        for raw, years in expected.items():
+            with self.subTest(raw=raw):
+                item = normalize_time(raw)
+                self.assertEqual((item.year_start, item.year_end), years)
+                self.assertEqual(item.time_type, "range")
+
+    def test_reign_and_composite_ranges(self):
+        expected = {
+            "北宋仁宗朝": (1022, 1063),
+            "北宋太祖、太宗朝": (960, 997),
+            "北宋神宗朝": (1067, 1085),
+            "北宋徽宗朝": (1100, 1125),
+            "北宋熙丰间": (1068, 1085),
+        }
+        for raw, years in expected.items():
+            with self.subTest(raw=raw):
+                item = normalize_time(raw)
+                self.assertEqual((item.year_start, item.year_end), years)
+                self.assertEqual(item.time_type, "range")
+
+    def test_relative_ranges_keep_boundary_year(self):
+        expected = {
+            "北宋景德后": (1007, 1127),
+            "北宋英宗即位前": (960, 1063),
+            "北宋英宗即位后": (1063, 1127),
+            "北宋神宗朝起": (1067, 1127),
+            "南宋隆兴后": (1164, 1279),
+        }
+        for raw, years in expected.items():
+            with self.subTest(raw=raw):
+                item = normalize_time(raw)
+                self.assertEqual((item.year_start, item.year_end), years)
+                self.assertEqual(item.time_type, "range")
+
+    def test_accession_year_is_exact(self):
+        item = normalize_time("北宋英宗即位")
+        self.assertEqual((item.year_start, item.year_end), (1063, 1063))
+        self.assertEqual(item.time_type, "exact")
+
+    def test_fuzzy_periods_remain_undated(self):
+        for raw in ("北宋初", "北宋前期", "北宋英宗即位之初", "北宋元丰改制后"):
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_time(raw).time_type, "undated")
 
 
 if __name__ == "__main__":
