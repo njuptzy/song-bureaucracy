@@ -116,7 +116,35 @@ const reviewRows = rows.filter((item) =>
   item.time_type === "unresolved" || item.sync_status !== "已同步"
 );
 
+const entityStats = query(`
+  SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN type = '机构' THEN 1 ELSE 0 END) AS institutions,
+    SUM(CASE WHEN type = '官职' THEN 1 ELSE 0 END) AS offices
+  FROM Entities
+`)[0];
+
+const typeStats = ["exact", "range", "undated", "pre_song", "unresolved"].map((timeType) => ({
+  timeType,
+  label: typeLabels[timeType],
+  timepoints: rows.filter((item) => item.time_type === timeType).length,
+  rawTimes: new Set(rows.filter((item) => item.time_type === timeType).map((item) => item.raw_time)).size,
+}));
+
+const structureStats = [
+  { label: "精确到日", count: rows.filter((item) => item.time_type === "exact" && item.day != null).length, rule: "年、月、日均已解析" },
+  { label: "精确到月", count: rows.filter((item) => item.time_type === "exact" && item.month != null && item.day == null).length, rule: "已解析年、月，原文没有可靠日期" },
+  { label: "精确到年", count: rows.filter((item) => item.time_type === "exact" && item.month == null).length, rule: "仅能定位到一个公元年" },
+  { label: "跨年范围", count: rows.filter((item) => item.time_type === "range" && item.year_start !== item.year_end).length, rule: "保留可审计的起止年，不补造具体日期" },
+  { label: "同年范围", count: rows.filter((item) => item.time_type === "range" && item.year_start === item.year_end).length, rule: "范围落在同一公元年内" },
+  { label: "无明确纪年", count: rows.filter((item) => item.time_type === "undated").length, rule: "朝代、时期或相对描述不足以可靠换算" },
+  { label: "宋前时间", count: rows.filter((item) => item.time_type === "pre_song").length, rule: "保留类别与原文，不投射到宋代年表" },
+  { label: "无法解析", count: rows.filter((item) => item.time_type === "unresolved").length, rule: "字段疑似时间但无法可靠判断，进入人工核查" },
+];
+
 const workbook = Workbook.create();
+const overview = workbook.worksheets.add("总汇总");
+const structure = workbook.worksheets.add("时间结构");
 const summary = workbook.worksheets.add("全部时间汇总");
 const detail = workbook.worksheets.add("全部时间点明细");
 const review = workbook.worksheets.add("无法解析");
@@ -127,7 +155,7 @@ const colors = {
   teal: "#6F9690", tealLight: "#DDEAE7", rust: "#B56F46",
   rustLight: "#F4E3D7", line: "#D8C9B5", white: "#FFFFFF",
 };
-for (const sheet of [summary, detail, review, rules]) sheet.showGridLines = false;
+for (const sheet of [overview, structure, summary, detail, review, rules]) sheet.showGridLines = false;
 
 function styleTableSheet(sheet, headerRange, dataRange) {
   sheet.getRange(headerRange).format = {
@@ -142,7 +170,117 @@ function styleTableSheet(sheet, headerRange, dataRange) {
   sheet.freezePanes.freezeRows(1);
 }
 
-// 第一张表：731 种原始时间文本的全部转换汇总。
+// 第一张表：恢复旧版的一页式总览，并将所有关键数量集中展示。
+overview.mergeCells("A1:H2");
+overview.getRange("A1").values = [["宋代官制时间处理结果 · 总汇总"]];
+overview.getRange("A1:H2").format = {
+  fill: colors.brownDark,
+  font: { bold: true, color: colors.white, size: 20, name: "Microsoft YaHei" },
+  verticalAlignment: "center",
+};
+overview.mergeCells("A3:H3");
+overview.getRange("A3").values = [["数据库当前时间标准化快照；原始中文时间保持不变，另存可排序的公元年与农历月日字段"]];
+overview.getRange("A3:H3").format = {
+  fill: colors.parchment, font: { color: colors.brown, name: "Microsoft YaHei" }, verticalAlignment: "center",
+};
+overview.getRange("A5:B5").values = [["项目", "当前值"]];
+overview.getRange("A6:B12").values = [
+  ["工作数据库", dbPath],
+  ["标准化版本", metadataMap.get("normalization_version") || ""],
+  ["数据库生成时间（UTC）", `UTC ${String(metadataMap.get("generated_at_utc") || "").replace("T", " ").replace(".000Z", "")}`.trim()],
+  ["实体总数", entityStats.total],
+  ["机构 / 官职", `${entityStats.institutions} / ${entityStats.offices}`],
+  ["原始时间文本种数", summaries.length],
+  ["同步完整性", `${rows.filter((item) => item.sync_status === "已同步").length} / ${rows.length}`],
+];
+for (let row = 6; row <= 12; row += 1) overview.mergeCells(`B${row}:H${row}`);
+overview.getRange("A5:B5").format = { fill: colors.teal, font: { bold: true, color: colors.white, name: "Microsoft YaHei" } };
+overview.getRange("A6:A12").format = { fill: colors.parchment, font: { bold: true, color: colors.brown, name: "Microsoft YaHei" } };
+overview.getRange("A6:B12").format.borders = { preset: "outside", style: "thin", color: colors.line };
+overview.getRange("A6:B12").format.wrapText = true;
+overview.getRange("B6:H12").format.horizontalAlignment = "left";
+
+const overviewKpis = ["全部时间点", "精确时间", "时间范围", "无明确纪年", "宋前时间", "待核查"];
+overview.getRange("A14:F14").values = [overviewKpis];
+overview.getRange("A15:F15").values = [[rows.length, ...typeStats.map((item) => item.timepoints)]];
+overview.getRange("A14:F14").format = {
+  fill: colors.brown, font: { bold: true, color: colors.white, name: "Microsoft YaHei" }, horizontalAlignment: "center",
+};
+overview.getRange("A15:F15").format = {
+  fill: "#FBF8F1", font: { bold: true, color: colors.brownDark, size: 16, name: "Microsoft YaHei" },
+  horizontalAlignment: "center", numberFormat: "#,##0", borders: { preset: "outside", style: "thin", color: colors.line },
+};
+
+overview.getRange("A18:D18").values = [["时间类型", "时间点数", "原始时间文本种数", "占全部时间点"]];
+overview.getRangeByIndexes(18, 0, typeStats.length, 3).values = typeStats.map((item) => [item.label, item.timepoints, item.rawTimes]);
+for (let index = 0; index < typeStats.length; index += 1) {
+  overview.getRange(`D${19 + index}`).formulas = [[`=B${19 + index}/$A$15`]];
+}
+overview.getRange("A18:D18").format = { fill: colors.teal, font: { bold: true, color: colors.white, name: "Microsoft YaHei" } };
+overview.getRange(`A19:D${18 + typeStats.length}`).format = {
+  font: { name: "Microsoft YaHei" }, borders: { preset: "outside", style: "thin", color: colors.line },
+};
+overview.getRange(`B19:C${18 + typeStats.length}`).format.numberFormat = "#,##0";
+overview.getRange(`D19:D${18 + typeStats.length}`).format.numberFormat = "0.0%";
+overview.getRange("A:A").format.columnWidth = 24;
+overview.getRange("B:F").format.columnWidth = 18;
+overview.getRange("G:H").format.columnWidth = 14;
+overview.freezePanes.freezeRows(3);
+
+// 第二张表：恢复旧版的时间字段结构，并补充当前数据的结构分布。
+structure.mergeCells("A1:F2");
+structure.getRange("A1").values = [["时间结构"]];
+structure.getRange("A1:F2").format = {
+  fill: colors.brownDark,
+  font: { bold: true, color: colors.white, size: 20, name: "Microsoft YaHei" },
+  verticalAlignment: "center",
+};
+structure.mergeCells("A3:F3");
+structure.getRange("A3").values = [["原始时间、标准化区间、农历月日与排序字段的完整结构；不以换算结果覆盖数据库原文"]];
+structure.getRange("A3:F3").format = { fill: colors.parchment, font: { color: colors.brown, name: "Microsoft YaHei" } };
+structure.getRange("A5:F5").values = [["层级", "字段", "含义", "数据类型", "处理原则", "当前非空数"]];
+const structureFields = [
+  ["原始层", "raw_time", "数据库 Timepoints.time 原文", "文本", "始终保留，作为核查与重新转换依据", rows.filter((item) => item.raw_time !== "").length],
+  ["分类层", "time_type", "exact / range / undated / pre_song / unresolved", "枚举", "决定前端按时间点、区间或非时间项处理", rows.length],
+  ["区间层", "year_start", "公元起始年", "整数", "精确时间与范围的左端点", rows.filter((item) => item.year_start != null).length],
+  ["区间层", "year_end", "公元结束年", "整数", "精确时间等于起始年；范围保留右端点", rows.filter((item) => item.year_end != null).length],
+  ["起点细节", "month / is_leap_month / day", "起点农历月、闰月标记、日", "整数 / 布尔", "用于同年内部排序，不冒充公历日期", rows.filter((item) => item.month != null || item.day != null).length],
+  ["终点细节", "end_month / end_is_leap_month / end_day", "终点农历月、闰月标记、日", "整数 / 布尔", "仅在原文可靠给出范围终点时记录", rows.filter((item) => item.end_month != null || item.end_day != null).length],
+  ["原文细节", "month_text / day_text", "月日的原始中文写法", "文本", "保留异体、朔晦等信息供审计", rows.filter((item) => item.month_text || item.day_text).length],
+  ["排序层", "sort_order", "前端时间线排序辅助值", "整数", "只负责稳定排序，不作为展示日期", rows.filter((item) => item.sort_order != null).length],
+  ["审计层", "parse_note", "范围、歧义与异常说明", "文本", "记录解析边界，不能静默猜测", rows.filter((item) => item.parse_note !== "").length],
+];
+structure.getRangeByIndexes(5, 0, structureFields.length, 6).values = structureFields;
+structure.getRange("A5:F5").format = { fill: colors.teal, font: { bold: true, color: colors.white, name: "Microsoft YaHei" } };
+structure.getRange(`A6:F${5 + structureFields.length}`).format = {
+  font: { name: "Microsoft YaHei" }, wrapText: true, verticalAlignment: "center",
+  borders: { preset: "outside", style: "thin", color: colors.line },
+};
+structure.getRange(`6:${5 + structureFields.length}`).format.rowHeight = 38;
+structure.getRange(`F6:F${5 + structureFields.length}`).format.numberFormat = "#,##0";
+const distributionHeaderRow = 17;
+structure.getRange(`A${distributionHeaderRow}:D${distributionHeaderRow}`).values = [["当前时间结构", "时间点数", "占全部时间点", "判定规则"]];
+structure.getRangeByIndexes(distributionHeaderRow, 0, structureStats.length, 4).values = structureStats.map((item) => [item.label, item.count, null, item.rule]);
+for (let index = 0; index < structureStats.length; index += 1) {
+  const rowNumber = distributionHeaderRow + 1 + index;
+  structure.getRange(`C${rowNumber}`).formulas = [[`=B${rowNumber}/'总汇总'!$A$15`]];
+}
+structure.getRange(`A${distributionHeaderRow}:D${distributionHeaderRow}`).format = { fill: colors.brown, font: { bold: true, color: colors.white, name: "Microsoft YaHei" } };
+structure.getRange(`A${distributionHeaderRow + 1}:D${distributionHeaderRow + structureStats.length}`).format = {
+  font: { name: "Microsoft YaHei" }, wrapText: true, borders: { preset: "outside", style: "thin", color: colors.line },
+};
+structure.getRange(`${distributionHeaderRow + 1}:${distributionHeaderRow + structureStats.length}`).format.rowHeight = 42;
+structure.getRange(`B${distributionHeaderRow + 1}:B${distributionHeaderRow + structureStats.length}`).format.numberFormat = "#,##0";
+structure.getRange(`C${distributionHeaderRow + 1}:C${distributionHeaderRow + structureStats.length}`).format.numberFormat = "0.0%";
+structure.getRange("A:A").format.columnWidth = 16;
+structure.getRange("B:B").format.columnWidth = 34;
+structure.getRange("C:C").format.columnWidth = 42;
+structure.getRange("D:D").format.columnWidth = 20;
+structure.getRange("E:E").format.columnWidth = 54;
+structure.getRange("F:F").format.columnWidth = 16;
+structure.freezePanes.freezeRows(5);
+
+// 第三张表：全部原始时间文本的转换汇总。
 const summaryHeaders = [
   "原始时间", "出现次数", "涉及实体数", "时间类型", "转换结果",
   "起始年", "结束年", "起始月", "起始闰月", "起始日",
@@ -172,6 +310,8 @@ summary.getRange(`F2:N${summaryValues.length + 1}`).format.numberFormat = "0";
 summary.getRange(`A2:A${summaryValues.length + 1}`).format.wrapText = true;
 summary.getRange(`E2:E${summaryValues.length + 1}`).format.wrapText = true;
 summary.getRange(`O2:R${summaryValues.length + 1}`).format.wrapText = true;
+summary.getRange(`Q2:Q${summaryValues.length + 1}`).format.wrapText = false;
+summary.getRange(`2:${summaryValues.length + 1}`).format.rowHeight = 34;
 summary.getRange(`D2:D${summaryValues.length + 1}`).conditionalFormats.add("containsText", {
   text: "无法解析", format: { fill: colors.rustLight, font: { color: colors.rust, bold: true } },
 });
@@ -185,7 +325,7 @@ summary.getRange("P:P").format.columnWidth = 48;
 summary.getRange("Q:Q").format.columnWidth = 44;
 summary.getRange("R:R").format.columnWidth = 16;
 
-// 第二张表：数据库全部 1813 个时间点，一条不省略。
+// 第四张表：数据库全部时间点，一条不省略。
 const detailHeaders = [
   "时间点ID", "实体ID", "实体名称", "实体类型", "原始时间", "时间类型", "转换结果",
   "起始年", "结束年", "起始月", "起始闰月", "起始日", "结束月", "结束闰月", "结束日",
@@ -230,7 +370,7 @@ detail.getRange("U:U").format.columnWidth = 16;
 detail.getRange("V:V").format.columnWidth = 36;
 detail.getRange("W:W").format.columnWidth = 52;
 
-// 第三张表：真正需要人工判断的记录。
+// 第五张表：真正需要人工判断的记录。
 const reviewHeaders = ["时间点ID", "实体ID", "实体名称", "实体类型", "原始时间", "当前处理结果", "解析备注", "事件描述"];
 const reviewValues = reviewRows.map((item) => [
   item.timepoint_id, item.entity_id, item.entity_title, item.entity_type,
@@ -253,7 +393,7 @@ review.getRange("E:F").format.columnWidth = 32;
 review.getRange("G:G").format.columnWidth = 40;
 review.getRange("H:H").format.columnWidth = 52;
 
-// 第四张表：说明汇总依据和字段边界。
+// 第六张表：说明汇总依据和字段边界。
 rules.mergeCells("A1:D2");
 rules.getRange("A1").values = [["当前时间处理规则与来源"]];
 rules.getRange("A1:D2").format = {
@@ -290,6 +430,8 @@ rules.freezePanes.freezeRows(2);
 
 await fs.mkdir(previewDir, { recursive: true });
 const renderSpecs = [
+  ["总汇总", "A1:H24", "overview.png", 0.95],
+  ["时间结构", `A1:F${distributionHeaderRow + structureStats.length}`, "time-structure.png", 0.9],
   ["全部时间汇总", "A1:R18", "all-summary.png", 0.78],
   ["全部时间点明细", "A1:W15", "all-details.png", 0.72],
   ["无法解析", `A1:H${reviewValues.length + 1}`, "unresolved.png", 1.1],
@@ -301,8 +443,8 @@ for (const [sheetName, range, fileName, scale] of renderSpecs) {
 }
 
 const inspectSummary = await workbook.inspect({
-  kind: "table", range: "全部时间汇总!A1:R10", include: "values,formulas",
-  tableMaxRows: 10, tableMaxCols: 18,
+  kind: "table", range: "总汇总!A1:H24", include: "values,formulas",
+  tableMaxRows: 24, tableMaxCols: 8,
 });
 console.log("SUMMARY_CHECK");
 console.log(inspectSummary.ndjson);

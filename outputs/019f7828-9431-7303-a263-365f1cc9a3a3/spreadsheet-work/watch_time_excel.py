@@ -61,13 +61,13 @@ def main() -> None:
     target = args.target.resolve()
 
     build()
-    if not publish(target):
-        raise SystemExit("目标文件正在打开，未覆盖")
     if args.once:
+        if not publish(target):
+            raise SystemExit("目标文件正在打开，未覆盖")
         return
 
     last_stamp = database_stamp()
-    pending = False
+    pending = not publish(target)
     print(f"监听数据库: {DB}", flush=True)
     print(f"同步文件: {target}", flush=True)
     try:
