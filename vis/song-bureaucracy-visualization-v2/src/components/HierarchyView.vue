@@ -498,6 +498,9 @@ const visualTree = computed(() => {
     seen.add(id);
 
     const allChildren = sortedChildren(id).filter((child) => !path.has(child.entityId));
+    // 可显示的子节点：多上级去重后，已经挂在别处的子节点不算
+    // （否则会出现有「−」按钮但下面什么都展不开的节点）
+    const freshChildren = allChildren.filter((child) => !seen.has(child.entityId));
     const data = {
       id,
       title: entity.title,
@@ -507,16 +510,16 @@ const visualTree = computed(() => {
       yearMin: entity.yearMin,
       yearMax: entity.yearMax,
       edge,
-      hasChildren: allChildren.length > 0,
-      depthLimited: allChildren.length > 0 && depth >= maxDepth,
+      hasChildren: freshChildren.length > 0,
+      depthLimited: freshChildren.length > 0 && depth >= maxDepth,
       badge: "",
       children: [],
     };
 
-    if (!allChildren.length) return data;
+    if (!freshChildren.length) return data;
     if (depth >= maxDepth) {
-      hiddenCount += allChildren.length;
-      data.badge = [data.badge, `下级${allChildren.length}`].filter(Boolean).join(" · ");
+      hiddenCount += freshChildren.length;
+      data.badge = [data.badge, `下级${freshChildren.length}`].filter(Boolean).join(" · ");
       return data;
     }
     if (!expanded.has(id)) return data;
@@ -525,7 +528,7 @@ const visualTree = computed(() => {
     const nextPath = new Set(path).add(id);
     let shown = 0;
     let omitted = 0;
-    for (const child of allChildren) {
+    for (const child of freshChildren) {
       if (seen.has(child.entityId)) continue; // 多上级去重：不计入“余N项”
       if (shown >= limit) {
         omitted += 1;
