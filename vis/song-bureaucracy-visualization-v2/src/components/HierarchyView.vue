@@ -32,7 +32,6 @@
         <span class="legend-item via-alias">
           <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg></i>统称
         </span>
-        <span class="legend-item"><i class="line-sample secondary"></i>其他上级</span>
       </span>
 
       <div class="scope-switch" aria-label="层级结构时间范围">
@@ -146,41 +145,10 @@
           :width="viewW"
           :height="viewH"
           @pointerdown="beginPan"
+          @click="clearOtherParentCard"
         />
 
-        <g :transform="worldTransform">
-          <g class="secondary-buses" aria-hidden="true">
-            <path
-              v-for="bus in visibleSecondaryLayout.buses"
-              :key="bus.key"
-              :d="busPath(bus)"
-              class="bus-line secondary"
-            />
-          </g>
-
-          <g class="secondary-edges">
-            <g
-              v-for="edge in visibleSecondaryLayout.edges"
-              :key="edge.key"
-              :class="['edge-group', 'secondary-edge-group', `via-${viaClass(edge)}`]"
-              @click.stop="toggleEdgeEvidence(edge)"
-            >
-              <path :d="stemPath(edge)" class="canvas-edge secondary" />
-              <path :d="stemPath(edge)" class="edge-hit" />
-              <g
-                v-if="edge.data"
-                class="edge-mark"
-                :transform="`translate(${edge.target.x} ${edge.busY})`"
-              >
-                <circle r="7.5" />
-                <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
-                  <path :d="VIA_ICONS[viaClass(edge)]" />
-                </svg>
-              </g>
-              <title>{{ edgeTooltip(edge) }}</title>
-            </g>
-          </g>
-
+        <g :transform="worldTransform" :class="{ 'relation-inspection': activeOtherParent }">
           <g class="primary-buses" aria-hidden="true">
             <path
               v-for="bus in canvasLayout.buses"
@@ -225,6 +193,8 @@
                   focus: node.data.id === focusId,
                   selected: node.data.id === selectedEntityId,
                   'linked-hover': node.data.id === hoveredEntityId,
+                  'relation-highlight': isInspectedNode(node.data.id),
+                  'relation-dimmed': activeOtherParent && !isInspectedNode(node.data.id),
                   overflow: node.data.overflow,
                 },
               ]"
@@ -258,6 +228,17 @@
                 >{{ char }}</tspan>
               </text>
               <g
+                v-if="otherParentCount(node.data.id)"
+                class="other-parent-trigger"
+                :class="{ active: otherParentCardId === node.data.id }"
+                :transform="`translate(${nodeWidth(node.data) / 2 + 22} 0)`"
+                @click.stop="toggleOtherParentCard(node.data.id)"
+              >
+                <rect x="-19" y="-8" width="38" height="16" rx="8" />
+                <text text-anchor="middle" dy="3">另{{ otherParentCount(node.data.id) }}上级</text>
+                <title>查看其他上级</title>
+              </g>
+              <g
                 v-if="node.data.hasChildren && !node.data.overflow && !node.data.depthLimited"
                 class="expand-control"
                 :transform="`translate(0 ${nodeHeight(node.data) / 2 + 9})`"
@@ -278,6 +259,58 @@
               <title>{{ nodeTooltip(node.data) }}</title>
             </g>
           </g>
+
+          <g
+            v-if="otherParentCard"
+            class="other-parent-card"
+            :transform="`translate(${otherParentCard.x} ${otherParentCard.y})`"
+            @click.stop
+          >
+            <rect
+              class="other-parent-card-bg"
+              :width="otherParentCard.width"
+              :height="otherParentCard.height"
+              rx="7"
+            />
+            <text class="other-parent-card-title" x="11" y="18">
+              其他上级 · {{ otherParentCard.items.length }}
+            </text>
+            <g class="other-parent-card-close" @click.stop="clearOtherParentCard">
+              <circle :cx="otherParentCard.width - 13" cy="14" r="8" />
+              <text :x="otherParentCard.width - 13" y="17" text-anchor="middle">×</text>
+            </g>
+            <g
+              v-for="(item, index) in otherParentCard.visibleItems"
+              :key="item.key"
+              class="other-parent-row"
+              :class="{ active: activeOtherParent?.key === item.key }"
+              :transform="`translate(8 ${28 + index * 34})`"
+              @click.stop="selectOtherParent(otherParentCard.targetId, item)"
+            >
+              <rect :width="otherParentCard.width - 16" height="30" rx="4" />
+              <svg x="6" y="7" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+                <path :d="VIA_ICONS[viaClass({ data: { via: item.primaryVia } })]" />
+              </svg>
+              <text class="other-parent-name" x="27" y="12">{{ compactLabel(item.title, 9) }}</text>
+              <text class="other-parent-meta" x="27" y="24">
+                {{ compactLabel(`${item.viaLabel} · ${edgePeriodLabel(item.data)}`, 18) }}
+              </text>
+              <text
+                class="other-parent-center"
+                :x="otherParentCard.width - 25"
+                y="18"
+                text-anchor="end"
+                @click.stop="centerOtherParent(item.parentId)"
+              >中心</text>
+              <title>{{ item.title }} · {{ item.viaLabel }} · {{ edgePeriodLabel(item.data) }}</title>
+            </g>
+            <text
+              v-if="otherParentCard.hiddenCount"
+              class="other-parent-card-more"
+              x="11"
+              :y="otherParentCard.height - 8"
+            >其余 {{ otherParentCard.hiddenCount }} 个上级见实体详情</text>
+          </g>
         </g>
       </svg>
 
@@ -285,6 +318,7 @@
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
         <span>· 单击看详情，双击设为中心</span>
+        <span>· “另 N 上级”查看多上级关系</span>
       </div>
 
       <div class="canvas-controls">
@@ -335,7 +369,7 @@
 //   视口状态 {zoom, panX, panY} 显式管理，不再有隐式 meet 缩放叠加：
 //   「适」= 按内容 bbox 计算 fit；滚轮以鼠标为锚缩放；拖动按屏幕像素平移。
 // - 展开模型：每个父节点独立分页（余N项点击翻页），删除全局节点预算；
-//   因多上级去重而未显示的实体不计入“余N项”，以辅助虚线表达。
+//   多上级关系不重复生成节点，改由节点旁的局部关系卡表达。
 // - 展开/收起/翻页不触发全画布重新居中：被操作的节点锚定在原地，子树就地显隐；
 //   只有重设中心、切换时间范围/所选时段/历时/布局模式时才重新 fit。
 //   单纯打开或关闭详情不改变中心，也不扰动画布视口。
@@ -377,6 +411,8 @@ const focusId = ref(null);
 const expanded = reactive(new Set());
 const childLimits = reactive(new Map());
 const evidenceCard = ref(null);
+const otherParentCardId = ref(null);
+const activeOtherParent = ref(null);
 const rootRef = ref(null);
 const stageRef = ref(null);
 const svgRef = ref(null);
@@ -519,7 +555,7 @@ const visualTree = computed(() => {
 });
 
 const canvasLayout = computed(() => {
-  const empty = { nodes: [], edges: [], buses: [], secondaryEdges: [], hiddenCount: 0, realNodeCount: 0, bbox: null };
+  const empty = { nodes: [], edges: [], buses: [], hiddenCount: 0, realNodeCount: 0, bbox: null };
   if (!visualTree.value) return empty;
 
   const root = d3Hierarchy(visualTree.value.root, (data) => data.children);
@@ -549,9 +585,6 @@ const canvasLayout = computed(() => {
     cy: (minY + maxY) / 2 + 10,
   };
 
-  const positionedById = new Map(
-    nodes.filter((node) => typeof node.data.id === "number").map((node) => [node.data.id, node])
-  );
   const edges = root.links().map((link, index) => ({
     key: `primary-${link.target.data.id}-${index}`,
     source: link.source,
@@ -589,81 +622,106 @@ const canvasLayout = computed(() => {
     });
   }
 
-  const secondaryEdges = [];
-  for (const target of nodes) {
-    if (typeof target.data.id !== "number") continue;
-    const primaryParentId = target.parent?.data.id;
-    for (const parentRel of graph.value.parentRelsOf.get(target.data.id) || []) {
-      if (parentRel.entityId === primaryParentId) continue;
-      const source = positionedById.get(parentRel.entityId);
-      if (!source) continue;
-      const fullEdge = (graph.value.childrenOf.get(parentRel.entityId) || []).find(
-        (edge) => edge.entityId === target.data.id && edge.via === parentRel.via
-      );
-      secondaryEdges.push({
-        key: `secondary-${parentRel.entityId}-${target.data.id}-${parentRel.relationId}`,
-        source,
-        target,
-        data: fullEdge || parentRel,
-      });
-    }
-  }
-
   return {
     nodes,
     edges,
     buses,
-    secondaryEdges,
     hiddenCount: visualTree.value.hiddenCount,
     realNodeCount: nodes.filter((node) => typeof node.data.id === "number").length,
     bbox,
   };
 });
 
-const visibleSecondaryEdges = computed(() => {
-  const highlighted = new Set(
-    [props.selectedEntityId, props.hoveredEntityId].filter((id) => typeof id === "number")
-  );
-  if (!highlighted.size) return [];
-  return canvasLayout.value.secondaryEdges.filter(
-    (edge) => highlighted.has(edge.source.data.id) || highlighted.has(edge.target.data.id)
-  );
+const otherParentsByTarget = computed(() => {
+  const result = new Map();
+  for (const node of canvasLayout.value.nodes) {
+    const targetId = node.data.id;
+    if (typeof targetId !== "number") continue;
+    const mainParentId = node.parent?.data.id ?? graph.value.primaryParent.get(targetId);
+    const grouped = new Map();
+
+    for (const parentRel of graph.value.parentRelsOf.get(targetId) || []) {
+      if (parentRel.entityId === mainParentId) continue;
+      const parent = graph.value.entityById.get(parentRel.entityId);
+      if (!parent) continue;
+      if (!grouped.has(parentRel.entityId)) {
+        grouped.set(parentRel.entityId, {
+          parentId: parentRel.entityId,
+          title: parent.title,
+          vias: new Set(),
+          relationIds: new Set(),
+          periods: new Map(),
+          hasUndated: false,
+        });
+      }
+      const item = grouped.get(parentRel.entityId);
+      const fullEdge = (graph.value.childrenOf.get(parentRel.entityId) || []).find(
+        (edge) => edge.entityId === targetId && edge.via === parentRel.via
+      );
+      item.vias.add(parentRel.via);
+      for (const relationId of fullEdge?.relationIds || [parentRel.relationId]) {
+        if (relationId != null) item.relationIds.add(relationId);
+      }
+      for (const period of fullEdge?.periods || []) {
+        item.periods.set(`${period.start}-${period.end}`, period);
+      }
+      item.hasUndated ||= fullEdge?.hasUndated ?? true;
+    }
+
+    const items = [...grouped.values()]
+      .map((item) => {
+        const vias = [...item.vias].sort(
+          (a, b) => (PRIMARY_VIA[a] ?? 9) - (PRIMARY_VIA[b] ?? 9)
+        );
+        const primaryVia = vias[0] || "上下级机构";
+        return {
+          key: `${targetId}-${item.parentId}`,
+          parentId: item.parentId,
+          title: item.title,
+          primaryVia,
+          viaLabel: vias.join("／"),
+          data: {
+            via: primaryVia,
+            relationIds: [...item.relationIds],
+            periods: [...item.periods.values()].sort((a, b) => a.start - b.start || a.end - b.end),
+            hasUndated: item.hasUndated,
+          },
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, "zh"));
+    if (items.length) result.set(targetId, items);
+  }
+  return result;
 });
 
-// 其他上级沿用主关系的父节点总线结构。同一父节点的辅助关系共享同一个 busY；
-// 如果该父节点已有主总线，虚线直接复用其高度，不再另起一层。
-const visibleSecondaryLayout = computed(() => {
-  const primaryBusBySource = new Map(
-    canvasLayout.value.buses.map((bus) => [bus.source.data.id, bus])
-  );
-  const grouped = new Map();
-  for (const edge of visibleSecondaryEdges.value) {
-    const sourceId = edge.source.data.id;
-    if (!grouped.has(sourceId)) grouped.set(sourceId, []);
-    grouped.get(sourceId).push(edge);
-  }
-
-  const edges = [];
-  const buses = [];
-  for (const [sourceId, members] of grouped) {
-    const source = members[0].source;
-    const sourceY = source.y + nodeHeight(source.data) / 2;
-    const targetY = Math.min(
-      ...members.map((edge) => edge.target.y - nodeHeight(edge.target.data) / 2 - 8)
-    );
-    const busY = primaryBusBySource.get(sourceId)?.busY ?? sourceY + (targetY - sourceY) * 0.48;
-    const routedMembers = members.map((edge) => ({ ...edge, busY }));
-    edges.push(...routedMembers);
-    buses.push({
-      key: `secondary-bus-${sourceId}`,
-      source,
-      members: routedMembers,
-      busY,
-      minX: Math.min(source.x, ...members.map((edge) => edge.target.x)),
-      maxX: Math.max(source.x, ...members.map((edge) => edge.target.x)),
-    });
-  }
-  return { edges, buses };
+const otherParentCard = computed(() => {
+  const targetId = otherParentCardId.value;
+  if (targetId == null) return null;
+  const node = canvasLayout.value.nodes.find((item) => item.data.id === targetId);
+  const items = otherParentsByTarget.value.get(targetId) || [];
+  if (!node || !items.length) return null;
+  const width = 176;
+  const visibleItems = items.slice(0, 6);
+  const hiddenCount = items.length - visibleItems.length;
+  const height = 32 + visibleItems.length * 34 + (hiddenCount ? 20 : 0);
+  const centerX = canvasLayout.value.bbox?.cx ?? 0;
+  const centerY = canvasLayout.value.bbox?.cy ?? 0;
+  const placeLeft = node.x > centerX;
+  const placeAbove = node.y > centerY;
+  return {
+    targetId,
+    items,
+    visibleItems,
+    hiddenCount,
+    width,
+    height,
+    x: placeLeft
+      ? node.x - nodeWidth(node.data) / 2 - width - 10
+      : node.x + nodeWidth(node.data) / 2 + 48,
+    y: placeAbove
+      ? node.y + nodeHeight(node.data) / 2 - height
+      : node.y - nodeHeight(node.data) / 2,
+  };
 });
 
 const worldTransform = computed(
@@ -766,6 +824,61 @@ function evidencePeriodLabel(relations) {
   return labels.length <= 2 ? labels.join("、") : `${labels[0]}等${labels.length}期记录`;
 }
 
+function compactLabel(value, limit) {
+  const chars = [...String(value || "")];
+  return chars.length > limit ? `${chars.slice(0, limit - 1).join("")}…` : chars.join("");
+}
+
+function otherParentCount(id) {
+  return otherParentsByTarget.value.get(id)?.length || 0;
+}
+
+function isInspectedNode(id) {
+  return Boolean(
+    activeOtherParent.value &&
+      (activeOtherParent.value.targetId === id || activeOtherParent.value.parentId === id)
+  );
+}
+
+function clearOtherParentCard() {
+  otherParentCardId.value = null;
+  if (activeOtherParent.value) evidenceCard.value = null;
+  activeOtherParent.value = null;
+}
+
+function toggleOtherParentCard(id) {
+  if (otherParentCardId.value === id) {
+    clearOtherParentCard();
+    return;
+  }
+  otherParentCardId.value = id;
+  activeOtherParent.value = null;
+  evidenceCard.value = null;
+}
+
+function selectOtherParent(targetId, item) {
+  if (activeOtherParent.value?.key === item.key) {
+    activeOtherParent.value = null;
+    evidenceCard.value = null;
+    return;
+  }
+  activeOtherParent.value = {
+    key: item.key,
+    targetId,
+    parentId: item.parentId,
+  };
+  const relations = item.data.relationIds
+    .map((id) => relationById.value.get(id))
+    .filter(Boolean)
+    .sort((a, b) => (a.periods?.[0]?.start ?? Infinity) - (b.periods?.[0]?.start ?? Infinity) || a.id - b.id);
+  evidenceCard.value = relations.length ? { key: item.data.relationIds.join(","), relations } : null;
+}
+
+function centerOtherParent(id) {
+  clearOtherParentCard();
+  focusEntity(id);
+}
+
 function onItemClick(item) {
   if (item.id === focusId.value) toggleSelection(item.id);
   else focusEntity(item.id);
@@ -783,6 +896,7 @@ async function onNodeClick(data, event = null) {
   // 双击的第二次点击 detail=2，跳过，避免与双击聚焦冲突
   if (event?.detail > 1) return;
   if (data.overflow) {
+    clearOtherParentCard();
     const before = canvasNodePos(data.parentId);
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
     await nextTick();
@@ -790,6 +904,7 @@ async function onNodeClick(data, event = null) {
     return;
   }
   browserOpen.value = false;
+  clearOtherParentCard();
   toggleSelection(data.id);
 }
 
@@ -799,6 +914,7 @@ function onNodeDoubleClick(data) {
 
 async function focusEntity(id, emitSelection = true) {
   if (id == null || !graph.value.entityById.has(id)) return;
+  clearOtherParentCard();
   focusId.value = id;
   evidenceCard.value = null;
   childLimits.clear();
@@ -824,6 +940,7 @@ function expandFocusedTree() {
 // 展开/收起不再触发全画布重新居中：记录被点节点的位置，
 // 重新布局后平移视口把它锚回原地，子树就地出现或消失。
 async function toggle(id) {
+  clearOtherParentCard();
   evidenceCard.value = null;
   const before = canvasNodePos(id);
   if (expanded.has(id)) expanded.delete(id);
@@ -846,6 +963,7 @@ function anchorViewport(before, id) {
 }
 
 async function setLayoutMode(mode) {
+  clearOtherParentCard();
   layoutMode.value = mode;
   childLimits.clear();
   await nextTick();
@@ -945,6 +1063,7 @@ watch(
 // 自动重新居中的触发点：切换时间范围、所选时段/历时。
 // 重设中心与切换布局模式在各自函数内显式 fit；展开/收起/翻页走节点锚定，视口不动。
 watch(structureScope, async () => {
+  clearOtherParentCard();
   evidenceCard.value = null;
   childLimits.clear();
   await nextTick();
@@ -954,6 +1073,7 @@ watch(structureScope, async () => {
 watch(
   () => props.range,
   async () => {
+    clearOtherParentCard();
     await nextTick();
     resetViewport();
   },
@@ -1172,18 +1292,9 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   stroke-width: 12;
 }
 
-.secondary-edges .canvas-edge {
-  stroke: var(--rust);
-  stroke-dasharray: 3 4;
-  stroke-width: 1;
-  opacity: 0.55;
-}
-
-.secondary-buses .bus-line {
-  stroke: var(--rust);
-  stroke-dasharray: 3 4;
-  stroke-width: 1;
-  opacity: 0.55;
+.relation-inspection .primary-buses,
+.relation-inspection .primary-edges {
+  opacity: 0.16;
 }
 
 #hierarchy-arrow path {
@@ -1194,6 +1305,7 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   color: var(--paper);
   cursor: pointer;
   outline: none;
+  transition: opacity 0.16s ease;
 
   rect {
     fill: #6d4a2e;
@@ -1223,6 +1335,15 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     stroke-width: 4;
   }
 
+  &.relation-dimmed {
+    opacity: 0.2;
+  }
+
+  &.relation-highlight rect {
+    stroke: #b65435;
+    stroke-width: 3;
+  }
+
   &.overflow rect {
     fill: rgba(244, 241, 234, 0.92);
     stroke: var(--line);
@@ -1233,6 +1354,113 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   &.overflow .node-title {
     fill: var(--ink-soft);
   }
+}
+
+.other-parent-trigger {
+  cursor: pointer;
+
+  rect {
+    fill: rgba(244, 241, 234, 0.96) !important;
+    stroke: rgba(157, 83, 52, 0.72) !important;
+    stroke-width: 0.8 !important;
+    filter: none !important;
+  }
+
+  text {
+    fill: var(--rust);
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 7.5px;
+    pointer-events: none;
+  }
+
+  &:hover rect,
+  &.active rect {
+    fill: var(--rust) !important;
+  }
+
+  &:hover text,
+  &.active text {
+    fill: var(--paper);
+  }
+}
+
+.other-parent-card-bg {
+  fill: rgba(244, 241, 234, 0.98);
+  stroke: rgba(90, 58, 32, 0.55);
+  stroke-width: 1;
+  filter: url(#node-shadow);
+}
+
+.other-parent-card-title {
+  fill: var(--ink);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.other-parent-card-close {
+  cursor: pointer;
+
+  circle {
+    fill: transparent;
+    stroke: transparent;
+  }
+
+  text {
+    fill: rgba(90, 58, 32, 0.62);
+    font-size: 13px;
+  }
+
+  &:hover circle {
+    fill: rgba(157, 83, 52, 0.12);
+  }
+}
+
+.other-parent-row {
+  cursor: pointer;
+
+  rect {
+    fill: rgba(255, 255, 255, 0.35);
+    stroke: var(--line-light);
+    stroke-width: 0.7;
+  }
+
+  svg {
+    fill: none;
+    stroke: var(--rust);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.4;
+  }
+
+  &:hover rect,
+  &.active rect {
+    fill: rgba(157, 83, 52, 0.11);
+    stroke: var(--rust);
+  }
+}
+
+.other-parent-name {
+  fill: var(--ink);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.other-parent-meta,
+.other-parent-card-more {
+  fill: rgba(90, 58, 32, 0.58);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 7px;
+  pointer-events: none;
+}
+
+.other-parent-center {
+  fill: var(--rust);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 8px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .node-title {
@@ -1493,11 +1721,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 .line-sample {
   width: 22px;
   border-top: 1px solid var(--ink-soft);
-}
-
-.line-sample.secondary {
-  border-top-color: var(--rust);
-  border-top-style: dashed;
 }
 
 .canvas-controls {
