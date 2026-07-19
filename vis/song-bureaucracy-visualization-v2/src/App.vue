@@ -7,6 +7,9 @@
         <text x="22" y="30.5" text-anchor="middle" font-size="23" fill="#f4f1ea" font-family="FZQINGKBYSJF, serif">宋</text>
       </svg>
       <h1>宋代官制可视化</h1>
+      <span class="live-status" :class="{ error: dataError }" :title="dataError || `数据库版本 ${dataVersion || '载入中'}`">
+        <i aria-hidden="true"></i>{{ dataError ? "数据库连接异常" : "数据库实时" }}
+      </span>
 
       <div class="search-wrap">
         <label for="entity-search">查找机构或官职</label>
@@ -313,7 +316,7 @@
       </section>
     </main>
 
-    <div v-else class="loading-state">正在展开宋代官制时间……</div>
+    <div v-else class="loading-state">{{ dataError || "正在读取宋代官制数据库……" }}</div>
 
     <SongTimeline
       v-if="dataset"
@@ -326,7 +329,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import EntityTimeline from "./components/EntityTimeline.vue";
 import EventDetailPanel from "./components/EventDetailPanel.vue";
 import HierarchyView from "./components/HierarchyView.vue";
@@ -347,6 +350,11 @@ const timelineEvent = ref(null);
 const viewMode = ref("events");
 const entityFilter = ref("all");
 const eventFilter = ref("all");
+const dataVersion = ref(null);
+const dataError = ref("");
+let refreshTimer = null;
+let refreshInFlight = false;
+let initialNavigationApplied = false;
 
 const entityFilters = [
   { value: "all", label: "全部" },
@@ -363,10 +371,35 @@ const eventTypeLabels = {
   recorded: "记载",
 };
 
-onMounted(async () => {
-  const response = await fetch("./data/song-bureaucracy.json");
-  dataset.value = await response.json();
-  // 支持深链：?view=hierarchy|timeline&entity=实体ID
+function applyDataset(nextDataset) {
+  const entityIds = new Set(nextDataset.entities.map((item) => item.id));
+  const eventsById = new Map(nextDataset.events.map((item) => [item.id, item]));
+
+  dataset.value = nextDataset;
+  if (selectedEntityId.value != null && !entityIds.has(selectedEntityId.value)) {
+    selectedEntityId.value = null;
+  }
+  if (timelineEntityId.value != null && !entityIds.has(timelineEntityId.value)) {
+    timelineEntityId.value = null;
+  }
+  if (centeredEvent.value) {
+    centeredEvent.value = eventsById.get(centeredEvent.value.id) || null;
+    if (!centeredEvent.value) detailOpen.value = false;
+  }
+  if (timelineEvent.value) {
+    timelineEvent.value = eventsById.get(timelineEvent.value.id) || null;
+  }
+
+  const minYear = nextDataset.meta.yearStart;
+  const maxYear = nextDataset.meta.yearEnd;
+  const start = Math.max(minYear, Math.min(maxYear, selectedRange.value[0]));
+  const end = Math.max(start, Math.min(maxYear, selectedRange.value[1]));
+  selectedRange.value = [start, end];
+}
+
+function applyInitialNavigation() {
+  if (initialNavigationApplied || !dataset.value) return;
+  initialNavigationApplied = true;
   const params = new URLSearchParams(window.location.search);
   const view = params.get("view");
   if (view === "hierarchy" || view === "timeline") viewMode.value = view;
@@ -376,6 +409,46 @@ onMounted(async () => {
     else selectedEntityId.value = entityId;
   }
   scrollRailToRange();
+}
+
+async function loadDataset() {
+  const response = await fetch("/api/data", { cache: "no-store" });
+  if (!response.ok) throw new Error(`数据库接口返回 ${response.status}`);
+  const nextDataset = await response.json();
+  applyDataset(nextDataset);
+  applyInitialNavigation();
+  dataVersion.value =
+    response.headers.get("X-Database-Version") || nextDataset.meta.databaseVersion || null;
+  dataError.value = "";
+}
+
+async function refreshIfDatabaseChanged() {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  try {
+    const response = await fetch("/api/version", { cache: "no-store" });
+    if (!response.ok) throw new Error(`数据库版本接口返回 ${response.status}`);
+    const status = await response.json();
+    if (status.version !== dataVersion.value) await loadDataset();
+    dataError.value = "";
+  } catch (error) {
+    dataError.value = `数据库实时连接失败：${error.message}`;
+  } finally {
+    refreshInFlight = false;
+  }
+}
+
+onMounted(async () => {
+  try {
+    await loadDataset();
+  } catch (error) {
+    dataError.value = `数据库读取失败：${error.message}`;
+  }
+  refreshTimer = window.setInterval(refreshIfDatabaseChanged, 1500);
+});
+
+onBeforeUnmount(() => {
+  if (refreshTimer) window.clearInterval(refreshTimer);
 });
 
 const exactEvents = computed(() => {
@@ -891,6 +964,33 @@ button {
   font-family: "FZQINGKBYSJF", serif;
   font-size: 4vh;
   font-weight: 400;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  color: rgba(90, 58, 32, 0.58);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.live-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(111, 150, 144, 0.13);
+}
+
+.live-status.error {
+  color: var(--rust);
+}
+
+.live-status.error i {
+  background: var(--rust);
+  box-shadow: 0 0 0 3px rgba(180, 112, 71, 0.13);
 }
 
 .search-wrap {
