@@ -53,7 +53,8 @@
       </div>
     </div>
 
-    <div ref="shellRef" class="canvas-shell">
+    <div class="canvas-shell">
+      <div ref="stageRef" class="canvas-stage">
       <button
         type="button"
         class="entity-browser-trigger"
@@ -252,13 +253,14 @@
                 <circle r="6" />
                 <path d="M-3 0H3" />
                 <path v-if="!expanded.has(node.data.id)" d="M0-3V3" />
+                <title>{{ expanded.has(node.data.id) ? "收起下级" : "展开下级" }}</title>
               </g>
               <text
                 v-if="node.data.badge"
                 class="node-badge"
-                text-anchor="middle"
-                x="0"
-                :y="nodeHeight(node.data) / 2 + (node.data.hasChildren && !node.data.depthLimited ? 26 : 13)"
+                text-anchor="start"
+                x="10"
+                :y="nodeHeight(node.data) / 2 + 27"
               >{{ node.data.badge }}</text>
               <title>{{ nodeTooltip(node.data) }}</title>
             </g>
@@ -286,6 +288,8 @@
           <button type="button" aria-label="适应画布" @click="resetViewport">适</button>
           <button type="button" aria-label="放大" @click="changeZoom(0.15)">＋</button>
         </div>
+      </div>
+
       </div>
 
       <aside v-if="evidenceCard" class="evidence-panel">
@@ -319,7 +323,8 @@
 //   「适」= 按内容 bbox 计算 fit；滚轮以鼠标为锚缩放；拖动按屏幕像素平移。
 // - 展开模型：每个父节点独立分页（余N项点击翻页），删除全局节点预算；
 //   因多上级去重而未显示的实体不计入“余N项”，以辅助虚线表达。
-// - 节点、展开状态、时间范围或布局模式改变后统一重新 fit，保证新结构完整居中；
+// - 展开/收起/翻页不触发全画布重新居中：被操作的节点锚定在原地，子树就地显隐；
+//   只有重设中心、切换时间范围/所选时段/历时/布局模式时才重新 fit。
 //   单纯打开或关闭详情不改变中心，也不扰动画布视口。
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { hierarchy as d3Hierarchy, tree as d3Tree } from "d3";
@@ -342,13 +347,13 @@ const VIA_ICONS = {
   alias: "M2.5 2.5h7v7h-7zM6.5 6.5h7v7h-7z",
 };
 const NODE_WIDTH = 42;
-const NODE_HEIGHT_MAX = 96;
+const NODE_HEIGHT_MAX = 124;
 const OVERVIEW_CHILD_LIMIT = 24;
 const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
 const FOCUS_MAX_DEPTH = 2;
-const X_SEP = 72;
-const Y_SEP = 148;
+const X_SEP = 84;
+const Y_SEP = 190;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3;
 
@@ -360,7 +365,7 @@ const expanded = reactive(new Set());
 const childLimits = reactive(new Map());
 const evidenceCard = ref(null);
 const rootRef = ref(null);
-const shellRef = ref(null);
+const stageRef = ref(null);
 const svgRef = ref(null);
 
 // —— 视口状态（世界坐标 → 屏幕坐标：translate(pan) scale(zoom)）——
@@ -433,7 +438,7 @@ function makeBadge(edge, extraParentCount = 0) {
     bits.push(first.start === first.end ? `${first.start}` : `${first.start}—${first.end}`);
   }
   if (extraParentCount) bits.push(`另${extraParentCount}上级`);
-  return bits.join(" · ");
+  return bits.join("·");
 }
 
 const defaultChildLimit = () =>
@@ -528,10 +533,12 @@ const canvasLayout = computed(() => {
   for (const node of nodes) {
     const w = nodeWidth(node.data);
     const h = nodeHeight(node.data);
+    // 徽标文字从卡片右侧 x=10 起排，按每字约 8px 估算宽度，避免 bbox 裁掉徽标
+    const badgeExtent = node.data.badge ? 10 + node.data.badge.length * 8 : 0;
     minX = Math.min(minX, node.x - w / 2);
-    maxX = Math.max(maxX, node.x + w / 2);
+    maxX = Math.max(maxX, node.x + Math.max(w / 2, badgeExtent));
     minY = Math.min(minY, node.y - h / 2);
-    maxY = Math.max(maxY, node.y + h / 2 + 34); // 展开按钮 + 徽标空间
+    maxY = Math.max(maxY, node.y + h / 2 + 40); // 展开按钮 + 徽标 + 下行连线起点空间
   }
   const bbox = {
     w: maxX - minX + 80,
@@ -563,7 +570,8 @@ const canvasLayout = computed(() => {
   const buses = [];
   for (const [sourceId, members] of edgesBySource) {
     const source = members[0].source;
-    const sourceY = source.y + nodeHeight(source.data) / 2 + 8;
+    // 下行连线从卡片下缘出发，穿过展开按钮（纸色圆底遮住线头），直达总线
+    const sourceY = source.y + nodeHeight(source.data) / 2;
     const targetY = Math.min(
       ...members.map((edge) => edge.target.y - nodeHeight(edge.target.data) / 2 - 8)
     );
@@ -630,7 +638,8 @@ function nodeWidth(data) {
 
 function nodeHeight(data) {
   if (data.overflow) return 70;
-  return Math.max(68, Math.min(NODE_HEIGHT_MAX, data.displayChars.length * 15 + 22));
+  // 高度按竖排字数给足，标题不溢出卡片
+  return Math.max(68, Math.min(NODE_HEIGHT_MAX, data.displayChars.length * 15 + 26));
 }
 
 function titleStart(data) {
@@ -639,7 +648,7 @@ function titleStart(data) {
 
 function busPath(bus) {
   if (!bus.source) return "";
-  const sourceY = bus.source.y + nodeHeight(bus.source.data) / 2 + 8;
+  const sourceY = bus.source.y + nodeHeight(bus.source.data) / 2;
   return `M${bus.source.x},${sourceY}V${bus.busY}M${bus.minX},${bus.busY}H${bus.maxX}`;
 }
 
@@ -740,9 +749,12 @@ function toggleSelection(id) {
   emit("select-entity", props.selectedEntityId === id ? null : id);
 }
 
-function onNodeClick(data) {
+async function onNodeClick(data) {
   if (data.overflow) {
+    const before = canvasNodePos(data.parentId);
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
+    await nextTick();
+    anchorViewport(before, data.parentId);
     return;
   }
   browserOpen.value = false;
@@ -773,10 +785,28 @@ function expandFocusedTree() {
   }
 }
 
-function toggle(id) {
+// 展开/收起不再触发全画布重新居中：记录被点节点的位置，
+// 重新布局后平移视口把它锚回原地，子树就地出现或消失。
+async function toggle(id) {
   evidenceCard.value = null;
+  const before = canvasNodePos(id);
   if (expanded.has(id)) expanded.delete(id);
   else expanded.add(id);
+  await nextTick();
+  anchorViewport(before, id);
+}
+
+function canvasNodePos(id) {
+  const node = canvasLayout.value.nodes.find((item) => item.data.id === id);
+  return node ? { x: node.x, y: node.y } : null;
+}
+
+function anchorViewport(before, id) {
+  if (!before) return;
+  const after = canvasNodePos(id);
+  if (!after) return;
+  panX.value += (before.x - after.x) * zoom.value;
+  panY.value += (before.y - after.y) * zoom.value;
 }
 
 async function setLayoutMode(mode) {
@@ -806,16 +836,6 @@ function resetViewport() {
   fitViewport();
 }
 
-// 所有会改变结构边界的操作都走同一套自动适配：切换中心、展开/收起、
-// 加载更多、时间范围变化、所选时段/历时和全貌/聚焦切换。
-// 只选中节点查看详情不会改变此 key，因此不会造成画布跳动。
-const layoutFitKey = computed(() => {
-  const layout = canvasLayout.value;
-  return layout.nodes
-    .map((node) => `${node.key}:${node.x}:${node.y}`)
-    .join("|");
-});
-
 function zoomAt(factor, cx, cy) {
   const next = clampZoom(zoom.value * factor);
   if (next === zoom.value) return;
@@ -831,7 +851,10 @@ function changeZoom(delta) {
 function onWheel(event) {
   const rect = svgRef.value?.getBoundingClientRect();
   if (!rect) return;
-  zoomAt(event.deltaY > 0 ? 0.88 : 1 / 0.88, event.clientX - rect.left, event.clientY - rect.top);
+  // 指数步进：触控板连续小滚动平滑，鼠标滚轮一格约 ±15%，避免大幅跳变
+  const unit = event.deltaMode === 1 ? 16 : 1;
+  const factor = Math.exp((-event.deltaY * unit * 0.0016));
+  zoomAt(factor, event.clientX - rect.left, event.clientY - rect.top);
 }
 
 function beginPan(event) {
@@ -867,7 +890,7 @@ onMounted(() => {
     // 画布可用区域变化后重新计算最佳位置，避免窗口或面板变化造成偏移。
     resetViewport();
   });
-  if (shellRef.value) resizeObserver.observe(shellRef.value);
+  if (stageRef.value) resizeObserver.observe(stageRef.value);
 });
 
 onBeforeUnmount(() => resizeObserver?.disconnect());
@@ -883,18 +906,22 @@ watch(
   }
 );
 
-watch(structureScope, () => {
+// 自动重新居中的触发点：切换时间范围、所选时段/历时。
+// 重设中心与切换布局模式在各自函数内显式 fit；展开/收起/翻页走节点锚定，视口不动。
+watch(structureScope, async () => {
   evidenceCard.value = null;
   childLimits.clear();
+  await nextTick();
+  resetViewport();
 });
 
 watch(
-  layoutFitKey,
+  () => props.range,
   async () => {
     await nextTick();
     resetViewport();
   },
-  { flush: "post" }
+  { deep: true }
 );
 
 // 深链：?view=hierarchy&entity=实体ID
@@ -1008,6 +1035,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 }
 
 .canvas-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.canvas-stage {
   position: relative;
   flex: 1;
   min-width: 0;
@@ -1473,20 +1508,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   font-size: 12px;
 }
 
+// 证据页停靠在画布右侧，作为侧栏挤压画布而不是覆盖
 .evidence-panel {
-  position: absolute;
-  z-index: 10;
-  top: 14px;
-  right: 154px;
-  bottom: 14px;
+  flex: 0 0 auto;
   width: min(320px, 31vw);
   overflow-y: auto;
-  border: 1px solid var(--ink-soft);
-  border-radius: 7px;
+  border-left: 1px solid var(--ink-soft);
   padding: 12px 15px 20px;
-  background: rgba(244, 241, 234, 0.96);
-  box-shadow: 0 8px 26px rgba(90, 58, 32, 0.2);
-  backdrop-filter: blur(4px);
+  background: rgba(244, 241, 234, 0.97);
   scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
 }
@@ -1591,7 +1620,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 
   .evidence-panel {
-    right: 14px;
     width: min(330px, 62vw);
   }
 }

@@ -1238,18 +1238,15 @@ button {
   position: relative;
 }
 
+/* 详情页停靠在画布左侧，作为侧栏挤压画布而不是覆盖 */
 .hierarchy-detail-panel {
-  position: absolute;
-  z-index: 14;
-  top: 52px;
-  bottom: 64px;
-  left: 18px;
+  order: -1;
+  flex: 0 0 auto;
   width: min(300px, 27vw);
-  border: 1px solid var(--ink-soft);
-  border-radius: 7px;
+  border-right: 1px solid var(--ink-soft);
+  border-left: 0;
   padding: 14px 17px 24px;
   background-image: url("./assets/images/background.png");
-  box-shadow: 0 8px 28px rgba(90, 58, 32, 0.22);
 }
 
 .exploration-area.events-layout {
