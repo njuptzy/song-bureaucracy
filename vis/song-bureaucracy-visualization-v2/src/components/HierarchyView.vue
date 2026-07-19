@@ -135,6 +135,15 @@
                     <small v-if="rowBadge(row)" class="node-badge">{{ rowBadge(row) }}</small>
                   </button>
                   <button
+                    v-if="row.hasChildren && row.id !== focusId"
+                    type="button"
+                    class="row-focus"
+                    title="将该节点设为层级树中心"
+                    @click.stop="focusEntity(row.id)"
+                  >
+                    以此为中心
+                  </button>
+                  <button
                     v-if="row.edge"
                     type="button"
                     class="evidence-btn"
@@ -183,7 +192,8 @@
 //   （默认全展开，点 ▸/▾ 收起/展开单层）；子节点按关系类型归组排序
 //   （上下级机构 → 编制隶属 → 统称与实例），父子之间用直角肘线连接，不存在交叉线；
 // - 主父链以顶部面包屑条展示，点击可回到任一上级；
-// - 点击树内分支行改以它为焦点；叶子行点击直接打开/关闭右侧详情；
+// - 点击任意树节点只打开/关闭右侧详情；有下级的节点另设“以此为中心”按钮，
+//   避免同一种节点点击因是否有下级而产生两种不同结果；
 // - 节点形状区分类型（机构方角、官职圆角）；关系类型用「颜色 + 线型 + 图标」
 //   三通道区分（上下级机构=深褐实线+建筑、编制隶属=橙色虚线+人形、
 //   统称与实例=灰褐点线+交叠方框），图例见顶部工具栏；
@@ -296,22 +306,17 @@ function focusEntity(id) {
       stack.push(child.entityId);
     }
   }
+  // 树重新聚焦时，详情同步到新中心，避免中央结构和右侧内容指向不同实体。
+  if (props.selectedEntityId !== id) emit("select-entity", id);
 }
 
-// 叶子点击只选中看详情，不触发 selectedEntityId 的改焦点逻辑
+// 树节点点击只选中看详情，不触发 selectedEntityId 的外部定位逻辑。
 let suppressNextFocus = false;
 
 function onRowClick(row) {
   if (row.overflow) return;
-  if (row.id === focusId.value) {
-    toggleSelect(row.id);
-  } else if (row.hasChildren) {
-    focusEntity(row.id);
-  } else {
-    // 叶子节点：直接打开/关闭详情，树保持不动
-    suppressNextFocus = true;
-    toggleSelect(row.id);
-  }
+  suppressNextFocus = true;
+  toggleSelect(row.id);
 }
 
 function toggle(id) {
@@ -995,6 +1000,24 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
 
 .tree-row.selected:not(.focus) .row-node {
   box-shadow: inset 0 0 0 1px var(--ink-soft);
+}
+
+.row-focus {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 1px 2px;
+  color: rgba(90, 58, 32, 0.48);
+  background: transparent;
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  cursor: pointer;
+
+  &:hover {
+    border-bottom-color: var(--ink-soft);
+    color: var(--ink);
+  }
 }
 
 // 行内独立「证」按钮（节点右侧，查看关系证据，与跳转热区分开）
