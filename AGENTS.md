@@ -85,6 +85,7 @@ vis/data/song_bureaucracy_best.db（只读源）
 ```
 
 - 实时服务在请求时现场装配 payload：`NormalizedTimes` 缺失或 `raw_time` 与 `Timepoints.time` 不一致时即时重标准化，因此 `--db` 可直接指向任意结果库；按主库 + WAL 的 mtime/size 指纹缓存，写入稳定约 2 秒（`--settle-seconds`）后才重建，前端每 1.5 秒轮询 `/api/version`。
+- 数据契约：关系的纪年依据是 `relations[].periods`（离散段列表，每段来自关系某一端时间点自身的纪年，空数组 = 时间未明）。**不要**改回两端 min/max 合并的连续跨度——两端相隔很远时会编造出没有依据的连续期。
 - `public/data/song-bureaucracy.json` 只是离线快照：实时接口不可用时前端自动回退，不再是主数据源；需要更新快照时跑 `python3 vis/export_visualization_data.py`。
 
 时间分类规则（详见 `vis/plan.md`）：`exact`（确定到年）/ `range`（明确起止）/ `undated`（宋代无具体年）/ `pre_song`（宋前源流）/ `unresolved`（无法识别）。月日只用于年内排序，不转公历。
