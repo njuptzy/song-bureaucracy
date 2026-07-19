@@ -148,7 +148,7 @@
           @click="closeFloaters"
         />
 
-        <g :transform="worldTransform" :class="{ 'relation-inspection': activeOtherParent }">
+        <g :transform="worldTransform" :class="{ 'relation-inspection': effectiveOtherParent }">
           <g class="primary-buses" aria-hidden="true">
             <path
               v-for="bus in canvasLayout.buses"
@@ -166,6 +166,7 @@
                 'edge-group',
                 `via-${viaClass(edge)}`,
                 { 'evidence-open': evidenceCard?.key != null && evidenceCard.key === relationKey(edge.data) },
+                { 'linked-hover': isHoveredRelationEdge(edge) },
               ]"
               @click.stop="toggleEdgeEvidence(edge)"
             >
@@ -198,7 +199,7 @@
                   selected: node.data.id === selectedEntityId,
                   'linked-hover': node.data.id === hoveredEntityId,
                   'relation-highlight': isInspectedNode(node.data.id),
-                  'relation-dimmed': activeOtherParent && !isInspectedNode(node.data.id),
+                  'relation-dimmed': effectiveOtherParent && !isInspectedNode(node.data.id),
                   overflow: node.data.overflow,
                 },
               ]"
@@ -234,7 +235,7 @@
               <g
                 v-if="otherParentCount(node.data.id)"
                 class="other-parent-trigger"
-                :class="{ active: otherParentCardId === node.data.id }"
+                :class="{ active: effectiveOtherParentCardId === node.data.id }"
                 :transform="`translate(${-nodeWidth(node.data) / 2} ${-nodeHeight(node.data) / 2})`"
                 @click.stop="toggleOtherParentCard(node.data.id)"
               >
@@ -277,7 +278,7 @@
               v-for="(item, index) in otherParentCard.visibleItems"
               :key="item.key"
               class="other-parent-row"
-              :class="{ active: activeOtherParent?.key === item.key }"
+              :class="{ active: effectiveOtherParent?.key === item.key }"
               :transform="`translate(8 ${28 + index * 34})`"
               @click.stop="selectOtherParent(otherParentCard.targetId, item)"
             >
@@ -693,8 +694,52 @@ const otherParentsByTarget = computed(() => {
   return result;
 });
 
+// 左侧详情悬停关系时，只做右侧瞬时预览：
+// 主树关系高亮对应连线；其他上级关系展开对应节点的关系卡和具体行。
+const hoveredOtherParent = computed(() => {
+  const selectedId = props.selectedEntityId;
+  const hoveredId = props.hoveredEntityId;
+  if (selectedId == null || hoveredId == null) return null;
+
+  const selectedAsTarget = (otherParentsByTarget.value.get(selectedId) || []).find(
+    (item) => item.parentId === hoveredId
+  );
+  if (selectedAsTarget) {
+    return {
+      key: selectedAsTarget.key,
+      targetId: selectedId,
+      parentId: hoveredId,
+    };
+  }
+
+  const hoveredAsTarget = (otherParentsByTarget.value.get(hoveredId) || []).find(
+    (item) => item.parentId === selectedId
+  );
+  if (hoveredAsTarget) {
+    return {
+      key: hoveredAsTarget.key,
+      targetId: hoveredId,
+      parentId: selectedId,
+    };
+  }
+  return null;
+});
+
+const hasHoveredDetailRelation = computed(
+  () => props.selectedEntityId != null && props.hoveredEntityId != null
+);
+const effectiveOtherParent = computed(() =>
+  hasHoveredDetailRelation.value ? hoveredOtherParent.value : activeOtherParent.value
+);
+const effectiveOtherParentCardId = computed(
+  () =>
+    hasHoveredDetailRelation.value
+      ? hoveredOtherParent.value?.targetId ?? null
+      : otherParentCardId.value
+);
+
 const otherParentCard = computed(() => {
-  const targetId = otherParentCardId.value;
+  const targetId = effectiveOtherParentCardId.value;
   if (targetId == null) return null;
   const node = canvasLayout.value.nodes.find((item) => item.data.id === targetId);
   const items = otherParentsByTarget.value.get(targetId) || [];
@@ -845,8 +890,20 @@ function otherParentCount(id) {
 
 function isInspectedNode(id) {
   return Boolean(
-    activeOtherParent.value &&
-      (activeOtherParent.value.targetId === id || activeOtherParent.value.parentId === id)
+    effectiveOtherParent.value &&
+      (effectiveOtherParent.value.targetId === id || effectiveOtherParent.value.parentId === id)
+  );
+}
+
+function isHoveredRelationEdge(edge) {
+  const selectedId = props.selectedEntityId;
+  const hoveredId = props.hoveredEntityId;
+  if (selectedId == null || hoveredId == null) return false;
+  const sourceId = edge.source?.data.id;
+  const targetId = edge.target?.data.id;
+  return (
+    (sourceId === selectedId && targetId === hoveredId) ||
+    (sourceId === hoveredId && targetId === selectedId)
   );
 }
 
@@ -1288,8 +1345,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     stroke: #8e8175;
   }
 
-  &:hover .canvas-edge {
+  &:hover .canvas-edge,
+  &.linked-hover .canvas-edge {
     stroke-width: 2.4;
+  }
+
+  &.linked-hover .edge-mark circle {
+    fill: rgba(157, 83, 52, 0.15);
+    stroke-width: 2;
   }
 }
 
