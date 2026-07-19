@@ -208,7 +208,8 @@
               :data-entity-id="typeof node.data.id === 'number' ? node.data.id : null"
               tabindex="0"
               role="button"
-              @click.stop="onNodeClick(node.data)"
+              @click.stop="onNodeClick(node.data, $event)"
+              @dblclick.stop="onNodeDoubleClick(node.data)"
               @keydown.enter.prevent="onNodeClick(node.data)"
             >
               <rect
@@ -225,17 +226,6 @@
                 :cy="-nodeHeight(node.data) / 2 + 5"
                 r="3.5"
               />
-              <g
-                v-if="!node.data.overflow && node.data.id !== focusId"
-                class="focus-control"
-                :transform="`translate(${-nodeWidth(node.data) / 2 - 10} ${-nodeHeight(node.data) / 2 + 10})`"
-                @click.stop="focusEntity(node.data.id)"
-              >
-                <circle class="focus-target-outer" r="7" />
-                <circle class="focus-target-inner" r="3" />
-                <path d="M-7 0H-4M4 0H7M0-7V-4M0 4V7" />
-                <title>以此为中心</title>
-              </g>
               <text class="node-title" text-anchor="middle">
                 <tspan
                   v-for="(char, index) in node.data.displayChars"
@@ -271,7 +261,7 @@
       <div v-if="focusId != null" class="canvas-caption">
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
-        <span>· 点击节点看详情，点击靶标设为中心</span>
+        <span>· 单击看详情，双击设为中心</span>
       </div>
 
       <div class="canvas-controls">
@@ -680,7 +670,7 @@ function nodeTooltip(data) {
   const bits = [`${data.title}（${data.entType}）`, `共${data.eventCount}条记录`];
   if (data.yearMin != null) bits.push(`${data.yearMin}—${data.yearMax}年有记录`);
   if (data.edge) bits.push(`关系：${data.edge.via}`);
-  bits.push("点击看详情，点击左上靶标设为中心");
+  bits.push("单击看详情，双击设为中心");
   return bits.join(" · ");
 }
 
@@ -746,7 +736,9 @@ function toggleSelection(id) {
   emit("select-entity", props.selectedEntityId === id ? null : id);
 }
 
-async function onNodeClick(data) {
+async function onNodeClick(data, event = null) {
+  // 双击的第二次点击 detail=2，跳过，避免与双击聚焦冲突
+  if (event?.detail > 1) return;
   if (data.overflow) {
     const before = canvasNodePos(data.parentId);
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
@@ -756,6 +748,10 @@ async function onNodeClick(data) {
   }
   browserOpen.value = false;
   toggleSelection(data.id);
+}
+
+function onNodeDoubleClick(data) {
+  if (!data.overflow && data.id !== focusId.value) focusEntity(data.id);
 }
 
 async function focusEntity(id, emitSelection = true) {
@@ -1223,35 +1219,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     stroke: var(--ink-soft);
     stroke-linecap: round;
     stroke-width: 1.2;
-  }
-}
-
-.focus-control {
-  cursor: pointer;
-
-  circle,
-  path {
-    fill: var(--paper);
-    stroke: var(--ink-soft);
-    stroke-linecap: round;
-    stroke-width: 1;
-  }
-
-  .focus-target-inner {
-    fill: none;
-  }
-
-  path {
-    fill: none;
-  }
-
-  &:hover .focus-target-outer {
-    fill: var(--ink-soft);
-  }
-
-  &:hover .focus-target-inner,
-  &:hover path {
-    stroke: var(--paper);
   }
 }
 
