@@ -147,7 +147,7 @@
               v-for="bus in canvasLayout.buses"
               :key="bus.key"
               :d="busPath(bus)"
-              :class="['bus-line', `via-${viaClass(bus)}`]"
+              class="bus-line"
             />
           </g>
 
@@ -520,43 +520,32 @@ const canvasLayout = computed(() => {
     data: link.target.data.edge || null,
   }));
 
-  // 同一父节点的子节点按关系类型共用一条横向总线：父节点竖线 → 横线 → 子节点箭头。
-  // 这与逐条绘制完整折线相比不会反复叠加父节点下方的公共线段。
+  // 同一父节点的所有子节点只共用一条横向总线：
+  // 父节点竖线 → 一条横线 → 每个子节点各自向下的箭头。
+  // 关系类型只在最后一段子节点竖线上用线型区分。
   const edgesBySource = new Map();
   for (const edge of edges) {
     const sourceKey = edge.source.data.id;
-    if (!edgesBySource.has(sourceKey)) edgesBySource.set(sourceKey, new Map());
-    const via = edge.data?.via || "上下级机构";
-    const groups = edgesBySource.get(sourceKey);
-    if (!groups.has(via)) groups.set(via, []);
-    groups.get(via).push(edge);
+    if (!edgesBySource.has(sourceKey)) edgesBySource.set(sourceKey, []);
+    edgesBySource.get(sourceKey).push(edge);
   }
 
   const buses = [];
-  for (const [sourceId, groups] of edgesBySource) {
-    const orderedGroups = [...groups.entries()].sort(
-      (a, b) => (PRIMARY_VIA[a[0]] ?? 9) - (PRIMARY_VIA[b[0]] ?? 9)
+  for (const [sourceId, members] of edgesBySource) {
+    const source = members[0].source;
+    const sourceY = source.y + nodeHeight(source.data) / 2 + 8;
+    const targetY = Math.min(
+      ...members.map((edge) => edge.target.y - nodeHeight(edge.target.data) / 2 - 8)
     );
-    orderedGroups.forEach(([via, members], laneIndex) => {
-      const source = members[0].source;
-      const sourceY = source.y + nodeHeight(source.data) / 2 + 8;
-      const targetY = Math.min(
-        ...members.map((edge) => edge.target.y - nodeHeight(edge.target.data) / 2 - 8)
-      );
-      const laneRatio = orderedGroups.length === 1
-        ? 0.48
-        : 0.32 + (laneIndex * 0.3) / Math.max(1, orderedGroups.length - 1);
-      const busY = sourceY + (targetY - sourceY) * laneRatio;
-      for (const edge of members) edge.busY = busY;
-      buses.push({
-        key: `bus-${sourceId}-${via}`,
-        source,
-        members,
-        busY,
-        minX: Math.min(source.x, ...members.map((edge) => edge.target.x)),
-        maxX: Math.max(source.x, ...members.map((edge) => edge.target.x)),
-        data: members[0].data || { via },
-      });
+    const busY = sourceY + (targetY - sourceY) * 0.48;
+    for (const edge of members) edge.busY = busY;
+    buses.push({
+      key: `bus-${sourceId}`,
+      source,
+      members,
+      busY,
+      minX: Math.min(source.x, ...members.map((edge) => edge.target.x)),
+      maxX: Math.max(source.x, ...members.map((edge) => edge.target.x)),
     });
   }
 
@@ -1015,16 +1004,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   stroke-linecap: square;
   stroke-linejoin: miter;
   stroke-width: 1.15;
-
-  &.via-staff {
-    stroke: #b96f42;
-    stroke-dasharray: 6 4;
-  }
-
-  &.via-alias {
-    stroke: #8e8175;
-    stroke-dasharray: 2 4;
-  }
 }
 
 .edge-group {
