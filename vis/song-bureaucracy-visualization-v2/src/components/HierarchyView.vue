@@ -167,7 +167,7 @@
                 `via-${viaClass(edge)}`,
                 { 'evidence-open': evidenceCard?.key != null && evidenceCard.key === relationKey(edge.data) },
               ]"
-              @click.stop="toggleEdgeEvidence(edge)"
+              @click.stop="onEdgeClick(edge)"
             >
               <path :d="stemPath(edge)" class="canvas-edge" />
               <path :d="stemPath(edge)" class="edge-hit" />
@@ -198,7 +198,7 @@
                   selected: node.data.id === selectedEntityId,
                   'linked-hover': node.data.id === hoveredEntityId,
                   'relation-highlight': isInspectedNode(node.data.id),
-                  'relation-dimmed': activeOtherParent && !isInspectedNode(node.data.id),
+                  'relation-dimmed': activeOtherParent && !isInspectedNode(node.data.id) && node.data.id !== hoveredEntityId,
                   overflow: node.data.overflow,
                 },
               ]"
@@ -825,6 +825,12 @@ function toggleEdgeEvidence(edge) {
   };
 }
 
+function onEdgeClick(edge) {
+  toggleEdgeEvidence(edge);
+  const targetId = edge.target?.data.id;
+  if (typeof targetId === "number") selectEntityWithoutFocus(targetId);
+}
+
 function relationPeriodLabel(relation) {
   return relationPeriodsLabel(relation);
 }
@@ -888,6 +894,7 @@ function toggleOtherParentCard(id) {
     clearOtherParentCard();
     return;
   }
+  selectEntityWithoutFocus(id);
   otherParentCardId.value = id;
   activeOtherParent.value = null;
   evidenceCard.value = null;
@@ -897,6 +904,7 @@ function selectOtherParent(targetId, item) {
   if (activeOtherParent.value?.key === item.key) {
     activeOtherParent.value = null;
     evidenceCard.value = null;
+    selectEntityWithoutFocus(targetId);
     return;
   }
   activeOtherParent.value = {
@@ -904,6 +912,7 @@ function selectOtherParent(targetId, item) {
     targetId,
     parentId: item.parentId,
   };
+  selectEntityWithoutFocus(item.parentId);
   const relations = item.data.relationIds
     .map((id) => relationById.value.get(id))
     .filter(Boolean)
@@ -934,6 +943,12 @@ function onItemClick(item) {
 }
 
 let suppressNextFocus = false;
+
+function selectEntityWithoutFocus(id) {
+  if (props.selectedEntityId === id) return;
+  suppressNextFocus = true;
+  emit("select-entity", id);
+}
 
 function toggleSelection(id) {
   suppressNextFocus = true;
@@ -1090,6 +1105,10 @@ watch(
   (id) => {
     if (suppressNextFocus) {
       suppressNextFocus = false;
+      return;
+    }
+    if (id == null) {
+      clearOtherParentCard();
       return;
     }
     if (id != null && id !== focusId.value) focusEntity(id, false);
