@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell backgrounded">
+  <div class="app-shell backgrounded" :class="{ 'hierarchy-mode': viewMode === 'hierarchy' }">
     <header class="site-header">
       <svg class="lab-logo" viewBox="0 0 44 44" aria-hidden="true">
         <rect x="3" y="3" width="38" height="38" rx="6" fill="#724a2b" />
@@ -108,6 +108,7 @@
         :class="{
           'events-layout': viewMode === 'events',
           'with-detail': viewMode === 'events' && centeredEvent && detailOpen,
+          'hierarchy-layout': viewMode === 'hierarchy',
         }"
       >
         <template v-if="viewMode === 'events'">
@@ -232,7 +233,7 @@
             @select-entity="(id) => (selectedEntityId = id)"
           />
 
-          <aside v-if="selectedEntity" class="detail-panel">
+          <aside v-if="selectedEntity" class="detail-panel hierarchy-detail-panel">
             <div class="detail-head">
               <span>{{ selectedEntity.type }} · {{ entityAttrs.category || "未分类" }}</span>
               <button type="button" @click="selectedEntityId = null" aria-label="关闭详情">×</button>
@@ -951,6 +952,10 @@ button {
   overflow: hidden;
 }
 
+.app-shell.hierarchy-mode {
+  grid-template-rows: 8.3vh 79.7vh 12vh;
+}
+
 .site-header {
   position: relative;
   display: flex;
@@ -1227,6 +1232,24 @@ button {
   display: flex;
   min-height: 0;
   overflow: hidden;
+}
+
+.exploration-area.hierarchy-layout {
+  position: relative;
+}
+
+.hierarchy-detail-panel {
+  position: absolute;
+  z-index: 14;
+  top: 52px;
+  bottom: 64px;
+  left: 18px;
+  width: min(300px, 27vw);
+  border: 1px solid var(--ink-soft);
+  border-radius: 7px;
+  padding: 14px 17px 24px;
+  background-image: url("./assets/images/background.png");
+  box-shadow: 0 8px 28px rgba(90, 58, 32, 0.22);
 }
 
 .exploration-area.events-layout {
