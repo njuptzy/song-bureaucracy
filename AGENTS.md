@@ -96,7 +96,7 @@ v2 前端结构（`src/`）：
 - `components/EntityTimeline.vue`：单实体纵向年表（间隔压缩行、1127 分隔、播放演示、与全局时段双向联动）。
 - `components/HierarchyView.vue` + `utils/hierarchy.js`：按 `上下级机构/编制隶属/统称与实例` 建树，支持"所选时段/历时全貌"两种范围。
 - `components/EventDetailPanel.vue`：时序事件与年表共用的详情面板（关系分组、引文证据展开、沿关系跳转）。
-- `components/MainMap.vue`、`components/map/`、`store/`、`data/Data.js`、`PrimaryAxis.vue` 等是 CBDB 模板遗留死代码，未被引用，可清理。
+- CBDB 模板遗留（地图组件、vuex store、vue-router、element-plus、`public/geojson`/`oddata`、`datavis.csv`）已于 2026-07 清理；`node_modules` 仍是指向 `../CBDB-Migration-Map/node_modules` 的符号链接，**不要在本目录跑 `pnpm install`**（会连带改动共享目录），依赖变更用 `pnpm install --lockfile-only` 只更新锁文件。
 
 前端命令（在 `vis/song-bureaucracy-visualization-v2/` 下）：
 
@@ -162,8 +162,8 @@ sqlite3 <结果库> '.tables'
 1. `agent-v0612/` 未被 git 跟踪（还有 `outputs/`、`.claude/` 等），重要成果注意自行备份。
 2. `agent-v0612/README.md` 部分信息偏旧（如默认结果库路径、`check_syntax.py` 已不存在）；以 `run.sh --help` 和源码为准。
 3. 两阶段管线各工具仍是原子写、逐次提交；词条级事务由 `Database.entry_transaction()` 保证，跨词条无整体回滚。
-4. v2 前端留有 CBDB 模板死代码（见"可视化"一节），清理不影响运行。
-5. v2 的 `datavis.csv` 为历史产物；`dist/` 是构建输出；离线快照 JSON 需手动重跑 `vis/export_visualization_data.py` 才会更新。
+4. v2 的 `node_modules` 是共享符号链接，卸载依赖不要直接 `pnpm install`（见"可视化"一节）。
+5. `dist/` 是构建输出；离线快照 JSON 需手动重跑 `vis/export_visualization_data.py` 才会更新。
 6. v0620-regen-test 库有 1 条辞典条目（833 中的 1 条）未被 BuildRecords 覆盖，如需全覆盖请先定位补跑。
 7. 早期 `agent/parse_response.py` 是空实现，不属于当前路径。
 

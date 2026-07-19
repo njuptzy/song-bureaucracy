@@ -37,6 +37,8 @@ python3 ../serve_visualization_v2.py --db /absolute/path/to/database.db
 
 ## 前端开发
 
+注意：`node_modules` 是指向 `../CBDB-Migration-Map/node_modules` 的共享符号链接，不要在本目录直接跑 `pnpm install`（会连带改动共享目录）；依赖变更后用 `pnpm install --lockfile-only` 只更新锁文件。
+
 先在仓库根目录启动 API：
 
 ```bash
