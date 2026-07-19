@@ -148,7 +148,7 @@
           @click="closeFloaters"
         />
 
-        <g :transform="worldTransform" :class="{ 'relation-inspection': effectiveOtherParent }">
+        <g :transform="worldTransform" :class="{ 'relation-inspection': effectiveInspectionPair }">
           <g class="primary-buses" aria-hidden="true">
             <path
               v-for="bus in canvasLayout.buses"
@@ -199,7 +199,7 @@
                   selected: node.data.id === selectedEntityId,
                   'linked-hover': node.data.id === hoveredEntityId,
                   'relation-highlight': isInspectedNode(node.data.id),
-                  'relation-dimmed': effectiveOtherParent && !isInspectedNode(node.data.id),
+                  'relation-dimmed': effectiveInspectionPair && !isInspectedNode(node.data.id),
                   overflow: node.data.overflow,
                 },
               ]"
@@ -728,9 +728,19 @@ const hoveredOtherParent = computed(() => {
 const hasHoveredDetailRelation = computed(
   () => props.selectedEntityId != null && props.hoveredEntityId != null
 );
+const hoveredDetailPair = computed(() =>
+  hasHoveredDetailRelation.value
+    ? {
+        key: `hover-${props.selectedEntityId}-${props.hoveredEntityId}`,
+        targetId: props.selectedEntityId,
+        parentId: props.hoveredEntityId,
+      }
+    : null
+);
 const effectiveOtherParent = computed(() =>
   hasHoveredDetailRelation.value ? hoveredOtherParent.value : activeOtherParent.value
 );
+const effectiveInspectionPair = computed(() => hoveredDetailPair.value || activeOtherParent.value);
 const effectiveOtherParentCardId = computed(
   () =>
     hasHoveredDetailRelation.value
@@ -890,8 +900,8 @@ function otherParentCount(id) {
 
 function isInspectedNode(id) {
   return Boolean(
-    effectiveOtherParent.value &&
-      (effectiveOtherParent.value.targetId === id || effectiveOtherParent.value.parentId === id)
+    effectiveInspectionPair.value &&
+      (effectiveInspectionPair.value.targetId === id || effectiveInspectionPair.value.parentId === id)
   );
 }
 
@@ -1392,8 +1402,12 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 }
 
 .relation-inspection .primary-buses,
-.relation-inspection .primary-edges {
+.relation-inspection .primary-edges .edge-group {
   opacity: 0.16;
+}
+
+.relation-inspection .primary-edges .edge-group.linked-hover {
+  opacity: 1;
 }
 
 #hierarchy-arrow path {
