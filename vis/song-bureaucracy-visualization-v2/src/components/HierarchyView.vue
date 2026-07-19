@@ -388,7 +388,6 @@ const VIA_ICONS = {
 };
 const NODE_WIDTH = 40;
 const NODE_HEIGHT = 112;
-const OVERVIEW_CHILD_LIMIT = 24;
 const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
 const FOCUS_MAX_DEPTH = 2;
@@ -472,8 +471,10 @@ function displayChars(title) {
   return chars.length > 7 ? [...chars.slice(0, 6), "…"] : chars;
 }
 
+// 全貌模式展示全部下级（数据中单个父节点最多 37 个下级，无需分页）；
+// 分页只用于聚焦模式，避免一次铺开过多节点。
 const defaultChildLimit = () =>
-  layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : OVERVIEW_CHILD_LIMIT;
+  layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : Infinity;
 
 const visualTree = computed(() => {
   if (focusId.value == null || !graph.value.entityById.has(focusId.value)) return null;
