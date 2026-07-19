@@ -1,6 +1,6 @@
 import unittest
 
-from vis.normalize_times import chinese_number, normalize_time
+from vis.backend.normalize_times import chinese_number, normalize_time
 
 
 class NormalizeTimesTest(unittest.TestCase):

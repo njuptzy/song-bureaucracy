@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
-DEFAULT_REPORT = ROOT / "vis/time-normalization-report.md"
+DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
 NORMALIZATION_VERSION = "1.1.0"
 REFERENCE_SOURCES = {

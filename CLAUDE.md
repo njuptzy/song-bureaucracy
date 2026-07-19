@@ -27,16 +27,16 @@ cd agent-v0612
 **可视化（vis/song-bureaucracy-visualization-v2/）：**
 ```bash
 pnpm live                      # 推荐：build + 实时只读服务（127.0.0.1:8643），改库后自动刷新
-pnpm dev                       # 需先启动 python3 vis/serve_visualization_v2.py（/api 代理）
-python3 vis/normalize_times.py           # 仅源库变化时：best.db -> visualization.db
-python3 vis/export_visualization_data.py # 仅更新离线快照 JSON（实时接口失效时的兜底）
+pnpm dev                               # 需先启动 python3 vis/backend/serve_visualization_v2.py（/api 代理）
+python3 vis/backend/normalize_times.py           # 仅源库变化时：best.db -> visualization.db
+python3 vis/backend/export_visualization_data.py # 仅更新离线快照 JSON（实时接口失效时的兜底）
 ```
 
 **验证：**
 ```bash
 python3 -m compileall -q agent-v0612
 cd agent-v0612 && python smoke_test.py   # 不调 LLM，对结构化库只读
-python3 -m unittest vis.test_live_visualization_data vis.test_normalize_times
+python3 -m unittest vis.tests.test_live_visualization_data vis.tests.test_normalize_times
 sqlite3 <结果库> 'pragma integrity_check;'
 ```
 
@@ -45,7 +45,7 @@ sqlite3 <结果库> 'pragma integrity_check;'
 ## 修改约定
 
 - **修改代码前必须先做好 git 备份**（提交或暂存当前工作区改动，确保任何修改都可回退）。这条规则永远有效，任何会话、任何目录的代码改动都要遵守。
-- 抽取相关只改 `agent-v0612/`；可视化相关只改 `vis/song-bureaucracy-visualization-v2/` 和 `vis/*.py` 数据脚本。历史目录（`agent/`、`agent_v0126/`、`agent_v0211/`、`agent_v0303/`）仅作参考。
+- 抽取相关只改 `agent-v0612/`；可视化相关只改 `vis/song-bureaucracy-visualization-v2/` 和 `vis/backend/` 数据脚本。历史目录（`agent/`、`agent_v0126/`、`agent_v0211/`、`agent_v0303/`）仅作参考。
 - 保持 `database.py` 为原子 CRUD，跨表联动逻辑放在 `utils.py`；提示词变更落在两个 prompt 模块。
 - 关系必须明确方向，并为关系本身保存引用。
 - `db._recreate_tables()` 是破坏性操作，只允许对临时数据库副本执行。

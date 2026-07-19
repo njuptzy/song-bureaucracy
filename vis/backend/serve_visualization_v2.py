@@ -16,11 +16,11 @@ from urllib.parse import unquote, urlparse
 
 try:
     from .export_visualization_data import build_payload
-except ImportError:  # 直接执行 python3 vis/serve_visualization_v2.py
+except ImportError:  # 直接执行 python3 vis/backend/serve_visualization_v2.py
     from export_visualization_data import build_payload
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB = REPO_ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_DIST = REPO_ROOT / "vis/song-bureaucracy-visualization-v2/dist"
 

@@ -5,11 +5,11 @@ import time
 import unittest
 from pathlib import Path
 
-from vis.export_visualization_data import build_payload
-from vis.serve_visualization_v2 import LivePayloadCache
+from vis.backend.export_visualization_data import build_payload
+from vis.backend.serve_visualization_v2 import LivePayloadCache
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DB = ROOT / "vis/data/song_bureaucracy_visualization.db"
 
 

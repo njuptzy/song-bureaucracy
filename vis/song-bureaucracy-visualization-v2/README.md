@@ -1,6 +1,6 @@
 # 宋代官制时序图谱
 
-本目录由 `vis/CBDB-Migration-Map` 复制后独立改造。原CBDB迁居地图保留在原目录中，不与本项目同步修改。
+本目录由 `vis/legacy/CBDB-Migration-Map` 复制后独立改造。原 CBDB 迁居地图仅作历史参考，不与本项目同步修改。
 
 ## 目录分类
 
@@ -30,7 +30,7 @@
 
 ```bash
 cd ../..
-python3 vis/normalize_times.py
+python3 vis/backend/normalize_times.py
 ```
 
 后端通过只读 SQLite 连接实时装配前端数据。修改工作库并提交事务后，页面会在数秒内检测到主数据库或 WAL 变化并刷新（写入停止约 2 秒后重建缓存，避免批量写入期间反复全量刷新，可用 `--settle-seconds` 调整）；新增或修改 `Timepoints.time` 时会按最新中文时间即时标准化，不依赖旧 `NormalizedTimes`。
@@ -47,19 +47,19 @@ pnpm live
 指定其他数据库：
 
 ```bash
-python3 ../serve_visualization_v2.py --db /absolute/path/to/database.db
+python3 ../backend/serve_visualization_v2.py --db /absolute/path/to/database.db
 ```
 
 数据库始终使用 SQLite `mode=ro` 打开，服务不会写库。
 
 ## 前端开发
 
-注意：`node_modules` 是指向 `../CBDB-Migration-Map/node_modules` 的共享符号链接，不要在本目录直接跑 `pnpm install`（会连带改动共享目录）；依赖变更后用 `pnpm install --lockfile-only` 只更新锁文件。
+注意：`node_modules` 是指向 `../legacy/CBDB-Migration-Map/node_modules` 的共享符号链接，不要在本目录直接跑 `pnpm install`（会连带改动共享目录）；依赖变更后用 `pnpm install --lockfile-only` 只更新锁文件。
 
 先在仓库根目录启动 API：
 
 ```bash
-python3 vis/serve_visualization_v2.py
+python3 vis/backend/serve_visualization_v2.py
 ```
 
 再在另一个终端启动 Vite（`/api` 会代理到 8643）：
@@ -78,7 +78,7 @@ pnpm build
 如仍需重新生成离线 JSON 快照（离线兜底数据随 `pnpm build` 一起打包）：
 
 ```bash
-python3 vis/export_visualization_data.py
+python3 vis/backend/export_visualization_data.py
 ```
 
 ## 测试
@@ -86,5 +86,5 @@ python3 vis/export_visualization_data.py
 在仓库根目录运行（不启动服务、不改库）：
 
 ```bash
-python3 -m unittest vis.test_live_visualization_data vis.test_normalize_times
+python3 -m unittest vis.tests.test_live_visualization_data vis.tests.test_normalize_times
 ```

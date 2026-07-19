@@ -8,7 +8,7 @@
     "serve": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "live": "pnpm build && python3 ../serve_visualization_v2.py"
+    "live": "pnpm build && python3 ../backend/serve_visualization_v2.py"
   },
   "dependencies": {
     "d3": "^7.9.0",

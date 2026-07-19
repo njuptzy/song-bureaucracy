@@ -27,10 +27,12 @@
 | `agent-v0612/records/<标签>/` | 各版本批跑产物（结果库、词条 records_*.json、failed_entries.json、run.log） | 生成物，不要手工编辑 |
 | `agent_framework/` | 共享的 OpenRouter 客户端（`llm.py`），被 agent-v0612 包装使用 | 稳定 |
 | `prompts/` | 两个独立 agent 技能提示词：逐条校对（`..._curation_...`）和全量重生成（`..._full_regeneration_...`），驱动 agent 直接操作 SQLite | 重生成路线的事实标准 |
-| `vis/` | 可视化工作区：时间标准化、数据导出脚本、v1/v2 前端、CBDB 模板 | **当前主战场** |
+| `vis/` | 可视化工作区：当前前端、后端数据链路、测试、文档与资源 | **当前主战场** |
 | `vis/song-bureaucracy-visualization-v2/` | 当前可视化版本（Vue 3 + Vite）：时序事件 / 层级结构 / 年表三视图 + 底部宋代总时间线 | 活跃开发 |
-| `vis/song-bureaucracy-visualization/` | v1 旧版前端 | 冻结，不再同步 |
-| `vis/CBDB-Migration-Map/` | v2 复制改造前的原始模板，也是 `node_modules` 的符号链接来源 | 只读参考 |
+| `vis/backend/` | 时间标准化、离线 JSON 导出和实时只读服务 | 当前后端数据链路 |
+| `vis/tests/` | 可视化数据层单元测试 | 修改 `vis/backend/` 后必跑 |
+| `vis/docs/` / `vis/reports/` / `vis/resources/` | 流程说明、当前运行报告和外部参考资料 | 不放业务代码 |
+| `vis/legacy/CBDB-Migration-Map/` | v2 复制改造前的独立旧项目，也是 `node_modules` 的共享来源 | 只读参考，由自身 Git 管理 |
 | `visualization/` | 旧的逐条审查工具（只读 `server.py` + 静态页）：四表数据与辞典原文并排审查，自动标可疑数据 | 历史工具，仍可用 |
 | `analysis/` | 模型对比报告（`v0614_first25_model_comparison.md`）、结果检查脚本 | 分析材料 |
 | `outputs/excel-db-overlap/` | 尚书省 Excel 表与数据库重叠核查产物 | 生成物 |
@@ -78,17 +80,17 @@ LLM 配置在 `agent-v0612/.env`（参照 `.env.example`，支持 OpenAI 兼容�
 
 ```text
 vis/data/song_bureaucracy_best.db（只读源）
-  -> python3 vis/normalize_times.py      # 年号纪年 -> 公元年，写 NormalizedTimes
+  -> python3 vis/backend/normalize_times.py      # 年号纪年 -> 公元年，写 NormalizedTimes
   -> vis/data/song_bureaucracy_visualization.db（时间标准化工作库）
-  -> python3 vis/serve_visualization_v2.py（只读实时 API，默认 127.0.0.1:8643）
+  -> python3 vis/backend/serve_visualization_v2.py（只读实时 API，默认 127.0.0.1:8643）
   -> v2 前端运行时从 /api/data 取数（Vue 3 + Vite）
 ```
 
 - 实时服务在请求时现场装配 payload：`NormalizedTimes` 缺失或 `raw_time` 与 `Timepoints.time` 不一致时即时重标准化，因此 `--db` 可直接指向任意结果库；按主库 + WAL 的 mtime/size 指纹缓存，写入稳定约 2 秒（`--settle-seconds`）后才重建，前端每 1.5 秒轮询 `/api/version`。
 - 数据契约：关系的纪年依据是 `relations[].periods`（离散段列表，每段来自关系某一端时间点自身的纪年，空数组 = 时间未明）。**不要**改回两端 min/max 合并的连续跨度——两端相隔很远时会编造出没有依据的连续期。
-- `public/data/song-bureaucracy.json` 只是离线快照：实时接口不可用时前端自动回退，不再是主数据源；需要更新快照时跑 `python3 vis/export_visualization_data.py`。
+- `public/data/song-bureaucracy.json` 只是离线快照：实时接口不可用时前端自动回退，不再是主数据源；需要更新快照时跑 `python3 vis/backend/export_visualization_data.py`。
 
-时间分类规则（详见 `vis/plan.md`）：`exact`（确定到年）/ `range`（明确起止）/ `undated`（宋代无具体年）/ `pre_song`（宋前源流）/ `unresolved`（无法识别）。月日只用于年内排序，不转公历。
+时间分类规则（详见 `vis/docs/time-normalization.md`）：`exact`（确定到年）/ `range`（明确起止）/ `undated`（宋代无具体年）/ `pre_song`（宋前源流）/ `unresolved`（无法识别）。月日只用于年内排序，不转公历。
 
 v2 前端结构（`src/`）：
 
@@ -97,13 +99,13 @@ v2 前端结构（`src/`）：
 - `components/EntityTimeline.vue`：单实体纵向年表（间隔压缩行、1127 分隔、播放演示、与全局时段双向联动）。
 - `components/HierarchyView.vue` + `utils/hierarchy.js`：按 `上下级机构/编制隶属/统称与实例` 建树，支持"所选时段/历时全貌"两种范围。
 - `components/EventDetailPanel.vue`：时序事件与年表共用的详情面板（关系分组、引文证据展开、沿关系跳转）。
-- CBDB 模板遗留（地图组件、vuex store、vue-router、element-plus、`public/geojson`/`oddata`、`datavis.csv`）已于 2026-07 清理；`node_modules` 仍是指向 `../CBDB-Migration-Map/node_modules` 的符号链接，**不要在本目录跑 `pnpm install`**（会连带改动共享目录），依赖变更用 `pnpm install --lockfile-only` 只更新锁文件。
+- CBDB 模板遗留（地图组件、vuex store、vue-router、element-plus、`public/geojson`/`oddata`、`datavis.csv`）已于 2026-07 从 v2 清理；`node_modules` 仍是指向 `../legacy/CBDB-Migration-Map/node_modules` 的符号链接，**不要在本目录跑 `pnpm install`**（会连带改动共享目录），依赖变更用 `pnpm install --lockfile-only` 只更新锁文件。
 
 前端命令（在 `vis/song-bureaucracy-visualization-v2/` 下）：
 
 ```bash
 pnpm live   # 推荐：build 后启动实时只读服务（127.0.0.1:8643）
-pnpm dev    # 前端开发（需先在仓库根目录启动 python3 vis/serve_visualization_v2.py，/api 自动代理）
+pnpm dev    # 前端开发（需先在仓库根目录启动 python3 vis/backend/serve_visualization_v2.py，/api 自动代理）
 pnpm build  # 构建到 dist/
 ```
 
@@ -131,8 +133,8 @@ pnpm build  # 构建到 dist/
 python3 -m compileall -q agent-v0612
 # 不调用 LLM 的冒烟测试（对结构化库只读）
 cd agent-v0612 && python smoke_test.py
-# 可视化数据层单元测试（改动 vis/*.py 后必跑）
-python3 -m unittest vis.test_live_visualization_data vis.test_normalize_times
+# 可视化数据层单元测试（改动 vis/backend/*.py 后必跑）
+python3 -m unittest vis.tests.test_live_visualization_data vis.tests.test_normalize_times
 # 前端
 cd vis/song-bureaucracy-visualization-v2 && pnpm build
 ```
@@ -149,13 +151,13 @@ sqlite3 <结果库> '.tables'
 ## 修改约定
 
 - **修改代码前必须先做好 git 备份**（提交或暂存当前工作区改动，确保任何修改都可回退）。这条规则永远有效，任何会话、任何目录的代码改动都要遵守。
-- 抽取相关改动只落在 `agent-v0612/`；可视化相关改动只落在 `vis/song-bureaucracy-visualization-v2/`（及 `vis/*.py` 数据脚本）。历史目录用于追溯思路，不要同步修改。
+- 抽取相关改动只落在 `agent-v0612/`；可视化相关改动只落在 `vis/song-bureaucracy-visualization-v2/`（及 `vis/backend/` 数据脚本）。历史目录用于追溯思路，不要同步修改。
 - `database.py` 保持原子 CRUD；跨表联动逻辑优先放在 `utils.py`。
 - LLM 工具封装和短期上下文更新放在 `agent_state.py`。
 - 提示词行为变更分别落在两个 prompt 模块，不要把长提示词塞进 notebook。
 - 关系必须明确方向，并为关系本身保存引用。
 - 调试批跑前先用 `--limit` 限制词条数；破坏性调试用数据库的临时副本。
-- 直接修改 `vis/data/song_bureaucracy_visualization.db` 后，实时服务会在写入稳定后自动刷新前端；只有源库（如 v0620-regen-test）变化时才需要先同步 `vis/data/song_bureaucracy_best.db` 并重跑 `vis/normalize_times.py`，需要更新离线快照时另跑 `vis/export_visualization_data.py`。
+- 直接修改 `vis/data/song_bureaucracy_visualization.db` 后，实时服务会在写入稳定后自动刷新前端；只有源库（如 v0620-regen-test）变化时才需要先同步 `vis/data/song_bureaucracy_best.db` 并重跑 `vis/backend/normalize_times.py`，需要更新离线快照时另跑 `vis/backend/export_visualization_data.py`。
 - 不要手工编辑 `agent-v0612/records/` 下的批跑产物，除非任务明确针对生成物。
 
 ## 已知问题 / 注意事项
@@ -164,7 +166,7 @@ sqlite3 <结果库> '.tables'
 2. `agent-v0612/README.md` 部分信息偏旧（如默认结果库路径、`check_syntax.py` 已不存在）；以 `run.sh --help` 和源码为准。
 3. 两阶段管线各工具仍是原子写、逐次提交；词条级事务由 `Database.entry_transaction()` 保证，跨词条无整体回滚。
 4. v2 的 `node_modules` 是共享符号链接，卸载依赖不要直接 `pnpm install`（见"可视化"一节）。
-5. `dist/` 是构建输出；离线快照 JSON 需手动重跑 `vis/export_visualization_data.py` 才会更新。
+5. `dist/` 是构建输出；离线快照 JSON 需手动重跑 `vis/backend/export_visualization_data.py` 才会更新。
 6. v0620-regen-test 库有 1 条辞典条目（833 中的 1 条）未被 BuildRecords 覆盖，如需全覆盖请先定位补跑。
 7. 早期 `agent/parse_response.py` 是空实现，不属于当前路径。
 

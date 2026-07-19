@@ -21,7 +21,7 @@
 
 ## 转换规则
 
-脚本：`vis/normalize_times.py`
+脚本：`vis/backend/normalize_times.py`
 
 1. 识别宋代年号及年号年。
 2. 使用“年号元年公元年 + 年号年 - 1”得到公元年。
@@ -46,15 +46,15 @@
 ## 生成命令
 
 ```bash
-python3 vis/normalize_times.py
+python3 vis/backend/normalize_times.py
 ```
 
-运行时同时更新 `vis/time-normalization-report.md`，保存本次各类型数量、待复核项和资料来源。
+运行时同时更新 `vis/reports/time-normalization-report.md`，保存本次各类型数量、待复核项和资料来源。
 
 可显式指定输入和输出：
 
 ```bash
-python3 vis/normalize_times.py \
+python3 vis/backend/normalize_times.py \
   --source vis/data/song_bureaucracy_best.db \
   --output vis/data/song_bureaucracy_visualization.db
 ```
@@ -65,12 +65,12 @@ python3 vis/normalize_times.py \
 
 - `NormalizedTimes`：每个时间节点的年份、月日、排序值和解析类型。
 - `TimeNormalizationMetadata`：版本、生成时间、规则说明和资料来源。
-- `vis/time-normalization-report.md`：本次运行结果和待复核清单。
+- `vis/reports/time-normalization-report.md`：本次运行结果和待复核清单。
 
 ## 测试命令
 
 ```bash
-python3 -m unittest vis/test_normalize_times.py
+python3 -m unittest vis.tests.test_normalize_times
 ```
 
 ## 验证要求

@@ -11,11 +11,11 @@ from pathlib import Path
 
 try:
     from .normalize_times import ERA_YEARS, normalize_time
-except ImportError:  # 直接执行 python3 vis/export_visualization_data.py
+except ImportError:  # 直接执行 python3 vis/backend/export_visualization_data.py
     from normalize_times import ERA_YEARS, normalize_time
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_OUTPUT = ROOT / "vis/song-bureaucracy-visualization-v2/public/data/song-bureaucracy.json"
 
