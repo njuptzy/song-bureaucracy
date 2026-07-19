@@ -916,63 +916,65 @@ button {
 
 .main-stage {
   display: grid;
-  grid-template-rows: 9vh minmax(0, 1fr);
+  grid-template-rows: 5.6vh minmax(0, 1fr);
   min-height: 0;
   padding: 0 1.8vw;
 }
 
 .stage-heading {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto minmax(360px, 1fr);
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   align-items: center;
-  gap: 24px;
+  gap: 18px;
   border-bottom: 0.1vh solid var(--line);
 }
 
 .section-kicker {
-  color: rgba(90, 58, 32, 0.62);
-  font-family: "FZQINGKBYSJF", serif;
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  display: none;
 }
 
 .period-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .period-line h2 {
-  min-width: 190px;
-  margin: 2px 0 0;
-  font-size: 24px;
+  min-width: 166px;
+  margin: 0;
+  font-size: 19px;
   font-weight: 400;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 
 .period-heading {
+  display: flex;
+  align-items: center;
   min-width: 0;
 }
 
 .period-heading p {
   overflow: hidden;
-  margin: 2px 0 0 34px;
+  margin: 0 0 0 10px;
+  border-left: 1px solid var(--line-light);
+  padding-left: 10px;
   color: rgba(90, 58, 32, 0.7);
   font-family: "FZQINGKBYSJF", serif;
-  font-size: 12px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .year-step {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  font-size: 22px;
-  line-height: 20px;
+  font-size: 19px;
+  line-height: 17px;
 }
 
 .year-step:hover {
@@ -981,16 +983,30 @@ button {
 
 .stage-summary {
   display: flex;
-  gap: 22px;
+  align-items: center;
   color: rgba(90, 58, 32, 0.72);
   font-family: "FZQINGKBYSJF", serif;
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.stage-summary span {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  border-left: 1px solid var(--line-light);
+  padding: 0 11px;
+}
+
+.stage-summary span:first-child {
+  border-left: 0;
+  padding-left: 0;
 }
 
 .stage-summary strong {
   color: var(--ink);
   font-family: "FZQINGKBYSJF", serif;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 400;
 }
 
@@ -1006,7 +1022,7 @@ button {
 .filters select {
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 5px 13px;
+  padding: 4px 11px;
   color: var(--ink-soft);
   background: transparent;
   cursor: pointer;
