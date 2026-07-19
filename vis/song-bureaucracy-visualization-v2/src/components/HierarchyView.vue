@@ -231,12 +231,13 @@
                 v-if="otherParentCount(node.data.id)"
                 class="other-parent-trigger"
                 :class="{ active: otherParentCardId === node.data.id }"
-                :transform="`translate(${nodeWidth(node.data) / 2 + 22} 0)`"
+                :transform="`translate(${-nodeWidth(node.data) / 2} ${-nodeHeight(node.data) / 2})`"
                 @click.stop="toggleOtherParentCard(node.data.id)"
               >
-                <rect x="-19" y="-8" width="38" height="16" rx="8" />
-                <text text-anchor="middle" dy="3">另{{ otherParentCount(node.data.id) }}上级</text>
-                <title>查看其他上级</title>
+                <circle class="other-parent-hit" r="11" />
+                <circle class="other-parent-badge" r="7" />
+                <text text-anchor="middle" dy="3">{{ otherParentCount(node.data.id) }}</text>
+                <title>另有 {{ otherParentCount(node.data.id) }} 个上级，点击查看</title>
               </g>
               <g
                 v-if="node.data.hasChildren && !node.data.overflow && !node.data.depthLimited"
@@ -318,7 +319,7 @@
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
         <span>· 单击看详情，双击设为中心</span>
-        <span>· “另 N 上级”查看多上级关系</span>
+        <span>· 节点左上数字角标查看多上级</span>
       </div>
 
       <div class="canvas-controls">
@@ -1356,26 +1357,30 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 }
 
+// 多上级角标：钉在节点左上角的计数小圆，与右上角的活跃圆点对称
 .other-parent-trigger {
   cursor: pointer;
 
-  rect {
-    fill: rgba(244, 241, 234, 0.96) !important;
-    stroke: rgba(157, 83, 52, 0.72) !important;
-    stroke-width: 0.8 !important;
-    filter: none !important;
+  .other-parent-hit {
+    fill: transparent;
+  }
+
+  .other-parent-badge {
+    fill: var(--paper);
+    stroke: var(--rust);
+    stroke-width: 1.2;
   }
 
   text {
     fill: var(--rust);
     font-family: "FZQINGKBYSJF", serif;
-    font-size: 7.5px;
+    font-size: 9px;
     pointer-events: none;
   }
 
-  &:hover rect,
-  &.active rect {
-    fill: var(--rust) !important;
+  &:hover .other-parent-badge,
+  &.active .other-parent-badge {
+    fill: var(--rust);
   }
 
   &:hover text,
@@ -1716,11 +1721,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 .legend-item.via-alias .edge-mark-sample {
   border-color: #8e8175;
   color: #8e8175;
-}
-
-.line-sample {
-  width: 22px;
-  border-top: 1px solid var(--ink-soft);
 }
 
 .canvas-controls {
