@@ -219,6 +219,7 @@
           <HierarchyView
             :dataset="dataset"
             :selected-entity-id="selectedEntityId"
+            :hovered-entity-id="hoveredHierarchyEntityId"
             :active-entities="activeEntities"
             :range="selectedRange"
             @select-entity="(id) => (selectedEntityId = id)"
@@ -274,6 +275,8 @@
                       v-for="relation in group.items"
                       :key="relation.id"
                       type="button"
+                      @mouseenter="hoveredHierarchyEntityId = relation.otherEntityId"
+                      @mouseleave="hoveredHierarchyEntityId = null"
                       @click="followRelation(relation)"
                     >
                       <span class="relation-path">
@@ -338,6 +341,7 @@ const detailOpen = ref(false);
 const centerCardRef = ref(null);
 const railStreamRef = ref(null);
 const selectedEntityId = ref(null);
+const hoveredHierarchyEntityId = ref(null);
 const timelineEntityId = ref(null);
 const timelineEvent = ref(null);
 const viewMode = ref("events");
@@ -612,6 +616,7 @@ watch(rankedEvents, (items) => {
 
 watch(viewMode, (mode) => {
   query.value = "";
+  hoveredHierarchyEntityId.value = null;
   if (mode !== "events") closeCentered();
   if (mode !== "hierarchy") selectedEntityId.value = null;
   if (mode !== "timeline") timelineEvent.value = null;
@@ -706,6 +711,7 @@ function locateSearchResult(item) {
 }
 
 function followRelation(relation) {
+  hoveredHierarchyEntityId.value = null;
   if (viewMode.value === "hierarchy") {
     selectedEntityId.value = relation.otherEntityId;
     return;

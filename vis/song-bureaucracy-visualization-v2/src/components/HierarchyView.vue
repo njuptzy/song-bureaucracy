@@ -1,5 +1,5 @@
 <template>
-  <div class="hierarchy-view">
+  <div ref="rootRef" class="hierarchy-view">
     <div class="hierarchy-toolbar">
       <span class="toolbar-stats">
         {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}有层级实体
@@ -55,7 +55,12 @@
             :key="item.id"
             type="button"
             class="entity-item"
-            :class="{ focused: item.id === focusId, office: item.type === '官职' }"
+            :class="{
+              focused: item.id === focusId,
+              office: item.type === '官职',
+              'linked-hover': item.id === hoveredEntityId,
+            }"
+            :data-entity-id="item.id"
             @click="onItemClick(item)"
           >
             <span class="item-shape" aria-hidden="true"></span>
@@ -70,7 +75,12 @@
             :key="item.id"
             type="button"
             class="entity-item quiet"
-            :class="{ focused: item.id === focusId, office: item.type === '官职' }"
+            :class="{
+              focused: item.id === focusId,
+              office: item.type === '官职',
+              'linked-hover': item.id === hoveredEntityId,
+            }"
+            :data-entity-id="item.id"
             @click="onItemClick(item)"
           >
             <span class="item-shape" aria-hidden="true"></span>
@@ -114,9 +124,11 @@
                   v-for="(row, index) in treeRows"
                   :key="index"
                   class="tree-row"
+                  :data-entity-id="typeof row.id === 'number' ? row.id : null"
                   :class="{
                     focus: row.id === focusId,
                     selected: row.id === selectedEntityId,
+                    'linked-hover': row.id === hoveredEntityId,
                     overflow: row.overflow,
                   }"
                 >
@@ -220,12 +232,13 @@
 //   统称与实例=灰褐点线+交叠方框），图例见顶部工具栏；
 // - 行内「证」按钮在右侧栏显示证明该关系的引文；
 // - 所选时段模式只保留区间内有记录依据的层级边；历时模式保留全部边并标注纪年。
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { buildEntityGraph } from "@/utils/hierarchy";
 
 const props = defineProps({
   dataset: { type: Object, required: true },
   selectedEntityId: { type: Number, default: null },
+  hoveredEntityId: { type: Number, default: null },
   activeEntities: { type: Set, default: () => new Set() },
   range: { type: Array, default: null },
 });
@@ -291,6 +304,7 @@ const extraParents = computed(() => {
 const focusId = ref(null);
 const expanded = reactive(new Set()); // 已展开的下级节点（实体 id）
 const listCollapsed = ref(false); // 左侧词条栏收起状态
+const rootRef = ref(null);
 
 // —— 关系证据栏：点击行内「证」按钮，在舞台右侧固定栏显示证明该关系的引文 ——
 const evidenceCard = ref(null); // { key, relations }
@@ -507,6 +521,25 @@ watch(structureScope, () => {
   evidenceCard.value = null;
   if (focusId.value != null) expandFocusedTree();
 });
+
+watch(
+  () => props.hoveredEntityId,
+  async (id) => {
+    if (id == null) return;
+    await nextTick();
+    const selector = `[data-entity-id="${id}"]`;
+    rootRef.value?.querySelector(`.tree-row${selector}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+    rootRef.value?.querySelector(`.entity-item${selector}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }
+);
 
 // 深链：?view=hierarchy&entity=实体ID
 if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
@@ -731,7 +764,14 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
       background: rgba(106, 74, 42, 0.1);
     }
 
-    &.quiet {
+    &.linked-hover {
+      border-color: var(--rust);
+      background: rgba(180, 112, 71, 0.18);
+      box-shadow: inset 3px 0 0 var(--rust);
+      color: var(--ink);
+    }
+
+    &.quiet:not(.linked-hover) {
       color: rgba(90, 58, 32, 0.45);
     }
 
@@ -1100,6 +1140,17 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId);
 
 .tree-row.selected:not(.focus) .row-node {
   box-shadow: inset 0 0 0 1px var(--ink-soft);
+}
+
+.tree-row.linked-hover .row-node {
+  outline: 2px solid var(--rust);
+  outline-offset: 2px;
+  background: rgba(180, 112, 71, 0.2);
+  box-shadow: 0 0 12px rgba(180, 112, 71, 0.32);
+}
+
+.tree-row.focus.linked-hover .row-node {
+  background: var(--ink-soft);
 }
 
 .row-focus {
