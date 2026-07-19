@@ -204,7 +204,6 @@
             :range="selectedRange"
             @select-entity="onTimelineEntity"
             @select-event="onTimelineEvent"
-            @focus-event="onTimelineRangeFocus"
           />
 
           <EventDetailPanel
@@ -634,11 +633,6 @@ function onTimelineEvent(event) {
   const eventRange = rangeForEvent(event);
   if (eventRange) setRange(eventRange);
   timelineEvent.value = timelineEvent.value?.id === event.id ? null : event;
-}
-
-// 底部时间段驱动的年表定位只更新当前记录，不反向缩窄用户框选。
-function onTimelineRangeFocus(event) {
-  timelineEvent.value = event;
 }
 
 function rangeForEvent(event) {

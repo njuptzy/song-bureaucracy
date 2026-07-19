@@ -168,7 +168,7 @@ const props = defineProps({
   selectedEvent: { type: Object, default: null },
   range: { type: Array, default: null },
 });
-const emit = defineEmits(["select-entity", "select-event", "focus-event"]);
+const emit = defineEmits(["select-entity", "select-event"]);
 
 const GAP_YEARS = 4; // 相邻纪年相差达到该年数即插入「隔 N 年」行
 const DIVIDER_YEAR = 1127;
@@ -266,19 +266,12 @@ const rows = computed(() => {
   return list;
 });
 
-async function scrollToEvent(id) {
-  await nextTick();
-  const container = scrollRef.value;
-  const element = container?.querySelector(`[data-event-id="${id}"]`);
-  if (!container || !element) return;
-  const containerRect = container.getBoundingClientRect();
-  const elementRect = element.getBoundingClientRect();
-  const top =
-    container.scrollTop +
-    elementRect.top -
-    containerRect.top -
-    (container.clientHeight - elementRect.height) / 2;
-  container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+function scrollToEvent(id) {
+  nextTick(() => {
+    scrollRef.value
+      ?.querySelector(`[data-event-id="${id}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 function onCardClick(event) {
@@ -339,24 +332,23 @@ watch(
   () => {
     if (playing.value || !props.range || !entityEvents.value.length) return;
     const matched = rangeMatchedEvents.value[0];
+    if (matched) {
+      scrollToEvent(matched.id);
+      return;
+    }
     const center = (props.range[0] + props.range[1]) / 2;
-    const nearest = matched
-      ? null
-      : entityEvents.value
-          .filter((event) => event.yearStart != null)
-          .reduce(
-            (best, event) =>
-              !best || Math.abs(event.yearStart - center) < Math.abs(best.yearStart - center)
-                ? event
-                : best,
-            null
-          );
-    const target = matched || nearest;
-    if (!target) return;
-    emit("focus-event", target);
-    scrollToEvent(target.id);
+    const nearest = entityEvents.value
+      .filter((event) => event.yearStart != null)
+      .reduce(
+        (best, event) =>
+          !best || Math.abs(event.yearStart - center) < Math.abs(best.yearStart - center)
+            ? event
+            : best,
+        null
+      );
+    if (nearest) scrollToEvent(nearest.id);
   },
-  { deep: true, flush: "post" }
+  { deep: true }
 );
 
 onBeforeUnmount(() => {
