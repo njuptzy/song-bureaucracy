@@ -145,7 +145,7 @@
           :width="viewW"
           :height="viewH"
           @pointerdown="beginPan"
-          @click="clearOtherParentCard"
+          @click="closeFloaters"
         />
 
         <g :transform="worldTransform" :class="{ 'relation-inspection': activeOtherParent }">
@@ -162,7 +162,11 @@
             <g
               v-for="edge in canvasLayout.edges"
               :key="edge.key"
-              :class="['edge-group', `via-${viaClass(edge)}`]"
+              :class="[
+                'edge-group',
+                `via-${viaClass(edge)}`,
+                { 'evidence-open': evidenceCard?.key != null && evidenceCard.key === relationKey(edge.data) },
+              ]"
               @click.stop="toggleEdgeEvidence(edge)"
             >
               <path :d="stemPath(edge)" class="canvas-edge" />
@@ -338,9 +342,7 @@
         </div>
       </div>
 
-      </div>
-
-      <aside v-if="evidenceCard" class="evidence-panel">
+      <aside v-if="evidenceCard" class="evidence-pop" :style="evidencePopStyle" @click.stop>
         <div class="evidence-head">
           <span>{{ evidenceCard.relations[0].type }} · {{ evidencePeriodLabel(evidenceCard.relations) }}</span>
           <button type="button" aria-label="关闭" @click="evidenceCard = null">×</button>
@@ -360,6 +362,7 @@
           <p v-if="!relation.citations.length" class="quiet-text">该期关系暂无引文记录。</p>
         </div>
       </aside>
+      </div>
     </div>
   </div>
 </template>
@@ -816,7 +819,15 @@ function toggleEdgeEvidence(edge) {
     .map((id) => relationById.value.get(id))
     .filter(Boolean)
     .sort((a, b) => (a.periods?.[0]?.start ?? Infinity) - (b.periods?.[0]?.start ?? Infinity) || a.id - b.id);
-  if (relations.length) evidenceCard.value = { key, relations };
+  if (!relations.length) return;
+  // 证据卡锚定在被点竖线的中点（世界坐标），随缩放平移跟随
+  const stemEndY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
+  evidenceCard.value = {
+    key,
+    relations,
+    x: edge.target.x,
+    y: (edge.busY + stemEndY) / 2,
+  };
 }
 
 function relationPeriodLabel(relation) {
@@ -850,6 +861,33 @@ function clearOtherParentCard() {
   activeOtherParent.value = null;
 }
 
+// 点击画布空白处：收起所有浮动卡（其他上级卡 + 证据卡）
+function closeFloaters() {
+  clearOtherParentCard();
+  evidenceCard.value = null;
+}
+
+// 证据卡样式：贴在被点连线/节点的屏幕位置旁，随缩放平移跟随，夹回视口内
+const evidencePopStyle = computed(() => {
+  if (!evidenceCard.value) return {};
+  const cardW = 300;
+  const margin = 12;
+  const sx = panX.value + evidenceCard.value.x * zoom.value;
+  const sy = panY.value + evidenceCard.value.y * zoom.value;
+  let left = sx + 16;
+  if (left + cardW > viewW.value - margin) left = sx - 16 - cardW;
+  left = Math.max(margin, Math.min(left, viewW.value - cardW - margin));
+  const maxH = Math.min(430, viewH.value - margin * 2);
+  let top = sy - maxH / 2;
+  top = Math.max(margin, Math.min(top, viewH.value - maxH - margin));
+  return {
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    width: `${cardW}px`,
+    maxHeight: `${maxH}px`,
+  };
+});
+
 function toggleOtherParentCard(id) {
   if (otherParentCardId.value === id) {
     clearOtherParentCard();
@@ -875,7 +913,18 @@ function selectOtherParent(targetId, item) {
     .map((id) => relationById.value.get(id))
     .filter(Boolean)
     .sort((a, b) => (a.periods?.[0]?.start ?? Infinity) - (b.periods?.[0]?.start ?? Infinity) || a.id - b.id);
-  evidenceCard.value = relations.length ? { key: item.data.relationIds.join(","), relations } : null;
+  if (!relations.length) {
+    evidenceCard.value = null;
+    return;
+  }
+  // 其他上级关系没有可见连线，证据卡锚定在目标节点右侧
+  const node = canvasLayout.value.nodes.find((entry) => entry.data.id === targetId);
+  evidenceCard.value = {
+    key: item.data.relationIds.join(","),
+    relations,
+    x: node ? node.x + nodeWidth(node.data) / 2 : 0,
+    y: node?.y ?? 0,
+  };
 }
 
 function centerOtherParent(id) {
@@ -1748,16 +1797,27 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   font-size: 12px;
 }
 
-// 证据页停靠在画布右侧，作为侧栏挤压画布而不是覆盖
-.evidence-panel {
-  flex: 0 0 auto;
-  width: min(320px, 31vw);
+// 证据卡：弹在被点连线旁边的浮动卡（屏幕坐标，随缩放平移跟随）
+.evidence-pop {
+  position: absolute;
+  z-index: 12;
   overflow-y: auto;
-  border-left: 1px solid var(--ink-soft);
-  padding: 12px 15px 20px;
-  background: rgba(244, 241, 234, 0.97);
+  border: 1px solid var(--ink-soft);
+  border-radius: 7px;
+  padding: 12px 15px 18px;
+  background: rgba(244, 241, 234, 0.98);
+  box-shadow: 0 10px 30px rgba(90, 58, 32, 0.25);
   scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
+}
+
+// 被选中查看证据的连线：加粗高亮，与证据卡形成对应
+.edge-group.evidence-open .canvas-edge {
+  stroke-width: 2.8;
+}
+
+.edge-group.evidence-open .edge-mark circle {
+  stroke-width: 2.2;
 }
 
 .evidence-head {
@@ -1796,7 +1856,7 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   font-size: 10px;
 }
 
-.evidence-panel article {
+.evidence-pop article {
   border-top: 1px solid var(--line-light);
   padding: 8px 0 5px;
 
@@ -1857,10 +1917,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 
   .entity-browser {
     width: min(280px, 58vw);
-  }
-
-  .evidence-panel {
-    width: min(330px, 62vw);
   }
 }
 </style>
