@@ -20,6 +20,21 @@
         <span class="ancestor-current">{{ focusTitle }}</span>
       </nav>
 
+      <span class="toolbar-legend" aria-label="层级图图例">
+        <span class="legend-item"><i class="node-sample org"></i>机构</span>
+        <span class="legend-item"><i class="node-sample office"></i>官职</span>
+        <span class="legend-item via-sup">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.sup" /></svg></i>上下级
+        </span>
+        <span class="legend-item via-staff">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.staff" /></svg></i>隶属
+        </span>
+        <span class="legend-item via-alias">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg></i>统称
+        </span>
+        <span class="legend-item"><i class="line-sample secondary"></i>其他上级</span>
+      </span>
+
       <div class="scope-switch" aria-label="层级结构时间范围">
         <button
           type="button"
@@ -160,6 +175,16 @@
             >
               <path :d="stemPath(edge)" class="canvas-edge" />
               <path :d="stemPath(edge)" class="edge-hit" />
+              <g
+                v-if="edge.data"
+                class="edge-mark"
+                :transform="`translate(${edge.target.x} ${edge.busY})`"
+              >
+                <circle r="7.5" />
+                <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
+                  <path :d="VIA_ICONS[viaClass(edge)]" />
+                </svg>
+              </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
           </g>
@@ -247,16 +272,6 @@
         <span>· 点击节点看详情，点击靶标设为中心</span>
       </div>
 
-      <aside class="canvas-legend" aria-label="层级图图例">
-        <h4>图例</h4>
-        <span><i class="node-sample org"></i>机构</span>
-        <span><i class="node-sample office"></i>官职</span>
-        <span class="via-sup"><i class="line-sample"></i>上下级机构</span>
-        <span class="via-staff"><i class="line-sample"></i>编制隶属</span>
-        <span class="via-alias"><i class="line-sample"></i>统称与实例</span>
-        <span><i class="line-sample secondary"></i>其他上级（选中时）</span>
-      </aside>
-
       <div class="canvas-controls">
         <div class="layout-switch" aria-label="层级画布模式">
           <button type="button" :class="{ active: layoutMode === 'overview' }" @click="setLayoutMode('overview')">
@@ -320,6 +335,12 @@ const props = defineProps({
 const emit = defineEmits(["select-entity"]);
 
 const PRIMARY_VIA = { 上下级机构: 0, 编制隶属: 1, 统称与实例: 2 };
+// 关系类型图标（16×16 简笔，stroke=currentColor）：建筑=上下级机构、人形=编制隶属、交叠方框=统称与实例
+const VIA_ICONS = {
+  sup: "M2 13h12M3.5 13V5.5L8 2l4.5 3.5V13M6 13V8.5h1.6V13M8.4 13V8.5H10V13",
+  staff: "M8 7.2a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2zM3 13.5c.6-3 2.6-4.3 5-4.3s4.4 1.3 5 4.3",
+  alias: "M2.5 2.5h7v7h-7zM6.5 6.5h7v7h-7z",
+};
 const NODE_WIDTH = 42;
 const NODE_HEIGHT_MAX = 96;
 const OVERVIEW_CHILD_LIMIT = 24;
@@ -531,7 +552,7 @@ const canvasLayout = computed(() => {
 
   // 同一父节点的所有子节点只共用一条横向总线：
   // 父节点竖线 → 一条横线 → 每个子节点各自向下的箭头。
-  // 关系类型只在最后一段子节点竖线上用线型区分。
+  // 关系类型在总线分叉点用「颜色 + 类型图标」圆标区分，连线本身全为实线。
   const edgesBySource = new Map();
   for (const edge of edges) {
     const sourceKey = edge.source.data.id;
@@ -1034,17 +1055,44 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 
   &.via-staff .canvas-edge {
     stroke: #b96f42;
-    stroke-dasharray: 6 4;
   }
 
   &.via-alias .canvas-edge {
     stroke: #8e8175;
-    stroke-dasharray: 2 4;
   }
 
   &:hover .canvas-edge {
     stroke-width: 2.4;
   }
+}
+
+// 总线分叉点的类型图标标记：纸色圆底 + 类型色描边与图标
+.edge-mark {
+  pointer-events: none;
+
+  circle {
+    fill: var(--paper);
+    stroke: var(--ink-soft);
+    stroke-width: 1.2;
+  }
+
+  path {
+    fill: none;
+    stroke: var(--ink-soft);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+  }
+}
+
+.edge-group.via-staff .edge-mark circle,
+.edge-group.via-staff .edge-mark path {
+  stroke: #b96f42;
+}
+
+.edge-group.via-alias .edge-mark circle,
+.edge-group.via-alias .edge-mark path {
+  stroke: #8e8175;
 }
 
 .edge-hit {
@@ -1331,41 +1379,25 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 }
 
-.canvas-legend {
-  position: absolute;
-  z-index: 5;
-  top: 15px;
-  right: 15px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 5px;
-  min-width: 124px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 9px 11px;
-  color: rgba(90, 58, 32, 0.68);
-  background: rgba(244, 241, 234, 0.88);
+.toolbar-legend {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  color: rgba(90, 58, 32, 0.62);
   font-size: 9px;
-  backdrop-filter: blur(3px);
-  pointer-events: none;
+  white-space: nowrap;
+}
 
-  h4 {
-    margin: 0 0 2px;
-    color: var(--ink);
-    font-size: 11px;
-    font-weight: 400;
-  }
-
-  span {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .node-sample {
-  width: 12px;
-  height: 14px;
+  width: 9px;
+  height: 11px;
   border-radius: 2px;
   background: #6d4a2e;
 
@@ -1375,19 +1407,43 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 }
 
+// 与画布中总线分叉点一致的类型图标样式
+.edge-mark-sample {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--ink-soft);
+  border-radius: 50%;
+  color: var(--ink-soft);
+
+  svg {
+    width: 9px;
+    height: 9px;
+  }
+
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+  }
+}
+
+.legend-item.via-staff .edge-mark-sample {
+  border-color: #b96f42;
+  color: #b96f42;
+}
+
+.legend-item.via-alias .edge-mark-sample {
+  border-color: #8e8175;
+  color: #8e8175;
+}
+
 .line-sample {
   width: 22px;
   border-top: 1px solid var(--ink-soft);
-}
-
-.via-staff .line-sample {
-  border-top-color: #b96f42;
-  border-top-style: dashed;
-}
-
-.via-alias .line-sample {
-  border-top-color: #8e8175;
-  border-top-style: dotted;
 }
 
 .line-sample.secondary {
@@ -1522,7 +1578,7 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 @media (max-width: 960px) {
   .toolbar-copy span,
   .ancestor-bar,
-  .canvas-legend {
+  .toolbar-legend {
     display: none;
   }
 
