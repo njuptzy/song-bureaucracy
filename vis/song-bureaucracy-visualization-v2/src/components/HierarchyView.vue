@@ -182,8 +182,7 @@
               :data-entity-id="typeof node.data.id === 'number' ? node.data.id : null"
               tabindex="0"
               role="button"
-              @click.stop="onNodeClick(node.data, $event)"
-              @dblclick.stop="onNodeDoubleClick(node.data)"
+              @click.stop="onNodeClick(node.data)"
               @keydown.enter.prevent="onNodeClick(node.data)"
             >
               <rect
@@ -200,6 +199,17 @@
                 :cy="-nodeHeight(node.data) / 2 + 5"
                 r="3.5"
               />
+              <g
+                v-if="!node.data.overflow && node.data.id !== focusId"
+                class="focus-control"
+                :transform="`translate(${-nodeWidth(node.data) / 2 - 10} ${-nodeHeight(node.data) / 2 + 10})`"
+                @click.stop="focusEntity(node.data.id)"
+              >
+                <circle class="focus-target-outer" r="7" />
+                <circle class="focus-target-inner" r="3" />
+                <path d="M-7 0H-4M4 0H7M0-7V-4M0 4V7" />
+                <title>以此为中心</title>
+              </g>
               <text class="node-title" text-anchor="middle">
                 <tspan
                   v-for="(char, index) in node.data.displayChars"
@@ -234,7 +244,7 @@
       <div v-if="focusId != null" class="canvas-caption">
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
-        <span>· 单击看详情，双击设为中心</span>
+        <span>· 点击节点看详情，点击靶标设为中心</span>
       </div>
 
       <aside class="canvas-legend" aria-label="层级图图例">
@@ -294,8 +304,8 @@
 //   「适」= 按内容 bbox 计算 fit；滚轮以鼠标为锚缩放；拖动按屏幕像素平移。
 // - 展开模型：每个父节点独立分页（余N项点击翻页），删除全局节点预算；
 //   因多上级去重而未显示的实体不计入“余N项”，以辅助虚线表达。
-// - 底部时间 / 所选时段 / 历时切换只重建图与布局，保留用户视口与展开状态；
-//   仅初次设中心、双击重设中心、切换全貌/聚焦时自动 fit。
+// - 节点、展开状态、时间范围或布局模式改变后统一重新 fit，保证新结构完整居中；
+//   单纯打开或关闭详情不改变中心，也不扰动画布视口。
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { hierarchy as d3Hierarchy, tree as d3Tree } from "d3";
 import { buildEntityGraph, relationPeriodsLabel } from "@/utils/hierarchy";
@@ -338,7 +348,6 @@ const panX = ref(0);
 const panY = ref(0);
 const viewW = ref(1120);
 const viewH = ref(560);
-let viewportTouched = false; // 用户手动缩放/平移后，容器 resize 不再自动 fit
 const drag = reactive({ active: false, pointerId: null, x: 0, y: 0 });
 let resizeObserver;
 
@@ -644,7 +653,7 @@ function nodeTooltip(data) {
   const bits = [`${data.title}（${data.entType}）`, `共${data.eventCount}条记录`];
   if (data.yearMin != null) bits.push(`${data.yearMin}—${data.yearMax}年有记录`);
   if (data.edge) bits.push(`关系：${data.edge.via}`);
-  bits.push("单击看详情，双击设为中心");
+  bits.push("点击看详情，点击左上靶标设为中心");
   return bits.join(" · ");
 }
 
@@ -698,25 +707,25 @@ function evidencePeriodLabel(relations) {
 }
 
 function onItemClick(item) {
-  focusEntity(item.id);
+  if (item.id === focusId.value) toggleSelection(item.id);
+  else focusEntity(item.id);
   browserOpen.value = false;
 }
 
 let suppressNextFocus = false;
 
-function onNodeClick(data, event = null) {
-  if (event?.detail > 1) return;
+function toggleSelection(id) {
+  suppressNextFocus = true;
+  emit("select-entity", props.selectedEntityId === id ? null : id);
+}
+
+function onNodeClick(data) {
   if (data.overflow) {
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
     return;
   }
   browserOpen.value = false;
-  suppressNextFocus = true;
-  emit("select-entity", props.selectedEntityId === data.id ? null : data.id);
-}
-
-function onNodeDoubleClick(data) {
-  if (!data.overflow) focusEntity(data.id);
+  toggleSelection(data.id);
 }
 
 async function focusEntity(id, emitSelection = true) {
@@ -773,9 +782,18 @@ function fitViewport() {
 }
 
 function resetViewport() {
-  viewportTouched = false;
   fitViewport();
 }
+
+// 所有会改变结构边界的操作都走同一套自动适配：切换中心、展开/收起、
+// 加载更多、时间范围变化、所选时段/历时和全貌/聚焦切换。
+// 只选中节点查看详情不会改变此 key，因此不会造成画布跳动。
+const layoutFitKey = computed(() => {
+  const layout = canvasLayout.value;
+  return layout.nodes
+    .map((node) => `${node.key}:${node.x}:${node.y}`)
+    .join("|");
+});
 
 function zoomAt(factor, cx, cy) {
   const next = clampZoom(zoom.value * factor);
@@ -783,7 +801,6 @@ function zoomAt(factor, cx, cy) {
   panX.value = cx - ((cx - panX.value) * next) / zoom.value;
   panY.value = cy - ((cy - panY.value) * next) / zoom.value;
   zoom.value = next;
-  viewportTouched = true;
 }
 
 function changeZoom(delta) {
@@ -810,7 +827,6 @@ function onPointerMove(event) {
   panY.value += event.clientY - drag.y;
   drag.x = event.clientX;
   drag.y = event.clientY;
-  viewportTouched = true;
 }
 
 function endPan(event) {
@@ -827,8 +843,8 @@ onMounted(() => {
     if (!rect?.width || !rect?.height) return;
     viewW.value = Math.round(rect.width);
     viewH.value = Math.round(rect.height);
-    // 用户未手动操作时，容器尺寸变化保持自动 fit
-    if (!viewportTouched) fitViewport();
+    // 画布可用区域变化后重新计算最佳位置，避免窗口或面板变化造成偏移。
+    resetViewport();
   });
   if (shellRef.value) resizeObserver.observe(shellRef.value);
 });
@@ -847,12 +863,18 @@ watch(
 );
 
 watch(structureScope, () => {
-  // 所选时段 / 历时切换：保留视口与展开状态，只重建图
   evidenceCard.value = null;
   childLimits.clear();
 });
 
-// 底部时间变化不重置视口与展开状态：graph 自动重建，画布原地更新
+watch(
+  layoutFitKey,
+  async () => {
+    await nextTick();
+    resetViewport();
+  },
+  { flush: "post" }
+);
 
 // 深链：?view=hierarchy&entity=实体ID
 if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
@@ -1121,6 +1143,35 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     stroke: var(--ink-soft);
     stroke-linecap: round;
     stroke-width: 1.2;
+  }
+}
+
+.focus-control {
+  cursor: pointer;
+
+  circle,
+  path {
+    fill: var(--paper);
+    stroke: var(--ink-soft);
+    stroke-linecap: round;
+    stroke-width: 1;
+  }
+
+  .focus-target-inner {
+    fill: none;
+  }
+
+  path {
+    fill: none;
+  }
+
+  &:hover .focus-target-outer {
+    fill: var(--ink-soft);
+  }
+
+  &:hover .focus-target-inner,
+  &:hover path {
+    stroke: var(--paper);
   }
 }
 
