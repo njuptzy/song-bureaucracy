@@ -243,23 +243,12 @@
                 <text text-anchor="middle" dy="3">{{ otherParentCount(node.data.id) }}</text>
                 <title>另有 {{ otherParentCount(node.data.id) }} 个上级，点击查看</title>
               </g>
-              <g
-                v-if="node.data.hasChildren && !node.data.overflow && !node.data.depthLimited"
-                class="expand-control"
-                :transform="`translate(0 ${nodeHeight(node.data) / 2 + 9})`"
-                @click.stop="toggle(node.data.id)"
-              >
-                <circle r="6" />
-                <path d="M-3 0H3" />
-                <path v-if="!expanded.has(node.data.id)" d="M0-3V3" />
-                <title>{{ expanded.has(node.data.id) ? "收起下级" : "展开下级" }}</title>
-              </g>
               <text
                 v-if="node.data.badge"
                 class="node-badge"
                 text-anchor="start"
                 x="10"
-                :y="nodeHeight(node.data) / 2 + 27"
+                :y="nodeHeight(node.data) / 2 + 13"
               >{{ node.data.badge }}</text>
               <title>{{ nodeTooltip(node.data) }}</title>
             </g>
@@ -995,18 +984,6 @@ function expandFocusedTree() {
   }
 }
 
-// 展开/收起不再触发全画布重新居中：记录被点节点的位置，
-// 重新布局后平移视口把它锚回原地，子树就地出现或消失。
-async function toggle(id) {
-  clearOtherParentCard();
-  evidenceCard.value = null;
-  const before = canvasNodePos(id);
-  if (expanded.has(id)) expanded.delete(id);
-  else expanded.add(id);
-  await nextTick();
-  anchorViewport(before, id);
-}
-
 function canvasNodePos(id) {
   const node = canvasLayout.value.nodes.find((item) => item.data.id === id);
   return node ? { x: node.x, y: node.y } : null;
@@ -1543,23 +1520,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   fill: #83b0a9;
   stroke: var(--paper);
   stroke-width: 1;
-}
-
-.expand-control {
-  cursor: pointer;
-
-  circle {
-    fill: var(--paper);
-    stroke: var(--ink-soft);
-    stroke-width: 1;
-  }
-
-  path {
-    fill: none;
-    stroke: var(--ink-soft);
-    stroke-linecap: round;
-    stroke-width: 1.2;
-  }
 }
 
 .entity-browser-trigger {
