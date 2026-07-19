@@ -24,7 +24,8 @@ let yearScale;
 
 // —— 与 CBDB TimeLine 一致的画幅与布局参数 ——
 const WIDTH = 2560;
-const MARGIN = { top: 0.08, left: 0.02, right: 0.02, bottom: 0.25 };
+// 保持时间线有效高度不变，将原先底部多余的留白移到顶部，让整组内容下移。
+const MARGIN = { top: 0.2, left: 0.02, right: 0.02, bottom: 0.13 };
 const YEAR_START = 960;
 const YEAR_END = 1280; // 比例尺右端 = 最后一年 1279 + 1
 const YEAR_STEP = 10;
