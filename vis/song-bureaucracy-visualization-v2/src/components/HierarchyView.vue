@@ -151,6 +151,12 @@
             >
               <path :d="edgePath(edge)" class="canvas-edge" />
               <path :d="edgePath(edge)" class="edge-hit" />
+              <g class="edge-mark" :transform="`translate(${edgeMidpoint(edge).x} ${edgeMidpoint(edge).y})`">
+                <circle r="7.5" />
+                <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
+                  <path :d="VIA_ICONS[viaClass(edge)]" />
+                </svg>
+              </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
           </g>
@@ -232,9 +238,15 @@
         <h4>图例</h4>
         <span><i class="node-sample org"></i>机构</span>
         <span><i class="node-sample office"></i>官职</span>
-        <span class="via-sup"><i class="line-sample"></i>上下级机构</span>
-        <span class="via-staff"><i class="line-sample"></i>编制隶属</span>
-        <span class="via-alias"><i class="line-sample"></i>统称与实例</span>
+        <span class="via-sup">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.sup" /></svg></i>上下级机构
+        </span>
+        <span class="via-staff">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.staff" /></svg></i>编制隶属
+        </span>
+        <span class="via-alias">
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg></i>统称与实例
+        </span>
         <span><i class="line-sample secondary"></i>其他上级</span>
       </aside>
 
