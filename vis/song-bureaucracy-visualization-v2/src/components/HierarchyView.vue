@@ -430,15 +430,12 @@ function displayChars(title) {
   return chars.length > 7 ? [...chars.slice(0, 6), "…"] : chars;
 }
 
-function makeBadge(edge, extraParentCount = 0) {
-  const bits = [];
-  if (edge?.via === "编制隶属" && edge.quota != null) bits.push(`${edge.quota}${edge.staffType || "员"}`);
-  if (structureScope.value === "history" && edge?.periods?.length) {
-    const first = edge.periods[0];
-    bits.push(first.start === first.end ? `${first.start}` : `${first.start}—${first.end}`);
-  }
-  if (extraParentCount) bits.push(`另${extraParentCount}上级`);
-  return bits.join("·");
+// 画布徽标只保留关系依据时间（历时模式）。
+// 员额见连线悬停提示与详情面板；多上级数量见详情面板，均不进主视图。
+function makeBadge(edge) {
+  if (structureScope.value !== "history" || !edge?.periods?.length) return "";
+  const first = edge.periods[0];
+  return first.start === first.end ? `${first.start}` : `${first.start}—${first.end}`;
 }
 
 const defaultChildLimit = () =>
@@ -467,7 +464,7 @@ const visualTree = computed(() => {
       edge,
       hasChildren: allChildren.length > 0,
       depthLimited: allChildren.length > 0 && depth >= maxDepth,
-      badge: makeBadge(edge, Math.max(0, (graph.value.parentRelsOf.get(id)?.length || 1) - 1)),
+      badge: makeBadge(edge),
       children: [],
     };
 
