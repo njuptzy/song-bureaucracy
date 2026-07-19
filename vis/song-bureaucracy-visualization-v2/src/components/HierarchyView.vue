@@ -177,20 +177,6 @@
                   <path :d="VIA_ICONS[viaClass(edge)]" />
                 </svg>
               </g>
-              <g
-                v-if="structureScope === 'history' && edge.data"
-                class="edge-time-pill"
-                :transform="edgeTimeTransform(edge)"
-              >
-                <rect
-                  :x="-edgeTimeWidth(edge.data) / 2"
-                  y="-7"
-                  :width="edgeTimeWidth(edge.data)"
-                  height="14"
-                  rx="7"
-                />
-                <text text-anchor="middle" dy="3">{{ edgeTimeText(edge.data) }}</text>
-              </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
           </g>
@@ -222,20 +208,6 @@
                 <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
                   <path :d="VIA_ICONS[viaClass(edge)]" />
                 </svg>
-              </g>
-              <g
-                v-if="structureScope === 'history' && edge.data"
-                class="edge-time-pill"
-                :transform="edgeTimeTransform(edge)"
-              >
-                <rect
-                  :x="-edgeTimeWidth(edge.data) / 2"
-                  y="-7"
-                  :width="edgeTimeWidth(edge.data)"
-                  height="14"
-                  rx="7"
-                />
-                <text text-anchor="middle" dy="3">{{ edgeTimeText(edge.data) }}</text>
               </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
@@ -394,7 +366,7 @@ const FOCUS_CHILD_LIMIT = 14;
 const OVERVIEW_MAX_DEPTH = 7;
 const FOCUS_MAX_DEPTH = 2;
 const X_SEP = 84;
-const Y_SEP = 205;
+const Y_SEP = 190;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3;
 
@@ -764,30 +736,6 @@ function edgePeriodLabel(edge) {
   const suffix = edge.hasUndated ? "、另有时间未明记录" : "";
   if (periods.length <= 2) return `${periods.map((period) => periodText(period.start, period.end)).join("、")}${suffix}`;
   return `${periodText(periods[0].start, periods[0].end)}等${periods.length}期${suffix}`;
-}
-
-// 历时模式下挂在主连线（竖线）中段的时间胶囊：单行、紧凑。
-// ≤2 期全列（"978、1126—1127"），更多期压缩为"978等3期"；无纪年显示"未明"。
-function edgeTimeText(edge) {
-  const periods = edge?.periods || [];
-  if (!periods.length) return "未明";
-  const labels = periods.map((period) =>
-    period.start === period.end ? `${period.start}` : `${period.start}—${period.end}`
-  );
-  if (labels.length <= 2) return labels.join("、");
-  return `${labels[0]}等${labels.length}期`;
-}
-
-function edgeTimeWidth(edge) {
-  let width = 12;
-  for (const char of edgeTimeText(edge)) width += /[0-9—]/.test(char) ? 5 : 9;
-  return Math.max(34, width);
-}
-
-function edgeTimeTransform(edge) {
-  const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
-  const y = edge.busY + (targetY - edge.busY) * 0.55;
-  return `translate(${edge.target.x} ${y})`;
 }
 
 function relationKey(edge) {
@@ -1208,32 +1156,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 }
 
-.edge-time-pill {
-  color: var(--ink-soft);
-  pointer-events: none;
-
-  rect {
-    fill: rgba(244, 241, 234, 0.94);
-    stroke: rgba(90, 58, 32, 0.3);
-    stroke-width: 0.7;
-  }
-
-  text {
-    fill: currentColor;
-    font-family: "FZQINGKBYSJF", serif;
-    font-size: 8px;
-    letter-spacing: 0.02em;
-  }
-}
-
-.edge-group.via-staff .edge-time-pill {
-  color: #a56038;
-}
-
-.edge-group.via-alias .edge-time-pill {
-  color: #7a6e62;
-}
-
 .edge-group.via-staff .edge-mark circle,
 .edge-group.via-staff .edge-mark path {
   stroke: #b96f42;
@@ -1262,10 +1184,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   stroke-dasharray: 3 4;
   stroke-width: 1;
   opacity: 0.55;
-}
-
-.secondary-edge-group .edge-time-pill {
-  color: var(--rust);
 }
 
 #hierarchy-arrow path {
