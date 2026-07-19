@@ -8,6 +8,7 @@ import hashlib
 import json
 import mimetypes
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -25,15 +26,22 @@ DEFAULT_DIST = REPO_ROOT / "vis/song-bureaucracy-visualization-v2/dist"
 
 
 class LivePayloadCache:
-    """按 SQLite 主文件和 WAL 的状态缓存序列化结果。"""
+    """按 SQLite 主文件和 WAL 的状态缓存序列化结果。
 
-    def __init__(self, db_path: Path):
+    min_stable_seconds：检测到库文件变化后，等指纹稳定这么久才重建缓存。
+    批量写库期间前端会继续拿到旧版本，避免每 1.5 秒一次全量刷新；传 0 表示立即重建。
+    """
+
+    def __init__(self, db_path: Path, min_stable_seconds: float = 2.0):
         self.db_path = db_path.resolve()
+        self.min_stable_seconds = min_stable_seconds
         self._lock = threading.Lock()
         self._stamp: tuple[tuple[str, int, int], ...] | None = None
         self._version: str | None = None
         self._payload: dict[str, Any] | None = None
         self._body: bytes | None = None
+        self._pending_stamp: tuple[tuple[str, int, int], ...] | None = None
+        self._pending_since = 0.0
 
     def _database_stamp(self) -> tuple[tuple[str, int, int], ...]:
         parts = []
@@ -51,9 +59,19 @@ class LivePayloadCache:
 
     def get(self) -> tuple[str, dict[str, Any], bytes]:
         stamp = self._database_stamp()
+        now = time.monotonic()
         with self._lock:
             if self._stamp == stamp and self._payload is not None and self._body is not None:
+                self._pending_stamp = None
                 return self._version or "", self._payload, self._body
+
+            if self._payload is not None:
+                # 已有缓存：新指纹需持续稳定 min_stable_seconds 才重建，期间仍发旧版本
+                if self._pending_stamp != stamp:
+                    self._pending_stamp = stamp
+                    self._pending_since = now
+                if now - self._pending_since < self.min_stable_seconds:
+                    return self._version or "", self._payload, self._body
 
             # 在同一个 SQLite 只读快照中装配数据；若写入恰好发生在装配期间，
             # 下一次轮询会根据新 stamp 再刷新，不向数据库写入任何内容。
@@ -67,6 +85,7 @@ class LivePayloadCache:
             self._version = version
             self._payload = payload
             self._body = body
+            self._pending_stamp = None
             return version, payload, body
 
 
@@ -137,6 +156,12 @@ def main() -> None:
     parser.add_argument("--dist", type=Path, default=DEFAULT_DIST)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8643)
+    parser.add_argument(
+        "--settle-seconds",
+        type=float,
+        default=2.0,
+        help="库文件变化后等待写入稳定的秒数，期间继续发旧版本；0 表示立即刷新（默认 2.0）",
+    )
     args = parser.parse_args()
 
     db_path = args.db.resolve()
@@ -146,7 +171,7 @@ def main() -> None:
     if not static_dir.is_dir():
         raise SystemExit(f"前端构建目录不存在: {static_dir}\n请先运行 pnpm build")
 
-    Handler.cache = LivePayloadCache(db_path)
+    Handler.cache = LivePayloadCache(db_path, min_stable_seconds=args.settle_seconds)
     Handler.static_dir = static_dir
     version, payload, _ = Handler.cache.get()
 

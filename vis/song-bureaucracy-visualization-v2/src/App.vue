@@ -7,8 +7,12 @@
         <text x="22" y="30.5" text-anchor="middle" font-size="23" fill="#f4f1ea" font-family="FZQINGKBYSJF, serif">宋</text>
       </svg>
       <h1>宋代官制可视化</h1>
-      <span class="live-status" :class="{ error: dataError }" :title="dataError || `数据库版本 ${dataVersion || '载入中'}`">
-        <i aria-hidden="true"></i>{{ dataError ? "数据库连接异常" : "数据库实时" }}
+      <span
+        class="live-status"
+        :class="{ error: dataError, snapshot: !dataError && usingSnapshot }"
+        :title="dataError || (usingSnapshot ? '实时数据库不可用，正在展示内置离线快照' : `数据库版本 ${dataVersion || '载入中'}`)"
+      >
+        <i aria-hidden="true"></i>{{ dataError ? "数据库连接异常" : usingSnapshot ? "离线快照" : "数据库实时" }}
       </span>
 
       <div class="search-wrap">
@@ -352,6 +356,7 @@ const entityFilter = ref("all");
 const eventFilter = ref("all");
 const dataVersion = ref(null);
 const dataError = ref("");
+const usingSnapshot = ref(false);
 let refreshTimer = null;
 let refreshInFlight = false;
 let initialNavigationApplied = false;
@@ -411,14 +416,24 @@ function applyInitialNavigation() {
   scrollRailToRange();
 }
 
+// 实时接口不可用时回退到构建时打包的离线快照；接口恢复后轮询会自动切回实时数据。
 async function loadDataset() {
-  const response = await fetch("/api/data", { cache: "no-store" });
-  if (!response.ok) throw new Error(`数据库接口返回 ${response.status}`);
-  const nextDataset = await response.json();
-  applyDataset(nextDataset);
+  try {
+    const response = await fetch("/api/data", { cache: "no-store" });
+    if (!response.ok) throw new Error(`数据库接口返回 ${response.status}`);
+    const nextDataset = await response.json();
+    applyDataset(nextDataset);
+    dataVersion.value =
+      response.headers.get("X-Database-Version") || nextDataset.meta.databaseVersion || null;
+    usingSnapshot.value = false;
+  } catch (liveError) {
+    const response = await fetch("./data/song-bureaucracy.json", { cache: "no-store" });
+    if (!response.ok) throw liveError;
+    applyDataset(await response.json());
+    dataVersion.value = null;
+    usingSnapshot.value = true;
+  }
   applyInitialNavigation();
-  dataVersion.value =
-    response.headers.get("X-Database-Version") || nextDataset.meta.databaseVersion || null;
   dataError.value = "";
 }
 
@@ -429,10 +444,11 @@ async function refreshIfDatabaseChanged() {
     const response = await fetch("/api/version", { cache: "no-store" });
     if (!response.ok) throw new Error(`数据库版本接口返回 ${response.status}`);
     const status = await response.json();
-    if (status.version !== dataVersion.value) await loadDataset();
+    if (usingSnapshot.value || status.version !== dataVersion.value) await loadDataset();
     dataError.value = "";
   } catch (error) {
-    dataError.value = `数据库实时连接失败：${error.message}`;
+    // 离线快照模式下静默等待接口恢复，实时模式下才提示连接异常
+    dataError.value = usingSnapshot.value ? "" : `数据库实时连接失败：${error.message}`;
   } finally {
     refreshInFlight = false;
   }
@@ -982,6 +998,11 @@ button {
   border-radius: 50%;
   background: var(--teal);
   box-shadow: 0 0 0 3px rgba(111, 150, 144, 0.13);
+}
+
+.live-status.snapshot i {
+  background: var(--line);
+  box-shadow: 0 0 0 3px rgba(173, 146, 120, 0.18);
 }
 
 .live-status.error {

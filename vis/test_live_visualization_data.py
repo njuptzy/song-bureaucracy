@@ -1,6 +1,7 @@
 import shutil
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -21,11 +22,22 @@ class LiveVisualizationDataTest(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def _table_counts(self) -> dict[str, int]:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            return {
+                table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("Entities", "Timepoints", "Relationships")
+            }
+        finally:
+            conn.close()
+
     def test_current_database_builds_complete_payload(self):
+        counts = self._table_counts()
         payload = build_payload(self.db_path)
-        self.assertEqual(len(payload["entities"]), 981)
-        self.assertEqual(len(payload["events"]), 1813)
-        self.assertEqual(len(payload["relations"]), 1177)
+        self.assertEqual(len(payload["entities"]), counts["Entities"])
+        self.assertEqual(len(payload["events"]), counts["Timepoints"])
+        self.assertEqual(len(payload["relations"]), counts["Relationships"])
 
     def test_changed_raw_time_overrides_stale_normalized_row(self):
         conn = sqlite3.connect(self.db_path)
@@ -60,13 +72,14 @@ class LiveVisualizationDataTest(unittest.TestCase):
             conn.close()
 
         payload = build_payload(self.db_path)
+        counts = self._table_counts()
         event = next(item for item in payload["events"] if item["id"] == timepoint_id)
         self.assertEqual(event["yearStart"], 1132)
-        self.assertEqual(payload["meta"]["entityCount"], 982)
-        self.assertEqual(payload["meta"]["eventCount"], 1814)
+        self.assertEqual(payload["meta"]["entityCount"], counts["Entities"])
+        self.assertEqual(payload["meta"]["eventCount"], counts["Timepoints"])
 
     def test_cache_version_changes_after_database_commit(self):
-        cache = LivePayloadCache(self.db_path)
+        cache = LivePayloadCache(self.db_path, min_stable_seconds=0)
         version_before, _, _ = cache.get()
 
         conn = sqlite3.connect(self.db_path)
@@ -80,6 +93,29 @@ class LiveVisualizationDataTest(unittest.TestCase):
         self.assertNotEqual(version_before, version_after)
         entity = next(item for item in payload["entities"] if item["id"] == 1)
         self.assertEqual(entity["title"], "实时标题变化")
+
+    def test_cache_waits_for_writes_to_settle(self):
+        cache = LivePayloadCache(self.db_path, min_stable_seconds=0.2)
+        version_before, _, _ = cache.get()
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("UPDATE Entities SET title = ? WHERE id = 1", ("写入尚未稳定",))
+            conn.commit()
+        finally:
+            conn.close()
+
+        # 稳定期内仍发旧版本；稳定期过后下一次轮询才重建
+        version_pending, payload_pending, _ = cache.get()
+        self.assertEqual(version_before, version_pending)
+        entity = next(item for item in payload_pending["entities"] if item["id"] == 1)
+        self.assertNotEqual(entity["title"], "写入尚未稳定")
+
+        time.sleep(0.3)
+        version_settled, payload_settled, _ = cache.get()
+        self.assertNotEqual(version_before, version_settled)
+        entity = next(item for item in payload_settled["entities"] if item["id"] == 1)
+        self.assertEqual(entity["title"], "写入尚未稳定")
 
 
 if __name__ == "__main__":

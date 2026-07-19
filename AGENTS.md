@@ -2,201 +2,176 @@
 
 ## 项目目标
 
-本项目尝试把《宋代官制辞典》的 OCR 文本转成可追溯的宋代官制结构化数据。核心对象分为“机构”和“官职”，需要保留它们的时间变化、相互关系和史料引用。
+本项目把《宋代官制辞典》的 OCR 文本转成可追溯的宋代官制结构化数据。核心对象分为"机构"和"官职"，需要保留它们的时间变化、相互关系和史料引用。
 
-仓库包含多轮实验代码。除非任务明确要求维护历史版本，新的实现和修复应优先落在 `agent_v0303/`。
+当前有两条主线：
+
+1. **数据抽取/重生成**：用 LLM agent 把辞典条目写入结构化 SQLite（`agent-v0612/` + `prompts/` 下的重生成/校对 agent 技能）。
+2. **可视化**：`vis/song-bureaucracy-visualization-v2/` 的宋代官制时序图谱，**这是当前的主要工作方向**。
 
 ## 先看这里
 
-- 当前最完整的实现位于 `agent_v0303/`。
-- 当前流程入口仍是 `agent_v0303/agent.ipynb`，还没有独立 CLI、依赖锁文件或自动化测试套件。
-- `data/` 被根目录 `.gitignore` 忽略，但本地工作区通常已恢复外部数据。
-- notebook 中的 Windows 硬编码路径已替换为相对路径，适配 macOS / Linux / Windows。
-- notebook 中的硬编码 API key 已移除，改为通过环境变量读取。共享仓库前仍需确认 `.env` 不被提交。
-- `db._recreate_tables()` 会清空结构化结果表。只允许对临时数据库副本执行。
+- 当前活跃开发：`vis/song-bureaucracy-visualization-v2/`（可视化）和 `agent-v0612/`（数据抽取）。
+- 当前最佳结果库：`agent-v0612/records/v0620-regen-test/song_bureaucracy_entries_v0620-regen-test.db`（覆盖辞典 833 条中的 832 条；981 实体 / 1813 时间点 / 1177 关系 / 3126 引用 / 7288 条 BuildRecords 追溯行）。
+- `vis/data/song_bureaucracy_best.db` 是该库的只读副本，是可视化的数据源；`vis/data/song_bureaucracy_visualization.db` 是由它生成的时间标准化工作库。
+- 辞典源库：`data/database/song_bureaucracy_dictionary.db`（表 `chapter8t10`，833 条）。
+- `agent-v0612/` **整个目录未被 git 跟踪**，改坏没有版本兜底；数据库改动前先备份文件。
+- `db._recreate_tables()` 会清空结构化结果表，只允许对临时数据库副本执行。
+- `data/` 被根目录 `.gitignore` 忽略，但本地工作区已恢复外部数据。
 
 ## 目录地图
 
 | 路径 | 用途 | 维护建议 |
 | --- | --- | --- |
-| `process/ocr-results/` | OCR 清洗 notebook：读取 MinerU 结果、修复目录、用 Trie 切分正文并导出半结构化 JSON/CSV | 输入预处理层 |
-| `agent/` | 最早期单表方案：直接修改按时间段拆分的官制条目 | 历史参考 |
-| `agent_v0126/` | 单表方案增强版：增加时间索引、时间点扩展和引用记录思路 | 历史参考 |
-| `agent_v0211/` | 四表模型的第一版：`Entities / Timepoints / Relationships / Citations`，含高层工具和设计文档 | 迁移参考 |
-| `agent_v0303/` | 当前版本：两阶段提示词、运行时状态、工具调用解析和批处理 notebook | 主要开发目录 |
-| `agent_test/` | 早期数据库与 LLM 实验 notebook | 历史参考，不是自动测试 |
-| `analysis/` | 批处理日志、分析 notebook 和结果数据库快照 | 生成物与分析材料 |
-| `doc/` | 数据建模、流程设计、问题复盘和汇报材料 | 理解设计演进 |
-| `plans/` | 四表模型设计草案 | 注意与实际代码核对 |
+| `agent-v0612/` | 当前抽取实现：两阶段 agent（辞典 → 原子事实 → 四表）、`run.sh` 版本化批跑、多 provider LLM 客户端 | 主要开发目录之一；**未纳入 git** |
+| `agent-v0612/records/<标签>/` | 各版本批跑产物（结果库、词条 records_*.json、failed_entries.json、run.log） | 生成物，不要手工编辑 |
+| `agent_framework/` | 共享的 OpenRouter 客户端（`llm.py`），被 agent-v0612 包装使用 | 稳定 |
+| `prompts/` | 两个独立 agent 技能提示词：逐条校对（`..._curation_...`）和全量重生成（`..._full_regeneration_...`），驱动 agent 直接操作 SQLite | 重生成路线的事实标准 |
+| `vis/` | 可视化工作区：时间标准化、数据导出脚本、v1/v2 前端、CBDB 模板 | **当前主战场** |
+| `vis/song-bureaucracy-visualization-v2/` | 当前可视化版本（Vue 3 + Vite）：时序事件 / 层级结构 / 年表三视图 + 底部宋代总时间线 | 活跃开发 |
+| `vis/song-bureaucracy-visualization/` | v1 旧版前端 | 冻结，不再同步 |
+| `vis/CBDB-Migration-Map/` | v2 复制改造前的原始模板，也是 `node_modules` 的符号链接来源 | 只读参考 |
+| `visualization/` | 旧的逐条审查工具（只读 `server.py` + 静态页）：四表数据与辞典原文并排审查，自动标可疑数据 | 历史工具，仍可用 |
+| `analysis/` | 模型对比报告（`v0614_first25_model_comparison.md`）、结果检查脚本 | 分析材料 |
+| `outputs/excel-db-overlap/` | 尚书省 Excel 表与数据库重叠核查产物 | 生成物 |
+| `process/ocr-results/` | OCR 清洗 notebook：MinerU 结果 → 半结构化辞典数据 | 输入预处理层 |
+| `data/` | 外部数据（辞典库、OCR 结果等），git 忽略 | 只入不删 |
+| `agent/`、`agent_v0126/`、`agent_v0211/`、`agent_v0303/`、`agent_test/` | 历史抽取版本 | 追溯思路用，不要同步修改 |
+| `doc/`、`plans/` | 设计文档与演进记录 | 阅读时注意版本号 |
+| `repair-agent/` | 空目录，预留 | — |
 
-## 当前架构
+## 数据管线
 
-```text
-MinerU OCR
-  -> process/ocr-results/*.ipynb
-  -> 外部 data/ 中的半结构化辞典数据
-  -> 辞典 SQLite 表 chapter8t10
-  -> agent_v0303/agent.ipynb 外层逐条遍历
-      -> 阶段 1: 辞典条目 -> 原子事实
-      -> 阶段 2: 原子事实 -> 四表更新
-  -> 结构化 SQLite 结果库
-  -> analysis/ 中的日志与结果分析
+### A. 两阶段抽取（`agent-v0612/`）
+
+辞典 `chapter8t10` 逐条进入两阶段循环，每阶段最多 10 轮，模型输出 `"Tasks All Finished"` 结束：
+
+1. 阶段 1（`prompt_input2facts.py`）：辞典条目 → 带引用的原子事实。工具：`search_dictionary`、`add_atomic_fact`、`remove_atomic_fact`、`update_atomic_fact`。
+2. 阶段 2（`prompt_facts2data.py`）：原子事实 → 四表更新。工具：`get_entity`、`create_entity`、`create_timepoint`、`update_timepoint_attr`、`create_timepoints_relationship`、`append_citation`。
+
+相比 v0303 的关键修复：LLM 调用带重试与空响应校验；时间点/关系 ID 显式反馈（禁止模型猜 ID）；同名实体默认复用；关系与引用按语义去重；词条级事务回滚；达到最大轮次抛错记入 `failed_entries.json`。详见 `agent-v0612/README.md`。
+
+批跑入口是 `run.sh`（不要用 notebook 跑正式批跑）：
+
+```bash
+cd agent-v0612
+./run.sh --tag <版本标签> --model <模型ID> --start 0 --limit 25   # 常用
+./run.sh --tag v0613-test --entries "河北兵马大元帅-482,都督府-483" # 指定词条
+./run.sh --help                                                  # 完整选项
 ```
 
-### 当前模块职责
+产物按标签隔离到 `records/<标签>/`：结果库 `song_bureaucracy_entries_<标签>.db`、词条记录、`failed_entries.json`、`run.log`。
 
-| 文件 | 职责 |
-| --- | --- |
-| `agent_v0303/database.py` | SQLite 双连接管理；查询辞典；维护四张结果表的原子 CRUD |
-| `agent_v0303/utils.py` | 领域级高层操作；组合 CRUD；格式化辞典和实体上下文 |
-| `agent_v0303/agent_state.py` | 管理当前轮上下文、原子事实、CoT 记录；解析模型 JSON；把工具调用路由到高层接口 |
-| `agent_v0303/prompt_input2facts.py` | 构建阶段 1 提示词：补查辞典并提取原子事实 |
-| `agent_v0303/prompt_facts2data.py` | 构建阶段 2 提示词：查询实体并写入时间点、关系、引用 |
-| `agent_v0303/agent.ipynb` | 配置 LLM，遍历辞典索引，执行两个阶段的最多 10 轮循环，并落盘每条词条的过程记录 |
-| `agent_v0303/config.py` | 统一计算项目根目录、数据库路径和 `save/` 目录，支持环境变量覆盖 |
-| `agent_v0303/llm_client.py` | OpenRouter 兼容 LLM 客户端，替代早期 `graph_agent` 外部依赖入口 |
-| `agent_v0303/test_cot_1.py` | 保存若干手工 CoT 样例，不是可执行测试 |
+LLM 配置在 `agent-v0612/.env`（参照 `.env.example`，支持 OpenAI 兼容端点 / OpenRouter / FreeModel 多 profile，`run.sh --provider` 切换）。另有 `kimi_cli_client.py`：以子进程方式调用本机 kimi CLI 作为模型后端（与 `SimpleLLMClient.chat()` 同接口）。
 
-### 两阶段 Agent 流程
+模型选型见 `analysis/v0614_first25_model_comparison.md`：当时结论以 deepseek v4-pro 为基线。
 
-阶段 1 只负责把辞典文本提炼成带引用的原子事实：
+### B. 全量重生成（`prompts/` 技能路线）
 
-1. `AgentState.append_input_entry()` 加载初始辞典条目。
-2. `build_prompt_input2facts()` 注入辞典索引、已加载文本、已有原子事实和 CoT。
-3. 模型可调用 `search_dictionary`、`add_atomic_fact`、`remove_atomic_fact`、`update_atomic_fact`。
-4. 模型返回 `"Tasks All Finished"` 后进入阶段 2。
+`prompts/song_bureaucracy_full_regeneration_agent_skill.md` 定义了绕过两阶段管线、由 agent 直接读写 SQLite 的全量重生成流程。当前最佳库 `v0620-regen-test` 即此路线的产物（后续用 `run_721_833.sh` 把第 721–833 条叠加修补过）。
 
-阶段 2 负责把原子事实写入结构化数据库：
+该路线在四表之外要求写第五张表 **`BuildRecords`**（追溯表）：每条四表数据记录 `target_table / target_id / source_entry / source_page / decision / created_at`，`decision` 必须说明"为什么建、依据原文哪句话"，与四表写入同事务。注意：`agent-v0612/database.py` 不创建此表，只有重生成/校对 agent 会写。
 
-1. `AgentState.prepare_for_update()` 保留原子事实，清空实体上下文和 CoT。
-2. `build_prompt_facts2data()` 注入实体索引、原子事实、已加载实体和 CoT。
-3. 模型可调用 `get_entity`、`create_entity`、`create_timepoint`、`update_timepoint_attr`、`create_timepoints_relationship`、`append_citation`。
-4. 每个领域工具在写入后重新读取相关实体，使下一轮提示词看到最新状态。
-5. 模型返回 `"Tasks All Finished"` 后保存该词条的处理记录。
+`prompts/song_bureaucracy_entry_curation_agent_prompt.md` 是同风格的逐条校对技能。`fix_evolution_timepoints.py`（根目录）是针对 v0620-regen-test 库的一次性修复脚本（为缺改名时间点的前后演变关系补建时间点），可作同类修复的参考。
 
-## 实际数据模型
+### C. 可视化（`vis/`）
 
-以 `agent_v0303/database.py` 和 `analysis/song_bureaucracy_entries_v0304.db` 的实际 schema 为准。历史文档中的单表方案和 `EntityIntervals` 名称已经过时。
+```text
+vis/data/song_bureaucracy_best.db（只读源）
+  -> python3 vis/normalize_times.py      # 年号纪年 -> 公元年，写 NormalizedTimes
+  -> vis/data/song_bureaucracy_visualization.db（时间标准化工作库）
+  -> python3 vis/serve_visualization_v2.py（只读实时 API，默认 127.0.0.1:8643）
+  -> v2 前端运行时从 /api/data 取数（Vue 3 + Vite）
+```
 
-### `Entities`
+- 实时服务在请求时现场装配 payload：`NormalizedTimes` 缺失或 `raw_time` 与 `Timepoints.time` 不一致时即时重标准化，因此 `--db` 可直接指向任意结果库；按主库 + WAL 的 mtime/size 指纹缓存，写入稳定约 2 秒（`--settle-seconds`）后才重建，前端每 1.5 秒轮询 `/api/version`。
+- `public/data/song-bureaucracy.json` 只是离线快照：实时接口不可用时前端自动回退，不再是主数据源；需要更新快照时跑 `python3 vis/export_visualization_data.py`。
 
-静态实体表：
+时间分类规则（详见 `vis/plan.md`）：`exact`（确定到年）/ `range`（明确起止）/ `undated`（宋代无具体年）/ `pre_song`（宋前源流）/ `unresolved`（无法识别）。月日只用于年内排序，不转公历。
 
-| 字段 | 含义 |
-| --- | --- |
-| `id` | 实体 ID |
-| `title` | 机构或官职名称 |
-| `type` | `机构` 或 `官职` |
+v2 前端结构（`src/`）：
 
-### `Timepoints`
+- `App.vue`：唯一页面壳，三个视图模式（`时序事件` / `层级结构` / `年表`）+ 全局时间段状态，支持深链 `?view=...&entity=...`。
+- `components/SongTimeline.vue`：底部 960–1279 总时间线（年刻度、帝系分段、事件刻度、d3 brush 框选时段）。
+- `components/EntityTimeline.vue`：单实体纵向年表（间隔压缩行、1127 分隔、播放演示、与全局时段双向联动）。
+- `components/HierarchyView.vue` + `utils/hierarchy.js`：按 `上下级机构/编制隶属/统称与实例` 建树，支持"所选时段/历时全貌"两种范围。
+- `components/EventDetailPanel.vue`：时序事件与年表共用的详情面板（关系分组、引文证据展开、沿关系跳转）。
+- `components/MainMap.vue`、`components/map/`、`store/`、`data/Data.js`、`PrimaryAxis.vue` 等是 CBDB 模板遗留死代码，未被引用，可清理。
 
-实体时间线节点：
+前端命令（在 `vis/song-bureaucracy-visualization-v2/` 下）：
 
-| 字段 | 含义 |
-| --- | --- |
-| `entity_id` | 所属实体 |
-| `time`, `event` | 时间文本和事件描述 |
-| `prev_id`, `succ_id` | 同一实体内的前后节点指针 |
-| `attr_category` | 细分类，如官司名、军职名 |
-| `attr_officer_type` | 官职分类，如差遣官或阶官 |
-| `attr_grade` | 官品描述 |
+```bash
+pnpm live   # 推荐：build 后启动实时只读服务（127.0.0.1:8643）
+pnpm dev    # 前端开发（需先在仓库根目录启动 python3 vis/serve_visualization_v2.py，/api 自动代理）
+pnpm build  # 构建到 dist/
+```
 
-新实体会自动创建 `time="未知", event="占位"` 的时间点。第一次写入真实时间时，`create_timepoint()` 会复用该占位节点。
+## 数据模型
 
-### `Relationships`
+以实际 SQLite schema 为准（`agent-v0612/database.py` 与 v0620-regen-test 库）。历史文档中的单表方案已过时。
 
-关系连接的是时间点，不是实体：
+### 四表
 
-| `relation_type` | 推荐方向：`subject_id -> object_id` |
-| --- | --- |
-| `上下级机构` | 上级机构 -> 下级机构 |
-| `编制隶属` | 机构 -> 官职 |
-| `前后演变` | 来源实体时间点 -> 后继实体时间点 |
-| `统称与实例` | 统称模板 -> 具体实例 |
+- **Entities**：静态实体（`id`、`title`、`type`：`机构` 或 `官职`）。
+- **Timepoints**：实体时间线节点（`entity_id`、`time`、`event`、`prev_id`/`succ_id`、`attr_category`、`attr_officer_type`、`attr_grade`）。新实体自动带 `time="未知", event="占位"` 的占位时间点，首次写入真实时间时复用。
+- **Relationships**：连接的是**时间点**不是实体。方向约定：`上下级机构` = 上级→下级；`编制隶属` = 机构→官职（可带 `staff_quota`/`staff_type`）；`前后演变` = 来源→后继；`统称与实例` = 统称→实例。
+- **Citations**：挂在 Timepoints 或 Relationships 上（`target_table`、`target_id`、`citation`、`quotation`、`note`、`conflict_flag`）。新证据用 `append_citation()`，不要静默覆盖冲突。
 
-`编制隶属` 可额外记录 `staff_quota` 和 `staff_type`。
+### BuildRecords（重生成路线）
 
-### `Citations`
-
-引用挂在 `Timepoints` 或 `Relationships` 上：
-
-| 字段 | 含义 |
-| --- | --- |
-| `target_table`, `target_id` | 被引用的时间点或关系 |
-| `citation` | 出处 |
-| `quotation` | 原文 |
-| `note` | 考证说明 |
-| `conflict_flag` | 是否存在冲突 |
-
-新增属性、关系和时间点时应尽量同步写入引用。已有结论出现新证据时使用 `append_citation()`，不要静默覆盖史料冲突。
-
-## 运行前置条件
-
-当前仓库在本机已有数据，运行前仍需要确认：
-
-1. `data/database/song_bureaucracy_dictionary.db` 存在，并确认包含 `chapter8t10` 表。
-2. LLM 已迁移到本仓库的 `agent_framework/`，基于 OpenRouter API，无需额外安装 `graph_agent`。
-3. 通过环境变量注入 `OPENROUTER_API_KEY`（以及可选的 `OPENROUTER_MODEL`），不要写入 notebook。可参考 `agent_v0303/.env.example`。
-4. `agent_v0303/config.py` 默认使用 `data/database/song_bureaucracy_entries_v0304.db`；可用 `SONG_DICT_DB_PATH`、`SONG_ENTRY_DB_PATH`、`SONG_DICT_TABLE` 覆盖。
-5. 使用临时结构化数据库副本调试破坏性流程，避免覆盖 `data/database/song_bureaucracy_entries_v0304.db`。
-
-当前 Python 模块使用同目录导入，例如 `from database import Database`。直接调试时从 `agent_v0303/` 目录启动，或把该目录加入 `PYTHONPATH`。
+第五张追溯表，见上文"全量重生成"一节。分析或可视化脚本不应依赖它一定存在（两阶段管线的库没有此表）。
 
 ## 验证方式
 
-仓库没有正式测试套件。修改后至少执行静态解析：
+仓库没有正式测试套件。修改后至少执行：
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-import ast
-
-for path in sorted(Path(".").glob("**/*.py")):
-    ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-print("Python syntax OK")
-PY
+# Python 语法
+python3 -m compileall -q agent-v0612
+# 不调用 LLM 的冒烟测试（对结构化库只读）
+cd agent-v0612 && python smoke_test.py
+# 可视化数据层单元测试（改动 vis/*.py 后必跑）
+python3 -m unittest vis.test_live_visualization_data vis.test_normalize_times
+# 前端
+cd vis/song-bureaucracy-visualization-v2 && pnpm build
 ```
 
-检查结果数据库时，优先对副本执行：
+结果库检查（优先对副本执行）：
 
 ```bash
-sqlite3 analysis/song_bureaucracy_entries_v0304.db '.tables'
-sqlite3 analysis/song_bureaucracy_entries_v0304.db '.schema'
-sqlite3 analysis/song_bureaucracy_entries_v0304.db 'pragma integrity_check;'
+sqlite3 <结果库> 'pragma integrity_check;'
+sqlite3 <结果库> '.tables'
 ```
 
-新增或删除数据后，还应检查孤儿时间点、孤儿关系和孤儿引用。`database.py` 已在连接时启用 `PRAGMA foreign_keys = ON`，但仍建议人工复核。
+新增或删除数据后检查孤儿时间点、孤儿关系和孤儿引用。`database.py` 连接时已启用 `PRAGMA foreign_keys = ON`，仍建议人工复核。
 
 ## 修改约定
 
-- 新功能默认只改 `agent_v0303/`。历史目录用于追溯思路，不要求同步维护。
+- **修改代码前必须先做好 git 备份**（提交或暂存当前工作区改动，确保任何修改都可回退）。这条规则永远有效，任何会话、任何目录的代码改动都要遵守。
+- 抽取相关改动只落在 `agent-v0612/`；可视化相关改动只落在 `vis/song-bureaucracy-visualization-v2/`（及 `vis/*.py` 数据脚本）。历史目录用于追溯思路，不要同步修改。
 - `database.py` 保持原子 CRUD；跨表联动逻辑优先放在 `utils.py`。
 - LLM 工具封装和短期上下文更新放在 `agent_state.py`。
 - 提示词行为变更分别落在两个 prompt 模块，不要把长提示词塞进 notebook。
 - 关系必须明确方向，并为关系本身保存引用。
-- 调试批处理前先把 `todo_dict_entries` 限制为少量词条。
-- 不要手工编辑 `analysis/nohup.20260304.log` 或结果数据库快照，除非任务明确针对生成物。
+- 调试批跑前先用 `--limit` 限制词条数；破坏性调试用数据库的临时副本。
+- 直接修改 `vis/data/song_bureaucracy_visualization.db` 后，实时服务会在写入稳定后自动刷新前端；只有源库（如 v0620-regen-test）变化时才需要先同步 `vis/data/song_bureaucracy_best.db` 并重跑 `vis/normalize_times.py`，需要更新离线快照时另跑 `vis/export_visualization_data.py`。
+- 不要手工编辑 `agent-v0612/records/` 下的批跑产物，除非任务明确针对生成物。
 
-## 已知问题
+## 已知问题 / 注意事项
 
-这些问题尚未修复，后续修改时应优先评估：
-
-1. ~~notebook 中存在硬编码 API key。~~ **已修复**：改为通过 `OPENROUTER_API_KEY` 环境变量读取。
-2. ~~`agent_v0303/agent.ipynb` 仍有硬编码 Windows 路径~~ **已修复**：已替换为相对路径。
-3. `_recreate_tables()` 是破坏性操作；`agent_v0303/agent.ipynb` 默认已注释，只有临时测试库可手动启用。
-4. ~~SQLite 外键没有显式开启~~ **已修复**：`Database.__init__` 中已启用 `PRAGMA foreign_keys = ON`。
-5. ~~`AgentState.append_input_entry()` 使用 `split("-")` 拆分 `title-page`~~ **已修复**：已改为 `rsplit("-", 1)`。
-6. ~~`AtomicFactsContext` 内部使用整数 ID，但更新和删除工具注解使用字符串 ID~~ **已修复**：`tool_remove_atomic_fact` / `tool_update_atomic_fact` 已强制将 `fact_id` 转为字符串。
-7. ~~阶段 2 提示词提到了 `get_entity_by_title`~~ **已修复**：提示词已改为指引使用 `get_entity`。
-8. 领域工具每个原子写操作都会单独提交事务；多步更新失败时没有整体回滚。
-9. ~~`create_entity()` 允许同名实体~~ **已修复**：同名同类型实体默认复用已有实体；如确认为“同名不同体”，可显式传 `allow_duplicate=True`。`create_timepoints_relationship()` 仍未阻止重复关系，调用方需要先查询确认。
-10. 早期 `agent/parse_response.py` 仍是空实现，但不属于当前 `v0303` 主路径。
+1. `agent-v0612/` 未被 git 跟踪（还有 `outputs/`、`.claude/` 等），重要成果注意自行备份。
+2. `agent-v0612/README.md` 部分信息偏旧（如默认结果库路径、`check_syntax.py` 已不存在）；以 `run.sh --help` 和源码为准。
+3. 两阶段管线各工具仍是原子写、逐次提交；词条级事务由 `Database.entry_transaction()` 保证，跨词条无整体回滚。
+4. v2 前端留有 CBDB 模板死代码（见"可视化"一节），清理不影响运行。
+5. v2 的 `datavis.csv` 为历史产物；`dist/` 是构建输出；离线快照 JSON 需手动重跑 `vis/export_visualization_data.py` 才会更新。
+6. v0620-regen-test 库有 1 条辞典条目（833 中的 1 条）未被 BuildRecords 覆盖，如需全覆盖请先定位补跑。
+7. 早期 `agent/parse_response.py` 是空实现，不属于当前路径。
 
 ## 版本演进
 
-- `agent/`：以辞典 `title-page` 为索引，直接维护单表属性和时间段。
-- `agent_v0126/`：增加时间切分、扩展时间点和引用记录思路。
-- `agent_v0211/`：把静态实体、时间点、关系、引用拆成四表，并形成双层 Agent 设计。
-- `agent_v0303/`：实现“辞典 -> 原子事实 -> 四表更新”的两阶段循环，并完成批量运行实验。
+- `agent/` → `agent_v0126/` → `agent_v0211/` → `agent_v0303/`：单表方案到四表两阶段管线的演进，均为历史参考。
+- `agent-v0612/`：v0303 的修复版，当前抽取实现；批跑产物按版本标签存于 `records/`。
+- `prompts/` 重生成路线（2026-06）：跳过两阶段管线直接全量重建，产出当前最佳库 `v0620-regen-test`，并引入 BuildRecords 追溯表。
+- `visualization/` → `vis/song-bureaucracy-visualization/`（v1）→ `vis/song-bureaucracy-visualization-v2/`：审查工具到时序图谱的演进，v2 为当前版本。
 
-阅读历史文档时，以版本号判断上下文；最终行为以 `agent_v0303/` 源码和实际 SQLite schema 为准。
+阅读历史文档时以版本号判断上下文；最终行为以 `agent-v0612/` 源码、v0620-regen-test 实际 schema 和 v2 前端源码为准。
