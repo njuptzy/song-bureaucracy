@@ -149,13 +149,50 @@
         />
 
         <g :transform="worldTransform">
-          <g class="secondary-edges" aria-hidden="true">
+          <g class="secondary-buses" aria-hidden="true">
             <path
-              v-for="edge in visibleSecondaryEdges"
-              :key="edge.key"
-              :d="secondaryEdgePath(edge)"
-              :class="['canvas-edge', 'secondary', `via-${viaClass(edge)}`]"
+              v-for="bus in visibleSecondaryLayout.buses"
+              :key="bus.key"
+              :d="busPath(bus)"
+              class="bus-line secondary"
             />
+          </g>
+
+          <g class="secondary-edges">
+            <g
+              v-for="edge in visibleSecondaryLayout.edges"
+              :key="edge.key"
+              :class="['edge-group', 'secondary-edge-group', `via-${viaClass(edge)}`]"
+              @click.stop="toggleEdgeEvidence(edge)"
+            >
+              <path :d="stemPath(edge)" class="canvas-edge secondary" />
+              <path :d="stemPath(edge)" class="edge-hit" />
+              <g
+                v-if="edge.data"
+                class="edge-mark"
+                :transform="`translate(${edge.target.x} ${edge.busY})`"
+              >
+                <circle r="7.5" />
+                <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
+                  <path :d="VIA_ICONS[viaClass(edge)]" />
+                </svg>
+              </g>
+              <g
+                v-if="structureScope === 'history' && edge.data"
+                class="edge-time-pill"
+                :transform="edgeTimeTransform(edge)"
+              >
+                <rect
+                  :x="-edgeTimeWidth(edge.data) / 2"
+                  y="-7"
+                  :width="edgeTimeWidth(edge.data)"
+                  height="14"
+                  rx="7"
+                />
+                <text text-anchor="middle" dy="3">{{ edgeTimeText(edge.data) }}</text>
+              </g>
+              <title>{{ edgeTooltip(edge) }}</title>
+            </g>
           </g>
 
           <g class="primary-buses" aria-hidden="true">
@@ -621,6 +658,42 @@ const visibleSecondaryEdges = computed(() => {
   );
 });
 
+// 其他上级沿用主关系的父节点总线结构。同一父节点的辅助关系共享同一个 busY；
+// 如果该父节点已有主总线，虚线直接复用其高度，不再另起一层。
+const visibleSecondaryLayout = computed(() => {
+  const primaryBusBySource = new Map(
+    canvasLayout.value.buses.map((bus) => [bus.source.data.id, bus])
+  );
+  const grouped = new Map();
+  for (const edge of visibleSecondaryEdges.value) {
+    const sourceId = edge.source.data.id;
+    if (!grouped.has(sourceId)) grouped.set(sourceId, []);
+    grouped.get(sourceId).push(edge);
+  }
+
+  const edges = [];
+  const buses = [];
+  for (const [sourceId, members] of grouped) {
+    const source = members[0].source;
+    const sourceY = source.y + nodeHeight(source.data) / 2;
+    const targetY = Math.min(
+      ...members.map((edge) => edge.target.y - nodeHeight(edge.target.data) / 2 - 8)
+    );
+    const busY = primaryBusBySource.get(sourceId)?.busY ?? sourceY + (targetY - sourceY) * 0.48;
+    const routedMembers = members.map((edge) => ({ ...edge, busY }));
+    edges.push(...routedMembers);
+    buses.push({
+      key: `secondary-bus-${sourceId}`,
+      source,
+      members: routedMembers,
+      busY,
+      minX: Math.min(source.x, ...members.map((edge) => edge.target.x)),
+      maxX: Math.max(source.x, ...members.map((edge) => edge.target.x)),
+    });
+  }
+  return { edges, buses };
+});
+
 const worldTransform = computed(
   () => `translate(${panX.value} ${panY.value}) scale(${zoom.value})`
 );
@@ -649,55 +722,6 @@ function stemPath(edge) {
   if (!edge.target || edge.busY == null) return "";
   const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
   return `M${edge.target.x},${edge.busY}V${targetY}`;
-}
-
-// 其他上级辅助线：沿节点边缘裁剪后画一条平滑弧线（垂直方向微弯），
-// 与主层级的直角总线在形态上区分开，不挂任何文本。
-function secondaryEdgePath(edge) {
-  const points = secondaryEdgePoints(edge);
-  if (!points) return "";
-  const { start, end } = points;
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const distance = Math.hypot(dx, dy);
-  if (!distance) return "";
-  const bow = Math.min(30, Math.max(12, distance * 0.16));
-  const cx = (start.x + end.x) / 2 - (dy / distance) * bow;
-  const cy = (start.y + end.y) / 2 + (dx / distance) * bow;
-  return `M${start.x},${start.y} Q${cx},${cy} ${end.x},${end.y}`;
-}
-
-// “其他上级”不是主树总线的一部分，直接用一条直线连接两个节点边缘，
-// 避免每条辅助关系各自生成一层竖—横—竖折线。
-function secondaryEdgePoints(edge) {
-  if (!edge.source || !edge.target) return null;
-  const dx = edge.target.x - edge.source.x;
-  const dy = edge.target.y - edge.source.y;
-  const distance = Math.hypot(dx, dy);
-  if (!distance) return null;
-
-  const sourceScale = 1 / Math.max(
-    Math.abs(dx) / (nodeWidth(edge.source.data) / 2),
-    Math.abs(dy) / (nodeHeight(edge.source.data) / 2)
-  );
-  const targetScale = 1 / Math.max(
-    Math.abs(dx) / (nodeWidth(edge.target.data) / 2),
-    Math.abs(dy) / (nodeHeight(edge.target.data) / 2)
-  );
-  const ux = dx / distance;
-  const uy = dy / distance;
-  const gap = 7;
-
-  return {
-    start: {
-      x: edge.source.x + dx * sourceScale + ux * gap,
-      y: edge.source.y + dy * sourceScale + uy * gap,
-    },
-    end: {
-      x: edge.target.x - dx * targetScale - ux * gap,
-      y: edge.target.y - dy * targetScale - uy * gap,
-    },
-  };
 }
 
 function viaClass(edge) {
@@ -1231,6 +1255,17 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   stroke-dasharray: 3 4;
   stroke-width: 1;
   opacity: 0.55;
+}
+
+.secondary-buses .bus-line {
+  stroke: var(--rust);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.secondary-edge-group .edge-time-pill {
+  color: var(--rust);
 }
 
 #hierarchy-arrow path {
