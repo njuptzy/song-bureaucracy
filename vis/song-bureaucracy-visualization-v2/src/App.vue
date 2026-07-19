@@ -807,6 +807,7 @@ button {
 
 .app-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 8.3vh 75.7vh 16vh;
   width: 100vw;
   height: 100vh;
@@ -917,13 +918,14 @@ button {
 .main-stage {
   display: grid;
   grid-template-rows: 5.6vh minmax(0, 1fr);
+  min-width: 0;
   min-height: 0;
   padding: 0 1.8vw;
 }
 
 .stage-heading {
   display: grid;
-  grid-template-columns: max-content max-content minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 360px) max-content minmax(0, 1fr);
   align-items: center;
   gap: 18px;
   border-bottom: 0.1vh solid var(--line);
@@ -935,6 +937,7 @@ button {
 
 .period-line {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
 }
@@ -956,6 +959,7 @@ button {
 
 .period-heading p {
   overflow: hidden;
+  min-width: 0;
   margin: 0 0 0 10px;
   border-left: 1px solid var(--line-light);
   padding-left: 10px;
@@ -1578,6 +1582,8 @@ button {
 }
 
 .song-timeline {
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   background: transparent;
 }
