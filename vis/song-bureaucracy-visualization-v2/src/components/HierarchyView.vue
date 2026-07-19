@@ -150,12 +150,33 @@
 
         <g :transform="worldTransform">
           <g class="secondary-edges" aria-hidden="true">
-            <path
-              v-for="edge in visibleSecondaryEdges"
-              :key="edge.key"
-              :d="secondaryEdgePath(edge)"
-              :class="['canvas-edge', 'secondary', `via-${viaClass(edge)}`]"
-            />
+            <g v-for="edge in visibleSecondaryEdges" :key="edge.key">
+              <path
+                :d="secondaryEdgePath(edge)"
+                :class="['canvas-edge', 'secondary', `via-${viaClass(edge)}`]"
+              />
+              <g
+                v-if="structureScope === 'history' && edge.data"
+                class="edge-time-label secondary-time-label"
+                :transform="edgeTimeTransform(edge, true)"
+              >
+                <rect
+                  :x="-edgeTimeWidth(edge.data) / 2"
+                  :y="-edgeTimeHeight(edge.data) / 2"
+                  :width="edgeTimeWidth(edge.data)"
+                  :height="edgeTimeHeight(edge.data)"
+                  rx="3"
+                />
+                <text text-anchor="middle">
+                  <tspan
+                    v-for="(label, index) in edgeTimeLines(edge.data)"
+                    :key="`${label}-${index}`"
+                    x="0"
+                    :dy="index === 0 ? edgeTimeFirstDy(edge.data) : 10"
+                  >{{ label }}</tspan>
+                </text>
+              </g>
+            </g>
           </g>
 
           <g class="primary-buses" aria-hidden="true">
@@ -185,6 +206,27 @@
                 <svg x="-5" y="-5" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
                   <path :d="VIA_ICONS[viaClass(edge)]" />
                 </svg>
+              </g>
+              <g
+                v-if="structureScope === 'history' && edge.data"
+                class="edge-time-label"
+                :transform="edgeTimeTransform(edge)"
+              >
+                <rect
+                  :x="-edgeTimeWidth(edge.data) / 2"
+                  :y="-edgeTimeHeight(edge.data) / 2"
+                  :width="edgeTimeWidth(edge.data)"
+                  :height="edgeTimeHeight(edge.data)"
+                  rx="3"
+                />
+                <text text-anchor="middle">
+                  <tspan
+                    v-for="(label, index) in edgeTimeLines(edge.data)"
+                    :key="`${label}-${index}`"
+                    x="0"
+                    :dy="index === 0 ? edgeTimeFirstDy(edge.data) : 10"
+                  >{{ label }}</tspan>
+                </text>
               </g>
               <title>{{ edgeTooltip(edge) }}</title>
             </g>
@@ -420,14 +462,6 @@ function displayChars(title) {
   return chars.length > 7 ? [...chars.slice(0, 6), "…"] : chars;
 }
 
-// 画布徽标只保留关系依据时间（历时模式）。
-// 员额见连线悬停提示与详情面板；多上级数量见详情面板，均不进主视图。
-function makeBadge(edge) {
-  if (structureScope.value !== "history" || !edge?.periods?.length) return "";
-  const first = edge.periods[0];
-  return first.start === first.end ? `${first.start}` : `${first.start}—${first.end}`;
-}
-
 const defaultChildLimit = () =>
   layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : OVERVIEW_CHILD_LIMIT;
 
@@ -454,7 +488,7 @@ const visualTree = computed(() => {
       edge,
       hasChildren: allChildren.length > 0,
       depthLimited: allChildren.length > 0 && depth >= maxDepth,
-      badge: makeBadge(edge),
+      badge: "",
       children: [],
     };
 
@@ -693,6 +727,38 @@ function edgePeriodLabel(edge) {
   const suffix = edge.hasUndated ? "、另有时间未明记录" : "";
   if (periods.length <= 2) return `${periods.map((period) => periodText(period.start, period.end)).join("、")}${suffix}`;
   return `${periodText(periods[0].start, periods[0].end)}等${periods.length}期${suffix}`;
+}
+
+function edgeTimeLines(edge) {
+  const lines = (edge?.periods || []).map((period) => periodText(period.start, period.end));
+  if (!lines.length || edge?.hasUndated) lines.push("时间未明");
+  return lines;
+}
+
+function edgeTimeWidth(edge) {
+  const longest = Math.max(...edgeTimeLines(edge).map((label) => [...label].length));
+  return Math.max(38, longest * 8 + 10);
+}
+
+function edgeTimeHeight(edge) {
+  return edgeTimeLines(edge).length * 10 + 6;
+}
+
+function edgeTimeFirstDy(edge) {
+  return 3 - ((edgeTimeLines(edge).length - 1) * 10) / 2;
+}
+
+function edgeTimeTransform(edge, secondary = false) {
+  if (secondary) {
+    const sourceY = edge.source.y + nodeHeight(edge.source.data) / 2 + 8;
+    const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
+    const y = sourceY + (targetY - sourceY) * 0.48;
+    const x = (edge.source.x + edge.target.x) / 2;
+    return `translate(${x} ${y})`;
+  }
+  const targetY = edge.target.y - nodeHeight(edge.target.data) / 2 - 8;
+  const y = edge.busY + (targetY - edge.busY) * 0.52;
+  return `translate(${edge.target.x} ${y})`;
 }
 
 function relationKey(edge) {
@@ -1110,6 +1176,28 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 1.5;
+  }
+}
+
+.edge-time-label {
+  color: var(--ink-soft);
+  pointer-events: none;
+
+  rect {
+    fill: rgba(244, 241, 234, 0.94);
+    stroke: rgba(90, 58, 32, 0.28);
+    stroke-width: 0.6;
+  }
+
+  text {
+    fill: currentColor;
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  &.secondary-time-label {
+    color: var(--rust);
   }
 }
 
