@@ -5,12 +5,13 @@
         <span>机构 / 官职</span>
         <span>{{ entityList.length }}</span>
       </div>
-      <div class="rail-list">
+      <div ref="entityListRef" class="rail-list">
         <button
           v-for="item in entityList"
           :key="item.id"
           type="button"
           class="entity-item"
+          :data-entity-id="item.id"
           :class="{
             active: item.id === entityId,
             office: item.type === '官职',
@@ -183,6 +184,7 @@ const typeLabels = {
 };
 
 const scrollRef = ref(null);
+const entityListRef = ref(null);
 const playing = ref(false);
 let playTimer = null;
 let playIndex = -1;
@@ -217,6 +219,7 @@ const entityList = computed(() =>
     }))
     .sort(
       (a, b) =>
+        Number(b.id === props.entityId) - Number(a.id === props.entityId) ||
         b.rangeEventCount - a.rangeEventCount ||
         b.eventCount - a.eventCount ||
         a.title.localeCompare(b.title, "zh")
@@ -316,6 +319,23 @@ watch(
     stopPlay();
     scrollRef.value?.scrollTo({ top: 0 });
   }
+);
+
+// 选中原本未命中的实体后，它会随新时间段提升到列表首位，并让列表回到该实体位置。
+watch(
+  () => [props.entityId, props.range?.[0], props.range?.[1]],
+  async () => {
+    if (props.entityId == null) return;
+    await nextTick();
+    const container = entityListRef.value;
+    const item = container?.querySelector(`[data-entity-id="${props.entityId}"]`);
+    if (!container || !item) return;
+    const containerRect = container.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const top = container.scrollTop + itemRect.top - containerRect.top;
+    container.scrollTo({ top: Math.max(0, top - 6), behavior: "smooth" });
+  },
+  { flush: "post" }
 );
 
 // 搜索、关系跳转等外部选中时滚动到对应卡片
