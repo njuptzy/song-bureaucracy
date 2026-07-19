@@ -38,7 +38,7 @@
       </div>
     </div>
 
-    <div class="canvas-shell">
+    <div ref="shellRef" class="canvas-shell">
       <button
         type="button"
         class="entity-browser-trigger"
@@ -105,8 +105,7 @@
         v-else
         ref="svgRef"
         class="hierarchy-canvas"
-        :viewBox="`0 0 ${canvasLayout.width} ${canvasLayout.height}`"
-        preserveAspectRatio="xMidYMid meet"
+        :viewBox="`0 0 ${viewW} ${viewH}`"
         role="img"
         :aria-label="`${focusTitle}层级结构图`"
         @wheel.prevent="onWheel"
@@ -128,12 +127,12 @@
           class="canvas-hit-area"
           x="0"
           y="0"
-          :width="canvasLayout.width"
-          :height="canvasLayout.height"
+          :width="viewW"
+          :height="viewH"
           @pointerdown="beginPan"
         />
 
-        <g :transform="viewportTransform">
+        <g :transform="worldTransform">
           <g class="secondary-edges" aria-hidden="true">
             <path
               v-for="edge in canvasLayout.secondaryEdges"
@@ -200,23 +199,23 @@
                   :dy="index === 0 ? titleStart(node.data) : 15"
                 >{{ char }}</tspan>
               </text>
-              <text
-                v-if="node.data.badge"
-                class="node-badge"
-                text-anchor="middle"
-                x="0"
-                :y="nodeHeight(node.data) / 2 + 13"
-              >{{ node.data.badge }}</text>
               <g
                 v-if="node.data.hasChildren && !node.data.overflow && !node.data.depthLimited"
                 class="expand-control"
-                :transform="`translate(0 ${nodeHeight(node.data) / 2 + 5})`"
+                :transform="`translate(0 ${nodeHeight(node.data) / 2 + 9})`"
                 @click.stop="toggle(node.data.id)"
               >
                 <circle r="6" />
                 <path d="M-3 0H3" />
                 <path v-if="!expanded.has(node.data.id)" d="M0-3V3" />
               </g>
+              <text
+                v-if="node.data.badge"
+                class="node-badge"
+                text-anchor="middle"
+                x="0"
+                :y="nodeHeight(node.data) / 2 + (node.data.hasChildren && !node.data.depthLimited ? 26 : 13)"
+              >{{ node.data.badge }}</text>
               <title>{{ nodeTooltip(node.data) }}</title>
             </g>
           </g>
@@ -280,7 +279,15 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from "vue";
+// 官制层级结构二维画布（2026-07 重写视口层）：
+// - 布局在“世界坐标”中计算（d3Tree），SVG viewBox 固定为容器像素尺寸，
+//   视口状态 {zoom, panX, panY} 显式管理，不再有隐式 meet 缩放叠加：
+//   「适」= 按内容 bbox 计算 fit；滚轮以鼠标为锚缩放；拖动按屏幕像素平移。
+// - 展开模型：每个父节点独立分页（余N项点击翻页），删除全局节点预算；
+//   因多上级去重而未显示的实体不计入“余N项”，以辅助虚线表达。
+// - 底部时间 / 所选时段 / 历时切换只重建图与布局，保留用户视口与展开状态；
+//   仅初次设中心、双击重设中心、切换全貌/聚焦时自动 fit。
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { hierarchy as d3Hierarchy, tree as d3Tree } from "d3";
 import { buildEntityGraph, relationPeriodsLabel } from "@/utils/hierarchy";
 
@@ -295,13 +302,15 @@ const emit = defineEmits(["select-entity"]);
 
 const PRIMARY_VIA = { 上下级机构: 0, 编制隶属: 1, 统称与实例: 2 };
 const NODE_WIDTH = 42;
-const NODE_HEIGHT = 96;
-const MIN_CANVAS_WIDTH = 1120;
-const MIN_CANVAS_HEIGHT = 560;
+const NODE_HEIGHT_MAX = 96;
 const OVERVIEW_CHILD_LIMIT = 24;
 const FOCUS_CHILD_LIMIT = 14;
-const OVERVIEW_NODE_BUDGET = 90;
-const FOCUS_NODE_BUDGET = 46;
+const OVERVIEW_MAX_DEPTH = 7;
+const FOCUS_MAX_DEPTH = 2;
+const X_SEP = 72;
+const Y_SEP = 148;
+const ZOOM_MIN = 0.12;
+const ZOOM_MAX = 3;
 
 const structureScope = ref("current");
 const layoutMode = ref("overview");
@@ -311,10 +320,18 @@ const expanded = reactive(new Set());
 const childLimits = reactive(new Map());
 const evidenceCard = ref(null);
 const rootRef = ref(null);
+const shellRef = ref(null);
 const svgRef = ref(null);
+
+// —— 视口状态（世界坐标 → 屏幕坐标：translate(pan) scale(zoom)）——
 const zoom = ref(1);
-const pan = reactive({ x: 0, y: 0 });
+const panX = ref(0);
+const panY = ref(0);
+const viewW = ref(1120);
+const viewH = ref(560);
+let viewportTouched = false; // 用户手动缩放/平移后，容器 resize 不再自动 fit
 const drag = reactive({ active: false, pointerId: null, x: 0, y: 0 });
+let resizeObserver;
 
 const graph = computed(() =>
   buildEntityGraph(props.dataset, structureScope.value === "current" ? props.range : null)
@@ -380,19 +397,19 @@ function makeBadge(edge, extraParentCount = 0) {
   return bits.join(" · ");
 }
 
+const defaultChildLimit = () =>
+  layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : OVERVIEW_CHILD_LIMIT;
+
 const visualTree = computed(() => {
   if (focusId.value == null || !graph.value.entityById.has(focusId.value)) return null;
   const seen = new Set();
-  const budget = { used: 0, hidden: 0 };
-  const maxDepth = layoutMode.value === "focus" ? 2 : 7;
-  const nodeBudget = layoutMode.value === "focus" ? FOCUS_NODE_BUDGET : OVERVIEW_NODE_BUDGET;
-  const defaultLimit = layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : OVERVIEW_CHILD_LIMIT;
+  const maxDepth = layoutMode.value === "focus" ? FOCUS_MAX_DEPTH : OVERVIEW_MAX_DEPTH;
+  let hiddenCount = 0;
 
   function build(id, edge = null, depth = 0, path = new Set()) {
     const entity = graph.value.entityById.get(id);
-    if (!entity || path.has(id) || seen.has(id) || budget.used >= nodeBudget) return null;
+    if (!entity || path.has(id) || seen.has(id)) return null;
     seen.add(id);
-    budget.used += 1;
 
     const allChildren = sortedChildren(id).filter((child) => !path.has(child.entityId));
     const data = {
@@ -410,29 +427,35 @@ const visualTree = computed(() => {
       children: [],
     };
 
-    if (!allChildren.length || !expanded.has(id) || depth >= maxDepth) {
-      if (allChildren.length && depth >= maxDepth) {
-        budget.hidden += allChildren.length;
-        data.badge = [data.badge, `下级${allChildren.length}`].filter(Boolean).join(" · ");
-      }
+    if (!allChildren.length) return data;
+    if (depth >= maxDepth) {
+      hiddenCount += allChildren.length;
+      data.badge = [data.badge, `下级${allChildren.length}`].filter(Boolean).join(" · ");
       return data;
     }
+    if (!expanded.has(id)) return data;
 
-    const limit = childLimits.get(id) ?? defaultLimit;
+    const limit = childLimits.get(id) ?? defaultChildLimit();
     const nextPath = new Set(path).add(id);
-    const candidates = allChildren.slice(0, limit);
-    for (const child of candidates) {
-      if (budget.used >= nodeBudget) break;
+    let shown = 0;
+    let omitted = 0;
+    for (const child of allChildren) {
+      if (seen.has(child.entityId)) continue; // 多上级去重：不计入“余N项”
+      if (shown >= limit) {
+        omitted += 1;
+        continue;
+      }
       const childNode = build(child.entityId, child, depth + 1, nextPath);
-      if (childNode) data.children.push(childNode);
+      if (childNode) {
+        data.children.push(childNode);
+        shown += 1;
+      }
     }
-
-    const omitted = allChildren.length - candidates.length + Math.max(0, candidates.length - data.children.length);
     if (omitted > 0) {
-      budget.hidden += omitted;
+      hiddenCount += omitted;
       data.children.push({
         id: `more-${id}`,
-        key: `more-${id}-${omitted}`,
+        key: `more-${id}`,
         title: `余${omitted}项`,
         displayChars: displayChars(`余${omitted}项`),
         entType: "overflow",
@@ -446,40 +469,45 @@ const visualTree = computed(() => {
   }
 
   const root = build(focusId.value);
-  return root ? { root, hiddenCount: budget.hidden } : null;
+  return root ? { root, hiddenCount } : null;
 });
 
 const canvasLayout = computed(() => {
-  if (!visualTree.value) {
-    return { width: MIN_CANVAS_WIDTH, height: MIN_CANVAS_HEIGHT, nodes: [], edges: [], secondaryEdges: [], hiddenCount: 0, realNodeCount: 0 };
-  }
+  const empty = { nodes: [], edges: [], secondaryEdges: [], hiddenCount: 0, realNodeCount: 0, bbox: null };
+  if (!visualTree.value) return empty;
 
   const root = d3Hierarchy(visualTree.value.root, (data) => data.children);
-  d3Tree().nodeSize([72, 142])(root);
-  const descendants = root.descendants();
-  const minX = Math.min(...descendants.map((node) => node.x));
-  const maxX = Math.max(...descendants.map((node) => node.x));
-  const maxDepth = Math.max(...descendants.map((node) => node.depth));
-  const contentWidth = maxX - minX + 190;
-  const contentHeight = maxDepth * 142 + 210;
-  const width = Math.max(MIN_CANVAS_WIDTH, contentWidth);
-  const height = Math.max(MIN_CANVAS_HEIGHT, contentHeight);
-  const offsetX = (width - (maxX - minX)) / 2 - minX;
-  const offsetY = 76;
+  d3Tree().nodeSize([X_SEP, Y_SEP])(root);
+  const nodes = root.descendants().map((node) =>
+    Object.assign(node, { key: node.data.key || String(node.data.id) })
+  );
 
-  const nodes = descendants.map((node) => ({
-    ...node,
-    key: node.data.key || String(node.data.id),
-    x: node.x + offsetX,
-    y: node.y + offsetY,
-  }));
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    const w = nodeWidth(node.data);
+    const h = nodeHeight(node.data);
+    minX = Math.min(minX, node.x - w / 2);
+    maxX = Math.max(maxX, node.x + w / 2);
+    minY = Math.min(minY, node.y - h / 2);
+    maxY = Math.max(maxY, node.y + h / 2 + 34); // 展开按钮 + 徽标空间
+  }
+  const bbox = {
+    w: maxX - minX + 80,
+    h: maxY - minY + 76,
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2 + 10,
+  };
+
   const positionedById = new Map(
     nodes.filter((node) => typeof node.data.id === "number").map((node) => [node.data.id, node])
   );
   const edges = root.links().map((link, index) => ({
     key: `primary-${link.target.data.id}-${index}`,
-    source: nodes.find((node) => node.data === link.source.data),
-    target: nodes.find((node) => node.data === link.target.data),
+    source: link.source,
+    target: link.target,
     data: link.target.data.edge || null,
   }));
 
@@ -504,21 +532,18 @@ const canvasLayout = computed(() => {
   }
 
   return {
-    width,
-    height,
     nodes,
     edges,
     secondaryEdges,
     hiddenCount: visualTree.value.hiddenCount,
     realNodeCount: nodes.filter((node) => typeof node.data.id === "number").length,
+    bbox,
   };
 });
 
-const viewportTransform = computed(() => {
-  const cx = canvasLayout.value.width / 2;
-  const cy = canvasLayout.value.height / 2;
-  return `translate(${cx + pan.x} ${cy + pan.y}) scale(${zoom.value}) translate(${-cx} ${-cy})`;
-});
+const worldTransform = computed(
+  () => `translate(${panX.value} ${panY.value}) scale(${zoom.value})`
+);
 
 function nodeWidth(data) {
   return data.overflow ? 48 : NODE_WIDTH;
@@ -526,7 +551,7 @@ function nodeWidth(data) {
 
 function nodeHeight(data) {
   if (data.overflow) return 70;
-  return Math.max(68, Math.min(NODE_HEIGHT, data.displayChars.length * 15 + 22));
+  return Math.max(68, Math.min(NODE_HEIGHT_MAX, data.displayChars.length * 15 + 22));
 }
 
 function titleStart(data) {
@@ -554,7 +579,7 @@ function isActiveId(id) {
 }
 
 function nodeTooltip(data) {
-  if (data.overflow) return `点击显示其余 ${data.omitted} 个下级`;
+  if (data.overflow) return `点击展开下一页（还有 ${data.omitted} 个下级）`;
   const bits = [`${data.title}（${data.entType}）`, `共${data.eventCount}条记录`];
   if (data.yearMin != null) bits.push(`${data.yearMin}—${data.yearMax}年有记录`);
   if (data.edge) bits.push(`关系：${data.edge.via}`);
@@ -621,7 +646,7 @@ let suppressNextFocus = false;
 function onNodeClick(data, event = null) {
   if (event?.detail > 1) return;
   if (data.overflow) {
-    childLimits.set(data.parentId, Infinity);
+    childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
     return;
   }
   browserOpen.value = false;
@@ -633,12 +658,13 @@ function onNodeDoubleClick(data) {
   if (!data.overflow) focusEntity(data.id);
 }
 
-function focusEntity(id, emitSelection = true) {
+async function focusEntity(id, emitSelection = true) {
   if (id == null || !graph.value.entityById.has(id)) return;
   focusId.value = id;
   evidenceCard.value = null;
   childLimits.clear();
   expandFocusedTree();
+  await nextTick();
   resetViewport();
   if (emitSelection && props.selectedEntityId !== id) emit("select-entity", id);
 }
@@ -662,28 +688,51 @@ function toggle(id) {
   else expanded.add(id);
 }
 
-function setLayoutMode(mode) {
+async function setLayoutMode(mode) {
   layoutMode.value = mode;
   childLimits.clear();
+  await nextTick();
   resetViewport();
 }
 
+// —— 视口操作 ——
+
 function clampZoom(value) {
-  return Math.max(0.55, Math.min(2.4, value));
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value));
 }
 
-function changeZoom(delta) {
-  zoom.value = clampZoom(zoom.value + delta);
+// 按内容 bbox 计算缩放与居中，「适」按钮与重设中心时调用
+function fitViewport() {
+  const bbox = canvasLayout.value.bbox;
+  if (!bbox || !viewW.value || !viewH.value) return;
+  const next = clampZoom(Math.min(viewW.value / bbox.w, viewH.value / bbox.h) * 0.94);
+  zoom.value = Math.min(next, 1.2);
+  panX.value = viewW.value / 2 - bbox.cx * zoom.value;
+  panY.value = viewH.value / 2 - bbox.cy * zoom.value;
 }
 
 function resetViewport() {
-  zoom.value = 1;
-  pan.x = 0;
-  pan.y = 0;
+  viewportTouched = false;
+  fitViewport();
+}
+
+function zoomAt(factor, cx, cy) {
+  const next = clampZoom(zoom.value * factor);
+  if (next === zoom.value) return;
+  panX.value = cx - ((cx - panX.value) * next) / zoom.value;
+  panY.value = cy - ((cy - panY.value) * next) / zoom.value;
+  zoom.value = next;
+  viewportTouched = true;
+}
+
+function changeZoom(delta) {
+  zoomAt(1 + delta, viewW.value / 2, viewH.value / 2);
 }
 
 function onWheel(event) {
-  changeZoom(event.deltaY > 0 ? -0.1 : 0.1);
+  const rect = svgRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  zoomAt(event.deltaY > 0 ? 0.88 : 1 / 0.88, event.clientX - rect.left, event.clientY - rect.top);
 }
 
 function beginPan(event) {
@@ -696,14 +745,11 @@ function beginPan(event) {
 
 function onPointerMove(event) {
   if (!drag.active || drag.pointerId !== event.pointerId) return;
-  const rect = svgRef.value?.getBoundingClientRect();
-  if (!rect?.width || !rect?.height) return;
-  const scaleX = canvasLayout.value.width / rect.width / zoom.value;
-  const scaleY = canvasLayout.value.height / rect.height / zoom.value;
-  pan.x += (event.clientX - drag.x) * scaleX;
-  pan.y += (event.clientY - drag.y) * scaleY;
+  panX.value += event.clientX - drag.x;
+  panY.value += event.clientY - drag.y;
   drag.x = event.clientX;
   drag.y = event.clientY;
+  viewportTouched = true;
 }
 
 function endPan(event) {
@@ -713,6 +759,20 @@ function endPan(event) {
   if (drag.pointerId != null) svgRef.value?.releasePointerCapture?.(drag.pointerId);
   drag.pointerId = null;
 }
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver((entries) => {
+    const rect = entries[0]?.contentRect;
+    if (!rect?.width || !rect?.height) return;
+    viewW.value = Math.round(rect.width);
+    viewH.value = Math.round(rect.height);
+    // 用户未手动操作时，容器尺寸变化保持自动 fit
+    if (!viewportTouched) fitViewport();
+  });
+  if (shellRef.value) resizeObserver.observe(shellRef.value);
+});
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 watch(
   () => props.selectedEntityId,
@@ -725,33 +785,15 @@ watch(
   }
 );
 
-watch(
-  listedEntities,
-  (items) => {
-    if (focusId.value == null && items.length) focusEntity(props.selectedEntityId ?? items[0].id, false);
-  },
-  { immediate: true }
-);
-
 watch(structureScope, () => {
+  // 所选时段 / 历时切换：保留视口与展开状态，只重建图
   evidenceCard.value = null;
   childLimits.clear();
-  if (focusId.value != null) expandFocusedTree();
-  resetViewport();
 });
 
-watch(
-  () => props.range,
-  () => {
-    if (structureScope.value === "current") {
-      childLimits.clear();
-      if (focusId.value != null) expandFocusedTree();
-      resetViewport();
-    }
-  },
-  { deep: true }
-);
+// 底部时间变化不重置视口与展开状态：graph 自动重建，画布原地更新
 
+// 深链：?view=hierarchy&entity=实体ID
 if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 </script>
 
@@ -867,7 +909,6 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  box-shadow: inset 0 0 0 2px rgba(40, 55, 73, 0.82);
 }
 
 .hierarchy-canvas {
