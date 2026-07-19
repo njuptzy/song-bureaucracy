@@ -2,6 +2,23 @@
 
 本目录由 `vis/CBDB-Migration-Map` 复制后独立改造。原CBDB迁居地图保留在原目录中，不与本项目同步修改。
 
+## 目录分类
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/` | Vue 前端源码：页面、组件、样式和显示逻辑 |
+| `public/` | 构建时直接复制的静态资源和离线数据快照 |
+| `docs/` | 使用说明与显示逻辑文档 |
+| `resources/reference/` | 外部参考资料，例如教育部宋代年号表 |
+| `resources/reports/` | 数据处理结果和同步导出的报表 |
+| `dist/` | `pnpm build` 生成的可部署文件，不手工编辑 |
+
+根目录只保留项目入口和构建配置，例如 `README.md`、`package.json`、`vite.config.js`、`index.html`。
+
+- [层级关系与时间联动使用逻辑](docs/HIERARCHY_DISPLAY_LOGIC.md)
+- [教育部宋代年号表](resources/reference/教育部宋代年號表_960-1279.xlsx)
+- [当前时间处理结果](resources/reports/宋代官制时间处理结果.xlsx)
+
 ## 数据
 
 - 原始可靠数据库：`../data/song_bureaucracy_best.db`

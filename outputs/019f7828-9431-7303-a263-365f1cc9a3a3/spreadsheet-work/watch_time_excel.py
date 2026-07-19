@@ -16,7 +16,7 @@ DB = REPO / "vis/data/song_bureaucracy_visualization.db"
 BUILDER_DIR = REPO / "outputs/019f7828-9431-7303-a263-365f1cc9a3a3/spreadsheet-work"
 BUILDER = BUILDER_DIR / "build_time_results.mjs"
 GENERATED = REPO / "outputs/019f7828-9431-7303-a263-365f1cc9a3a3/宋代官制时间处理结果_2026-07-19.xlsx"
-DEFAULT_TARGET = REPO / "vis/song-bureaucracy-visualization-v2/宋代官制时间处理结果.xlsx"
+DEFAULT_TARGET = REPO / "vis/song-bureaucracy-visualization-v2/resources/reports/宋代官制时间处理结果.xlsx"
 NODE = Path("/Users/zhanyi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node")
 
 

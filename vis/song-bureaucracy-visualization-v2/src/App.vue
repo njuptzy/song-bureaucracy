@@ -18,7 +18,7 @@
       <div class="search-wrap">
         <label for="entity-search">查找机构或官职</label>
         <div class="search-box">
-          <img src="./assets/magnifier.svg" alt="" />
+          <img src="./assets/icons/magnifier.svg" alt="" />
           <input
             id="entity-search"
             v-model.trim="query"
@@ -938,7 +938,7 @@ button {
 }
 
 .backgrounded {
-  background-image: url("./assets/background.png");
+  background-image: url("./assets/images/background.png");
   background-attachment: fixed;
 }
 
@@ -1060,7 +1060,7 @@ button {
   right: 0;
   width: 100%;
   border: 1px solid var(--line);
-  background-image: url("./assets/background.png");
+  background-image: url("./assets/images/background.png");
 }
 
 .search-results button {
