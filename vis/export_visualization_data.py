@@ -38,22 +38,14 @@ def phase_for_era(start: int) -> str:
     return "北宋" if start < 1127 else "南宋"
 
 
-def relation_span(*endpoints: tuple[int | None, int | None]) -> tuple[int | None, int | None]:
-    """合并关系两端时间点的纪年范围，作为该关系有记录的时间跨度。
-
-    每个端点给出 (year_start, year_end)；任一端无纪年时跳过该端。
-    两端都无纪年时返回 (None, None)，由前端回退到实体存续期判断。
-    """
-    starts: list[int] = []
-    ends: list[int] = []
-    for year_start, year_end in endpoints:
-        if year_start is None:
-            continue
-        starts.append(year_start)
-        ends.append(year_end if year_end is not None else year_start)
-    if not starts:
-        return None, None
-    return min(starts), max(ends)
+def endpoint_period(event: dict | None) -> dict | None:
+    """单个时间点自身的纪年段，作为关系的一条离散依据。无纪年时返回 None。"""
+    if not event or event["yearStart"] is None:
+        return None
+    return {
+        "start": event["yearStart"],
+        "end": event["yearEnd"] if event["yearEnd"] is not None else event["yearStart"],
+    }
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -191,18 +183,16 @@ def build_payload(db_path: Path) -> dict:
         ):
             relation_counts[row["subject_id"]] += 1
             relation_counts[row["object_id"]] += 1
-            subject_event = event_by_id.get(row["subject_id"])
-            object_event = event_by_id.get(row["object_id"])
-            year_start, year_end = relation_span(
-                (
-                    subject_event["yearStart"] if subject_event else None,
-                    subject_event["yearEnd"] if subject_event else None,
-                ),
-                (
-                    object_event["yearStart"] if object_event else None,
-                    object_event["yearEnd"] if object_event else None,
-                ),
-            )
+            # 离散依据模型：保留两端时间点各自的纪年段，不做 min/max 合并。
+            # 两端相隔很远时合并跨度会编造出没有史料依据的连续期。
+            periods = []
+            for period in (
+                endpoint_period(event_by_id.get(row["subject_id"])),
+                endpoint_period(event_by_id.get(row["object_id"])),
+            ):
+                if period and period not in periods:
+                    periods.append(period)
+            periods.sort(key=lambda p: (p["start"], p["end"]))
             relations.append({
                 "id": row["id"],
                 "subjectId": row["subject_id"],
@@ -216,8 +206,7 @@ def build_payload(db_path: Path) -> dict:
                 "subjectType": row["subject_type"],
                 "objectTitle": row["object_title"],
                 "objectType": row["object_type"],
-                "yearStart": year_start,
-                "yearEnd": year_end,
+                "periods": periods,
                 "citations": citation_map.get(("Relationships", row["id"]), []),
             })
 

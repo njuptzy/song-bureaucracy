@@ -2,14 +2,25 @@
 // 三种层级边：上下级机构（subject=上级 -> object=下级）、
 // 编制隶属（subject=机构 -> object=属官，可带员额）、统称与实例（subject=统称 -> object=实例）。
 // 前后演变不属于层级结构，不在此构建。
+// 关系的纪年依据是离散的：periods 里每段来自关系某一端时间点自身的纪年，
+// 不做两端合并（两端相隔很远时，合并跨度会编造出没有依据的连续期）。
 // 传入 range = [起, 止] 时按时间过滤层级边：
-// - 关系自带纪年跨度（yearStart/yearEnd）时，要求与区间相交；
-// - 关系两端时间点都无纪年时，仅当两端实体在该区间均有纪年活动才认为成立；
+// - 关系的任一依据段与区间相交，即视为该区间内有依据；
+// - 关系两端时间点都无纪年（periods 为空）时，仅当两端实体在该区间均有纪年活动才认为成立；
 //   完全没有时间依据的边在任何区间都不显示（实体仍可从有纪年的边挂出）。
 
 export const HIERARCHY_TYPES = ["上下级机构", "编制隶属", "统称与实例"];
 
 export const RELATION_TYPE_ORDER = ["上下级机构", "编制隶属", "前后演变", "统称与实例"];
+
+// 单条关系的依据时段文本（"1126年、1126—1127年"；无纪年时返回"时间未明"）
+export function relationPeriodsLabel(relation) {
+  const periods = relation?.periods || [];
+  if (!periods.length) return "时间未明";
+  return periods
+    .map((p) => (p.start === p.end ? `${p.start}年` : `${p.start}—${p.end}年`))
+    .join("、");
+}
 
 // 关系按类型分组，按 RELATION_TYPE_ORDER 排序，供详情面板展示
 export function groupRelationsByType(relations) {
@@ -69,8 +80,9 @@ function entityActiveInRange(entity, range) {
 }
 
 function relationInRange(rel, entityById, range) {
-  if (rel.yearStart != null) {
-    return rel.yearStart <= range[1] && (rel.yearEnd ?? rel.yearStart) >= range[0];
+  if (rel.periods?.length) {
+    // 任一离散依据段与区间相交即视为有依据
+    return rel.periods.some((p) => p.start <= range[1] && p.end >= range[0]);
   }
   // 关系两端时间点都无纪年：仅当两端实体在该区间均有纪年活动时才成立
   return (
@@ -103,11 +115,8 @@ export function buildEntityGraph(dataset, range = null) {
       staffType: rel.staffType,
       relationId: rel.id,
       relationIds: [rel.id],
-      hasUndated: rel.yearStart == null,
-      periods:
-        rel.yearStart == null
-          ? []
-          : [{ start: rel.yearStart, end: rel.yearEnd ?? rel.yearStart }],
+      hasUndated: !rel.periods?.length,
+      periods: (rel.periods || []).map((p) => ({ start: p.start, end: p.end })),
     });
     if (!parentRelsOf.has(child)) parentRelsOf.set(child, []);
     parentRelsOf.get(child).push({ entityId: parent, via: rel.type, relationId: rel.id });

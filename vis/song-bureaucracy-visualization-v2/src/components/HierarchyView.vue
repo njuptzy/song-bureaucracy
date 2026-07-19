@@ -233,7 +233,7 @@
 // - 行内「证」按钮在右侧栏显示证明该关系的引文；
 // - 所选时段模式只保留区间内有记录依据的层级边；历时模式保留全部边并标注纪年。
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { buildEntityGraph } from "@/utils/hierarchy";
+import { buildEntityGraph, relationPeriodsLabel } from "@/utils/hierarchy";
 
 const props = defineProps({
   dataset: { type: Object, required: true },
@@ -323,7 +323,10 @@ function toggleRowEvidence(row) {
   const relations = (row.edge.relationIds || [row.edge.relationId])
     .map((id) => relationById.value.get(id))
     .filter(Boolean)
-    .sort((a, b) => (a.yearStart ?? Infinity) - (b.yearStart ?? Infinity) || a.id - b.id);
+    .sort(
+      (a, b) =>
+        (a.periods?.[0]?.start ?? Infinity) - (b.periods?.[0]?.start ?? Infinity) || a.id - b.id
+    );
   if (!relations.length) return;
   evidenceCard.value = { key, relations };
 }
@@ -484,8 +487,7 @@ function edgePeriodLabel(edge) {
 }
 
 function relationPeriodLabel(relation) {
-  if (relation.yearStart == null) return "时间未明";
-  return periodText(relation.yearStart, relation.yearEnd ?? relation.yearStart);
+  return relationPeriodsLabel(relation);
 }
 
 function evidencePeriodLabel(relations) {

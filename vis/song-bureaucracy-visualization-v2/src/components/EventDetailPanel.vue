@@ -64,10 +64,9 @@
 
               <div v-if="expandedId === relation.id" class="relation-evidence">
                 <p class="relation-meta">
-                  {{ relation.type }}
-                  <template v-if="relation.yearStart != null">
-                    · {{ relation.yearStart }}—{{ relation.yearEnd ?? relation.yearStart }}年有记录
-                  </template>
+                  {{ relation.type }} ·
+                  <template v-if="relation.periods?.length">{{ relationPeriodsLabel(relation) }}有记录</template>
+                  <template v-else>时间未明</template>
                 </p>
                 <article v-for="(citation, index) in relation.citations" :key="index">
                   <cite>{{ citation.citation }}</cite>
@@ -106,6 +105,7 @@ import { computed, ref, watch } from "vue";
 import {
   groupRelationsByType,
   relationDirectionLabel as directionLabel,
+  relationPeriodsLabel,
   relationViaClass as viaClassOf,
 } from "@/utils/hierarchy";
 

@@ -78,6 +78,28 @@ class LiveVisualizationDataTest(unittest.TestCase):
         self.assertEqual(payload["meta"]["entityCount"], counts["Entities"])
         self.assertEqual(payload["meta"]["eventCount"], counts["Timepoints"])
 
+    def test_relation_periods_stay_discrete(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rel_id, subject_id, object_id = conn.execute(
+                "SELECT id, subject_id, object_id FROM Relationships LIMIT 1"
+            ).fetchone()
+            # 两端时间点改成相隔很远的年份：不允许合并成 978—1134 的连续跨度
+            conn.execute("UPDATE Timepoints SET time = ? WHERE id = ?", ("北宋太平兴国三年", subject_id))
+            conn.execute("UPDATE Timepoints SET time = ? WHERE id = ?", ("南宋绍兴四年", object_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+        relation = next(
+            item for item in build_payload(self.db_path)["relations"] if item["id"] == rel_id
+        )
+        self.assertEqual(
+            relation["periods"],
+            [{"start": 978, "end": 978}, {"start": 1134, "end": 1134}],
+        )
+        self.assertNotIn("yearStart", relation)
+
     def test_cache_version_changes_after_database_commit(self):
         cache = LivePayloadCache(self.db_path, min_stable_seconds=0)
         version_before, _, _ = cache.get()
