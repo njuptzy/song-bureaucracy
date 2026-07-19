@@ -705,24 +705,27 @@ const otherParentCard = computed(() => {
   const visibleItems = items.slice(0, 6);
   const hiddenCount = items.length - visibleItems.length;
   const height = 32 + visibleItems.length * 34 + (hiddenCount ? 20 : 0);
-  const centerX = canvasLayout.value.bbox?.cx ?? 0;
-  const centerY = canvasLayout.value.bbox?.cy ?? 0;
-  const placeLeft = node.x > centerX;
-  const placeAbove = node.y > centerY;
-  return {
-    targetId,
-    items,
-    visibleItems,
-    hiddenCount,
-    width,
-    height,
-    x: placeLeft
-      ? node.x - nodeWidth(node.data) / 2 - width - 10
-      : node.x + nodeWidth(node.data) / 2 + 48,
-    y: placeAbove
-      ? node.y + nodeHeight(node.data) / 2 - height
-      : node.y - nodeHeight(node.data) / 2,
-  };
+
+  // 按当前视口（可见世界范围）定位：优先与节点左对齐放下方，
+  // 下方放不下改放上方，最后把卡片夹回视口内，保证不被截断。
+  const margin = 10;
+  const visX0 = -panX.value / zoom.value;
+  const visY0 = -panY.value / zoom.value;
+  const visX1 = (viewW.value - panX.value) / zoom.value;
+  const visY1 = (viewH.value - panY.value) / zoom.value;
+  const nodeLeft = node.x - nodeWidth(node.data) / 2;
+  const nodeTop = node.y - nodeHeight(node.data) / 2;
+  const nodeBottom = node.y + nodeHeight(node.data) / 2;
+
+  let x = nodeLeft;
+  if (x + width > visX1 - margin) x = visX1 - margin - width;
+  if (x < visX0 + margin) x = visX0 + margin;
+
+  let y = nodeBottom + 12;
+  if (y + height > visY1 - margin) y = nodeTop - 12 - height;
+  if (y < visY0 + margin) y = visY0 + margin;
+
+  return { targetId, items, visibleItems, hiddenCount, width, height, x, y };
 });
 
 const worldTransform = computed(
