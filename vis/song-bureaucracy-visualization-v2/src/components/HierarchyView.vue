@@ -1836,8 +1836,7 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   right: 15px;
   bottom: 15px;
   display: flex;
-  flex-direction: column;
-  align-items: end;
+  align-items: center;
   gap: 5px;
 }
 
