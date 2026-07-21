@@ -1421,9 +1421,8 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   }
 
   &.focus rect {
-    fill: #263a4a;
-    stroke: #172b3d;
-    stroke-width: 2;
+    stroke: var(--rust);
+    stroke-width: 2.5;
   }
 
   &.selected:not(.focus) rect {
