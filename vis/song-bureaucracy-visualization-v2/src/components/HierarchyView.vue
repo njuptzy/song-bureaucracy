@@ -202,8 +202,7 @@
               :data-entity-id="typeof node.data.id === 'number' ? node.data.id : null"
               tabindex="0"
               role="button"
-              @click.stop="onNodeClick(node.data, $event)"
-              @dblclick.stop="onNodeDoubleClick(node.data)"
+              @click.stop="onNodeClick(node.data)"
               @keydown.enter.prevent="onNodeClick(node.data)"
             >
               <rect
@@ -308,7 +307,7 @@
       <div v-if="focusId != null" class="canvas-caption">
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
-        <span>· 单击看详情，双击设为中心</span>
+        <span>· 单击看详情</span>
         <span>· 节点左上数字角标查看多上级</span>
       </div>
 
@@ -818,7 +817,7 @@ function nodeTooltip(data) {
   const bits = [`${data.title}（${data.entType}）`, `共${data.eventCount}条记录`];
   if (data.yearMin != null) bits.push(`${data.yearMin}—${data.yearMax}年有记录`);
   if (data.edge) bits.push(`关系：${data.edge.via}`);
-  bits.push("单击看详情，双击设为中心");
+  bits.push("单击看详情");
   return bits.join(" · ");
 }
 
@@ -990,27 +989,14 @@ function onItemClick(item) {
 }
 
 let suppressNextFocus = false;
-let pendingNodeClickTimer = null;
-
-function cancelPendingNodeClick() {
-  if (pendingNodeClickTimer == null) return;
-  window.clearTimeout(pendingNodeClickTimer);
-  pendingNodeClickTimer = null;
-}
 
 function toggleSelection(id) {
   suppressNextFocus = true;
   emit("select-entity", props.selectedEntityId === id ? null : id);
 }
 
-async function onNodeClick(data, event = null) {
-  // 第二次 click 会先于 dblclick 到达；先取消待执行的单击，保持节点位置稳定。
-  if (event?.detail > 1) {
-    cancelPendingNodeClick();
-    return;
-  }
+async function onNodeClick(data) {
   if (data.overflow) {
-    cancelPendingNodeClick();
     clearOtherParentCard();
     const before = canvasNodePos(data.parentId);
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
@@ -1018,25 +1004,8 @@ async function onNodeClick(data, event = null) {
     anchorViewport(before, data.parentId);
     return;
   }
-
-  // 键盘回车没有 click 次数，可直接执行；鼠标单击需等待双击判定窗口结束。
-  if (!event) {
-    clearOtherParentCard();
-    toggleSelection(data.id);
-    return;
-  }
-
-  cancelPendingNodeClick();
-  pendingNodeClickTimer = window.setTimeout(() => {
-    pendingNodeClickTimer = null;
-    clearOtherParentCard();
-    toggleSelection(data.id);
-  }, 320);
-}
-
-function onNodeDoubleClick(data) {
-  cancelPendingNodeClick();
-  if (!data.overflow && data.id !== focusId.value) focusEntity(data.id);
+  clearOtherParentCard();
+  toggleSelection(data.id);
 }
 
 async function focusEntity(id, emitSelection = true) {
@@ -1162,10 +1131,7 @@ onMounted(() => {
   if (stageRef.value) resizeObserver.observe(stageRef.value);
 });
 
-onBeforeUnmount(() => {
-  cancelPendingNodeClick();
-  resizeObserver?.disconnect();
-});
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 watch(
   () => props.selectedEntityId,
@@ -1200,6 +1166,8 @@ watch(
 
 // 深链：?view=hierarchy&entity=实体ID
 if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
+
+defineExpose({ focusEntity });
 </script>
 
 <style scoped lang="scss">

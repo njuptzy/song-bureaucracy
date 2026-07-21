@@ -225,6 +225,7 @@
 
         <template v-else>
           <HierarchyView
+            ref="hierarchyViewRef"
             :dataset="dataset"
             :selected-entity-id="selectedEntityId"
             :hovered-entity-id="hoveredHierarchyEntityId"
@@ -236,7 +237,21 @@
           <aside v-if="selectedEntity" class="detail-panel hierarchy-detail-panel">
             <div class="detail-head">
               <span>{{ selectedEntity.type }} · {{ entityAttrs.category || "未分类" }}</span>
-              <button type="button" @click="selectedEntityId = null" aria-label="关闭详情">×</button>
+              <div class="detail-actions">
+                <button
+                  type="button"
+                  class="detail-focus-btn"
+                  @click="hierarchyViewRef?.focusEntity(selectedEntityId)"
+                >
+                  设为中心
+                </button>
+                <button
+                  type="button"
+                  class="detail-close-btn"
+                  @click="selectedEntityId = null"
+                  aria-label="关闭详情"
+                >×</button>
+              </div>
             </div>
 
             <nav v-if="entityBreadcrumb.length" class="breadcrumb" aria-label="上级路径">
@@ -348,6 +363,7 @@ const centeredEvent = ref(null);
 const detailOpen = ref(false);
 const centerCardRef = ref(null);
 const railStreamRef = ref(null);
+const hierarchyViewRef = ref(null);
 const selectedEntityId = ref(null);
 const hoveredHierarchyEntityId = ref(null);
 const timelineEntityId = ref(null);
@@ -1552,7 +1568,29 @@ button {
   letter-spacing: 0.08em;
 }
 
-.detail-head button {
+.detail-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-head .detail-focus-btn {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 7px;
+  color: var(--ink-soft);
+  background: rgba(244, 241, 234, 0.72);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--ink-soft);
+    background: var(--wash);
+  }
+}
+
+.detail-head .detail-close-btn {
   border: 0;
   padding: 0 4px;
   background: transparent;
