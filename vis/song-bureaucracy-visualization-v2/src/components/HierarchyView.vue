@@ -1847,14 +1847,24 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 }
 
 .zoom-controls button {
+  box-sizing: border-box;
   min-width: 28px;
+  height: 26px;
+  padding-block: 0;
   font-size: 12px;
 }
 
+.zoom-controls {
+  box-sizing: border-box;
+  height: 28px;
+}
+
 .reset-view-control {
+  box-sizing: border-box;
+  height: 28px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 4px 9px;
+  padding: 0 9px;
   color: rgba(90, 58, 32, 0.72);
   background: rgba(244, 241, 234, 0.9);
   box-shadow: 0 3px 12px rgba(90, 58, 32, 0.12);
