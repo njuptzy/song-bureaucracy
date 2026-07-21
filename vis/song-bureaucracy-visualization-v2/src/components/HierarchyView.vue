@@ -990,6 +990,13 @@ function onItemClick(item) {
 }
 
 let suppressNextFocus = false;
+let pendingNodeClickTimer = null;
+
+function cancelPendingNodeClick() {
+  if (pendingNodeClickTimer == null) return;
+  window.clearTimeout(pendingNodeClickTimer);
+  pendingNodeClickTimer = null;
+}
 
 function toggleSelection(id) {
   suppressNextFocus = true;
@@ -997,9 +1004,13 @@ function toggleSelection(id) {
 }
 
 async function onNodeClick(data, event = null) {
-  // 双击的第二次点击 detail=2，跳过，避免与双击聚焦冲突
-  if (event?.detail > 1) return;
+  // 第二次 click 会先于 dblclick 到达；先取消待执行的单击，保持节点位置稳定。
+  if (event?.detail > 1) {
+    cancelPendingNodeClick();
+    return;
+  }
   if (data.overflow) {
+    cancelPendingNodeClick();
     clearOtherParentCard();
     const before = canvasNodePos(data.parentId);
     childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
@@ -1007,11 +1018,24 @@ async function onNodeClick(data, event = null) {
     anchorViewport(before, data.parentId);
     return;
   }
-  clearOtherParentCard();
-  toggleSelection(data.id);
+
+  // 键盘回车没有 click 次数，可直接执行；鼠标单击需等待双击判定窗口结束。
+  if (!event) {
+    clearOtherParentCard();
+    toggleSelection(data.id);
+    return;
+  }
+
+  cancelPendingNodeClick();
+  pendingNodeClickTimer = window.setTimeout(() => {
+    pendingNodeClickTimer = null;
+    clearOtherParentCard();
+    toggleSelection(data.id);
+  }, 320);
 }
 
 function onNodeDoubleClick(data) {
+  cancelPendingNodeClick();
   if (!data.overflow && data.id !== focusId.value) focusEntity(data.id);
 }
 
@@ -1138,7 +1162,10 @@ onMounted(() => {
   if (stageRef.value) resizeObserver.observe(stageRef.value);
 });
 
-onBeforeUnmount(() => resizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  cancelPendingNodeClick();
+  resizeObserver?.disconnect();
+});
 
 watch(
   () => props.selectedEntityId,
