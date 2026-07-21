@@ -315,7 +315,7 @@
       <div class="canvas-controls">
         <div class="zoom-controls">
           <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
-          <button type="button" aria-label="适应画布" @click="resetViewport">适</button>
+          <button type="button" aria-label="显示完整层级图" @click="resetViewport">全图</button>
           <button type="button" aria-label="放大" @click="changeZoom(0.15)">＋</button>
         </div>
       </div>
