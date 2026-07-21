@@ -53,7 +53,11 @@
     </div>
 
     <div class="canvas-shell">
-      <aside class="entity-list" :class="{ collapsed: listCollapsed }">
+      <aside
+        class="entity-list"
+        :class="{ collapsed: listCollapsed }"
+        @transitionend="onEntityListTransitionEnd"
+      >
         <button
           type="button"
           class="list-toggle"
@@ -1072,6 +1076,11 @@ function fitViewport() {
 
 function resetViewport() {
   fitViewport();
+}
+
+function onEntityListTransitionEnd(event) {
+  if (event.propertyName !== "width") return;
+  resetViewport();
 }
 
 function zoomAt(factor, cx, cy) {
