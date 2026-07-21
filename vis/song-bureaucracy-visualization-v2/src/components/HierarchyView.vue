@@ -2,23 +2,12 @@
   <div ref="rootRef" class="hierarchy-view">
     <div class="hierarchy-toolbar">
       <div class="toolbar-copy">
-        <strong>{{ focusTitle || "官制层级结构" }}</strong>
+        <strong>官制层级结构</strong>
         <span>
           {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}有层级实体
           · {{ isolatedEntities.length }} 个无层级实体
         </span>
       </div>
-
-      <nav v-if="ancestorTrail.length" class="ancestor-bar" aria-label="上级链">
-        <template v-for="(ancestor, index) in ancestorTrail" :key="ancestor.id">
-          <span v-if="index" class="ancestor-sep">›</span>
-          <button type="button" :title="ancestor.title" @click="focusEntity(ancestor.id)">
-            {{ ancestor.title }}
-          </button>
-        </template>
-        <span class="ancestor-sep">›</span>
-        <span class="ancestor-current">{{ focusTitle }}</span>
-      </nav>
 
       <span class="toolbar-legend" aria-label="层级图图例">
         <span class="legend-item"><i class="node-sample org"></i>机构</span>
@@ -69,7 +58,7 @@
             type="button"
             class="entity-item"
             :class="{
-              focused: item.id === focusId,
+              selected: item.id === selectedEntityId,
               office: item.type === '官职',
               'linked-hover': item.id === hoveredEntityId,
             }"
@@ -88,7 +77,7 @@
             type="button"
             class="entity-item quiet"
             :class="{
-              focused: item.id === focusId,
+              selected: item.id === selectedEntityId,
               office: item.type === '官职',
               'linked-hover': item.id === hoveredEntityId,
             }"
@@ -107,9 +96,9 @@
       </aside>
 
       <div ref="stageRef" class="canvas-stage">
-      <div v-if="focusId == null" class="stage-hint">
-        <span class="empty-seal">选</span>
-        <p>从左侧实体目录或上方搜索选择机构或官职。</p>
+      <div v-if="!canvasLayout.realNodeCount" class="stage-hint">
+        <span class="empty-seal">层</span>
+        <p>当前范围暂无层级关系数据。</p>
       </div>
 
       <svg
@@ -118,7 +107,7 @@
         class="hierarchy-canvas"
         :viewBox="`0 0 ${viewW} ${viewH}`"
         role="img"
-        :aria-label="`${focusTitle}层级结构图`"
+        aria-label="官制层级结构图"
         @wheel.prevent="onWheel"
         @pointermove="onPointerMove"
         @pointerup="endPan"
@@ -191,19 +180,16 @@
                 'canvas-node',
                 node.data.entType === '官职' ? 'office' : 'org',
                 {
-                  focus: node.data.id === focusId,
                   selected: node.data.id === selectedEntityId,
                   'linked-hover': node.data.id === hoveredEntityId,
                   'relation-highlight': isInspectedNode(node.data.id),
                   'relation-dimmed': effectiveInspectionPair && !isInspectedNode(node.data.id),
-                  overflow: node.data.overflow,
                 },
               ]"
               :data-entity-id="typeof node.data.id === 'number' ? node.data.id : null"
               tabindex="0"
               role="button"
               @click.stop="onNodeClick(node.data, $event)"
-              @dblclick.stop="onNodeDoubleClick(node.data)"
               @keydown.enter.prevent="onNodeClick(node.data)"
             >
               <rect
@@ -240,13 +226,6 @@
                 <text text-anchor="middle" dy="3">{{ otherParentCount(node.data.id) }}</text>
                 <title>另有 {{ otherParentCount(node.data.id) }} 个上级，点击查看</title>
               </g>
-              <text
-                v-if="node.data.badge"
-                class="node-badge"
-                text-anchor="start"
-                x="10"
-                :y="nodeHeight(node.data) / 2 + 13"
-              >{{ node.data.badge }}</text>
               <title>{{ nodeTooltip(node.data) }}</title>
             </g>
           </g>
@@ -286,13 +265,6 @@
               <text class="other-parent-meta" x="27" y="24">
                 {{ compactLabel(`${item.viaLabel} · ${edgePeriodLabel(item.data)}`, 18) }}
               </text>
-              <text
-                class="other-parent-center"
-                :x="otherParentCard.width - 25"
-                y="18"
-                text-anchor="end"
-                @click.stop="centerOtherParent(item.parentId)"
-              >中心</text>
               <title>{{ item.title }} · {{ item.viaLabel }} · {{ edgePeriodLabel(item.data) }}</title>
             </g>
             <text
@@ -305,22 +277,13 @@
         </g>
       </svg>
 
-      <div v-if="focusId != null" class="canvas-caption">
+      <div v-if="canvasLayout.realNodeCount" class="canvas-caption">
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
-        <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
-        <span>· 单击看详情，双击设为中心</span>
+        <span>· 单击看详情</span>
         <span>· 节点左上数字角标查看多上级</span>
       </div>
 
       <div class="canvas-controls">
-        <div class="layout-switch" aria-label="层级画布模式">
-          <button type="button" :class="{ active: layoutMode === 'overview' }" @click="setLayoutMode('overview')">
-            全貌
-          </button>
-          <button type="button" :class="{ active: layoutMode === 'focus' }" @click="setLayoutMode('focus')">
-            聚焦
-          </button>
-        </div>
         <div class="zoom-controls">
           <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
           <button type="button" aria-label="适应画布" @click="resetViewport">适</button>
@@ -358,11 +321,10 @@
 // - 布局在“世界坐标”中计算（d3Tree），SVG viewBox 固定为容器像素尺寸，
 //   视口状态 {zoom, panX, panY} 显式管理，不再有隐式 meet 缩放叠加：
 //   「适」= 按内容 bbox 计算 fit；滚轮以鼠标为锚缩放；拖动按屏幕像素平移。
-// - 展开模型：每个父节点独立分页（余N项点击翻页），删除全局节点预算；
-//   多上级关系不重复生成节点，改由节点旁的局部关系卡表达。
-// - 展开/收起/翻页不触发全画布重新居中：被操作的节点锚定在原地，子树就地显隐；
-//   只有重设中心、切换时间范围/所选时段/历时/布局模式时才重新 fit。
-//   单纯打开或关闭详情不改变中心，也不扰动画布视口。
+// - 画布直接渲染全量层级森林：所有根实体各自成树并排布局，下级全部一次展开，
+//   不分页、不设深度上限；多上级关系不重复生成节点，改由节点旁的局部关系卡表达。
+// - 只有切换时间范围/所选时段/历时，或森林数据首次出现时，画布才重新 fit；
+//   单纯打开或关闭详情不扰动画布视口。
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { hierarchy as d3Hierarchy, tree as d3Tree } from "d3";
 import { buildEntityGraph, relationPeriodsLabel } from "@/utils/hierarchy";
@@ -385,20 +347,13 @@ const VIA_ICONS = {
 };
 const NODE_WIDTH = 40;
 const NODE_HEIGHT = 112;
-const FOCUS_CHILD_LIMIT = 14;
-const OVERVIEW_MAX_DEPTH = 7;
-const FOCUS_MAX_DEPTH = 2;
 const X_SEP = 60;
 const Y_SEP = 155;
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3;
 
 const structureScope = ref("current");
-const layoutMode = ref("overview");
 const listCollapsed = ref(false);
-const focusId = ref(null);
-const expanded = reactive(new Set());
-const childLimits = reactive(new Map());
 const evidenceCard = ref(null);
 const otherParentCardId = ref(null);
 const activeOtherParent = ref(null);
@@ -440,16 +395,6 @@ const isolatedEntities = computed(() =>
     .sort(byTimeMatch)
 );
 
-const ancestorTrail = computed(() => {
-  if (focusId.value == null) return [];
-  return graph.value.ancestorChain(focusId.value).map((id) => {
-    const entity = graph.value.entityById.get(id);
-    return { id, title: entity?.title ?? `#${id}`, entType: entity?.type ?? "" };
-  });
-});
-
-const focusTitle = computed(() => graph.value.entityById.get(focusId.value)?.title ?? "");
-
 function sortedChildren(id) {
   return [...(graph.value.childrenOf.get(id) || [])].sort(
     (a, b) =>
@@ -468,26 +413,21 @@ function displayChars(title) {
   return chars.length > 7 ? [...chars.slice(0, 6), "…"] : chars;
 }
 
-// 全貌模式展示全部下级（数据中单个父节点最多 37 个下级，无需分页）；
-// 分页只用于聚焦模式，避免一次铺开过多节点。
-const defaultChildLimit = () =>
-  layoutMode.value === "focus" ? FOCUS_CHILD_LIMIT : Infinity;
-
+// 全量层级森林：graph.roots 按记录数降序、再按标题排序作为根列表；
+// 环等原因导致未从 roots 访问到的有层级实体追加为额外根，保证全部可见。
+// 返回一个合成根节点，canvasLayout 布局后跳过它，根级节点各自成树、互不相连。
 const visualTree = computed(() => {
-  if (focusId.value == null || !graph.value.entityById.has(focusId.value)) return null;
   const seen = new Set();
-  const maxDepth = layoutMode.value === "focus" ? FOCUS_MAX_DEPTH : OVERVIEW_MAX_DEPTH;
-  let hiddenCount = 0;
 
-  function build(id, edge = null, depth = 0, path = new Set()) {
+  function build(id, edge = null, path = new Set()) {
     const entity = graph.value.entityById.get(id);
     if (!entity || path.has(id) || seen.has(id)) return null;
     seen.add(id);
 
-    const allChildren = sortedChildren(id).filter((child) => !path.has(child.entityId));
     // 可显示的子节点：多上级去重后，已经挂在别处的子节点不算
-    // （否则会出现有「−」按钮但下面什么都展不开的节点）
-    const freshChildren = allChildren.filter((child) => !seen.has(child.entityId));
+    const freshChildren = sortedChildren(id).filter(
+      (child) => !path.has(child.entityId) && !seen.has(child.entityId)
+    );
     const data = {
       id,
       title: entity.title,
@@ -497,55 +437,39 @@ const visualTree = computed(() => {
       yearMin: entity.yearMin,
       yearMax: entity.yearMax,
       edge,
-      hasChildren: freshChildren.length > 0,
-      depthLimited: freshChildren.length > 0 && depth >= maxDepth,
-      badge: "",
       children: [],
     };
 
-    if (!freshChildren.length) return data;
-    if (depth >= maxDepth) {
-      hiddenCount += freshChildren.length;
-      data.badge = [data.badge, `下级${freshChildren.length}`].filter(Boolean).join(" · ");
-      return data;
-    }
-    if (!expanded.has(id)) return data;
-
-    const limit = childLimits.get(id) ?? defaultChildLimit();
     const nextPath = new Set(path).add(id);
-    let shown = 0;
-    let omitted = 0;
     for (const child of freshChildren) {
-      if (seen.has(child.entityId)) continue; // 多上级去重：不计入“余N项”
-      if (shown >= limit) {
-        omitted += 1;
-        continue;
-      }
-      const childNode = build(child.entityId, child, depth + 1, nextPath);
-      if (childNode) {
-        data.children.push(childNode);
-        shown += 1;
-      }
-    }
-    if (omitted > 0) {
-      hiddenCount += omitted;
-      data.children.push({
-        id: `more-${id}`,
-        key: `more-${id}`,
-        title: `余${omitted}项`,
-        displayChars: displayChars(`余${omitted}项`),
-        entType: "overflow",
-        overflow: true,
-        parentId: id,
-        omitted,
-        children: [],
-      });
+      if (seen.has(child.entityId)) continue; // 多上级去重
+      const childNode = build(child.entityId, child, nextPath);
+      if (childNode) data.children.push(childNode);
     }
     return data;
   }
 
-  const root = build(focusId.value);
-  return root ? { root, hiddenCount } : null;
+  const rootIds = [...graph.value.roots].sort(
+    (a, b) =>
+      (graph.value.entityById.get(b)?.eventCount ?? 0) -
+        (graph.value.entityById.get(a)?.eventCount ?? 0) ||
+      (graph.value.entityById.get(a)?.title ?? "").localeCompare(
+        graph.value.entityById.get(b)?.title ?? "",
+        "zh"
+      )
+  );
+  const children = [];
+  for (const id of rootIds) {
+    const node = build(id);
+    if (node) children.push(node);
+  }
+  // 兜底：环等导致未从 roots 访问到的有层级实体，追加为额外根
+  for (const id of linkedIds.value) {
+    if (seen.has(id)) continue;
+    const node = build(id);
+    if (node) children.push(node);
+  }
+  return children.length ? { id: "forest-root", children } : null;
 });
 
 const canvasLayout = computed(() => {
