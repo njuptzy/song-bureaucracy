@@ -313,8 +313,8 @@
       </div>
 
       <div class="canvas-controls">
-        <button type="button" class="reset-view-control" @click="resetViewport">
-          重置视图
+        <button type="button" class="reset-view-control" aria-label="重置视图" title="重置视图" @click="resetViewport">
+          ↺
         </button>
         <div class="zoom-controls">
           <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
@@ -1755,8 +1755,8 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 
 .canvas-caption {
   position: absolute;
-  bottom: 16px;
-  left: 108px;
+  bottom: 18px;
+  left: 16px;
   color: rgba(90, 58, 32, 0.56);
   font-size: 9px;
   letter-spacing: 0.05em;
@@ -1848,27 +1848,42 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 
 .zoom-controls button {
   box-sizing: border-box;
+  width: 28px;
   min-width: 28px;
-  height: 26px;
-  padding-block: 0;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0;
+  background: rgba(244, 241, 234, 0.9);
+  box-shadow: 0 3px 12px rgba(90, 58, 32, 0.12);
   font-size: 12px;
+
+  &:last-child {
+    border-right: 1px solid var(--line);
+  }
 }
 
 .zoom-controls {
   box-sizing: border-box;
   height: 28px;
+  gap: 5px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .reset-view-control {
   box-sizing: border-box;
+  width: 28px;
   height: 28px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 0 9px;
+  padding: 0;
   color: rgba(90, 58, 32, 0.72);
   background: rgba(244, 241, 234, 0.9);
   box-shadow: 0 3px 12px rgba(90, 58, 32, 0.12);
-  font-size: 10px;
+  font-size: 15px;
   cursor: pointer;
 
   &:hover {
