@@ -313,9 +313,11 @@
       </div>
 
       <div class="canvas-controls">
+        <button type="button" class="reset-view-control" @click="resetViewport">
+          重置视图
+        </button>
         <div class="zoom-controls">
           <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
-          <button type="button" aria-label="显示完整层级图" @click="resetViewport">全图</button>
           <button type="button" aria-label="放大" @click="changeZoom(0.15)">＋</button>
         </div>
       </div>
@@ -1848,6 +1850,22 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 .zoom-controls button {
   min-width: 28px;
   font-size: 12px;
+}
+
+.reset-view-control {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 9px;
+  color: rgba(90, 58, 32, 0.72);
+  background: rgba(244, 241, 234, 0.9);
+  box-shadow: 0 3px 12px rgba(90, 58, 32, 0.12);
+  font-size: 10px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ink);
+    background: var(--wash);
+  }
 }
 
 // 证据卡：弹在被点连线旁边的浮动卡（屏幕坐标，随缩放平移跟随）
