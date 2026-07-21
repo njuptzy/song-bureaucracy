@@ -234,6 +234,7 @@
             @select-entity="(id) => (selectedEntityId = id)"
           />
 
+          <Transition name="hierarchy-detail">
           <aside v-if="selectedEntity" class="detail-panel hierarchy-detail-panel">
             <div class="detail-head">
               <span>{{ selectedEntity.type }} · {{ entityAttrs.category || "未分类" }}</span>
@@ -332,6 +333,7 @@
               </article>
             </section>
           </aside>
+          </Transition>
         </template>
       </section>
     </main>
@@ -1261,6 +1263,24 @@ button {
   border-left: 1px solid var(--ink-soft);
   padding: 12px 12px 20px;
   background-image: url("./assets/images/background.png");
+}
+
+.hierarchy-detail-enter-active,
+.hierarchy-detail-leave-active {
+  transition:
+    width 220ms ease,
+    padding 220ms ease,
+    opacity 160ms ease,
+    border-color 220ms ease;
+}
+
+.hierarchy-detail-enter-from,
+.hierarchy-detail-leave-to {
+  width: 0 !important;
+  border-left-color: transparent !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  opacity: 0;
 }
 
 .exploration-area.events-layout {
