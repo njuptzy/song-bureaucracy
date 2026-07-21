@@ -35,7 +35,7 @@
     <div v-if="entity" class="timeline-stage">
       <div class="timeline-head">
         <div class="head-title">
-          <strong>{{ entity.title }}</strong>
+          <strong :title="entity.title">{{ entity.title }}</strong>
           <em>{{ entity.type }}</em>
           <small v-if="entity.yearMin != null">公元{{ entity.yearMin }}—{{ entity.yearMax }}年</small>
           <small>
@@ -529,16 +529,26 @@ onBeforeUnmount(() => {
 
   .head-title {
     display: flex;
+    flex: 1;
     align-items: baseline;
     gap: 8px;
     min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
 
     strong {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: min(440px, 32vw);
+      overflow: hidden;
       font-size: 18px;
       font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     em {
+      flex: 0 0 auto;
       border: 1px solid var(--line);
       padding: 0 4px;
       color: rgba(90, 58, 32, 0.62);
@@ -547,6 +557,7 @@ onBeforeUnmount(() => {
     }
 
     small {
+      flex: 0 0 auto;
       color: rgba(90, 58, 32, 0.6);
       font-family: "FZQINGKBYSJF", serif;
       font-size: 11px;
