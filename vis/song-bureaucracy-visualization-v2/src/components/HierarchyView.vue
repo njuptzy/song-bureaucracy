@@ -476,13 +476,19 @@ const canvasLayout = computed(() => {
   const empty = { nodes: [], edges: [], buses: [], hiddenCount: 0, realNodeCount: 0, bbox: null };
   if (!visualTree.value) return empty;
 
-  const root = d3Hierarchy(visualTree.value.root, (data) => data.children);
+  const root = d3Hierarchy(visualTree.value, (data) => data.children);
   // separation 统一为 1：默认布局会让不同父节点的子树拉开双倍间距，
   // 深层节点少时留出大段空档；节点同宽，统一间距后相邻节点不会重叠。
   d3Tree().nodeSize([X_SEP, Y_SEP]).separation(() => 1)(root);
-  const nodes = root.descendants().map((node) =>
-    Object.assign(node, { key: node.data.key || String(node.data.id) })
-  );
+  const nodes = root
+    .descendants()
+    .filter((node) => node.depth > 0)
+    .map((node) =>
+      Object.assign(node, {
+        key: node.data.key || String(node.data.id),
+        y: node.y - Y_SEP,
+      })
+    );
 
   let minX = Infinity;
   let maxX = -Infinity;
@@ -505,12 +511,15 @@ const canvasLayout = computed(() => {
     cy: (minY + maxY) / 2 + 10,
   };
 
-  const edges = root.links().map((link, index) => ({
-    key: `primary-${link.target.data.id}-${index}`,
-    source: link.source,
-    target: link.target,
-    data: link.target.data.edge || null,
-  }));
+  const edges = root
+    .links()
+    .filter((link) => link.source.depth > 0)
+    .map((link, index) => ({
+      key: `primary-${link.target.data.id}-${index}`,
+      source: link.source,
+      target: link.target,
+      data: link.target.data.edge || null,
+    }));
 
   // 同一父节点的所有子节点只共用一条横向总线：
   // 父节点竖线 → 一条横线 → 每个子节点各自向下的箭头。
@@ -546,7 +555,7 @@ const canvasLayout = computed(() => {
     nodes,
     edges,
     buses,
-    hiddenCount: visualTree.value.hiddenCount,
+    hiddenCount: 0,
     realNodeCount: nodes.filter((node) => typeof node.data.id === "number").length,
     bbox,
   };
@@ -909,86 +918,30 @@ function selectOtherParent(targetId, item) {
   };
 }
 
-function centerOtherParent(id) {
-  clearOtherParentCard();
-  focusEntity(id);
-}
-
 function onItemClick(item) {
-  if (item.id === focusId.value) toggleSelection(item.id);
-  else focusEntity(item.id);
+  clearOtherParentCard();
+  evidenceCard.value = null;
+  toggleSelection(item.id);
 }
-
-let suppressNextFocus = false;
 
 function toggleSelection(id) {
-  suppressNextFocus = true;
   emit("select-entity", props.selectedEntityId === id ? null : id);
 }
 
-async function onNodeClick(data, event = null) {
-  // 双击的第二次点击 detail=2，跳过，避免与双击聚焦冲突
-  if (event?.detail > 1) return;
-  if (data.overflow) {
-    clearOtherParentCard();
-    const before = canvasNodePos(data.parentId);
-    childLimits.set(data.parentId, (childLimits.get(data.parentId) ?? defaultChildLimit()) + defaultChildLimit());
-    await nextTick();
-    anchorViewport(before, data.parentId);
-    return;
-  }
+function onNodeClick(data) {
+  if (typeof data.id !== "number") return;
   clearOtherParentCard();
+  evidenceCard.value = null;
   toggleSelection(data.id);
 }
 
-function onNodeDoubleClick(data) {
-  if (!data.overflow && data.id !== focusId.value) focusEntity(data.id);
-}
-
-async function focusEntity(id, emitSelection = true) {
-  if (id == null || !graph.value.entityById.has(id)) return;
-  clearOtherParentCard();
-  focusId.value = id;
-  evidenceCard.value = null;
-  childLimits.clear();
-  expandFocusedTree();
-  await nextTick();
-  resetViewport();
-  if (emitSelection && props.selectedEntityId !== id) emit("select-entity", id);
-}
-
-function expandFocusedTree() {
-  expanded.clear();
-  const stack = [focusId.value];
-  const seen = new Set();
-  while (stack.length) {
-    const current = stack.pop();
-    if (current == null || seen.has(current)) continue;
-    seen.add(current);
-    expanded.add(current);
-    for (const child of graph.value.childrenOf.get(current) || []) stack.push(child.entityId);
-  }
-}
-
-function canvasNodePos(id) {
+function centerEntity(id) {
   const node = canvasLayout.value.nodes.find((item) => item.data.id === id);
-  return node ? { x: node.x, y: node.y } : null;
-}
-
-function anchorViewport(before, id) {
-  if (!before) return;
-  const after = canvasNodePos(id);
-  if (!after) return;
-  panX.value += (before.x - after.x) * zoom.value;
-  panY.value += (before.y - after.y) * zoom.value;
-}
-
-async function setLayoutMode(mode) {
-  clearOtherParentCard();
-  layoutMode.value = mode;
-  childLimits.clear();
-  await nextTick();
-  resetViewport();
+  if (!node || !viewW.value || !viewH.value) return false;
+  zoom.value = clampZoom(0.92);
+  panX.value = viewW.value / 2 - node.x * zoom.value;
+  panY.value = viewH.value / 2 - node.y * zoom.value;
+  return true;
 }
 
 // —— 视口操作 ——
@@ -1062,8 +1015,8 @@ onMounted(() => {
     if (!rect?.width || !rect?.height) return;
     viewW.value = Math.round(rect.width);
     viewH.value = Math.round(rect.height);
-    // 画布可用区域变化后重新计算最佳位置，避免窗口或面板变化造成偏移。
-    resetViewport();
+    // 目录折叠、右侧详情开关或窗口变化后，优先让当前实体保持在最佳阅读位置。
+    if (!centerEntity(props.selectedEntityId)) resetViewport();
   });
   if (stageRef.value) resizeObserver.observe(stageRef.value);
 });
@@ -1072,23 +1025,19 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 
 watch(
   () => props.selectedEntityId,
-  (id) => {
-    if (suppressNextFocus) {
-      suppressNextFocus = false;
-      return;
-    }
-    if (id != null && id !== focusId.value) focusEntity(id, false);
+  async (id) => {
+    if (id == null) return;
+    await nextTick();
+    centerEntity(id);
   }
 );
 
-// 自动重新居中的触发点：切换时间范围、所选时段/历时。
-// 重设中心与切换布局模式在各自函数内显式 fit；展开/收起/翻页走节点锚定，视口不动。
+// 切换结构范围或底部时间后重新生成森林；当前实体仍在图中时继续聚焦它。
 watch(structureScope, async () => {
   clearOtherParentCard();
   evidenceCard.value = null;
-  childLimits.clear();
   await nextTick();
-  resetViewport();
+  if (!centerEntity(props.selectedEntityId)) resetViewport();
 });
 
 watch(
@@ -1096,13 +1045,10 @@ watch(
   async () => {
     clearOtherParentCard();
     await nextTick();
-    resetViewport();
+    if (!centerEntity(props.selectedEntityId)) resetViewport();
   },
   { deep: true }
 );
-
-// 深链：?view=hierarchy&entity=实体ID
-if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
 </script>
 
 <style scoped lang="scss">
@@ -1592,7 +1538,7 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
       background: var(--wash);
     }
 
-    &.focused {
+    &.selected {
       border-color: var(--ink-soft);
       background: rgba(106, 74, 42, 0.1);
     }
