@@ -1238,14 +1238,11 @@ button {
   position: relative;
 }
 
-/* 详情页停靠在画布左侧，作为侧栏挤压画布而不是覆盖；宽度从简，给画布留空间。
-   双类选择器提升优先级，覆盖后出现的 .detail-panel 基础宽度。 */
+/* 层级实体详情停靠在画布右侧，保持画布和左侧可折叠实体目录互不遮挡。 */
 .detail-panel.hierarchy-detail-panel {
-  order: -1;
   flex: 0 0 auto;
   width: min(230px, 19vw);
-  border-right: 1px solid var(--ink-soft);
-  border-left: 0;
+  border-left: 1px solid var(--ink-soft);
   padding: 12px 12px 20px;
   background-image: url("./assets/images/background.png");
 }

@@ -53,30 +53,16 @@
     </div>
 
     <div class="canvas-shell">
-      <div ref="stageRef" class="canvas-stage">
-      <button
-        type="button"
-        class="entity-browser-trigger"
-        :class="{ active: browserOpen }"
-        :title="browserOpen ? '关闭实体目录' : '打开实体目录'"
-        @click="browserOpen = !browserOpen"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 4v4M5 20v-5h14v5M5 15v-4h14v4M12 8H5v3M12 8h7v3" />
-          <rect x="9" y="2" width="6" height="4" rx="1" />
-          <rect x="2" y="18" width="6" height="4" rx="1" />
-          <rect x="9" y="18" width="6" height="4" rx="1" />
-          <rect x="16" y="18" width="6" height="4" rx="1" />
-        </svg>
-        <span>实体目录</span>
-      </button>
-
-      <aside v-if="browserOpen" class="entity-browser">
-        <div class="browser-head">
-          <span>机构与官职</span>
-          <button type="button" aria-label="关闭" @click="browserOpen = false">×</button>
-        </div>
-        <div class="browser-scroll">
+      <aside class="entity-list" :class="{ collapsed: listCollapsed }">
+        <button
+          type="button"
+          class="list-toggle"
+          :title="listCollapsed ? '展开实体目录' : '收起实体目录'"
+          @click="listCollapsed = !listCollapsed"
+        >
+          {{ listCollapsed ? "›" : "‹" }}
+        </button>
+        <div class="list-scroll">
           <button
             v-for="item in listedEntities"
             :key="item.id"
@@ -89,9 +75,9 @@
             }"
             @click="onItemClick(item)"
           >
-            <i aria-hidden="true"></i>
-            <span>{{ item.title }}</span>
-            <small v-if="activeEntities.has(item.id)" title="所选时段有记录">●</small>
+            <span class="item-shape" aria-hidden="true"></span>
+            <span class="item-title">{{ item.title }}</span>
+            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
           </button>
           <div v-if="isolatedEntities.length" class="list-divider">
             {{ structureScope === "current" ? "所选时段无层级关系" : "历时无层级关系" }}
@@ -101,19 +87,29 @@
             :key="item.id"
             type="button"
             class="entity-item quiet"
-            :class="{ focused: item.id === focusId, office: item.type === '官职' }"
+            :class="{
+              focused: item.id === focusId,
+              office: item.type === '官职',
+              'linked-hover': item.id === hoveredEntityId,
+            }"
             @click="onItemClick(item)"
           >
-            <i aria-hidden="true"></i>
-            <span>{{ item.title }}</span>
-            <small v-if="activeEntities.has(item.id)" title="所选时段有记录">●</small>
+            <span class="item-shape" aria-hidden="true"></span>
+            <span class="item-title">{{ item.title }}</span>
+            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
           </button>
+        </div>
+        <div class="rail-legend" aria-hidden="true">
+          <span><i class="item-shape"></i>机构</span>
+          <span><i class="item-shape office"></i>官职</span>
+          <span><i class="item-dot">●</i>当前活跃</span>
         </div>
       </aside>
 
+      <div ref="stageRef" class="canvas-stage">
       <div v-if="focusId == null" class="stage-hint">
         <span class="empty-seal">选</span>
-        <p>从上方搜索或打开实体目录，选择机构或官职。</p>
+        <p>从左侧实体目录或上方搜索选择机构或官职。</p>
       </div>
 
       <svg
@@ -399,7 +395,7 @@ const ZOOM_MAX = 3;
 
 const structureScope = ref("current");
 const layoutMode = ref("overview");
-const browserOpen = ref(false);
+const listCollapsed = ref(false);
 const focusId = ref(null);
 const expanded = reactive(new Set());
 const childLimits = reactive(new Map());
@@ -997,7 +993,6 @@ function centerOtherParent(id) {
 function onItemClick(item) {
   if (item.id === focusId.value) toggleSelection(item.id);
   else focusEntity(item.id);
-  browserOpen.value = false;
 }
 
 let suppressNextFocus = false;
@@ -1018,7 +1013,6 @@ async function onNodeClick(data, event = null) {
     anchorViewport(before, data.parentId);
     return;
   }
-  browserOpen.value = false;
   clearOtherParentCard();
   toggleSelection(data.id);
 }
@@ -1600,145 +1594,169 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
   stroke-width: 1;
 }
 
-.entity-browser-trigger {
-  position: absolute;
-  z-index: 12;
-  bottom: 17px;
-  left: 17px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--ink-soft);
-  border-radius: 5px;
-  padding: 6px 8px;
-  color: var(--paper);
-  background: var(--rust);
-  box-shadow: 0 4px 14px rgba(90, 58, 32, 0.18);
-  cursor: pointer;
-
-  svg {
-    width: 20px;
-    height: 20px;
-    fill: none;
-    stroke: currentColor;
-    stroke-linejoin: round;
-    stroke-width: 1.5;
-  }
-
-  span {
-    font-size: 10px;
-  }
-
-  &.active {
-    background: var(--ink-soft);
-  }
-}
-
-.entity-browser {
-  position: absolute;
-  z-index: 11;
-  top: 14px;
-  bottom: 56px;
-  left: 14px;
+.entity-list {
+  position: relative;
   display: flex;
-  width: min(260px, 27vw);
+  width: 210px;
+  flex: 0 0 auto;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--ink-soft);
-  border-radius: 7px;
-  background: rgba(244, 241, 234, 0.96);
-  box-shadow: 0 8px 26px rgba(90, 58, 32, 0.2);
-  backdrop-filter: blur(4px);
-}
+  border-right: 1px solid var(--line-light);
+  transition: width 160ms ease;
 
-.browser-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  padding: 8px 10px;
-  color: var(--ink);
-  font-size: 12px;
+  &.collapsed {
+    width: 15px;
 
-  button {
-    border: 0;
-    padding: 0 3px;
-    background: transparent;
-    font-size: 20px;
+    .list-scroll,
+    .rail-legend {
+      display: none;
+    }
+  }
+
+  .list-toggle {
+    position: absolute;
+    z-index: 3;
+    top: 50%;
+    right: 0;
+    width: 15px;
+    height: 44px;
+    transform: translateY(-50%);
+    border: 1px solid var(--line-light);
+    border-right: 0;
+    border-radius: 4px 0 0 4px;
+    padding: 0;
+    color: rgba(90, 58, 32, 0.5);
+    background: var(--paper);
+    font-size: 10px;
+    line-height: 1;
     cursor: pointer;
-  }
-}
+    opacity: 0.45;
 
-.browser-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px;
-  scrollbar-color: var(--line) transparent;
-  scrollbar-width: thin;
-}
-
-.entity-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 7px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 4px 6px;
-  color: var(--ink-soft);
-  background: transparent;
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
-
-  i {
-    width: 9px;
-    height: 9px;
-    flex: 0 0 auto;
-    border: 1px solid var(--ink-soft);
-    border-radius: 1px;
-    background: rgba(106, 74, 42, 0.16);
+    &:hover {
+      color: var(--ink);
+      opacity: 1;
+    }
   }
 
-  &.office i {
-    border-color: #55756c;
-    border-radius: 50%;
-    background: rgba(85, 117, 108, 0.14);
-  }
-
-  span {
+  .list-scroll {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-y: auto;
+    padding: 6px 8px 24px;
+    scrollbar-color: var(--line) transparent;
+    scrollbar-width: thin;
   }
 
-  small {
-    color: var(--teal);
+  .entity-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    margin-bottom: 1px;
+    padding: 3px 6px;
+    color: var(--ink-soft);
+    background: transparent;
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--line);
+      background: var(--wash);
+    }
+
+    &.focused {
+      border-color: var(--ink-soft);
+      background: rgba(106, 74, 42, 0.1);
+    }
+
+    &.linked-hover {
+      border-color: var(--rust);
+      background: rgba(180, 112, 71, 0.18);
+      box-shadow: inset 3px 0 0 var(--rust);
+      color: var(--ink);
+    }
+
+    &.quiet:not(.linked-hover) {
+      color: rgba(90, 58, 32, 0.45);
+    }
+
+    .item-shape {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      border: 1px solid var(--ink-soft);
+      border-radius: 1px;
+      background: rgba(106, 74, 42, 0.14);
+    }
+
+    &.office .item-shape {
+      border-color: var(--line);
+      border-radius: 50%;
+      background: rgba(106, 74, 42, 0.03);
+    }
+
+    .item-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-dot {
+      color: var(--teal);
+      font-size: 9px;
+    }
   }
 
-  &:hover,
-  &.focused {
-    border-color: var(--line);
-    background: var(--wash);
+  .list-divider {
+    margin: 10px 4px 6px;
+    border-top: 1px solid var(--line-light);
+    padding-top: 8px;
+    color: rgba(90, 58, 32, 0.45);
+    font-size: 10px;
+    letter-spacing: 0.2em;
   }
 
-  &.focused {
-    box-shadow: inset 3px 0 0 var(--ink-soft);
-  }
+  .rail-legend {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 12px;
+    border-top: 1px solid var(--line-light);
+    padding: 7px 8px;
+    color: rgba(90, 58, 32, 0.6);
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 10px;
 
-  &.quiet {
-    color: rgba(90, 58, 32, 0.46);
-  }
-}
+    span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
 
-.list-divider {
-  margin: 10px 4px 5px;
-  border-top: 1px solid var(--line-light);
-  padding-top: 7px;
-  color: rgba(90, 58, 32, 0.46);
-  font-size: 9px;
-  letter-spacing: 0.14em;
+    .item-shape {
+      width: 9px;
+      height: 9px;
+      border: 1px solid var(--ink-soft);
+      border-radius: 1px;
+      background: rgba(106, 74, 42, 0.14);
+
+      &.office {
+        border-color: var(--line);
+        border-radius: 50%;
+        background: rgba(106, 74, 42, 0.03);
+      }
+    }
+
+    .item-dot {
+      color: var(--teal);
+      font-size: 9px;
+      font-style: normal;
+    }
+  }
 }
 
 .canvas-caption {
@@ -1958,8 +1976,12 @@ if (props.selectedEntityId != null) focusEntity(props.selectedEntityId, false);
     justify-content: space-between;
   }
 
-  .entity-browser {
-    width: min(280px, 58vw);
+  .entity-list {
+    width: min(210px, 34vw);
+
+    &.collapsed {
+      width: 15px;
+    }
   }
 }
 </style>
