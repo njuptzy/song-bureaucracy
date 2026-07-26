@@ -90,6 +90,11 @@ PROFILES = {
         "catalog_renames": [
             {"from": "吏部尚书钰", "to": "吏部尚书铨", "page": "100",
              "reason": "目录把官署名末字‘铨’误识为‘钰’；正文条目头与下条合称均作‘吏部尚书铨’"},
+            {"from": "流外锥", "to": "流外钰", "canonical": "流外铨", "page": "102",
+             "reason": "目录误作‘流外锥’，正文条目头误作‘流外钰’；先按正文 OCR 匹配，"
+                       "输出标题据官名与正文‘小铨’说明统一为‘流外铨’"},
+            {"from": "钰曹四选", "to": "铨曹四选", "page": "102",
+             "reason": "目录把‘铨曹四选’误识为‘钰曹四选’，正文条目头作‘铨曹四选’"},
         ],
     },
     "5t7": {
@@ -860,6 +865,29 @@ def main():
                 target[k] = v
         print(f"  [粘连修补] '{join['bogus']}'(p{join['page']}) 并回 '{join['into']}'："
               f"{join['reason']}")
+
+    # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
+    for rename in PROFILE.get("catalog_renames", []):
+        canonical = rename.get("canonical")
+        if not canonical:
+            continue
+        matches = [
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == rename["to"] and str(m.get("page")) == rename["page"]
+        ]
+        if len(matches) != 1:
+            print(
+                f"  [规范名失败] '{rename['to']}' -> '{canonical}'(p{rename['page']})："
+                f"匹配数={len(matches)}"
+            )
+            continue
+        i = matches[0]
+        all_entries[i]["name"] = canonical
+        all_meta[i]["name"] = canonical
+        print(
+            f"  [规范条目名] '{rename['to']}' -> '{canonical}'(p{rename['page']})："
+            f"{rename['reason']}"
+        )
 
     print(f"  修补后最终条目 {len(all_entries)}")
     if uncovered_attrs:
