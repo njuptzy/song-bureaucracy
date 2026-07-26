@@ -86,6 +86,11 @@ PROFILES = {
                        "守当官等吏职……'是制敕院孔目房的编制内容（对照吏房/户房各房"
                        "均如此），别称匹配误拆为独立条目"},
         ],
+        # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
+        "catalog_renames": [
+            {"from": "吏部尚书钰", "to": "吏部尚书铨", "page": "100",
+             "reason": "目录把官署名末字‘铨’误识为‘钰’；正文条目头与下条合称均作‘吏部尚书铨’"},
+        ],
     },
     "5t7": {
         "chapters": [
@@ -274,6 +279,18 @@ def load_catalog():
         r = dict(r)
         if r["type"] == "h1":
             cur_h1 = r["text"]
+        rename = next(
+            (item for item in PROFILE.get("catalog_renames", [])
+             if r["type"] == "name" and r["text"] == item["from"]
+             and str(r.get("page")) == item["page"]),
+            None,
+        )
+        if rename:
+            old = r["text"]
+            r["text"] = rename["to"]
+            fix_log.append(
+                f"name '{old}'(p{r.get('page')}) -> '{r['text']}'（{rename['reason']}）"
+            )
         if (
             PROFILE.get("fix_xiangmen")
             and r["type"] == "h2"
