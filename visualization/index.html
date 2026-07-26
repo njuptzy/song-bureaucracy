@@ -3,132 +3,74 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>宋代官制四表数据可视化面板</title>
-  <link rel="icon" href="data:,">
+  <title>职官演变审查 · 宋代官制辞典</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='2' width='28' height='28' rx='5' fill='none' stroke='%238c4a2f' stroke-width='3'/><text x='16' y='24' text-anchor='middle' font-size='22' font-weight='700' font-family='Songti SC,STSong,SimSun,serif' fill='%238c4a2f'>宋</text></svg>">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
-  <header class="app-header">
-    <div>
-      <h1>宋代官制四表数据可视化面板</h1>
-      <p id="sourceLine">正在加载 SQLite 导出数据...</p>
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="4"
+                fill="none" stroke="currentColor" stroke-width="2.2"/>
+          <text x="16" y="23" text-anchor="middle"
+                font-size="19" font-weight="700"
+                font-family="'Songti SC','STSong','SimSun','Noto Serif CJK SC',serif"
+                fill="currentColor">宋</text>
+        </svg>
+        <h1>职官演变审查</h1>
+      </div>
+      <span id="dbPath" class="db-path"></span>
     </div>
-    <nav class="view-tabs" aria-label="视图切换">
-      <button class="tab active" data-view="overview">总览</button>
-      <button class="tab" data-view="entities">实体视图</button>
-      <button class="tab" data-view="network">关系网络</button>
-      <button class="tab" data-view="timeline">时间线</button>
-    </nav>
+    <div id="metaCounts" class="meta-counts"></div>
+    <div id="issueChips" class="issue-chips"></div>
   </header>
 
-  <main>
-    <section class="control-band">
-      <label class="search-box">
-        <span>全局搜索</span>
-        <input id="globalSearch" type="search" placeholder="实体、辞典标题、引用原文">
-      </label>
-      <label>
-        <span>实体类型</span>
-        <select id="typeFilter">
-          <option value="all">全部</option>
-          <option value="机构">机构</option>
-          <option value="官职">官职</option>
-        </select>
-      </label>
-      <label>
-        <span>关系类型</span>
-        <select id="relationFilter">
-          <option value="all">全部</option>
-        </select>
-      </label>
+  <main class="columns">
+    <aside class="col col-entries">
+      <div class="col-head">
+        <input id="entrySearch" type="search" placeholder="搜索条目名 / 页码">
+        <label class="only-issues">
+          <input id="onlyIssues" type="checkbox"> 只看有问题
+        </label>
+      </div>
+      <div id="entryList" class="entry-list"></div>
+    </aside>
+
+    <section class="col col-text">
+      <div class="col-head">
+        <h2 id="entryTitle">辞典原文</h2>
+      </div>
+      <article id="entryText" class="entry-text">
+        <p class="placeholder-tip">← 在左侧选择一个辞典条目开始审查</p>
+      </article>
     </section>
 
-    <section id="overview" class="view active">
-      <div id="metricCards" class="metric-grid"></div>
-      <div class="dashboard-grid">
-        <section class="panel">
-          <header class="panel-title">
-            <h2>实体类型分布</h2>
-          </header>
-          <svg id="entityTypeChart" class="chart"></svg>
-        </section>
-        <section class="panel">
-          <header class="panel-title">
-            <h2>关系类型分布</h2>
-          </header>
-          <svg id="relationTypeChart" class="chart"></svg>
-        </section>
-        <section class="panel wide">
-          <header class="panel-title">
-            <h2>结构概况</h2>
-          </header>
-          <svg id="structureChart" class="wide-chart"></svg>
-        </section>
+    <section class="col col-data">
+      <div class="col-head">
+        <h2>结构化数据</h2>
+        <span id="entityCount"></span>
+        <button id="toggleRecords" class="record-toggle" type="button">显示 record</button>
       </div>
-    </section>
-
-    <section id="entities" class="view">
-      <div class="three-column">
-        <section class="panel list-panel">
-          <header class="panel-title">
-            <h2>实体列表</h2>
-            <span id="entityCountLabel"></span>
-          </header>
-          <div id="entityList" class="entity-list"></div>
-        </section>
-        <section class="panel detail-panel">
-          <header class="panel-title">
-            <h2>实体详情</h2>
-          </header>
-          <div id="entityDetail" class="detail-content"></div>
-        </section>
-        <section class="panel reference-panel">
-          <header class="panel-title">
-            <h2>辞典对照</h2>
-          </header>
-          <div id="dictionaryDetail" class="detail-content"></div>
-        </section>
-      </div>
-    </section>
-
-    <section id="network" class="view">
-      <div class="network-layout">
-        <section class="panel graph-panel">
-          <header class="panel-title">
-            <h2>关系网络</h2>
-            <span id="networkStatus"></span>
-          </header>
-          <svg id="networkGraph"></svg>
-        </section>
-        <section class="panel side-detail">
-          <header class="panel-title">
-            <h2>选中关系 / 节点</h2>
-          </header>
-          <div id="networkDetail" class="detail-content"></div>
-        </section>
-      </div>
-    </section>
-
-    <section id="timeline" class="view">
-      <div class="timeline-layout">
-        <section class="panel">
-          <header class="panel-title">
-            <h2>实体时间线</h2>
-          </header>
-          <div id="timelineDetail" class="timeline-detail"></div>
-        </section>
-        <section class="panel">
-          <header class="panel-title">
-            <h2>前后演变关系</h2>
-          </header>
-          <svg id="evolutionGraph" class="timeline-graph"></svg>
-        </section>
-      </div>
+      <div id="entryIssues"></div>
+      <div id="entityCards" class="entity-cards"></div>
     </section>
   </main>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="entityModal" class="modal hidden">
+    <div class="modal-box">
+      <header class="modal-head">
+        <h2 id="modalTitle"></h2>
+        <button id="modalClose" class="modal-close">关闭 ✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="modalTimeline" class="modal-timeline"></div>
+        <div id="modalEntries" class="modal-entries"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
