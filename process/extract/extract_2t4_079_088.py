@@ -63,6 +63,17 @@ def existing(x, title, time, typ=None):
     return eid, tid
 
 
+def rechain(x, entity_id, ordered_ids, decision):
+    """按已核定历史顺序重建单实体 prev/succ 互反链。"""
+    for i, tid in enumerate(ordered_ids):
+        x.relink(
+            tid,
+            decision=decision,
+            prev_id=ordered_ids[i - 1] if i else None,
+            succ_id=ordered_ids[i + 1] if i + 1 < len(ordered_ids) else None,
+        )
+
+
 def entry79_80(eid, title, rel_id):
     text = FULL[eid][2].split("\n", 1)[0]
     x = w(eid)
@@ -111,8 +122,17 @@ def entry82():
         tt = x.find_timepoint(en, "唐、五代") or tp(x, en, "唐、五代", "为吏部三铨之一", eid, qdef, "官司名", f"建{title}唐五代节点。")
         ss_event = "举职事" if title == "吏部尚书铨" else "仅存官印而事废"
         ss = x.find_timepoint(en, "宋立国之初") or tp(x, en, "宋立国之初", ss_event, eid, qsong, "官司名", f"建{title}宋初节点。")
-        rel(x, gt, tt, "统称与实例", eid, qdef, f"吏部三铨包括{title}。")
-        rel(x, gs, ss, "统称与实例", eid, qsong, f"宋初三铨名下包括{title}。")
+        relation = rel(x, gt, tt, "统称与实例", eid, qdef, f"吏部三铨包括{title}；统称关系只建一次。")
+        ac(x, "Relationships", relation, eid, qsong, f"补充宋初{title}仍属三铨的证据。")
+        if title == "吏部尚书铨":
+            _, sui = existing(x, title, "隋朝", "机构")
+            _, tang = existing(x, title, "唐朝", "机构")
+            _, song_early = existing(x, title, "北宋初", "机构")
+            _, end = existing(x, title, "北宋太平兴国六年九月十二日", "机构")
+            rechain(
+                x, en, [sui, tang, tt, ss, song_early, end],
+                "按隋→唐/五代→宋立国之初→北宋初→太平兴国六年重排",
+            )
     x.commit()
 
 
@@ -144,6 +164,13 @@ def entry84():
     oe=x.find_entity("审官院","机构") or entity(x,"审官院","机构",qend,"本条明确后继机构。")
     ot=tp(x,oe,"北宋淳化四年二月二十八日","由磨勘京朝官院改名",eid,qend,"官司名","建后继节点。")
     rel(x,e,ot,"前后演变",eid,qend,"磨勘京朝官院改名审官院。")
+    may=x.find_timepoint(oe,"北宋淳化四年五月二十日")
+    if may:
+        ordered=[ot,may]
+        later=x.find_timepoint(oe,"北宋熙宁三年五月二十八日")
+        if later:
+            ordered.append(later)
+        rechain(x,oe,ordered,"审官院二月改名始置在前，五月接收差遣院在后，熙宁改名终结")
     x.commit()
 
 
@@ -178,7 +205,7 @@ def entry87():
     st=x.find_timepoint(en,"北宋淳化四年二月二十八日") or tp(x,en,"北宋淳化四年二月二十八日","由磨勘京朝官院改名",eid,qstart,"官司名","建始置节点。")
     ac(x,"Timepoints",st,eid,qstart,"补充审官院来源与差遣院并入证据。"); ac(x,"Timepoints",st,eid,qd,"补充职掌。",note="职掌"); ac(x,"Timepoints",st,eid,qstaff,"补充隶属与编制。",note="编制")
     central,ct=existing(x,"中书门下","宋前期","机构"); rel(x,ct,st,"上下级机构",eid,qstaff,"审官院隶中书门下。")
-    for title,quota,kind in (("知审官院事",2,"官"),("书令史",7,"吏"),("掌舍",2,"吏")):
+    for title,quota,kind in (("书令史",7,"吏"),("掌舍",2,"吏")):
         pe=x.find_entity(title,"官职") or entity(x,title,"官职",qstaff,f"审官院编制明列{title}。")
         pt=x.find_timepoint(pe,"北宋淳化四年二月") or tp(x,pe,"北宋淳化四年二月",f"审官院设{quota}人",eid,qstaff,"官职名","建编制节点。")
         rel(x,st,pt,"编制隶属",eid,qstaff,f"审官院设{title}{quota}人。",staff_quota=quota,staff_type=kind)
@@ -194,8 +221,13 @@ def entry88():
     en=x.find_entity("知审官院事","官职") or entity(x,"知审官院事","官职",text,"辞典明载为北宋差遣官。")
     tid=tp(x,en,"北宋淳化四年五月二十日","始置，掌审官院京朝官磨勘、差遣职事",eid,text,"差遣官名","建始置及职掌节点。",attr_grade="知杂侍御史（从六品）以上朝官或翰林学士（正三品）充")
     office,ot=existing(x,"审官院","北宋淳化四年二月二十八日","机构")
-    rel(x,ot,tid,"编制隶属",eid,text,"知审官院事掌审官院职事。",staff_type="官")
+    relation=rel(x,ot,tid,"编制隶属",eid,text,"知审官院事掌审官院职事；编制关系只建一次。",staff_type="官")
     x.commit()
+    # “审官院”条的“知院官二人”是同一编制事实，作为第二条证据挂到精确关系上。
+    qstaff=q(87,"审官院隶中书门下。知院官二人，书令史七人，掌舍二人")
+    x87=w(87)
+    ac(x87,"Relationships",relation,87,qstaff,"补充审官院设知院官二人的证据。")
+    x87.commit()
 
 
 def main():
