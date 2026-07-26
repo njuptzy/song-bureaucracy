@@ -86,7 +86,7 @@ def entry89():
     citation(w,"Timepoints",song,eid,qd,"补充职掌与机构性质。",note="职掌")
     citation(w,"Timepoints",song,eid,qstaff,"补充兼领方式及吏额。",note="编制；员额存在九/六、一至三的并列记载，不硬填单一 quota")
     end=timepoint(w,en,"北宋熙宁五年七月","并入流内铨",eid,qend,"官司名","建并入节点。")
-    oe=w.find_entity("流内铨","机构") or entity(w,"流内铨","机构",eid,qend,"本条明确后继机构。")
+    oe=w.find_entity("吏部流内铨","机构") or entity(w,"吏部流内铨","机构",eid,qend,"本条明确后继机构；采用正式全称。")
     ot=timepoint(w,oe,"北宋熙宁五年七月","接收并入的吏部南曹",eid,qend,"官司名","建承接节点。")
     relationship(w,end,ot,"前后演变",eid,qend,"吏部南曹并入流内铨。")
     w.commit()
@@ -156,7 +156,11 @@ def entry95():
     w=writer(eid); group=entity(w,"铨曹四选","机构",eid,full,"原文明载为四选机构的总名。")
     early=timepoint(w,group,"北宋前期","审官东院、审官西院、流内铨、三班院之总名",eid,qearly,"机构合称","建北宋前期合称节点。")
     new=timepoint(w,group,"北宋元丰新制","铨注悉归吏部，形成尚书、侍郎左、右四选",eid,qnew,"机构合称","建元丰新制节点。")
-    old_specs=(("审官东院","北宋熙宁三年五月二十八日"),("流内铨","北宋淳化四年五月二十日"),("审官西院","北宋前期"),("三班院","北宋前期"))
+    west=w.find_entity("审官西院","机构")
+    west_time="北宋熙宁三年五月" if west and w.find_timepoint(west,"北宋熙宁三年五月") else "北宋前期"
+    three=w.find_entity("三班院","机构")
+    three_time="北宋雍熙四年七月" if three and w.find_timepoint(three,"北宋雍熙四年七月") else "北宋前期"
+    old_specs=(("审官东院","北宋熙宁三年五月二十八日"),("吏部流内铨","北宋淳化四年五月二十日"),("审官西院",west_time),("三班院",three_time))
     old_nodes={}
     for title,time in old_specs:
         en=w.find_entity(title,"机构") or entity(w,title,"机构",eid,qearly,f"原文列为铨曹四选实例：{title}。")
@@ -164,21 +168,30 @@ def entry95():
         citation(w,"Timepoints",tp,eid,qearly,f"补充{title}属于四选的证据。")
         relationship(w,early,tp,"统称与实例",eid,qearly,f"铨曹四选包括{title}。")
         old_nodes[title]=tp
-    pairs=(("审官东院","吏部尚书左选"),("流内铨","吏部侍郎左选"),("审官西院","吏部尚书右选"),("三班院","吏部侍郎右选"))
+    pairs=(("审官东院","吏部尚书左选"),("吏部流内铨","吏部侍郎左选"),("审官西院","吏部尚书右选"),("三班院","吏部侍郎右选"))
     for old,title in pairs:
         en=entity(w,title,"机构",eid,qnew,f"元丰四选明列{title}。")
         # 审官东院一路在第96条会由“元丰新制”细化为“元丰五年五月”；
         # 重跑时优先复用已细化节点，避免重新制造泛化节点。
-        refined = "北宋元丰五年五月" if old == "审官东院" else None
-        tp=(w.find_timepoint(en,refined) if refined else None) or w.find_timepoint(en,"北宋元丰新制")
+        target_refined = "北宋元丰五年五月" if old in ("审官东院","吏部流内铨","审官西院","三班院") else None
+        old_refined = {
+            "审官东院":"北宋元丰五年五月",
+            "吏部流内铨":"北宋元丰三年八月十四日",
+            "审官西院":"北宋元丰五年五月",
+            "三班院":"北宋元丰五年五月",
+        }.get(old)
+        tp=(w.find_timepoint(en,target_refined) if target_refined else None) or w.find_timepoint(en,"北宋元丰新制")
         tp=tp or timepoint(w,en,"北宋元丰新制",f"由{old}改置",eid,qnew,"官司名",f"建{title}新制节点。")
         citation(w,"Timepoints",tp,eid,qnew,f"{title}属于元丰吏部四选。")
         relationship(w,new,tp,"统称与实例",eid,qnew,f"元丰吏部四选包括{title}。")
         old_en=w.find_entity(old,"机构"); assert old_en
-        terminal=(w.find_timepoint(old_en,refined) if refined else None) or w.find_timepoint(old_en,"北宋元丰新制")
+        terminal=(w.find_timepoint(old_en,old_refined) if old_refined else None) or w.find_timepoint(old_en,"北宋元丰新制")
         terminal=terminal or timepoint(w,old_en,"北宋元丰新制",f"改为{title}",eid,qnew,"官司名",f"建{old}终结改制节点。")
         citation(w,"Timepoints",terminal,eid,qnew,f"{old}在元丰新制中改为{title}。")
-        relationship(w,terminal,tp,"前后演变",eid,qnew,f"元丰新制以{old}为{title}。")
+        # “吏部流内铨”条另有元丰三年先改“尚书吏部”、五年再改
+        # “吏部侍郎左选”的精确两段沿革；细化后不重建概括性直连边。
+        if not (old == "吏部流内铨" and w.find_entity("尚书吏部","机构")):
+            relationship(w,terminal,tp,"前后演变",eid,qnew,f"元丰新制以{old}为{title}。")
     w.commit()
 
 

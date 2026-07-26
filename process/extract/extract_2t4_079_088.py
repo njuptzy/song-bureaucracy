@@ -193,7 +193,7 @@ def entry86():
     en,st=existing(x,"考课院","北宋淳化四年二月二十八日","机构")
     ac(x,"Timepoints",st,eid,text,"本条直接证明考课院改名设立及职掌。")
     end=tp(x,en,"北宋淳化四年五月二十日","并入流内铨",eid,text,"官司名","建并入节点。")
-    oe=entity(x,"流内铨","机构",text,"本条明确考课院并入流内铨。")
+    oe=entity(x,"吏部流内铨","机构",text,"本条明确考课院并入流内铨；采用正式全称。")
     ot=tp(x,oe,"北宋淳化四年五月二十日","接收并入的考课院",eid,text,"官司名","建承接节点。")
     rel(x,end,ot,"前后演变",eid,text,"考课院并入流内铨。")
     x.commit()
