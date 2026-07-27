@@ -97,6 +97,19 @@ PROFILES = {
              "status": "from_surname",
              "reason": "权三司户部判官标题在‘判官’二字处被别称匹配误拆；"
                        "‘缺，暂代任者带权字’及其简称均属本条"},
+            {"bogus": "勾院", "page": "136", "into": "判三司盐铁勾院公事",
+             "reason": "判三司盐铁勾院公事的正文在‘盐铁/勾院’换行处被误拆；"
+                       "‘勾院主判官，掌本部帐籍考校、勾销事’及简称均属本条"},
+            {"bogus": "勾院", "page": "136", "into": "判三司度支勾院公事",
+             "reason": "判三司度支勾院公事的正文在‘度支/勾院’换行处被误拆；"
+                       "‘勾院主判官，掌本部帐籍考校、勾销事’及简称均属本条"},
+            {"bogus": "判官", "page": "136", "into": "三司户部勾院",
+             "status": "from_surname", "target_field": "编制",
+             "reason": "三司户部勾院编制字段在‘主/判官’换行处被别称匹配误拆；"
+                       "‘判官一人’及后续吏额、简称均属本条"},
+            {"bogus": "勾院", "page": "136", "into": "判三司户部勾院公事",
+             "reason": "判三司户部勾院公事的正文在‘户部/勾院’换行处被误拆；"
+                       "‘勾院主判官，掌本部帐籍考校、勾销事’及简称均属本条"},
         ],
         "embedded_splits": [
             {"source": "都大提举在京诸司库务司", "target": "都大提举在京诸司库务",
@@ -917,8 +930,12 @@ def main():
         bogus = all_entries.pop(bi)
         all_meta.pop(bi)
         target = all_entries[ti if ti < bi else ti - 1]
-        # 伪条目名本身是被拆走的正文文字，一并接回
-        target["text"] = (target.get("text", "") + bogus["name"] + bogus.get("text", ""))
+        # 伪条目名本身是被拆走的正文文字，一并接回。通常接回正文；若断点
+        # 位于属性字段中（如“主/判官一人”），则由 target_field 指定归位字段。
+        target_field = join.get("target_field", "text")
+        target[target_field] = (
+            target.get(target_field, "") + bogus["name"] + bogus.get("text", "")
+        )
         for k, v in bogus.items():
             if k in ("name", "text") or k.startswith("_"):
                 continue
