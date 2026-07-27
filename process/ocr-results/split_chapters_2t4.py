@@ -947,6 +947,11 @@ def main():
             post[key] = office.pop(key)
         print("  [字段归位] '枢密院承旨'(p116)：职源、职掌、品位从承旨司条移回本条")
 
+        editor, _ = by_name["枢密院编修"]
+        assert editor["text"] == "事官。元祐前为差遣，其后为职"
+        editor["text"] = "元祐前为差遣，其后为职事官。"
+        print("  [跨栏归位] '枢密院编修'(p119)：页末跨行的‘事官。’移回‘其后为职’之后")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
