@@ -97,6 +97,10 @@ PROFILES = {
             {"source": "枢密院承旨司", "target": "枢密院承旨",
              "page": "116", "field": "简称", "marker": "枢密院承旨 差遣名。",
              "reason": "承旨条标题被承旨司前条的简称字段吞入；按正文独立标题拆回"},
+            {"source": "大程官营", "target": "大程官",
+             "page": "123", "field": "text", "marker": "大程官 给使名。",
+             "move_fields": ["职源"],
+             "reason": "大程官标题及其职源、职掌被并入前条大程官营；原始 OCR 与目录均显示为两个独立条目"},
         ],
         # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
         "catalog_renames": [
@@ -920,6 +924,9 @@ def main():
         before, marker, after = value.partition(item["marker"])
         all_entries[source_i][item["field"]] = before.rstrip()
         all_entries[target_i]["text"] = marker + after
+        for key in item.get("move_fields", []):
+            if key in all_entries[source_i]:
+                all_entries[target_i][key] = all_entries[source_i].pop(key)
         all_entries[target_i].pop("_placeholder", None)
         all_meta[target_i]["status"] = "ok"
         print(f"  [嵌入拆分] '{item['target']}'(p{item['page']}) 从 '{item['source']}' 的"
