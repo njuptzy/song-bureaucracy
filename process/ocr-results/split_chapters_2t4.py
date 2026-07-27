@@ -94,6 +94,9 @@ PROFILES = {
             {"source": "都大提举在京诸司库务司", "target": "都大提举在京诸司库务",
              "page": "111", "field": "简称", "marker": "都大提举在京诸司库务 差遣名。",
              "reason": "主管官标题仅比机构名少末字‘司’，被前条简称字段前缀匹配吞入；按正文独立标题拆回"},
+            {"source": "枢密院承旨司", "target": "枢密院承旨",
+             "page": "116", "field": "简称", "marker": "枢密院承旨 差遣名。",
+             "reason": "承旨条标题被承旨司前条的简称字段吞入；按正文独立标题拆回"},
         ],
         # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
         "catalog_renames": [
@@ -921,6 +924,28 @@ def main():
         all_meta[target_i]["status"] = "ok"
         print(f"  [嵌入拆分] '{item['target']}'(p{item['page']}) 从 '{item['source']}' 的"
               f" {item['field']} 字段拆出：{item['reason']}")
+
+    if PROFILE_NAME == "2t4":
+        by_name = {e["name"]: (e, m) for e, m in zip(all_entries, all_meta)}
+        power, _ = by_name["权领枢密院事"]
+        broken = power["text"]
+        marker = "源与沿革"
+        assert broken.startswith("之制。职事官名，徽宗朝临时") and marker in broken
+        _, history = broken.split(marker, 1)
+        power["text"] = "职事官名，徽宗朝临时之制。"
+        power["职源与沿革"] = history
+        print("  [字段归位] '权领枢密院事'(p115)：跨块的标题尾与职源字段恢复到对应位置")
+
+        office, _ = by_name["枢密院承旨司"]
+        post, _ = by_name["枢密院承旨"]
+        duty_marker = "为承旨司（院）长官"
+        assert duty_marker in office["职掌"]
+        office_duty, post_duty = office["职掌"].split(duty_marker, 1)
+        office["职掌"] = office_duty.rstrip()
+        post["职掌"] = duty_marker + post_duty
+        for key in ("职源与沿革", "品位"):
+            post[key] = office.pop(key)
+        print("  [字段归位] '枢密院承旨'(p116)：职源、职掌、品位从承旨司条移回本条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
