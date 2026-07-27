@@ -90,6 +90,11 @@ PROFILES = {
              "reason": "同知太常礼院简称引文跨块断开：'国朝同知院四员……'的后半句"
                        "被别称匹配误拆为独立条目，实属同知太常礼院的简称字段"},
         ],
+        "embedded_splits": [
+            {"source": "都大提举在京诸司库务司", "target": "都大提举在京诸司库务",
+             "page": "111", "field": "简称", "marker": "都大提举在京诸司库务 差遣名。",
+             "reason": "主管官标题仅比机构名少末字‘司’，被前条简称字段前缀匹配吞入；按正文独立标题拆回"},
+        ],
         # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
         "catalog_renames": [
             {"from": "吏部尚书钰", "to": "吏部尚书铨", "page": "100",
@@ -903,6 +908,19 @@ def main():
                 target[k] = v
         print(f"  [粘连修补] '{join['bogus']}'(p{join['page']}) 并回 '{join['into']}'："
               f"{join['reason']}")
+
+    for item in PROFILE.get("embedded_splits", []):
+        source_i = next(i for i,e in enumerate(all_entries) if e["name"] == item["source"])
+        target_i = next(i for i,e in enumerate(all_entries) if e["name"] == item["target"])
+        value = all_entries[source_i].get(item["field"], "")
+        assert item["marker"] in value, f"嵌入拆分标记不存在：{item['marker']}"
+        before, marker, after = value.partition(item["marker"])
+        all_entries[source_i][item["field"]] = before.rstrip()
+        all_entries[target_i]["text"] = marker + after
+        all_entries[target_i].pop("_placeholder", None)
+        all_meta[target_i]["status"] = "ok"
+        print(f"  [嵌入拆分] '{item['target']}'(p{item['page']}) 从 '{item['source']}' 的"
+              f" {item['field']} 字段拆出：{item['reason']}")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
