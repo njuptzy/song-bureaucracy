@@ -4,8 +4,9 @@
       <div class="toolbar-copy">
         <strong>{{ focusTitle || "官制层级结构" }}</strong>
         <span>
-          {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}机构层级实体
-          · {{ isolatedEntities.length }} 个无上下级机构关系
+          {{ treeDirectory.length }} 棵{{ structureScope === "current" ? "所选时段" : "历时" }}制度树
+          · {{ directoryTotals.institutions }} 个机构
+          · {{ directoryTotals.offices }} 个编制官职
         </span>
       </div>
 
@@ -104,46 +105,39 @@
           {{ listCollapsed ? "›" : "‹" }}
         </button>
         <div class="list-scroll">
-          <button
-            v-for="item in listedEntities"
-            :key="item.id"
-            type="button"
-            class="entity-item"
-            :class="{
-              focused: item.id === focusId,
-              office: item.type === '官职',
-              'linked-hover': item.id === hoveredEntityId,
-            }"
-            @click="onItemClick(item)"
-          >
-            <span class="item-shape" aria-hidden="true"></span>
-            <span class="item-title">{{ item.title }}</span>
-            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
-          </button>
-          <div v-if="isolatedEntities.length" class="list-divider">
-            {{ structureScope === "current" ? "所选时段无上下级机构关系" : "历时无上下级机构关系" }}
+          <div class="tree-directory-head">
+            <strong>制度树目录</strong>
+            <span>{{ structureScope === "current" ? "所选时段" : "历时全貌" }}</span>
           </div>
           <button
-            v-for="item in isolatedEntities"
-            :key="item.id"
+            v-for="tree in treeDirectory"
+            :key="tree.id"
             type="button"
-            class="entity-item quiet"
+            class="tree-directory-item"
             :class="{
-              focused: item.id === focusId,
-              office: item.type === '官职',
-              'linked-hover': item.id === hoveredEntityId,
+              focused: tree.id === currentTreeRootId,
+              'linked-hover': tree.institutionIds.has(hoveredEntityId) || tree.officeIds.has(hoveredEntityId),
             }"
-            @click="onItemClick(item)"
+            @click="focusEntity(tree.id)"
           >
-            <span class="item-shape" aria-hidden="true"></span>
-            <span class="item-title">{{ item.title }}</span>
-            <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
+            <span class="tree-root-mark" aria-hidden="true">根</span>
+            <span class="tree-directory-copy">
+              <strong>{{ tree.title }}</strong>
+              <small>
+                {{ tree.institutionCount }} 个机构 · {{ tree.officeCount }} 个官职
+              </small>
+            </span>
+            <span class="tree-open-mark" aria-hidden="true">›</span>
           </button>
+          <p v-if="!treeDirectory.length" class="tree-directory-empty">
+            所选时段没有具备上下级机构证据的制度树。
+          </p>
+          <p class="tree-directory-help">
+            点击一棵树查看完整结构；查找具体机构或官职请使用上方搜索。
+          </p>
         </div>
         <div class="rail-legend" aria-hidden="true">
-          <span><i class="item-shape"></i>机构</span>
-          <span><i class="item-shape office"></i>官职</span>
-          <span><i class="item-dot">●</i>当前活跃</span>
+          <span><i class="tree-legend-root">根</i>一项代表一棵制度树</span>
         </div>
       </aside>
 
@@ -500,26 +494,57 @@ const graph = computed(() =>
   buildEntityGraph(props.dataset, structureScope.value === "current" ? props.range : null)
 );
 const relationById = computed(() => new Map(props.dataset.relations.map((relation) => [relation.id, relation])));
-const linkedIds = computed(() => new Set([...graph.value.childrenOf.keys(), ...graph.value.parentRelsOf.keys()]));
 
-function byTimeMatch(a, b) {
-  const tier = (props.activeEntities.has(b.id) ? 1 : 0) - (props.activeEntities.has(a.id) ? 1 : 0);
-  return tier || b.eventCount - a.eventCount || a.title.localeCompare(b.title, "zh");
-}
-
-const listedEntities = computed(() =>
-  [...linkedIds.value]
-    .map((id) => graph.value.entityById.get(id))
+const treeDirectory = computed(() =>
+  graph.value.roots
+    .map((rootId) => {
+      const root = graph.value.entityById.get(rootId);
+      if (!root) return null;
+      const institutionIds = new Set();
+      const officeIds = new Set();
+      const stack = [rootId];
+      while (stack.length) {
+        const id = stack.pop();
+        if (institutionIds.has(id)) continue;
+        institutionIds.add(id);
+        for (const edge of graph.value.childrenOf.get(id) || []) {
+          stack.push(edge.entityId);
+        }
+        for (const edge of graph.value.staffChildrenOf.get(id) || []) {
+          officeIds.add(edge.entityId);
+        }
+      }
+      return {
+        id: rootId,
+        title: root.title,
+        institutionIds,
+        officeIds,
+        institutionCount: institutionIds.size,
+        officeCount: officeIds.size,
+      };
+    })
     .filter(Boolean)
-    .sort(byTimeMatch)
 );
 
-const isolatedEntities = computed(() =>
-  graph.value.isolated
-    .map((id) => graph.value.entityById.get(id))
-    .filter(Boolean)
-    .sort(byTimeMatch)
-);
+const directoryTotals = computed(() => {
+  const institutions = new Set();
+  const offices = new Set();
+  for (const tree of treeDirectory.value) {
+    tree.institutionIds.forEach((id) => institutions.add(id));
+    tree.officeIds.forEach((id) => offices.add(id));
+  }
+  return { institutions: institutions.size, offices: offices.size };
+});
+
+const currentTreeRootId = computed(() => {
+  if (focusId.value == null) return null;
+  return (
+    treeDirectory.value.find(
+      (tree) =>
+        tree.institutionIds.has(focusId.value) || tree.officeIds.has(focusId.value)
+    )?.id ?? null
+  );
+});
 
 const ancestorTrail = computed(() => {
   if (focusId.value == null) return [];
@@ -1141,11 +1166,6 @@ function selectOtherParent(targetId, item) {
 function centerOtherParent(id) {
   clearOtherParentCard();
   focusEntity(id);
-}
-
-function onItemClick(item) {
-  if (item.id === focusId.value) toggleSelection(item.id);
-  else focusEntity(item.id);
 }
 
 let suppressNextFocus = false;
@@ -2125,6 +2145,113 @@ defineExpose({ focusEntity });
     padding: 6px 8px 24px;
     scrollbar-color: var(--line) transparent;
     scrollbar-width: thin;
+  }
+
+  .tree-directory-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line-light);
+    margin-bottom: 5px;
+    padding: 3px 3px 7px;
+
+    strong {
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+    }
+
+    span {
+      color: rgba(90, 58, 32, 0.52);
+      font-size: 8px;
+    }
+  }
+
+  .tree-directory-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-bottom-color: var(--line-light);
+    border-radius: 3px;
+    padding: 7px 5px;
+    color: var(--ink-soft);
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--line);
+      background: var(--wash);
+    }
+
+    &.focused {
+      border-color: var(--ink-soft);
+      background: rgba(106, 74, 42, 0.1);
+    }
+
+    &.linked-hover {
+      border-color: var(--rust);
+      box-shadow: inset 3px 0 0 var(--rust);
+    }
+  }
+
+  .tree-root-mark,
+  .tree-legend-root {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(90, 58, 32, 0.52);
+    border-radius: 3px;
+    color: var(--ink-soft);
+    background: rgba(106, 74, 42, 0.08);
+    font-size: 9px;
+  }
+
+  .tree-directory-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+
+    strong {
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      color: rgba(90, 58, 32, 0.52);
+      font-size: 8px;
+    }
+  }
+
+  .tree-open-mark {
+    color: rgba(90, 58, 32, 0.42);
+    font-size: 14px;
+  }
+
+  .tree-directory-empty,
+  .tree-directory-help {
+    margin: 8px 4px;
+    color: rgba(90, 58, 32, 0.5);
+    font-size: 9px;
+    line-height: 1.5;
+  }
+
+  .tree-directory-help {
+    border-top: 1px dashed var(--line-light);
+    padding-top: 8px;
   }
 
   .entity-item {
