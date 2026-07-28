@@ -571,7 +571,6 @@ watch(
   () => {
     stopPlay();
     timelineMode.value = comparisonAvailable.value ? "comparison" : "single";
-    scrollRef.value?.scrollTo({ top: 0 });
   },
   { immediate: true }
 );
@@ -913,6 +912,7 @@ onBeforeUnmount(() => {
 .timeline-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 4px 0 60px;
   scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;

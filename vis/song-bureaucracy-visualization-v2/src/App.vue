@@ -835,7 +835,7 @@ watch(viewMode, async (mode) => {
 
 function onTimelineEntity(id) {
   if (id == null) return;
-  const changedEntity = researchEntityId.value !== id;
+  const changedEntity = timelineEntityId.value !== id;
   researchEntityId.value = id;
   timelineEntityId.value = id;
   if (changedEntity) {
