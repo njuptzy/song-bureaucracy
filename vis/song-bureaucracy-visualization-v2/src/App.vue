@@ -300,24 +300,36 @@
                     <span>{{ group.items.length }}</span>
                   </div>
                   <div class="relation-list">
-                    <button
+                    <div
                       v-for="relation in group.items"
                       :key="relation.id"
-                      type="button"
-                      @mouseenter="hoveredHierarchyEntityId = relation.otherEntityId"
-                      @mouseleave="hoveredHierarchyEntityId = null"
-                      @click="followRelation(relation)"
+                      class="relation-record"
                     >
-                      <span class="relation-path">
-                        <em class="dir-tag" :class="`via-${relationViaClass(relation.type)}`">
-                          {{ relationDirectionLabel(relation) }}
-                        </em>
-                        {{ relation.otherTitle }}
-                      </span>
-                      <small v-if="relation.staffQuota">
-                        {{ relation.staffQuota }}{{ relation.staffType || "员" }}
-                      </small>
-                    </button>
+                      <button
+                        type="button"
+                        @mouseenter="hoveredHierarchyEntityId = relation.otherEntityId"
+                        @mouseleave="hoveredHierarchyEntityId = null"
+                        @click="followRelation(relation)"
+                      >
+                        <span class="relation-path">
+                          <em class="dir-tag" :class="`via-${relationViaClass(relation.type)}`">
+                            {{ relationDirectionLabel(relation) }}
+                          </em>
+                          {{ relation.otherTitle }}
+                        </span>
+                        <small v-if="relation.staffQuota">
+                          {{ relation.staffQuota }}{{ relation.staffType || "员" }}
+                        </small>
+                      </button>
+                      <details v-if="relation.citations.length" class="relation-source">
+                        <summary>查看原句 · {{ relation.citations.length }}</summary>
+                        <article v-for="(citation, index) in relation.citations" :key="index">
+                          <cite>{{ citation.citation }}</cite>
+                          <blockquote>{{ citation.quotation }}</blockquote>
+                          <p v-if="citation.note">{{ citation.note }}</p>
+                        </article>
+                      </details>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -332,9 +344,13 @@
               <article v-for="event in entityEvents" :key="event.id">
                 <cite>{{ event.rawTime }}</cite>
                 <blockquote>{{ event.event }}</blockquote>
-                <p v-for="(citation, index) in event.citations" :key="index" class="event-citation">
-                  {{ citation.citation }}
-                </p>
+                <div v-for="(citation, index) in event.citations" :key="index" class="event-source-record">
+                  <span>辞典原句</span>
+                  <cite>{{ citation.citation }}</cite>
+                  <blockquote>{{ citation.quotation }}</blockquote>
+                  <p v-if="citation.note">{{ citation.note }}</p>
+                </div>
+                <p v-if="!event.citations.length" class="quiet-text">该纪事暂无引文原句。</p>
               </article>
             </section>
           </aside>
@@ -1894,6 +1910,47 @@ button {
   background: var(--wash);
 }
 
+.relation-source {
+  border-bottom: 1px solid var(--line-light);
+  padding: 0 0 7px;
+
+  summary {
+    width: fit-content;
+    color: var(--rust);
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 9px;
+    cursor: pointer;
+    list-style-position: inside;
+  }
+
+  article {
+    border-left: 2px solid rgba(157, 83, 52, 0.28);
+    margin-top: 6px;
+    padding-left: 7px;
+  }
+
+  cite {
+    display: block;
+    color: rgba(90, 58, 32, 0.62);
+    font-size: 9px;
+    font-style: normal;
+  }
+
+  blockquote {
+    margin: 3px 0 0;
+    color: var(--ink);
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 10px;
+    line-height: 1.55;
+  }
+
+  p {
+    margin: 4px 0 0;
+    color: rgba(90, 58, 32, 0.6);
+    font-size: 9px;
+  }
+}
+
 .relation-list small {
   color: rgba(90, 58, 32, 0.6);
   font-family: "FZQINGKBYSJF", serif;
@@ -1962,9 +2019,27 @@ button {
   line-height: 1.5;
 }
 
-.evidence-section .event-citation {
-  margin: 6px 0 0;
-  padding-left: 10px;
+.event-source-record {
+  border-top: 1px dashed var(--line-light);
+  margin-top: 8px;
+  padding: 7px 0 0 10px;
+
+  > span {
+    display: inline-block;
+    border: 1px solid rgba(157, 83, 52, 0.35);
+    border-radius: 2px;
+    margin-bottom: 4px;
+    padding: 1px 4px;
+    color: var(--rust);
+    font-size: 8px;
+    letter-spacing: 0.06em;
+  }
+
+  blockquote {
+    margin-top: 4px;
+    border-left-color: rgba(157, 83, 52, 0.4);
+    font-size: 11px;
+  }
 }
 
 .empty-state,
