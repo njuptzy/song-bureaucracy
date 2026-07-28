@@ -154,10 +154,10 @@
             </div>
 
             <div class="rail-legend" aria-hidden="true">
-              <span class="legend-chip event-established">设置/恢复</span>
-              <span class="legend-chip event-abolished">罢废</span>
-              <span class="legend-chip event-renamed">改称/合并</span>
-              <span class="legend-chip event-recorded">一般记载</span>
+              <span><i class="legend-marker mk-established"></i>设置/恢复</span>
+              <span><i class="legend-marker mk-abolished"></i>罢废</span>
+              <span><i class="legend-marker mk-renamed"></i>改称/合并</span>
+              <span><i class="legend-marker mk-recorded"></i>记载</span>
             </div>
           </div>
 
@@ -1070,44 +1070,32 @@ function followRelation(relation) {
   --wash: rgba(174, 142, 113, 0.15);
   --teal: #6f9690;
   --rust: #b47047;
-  --event-established: #4f7078;
-  --event-abolished: #9b5544;
-  --event-changed: #927345;
-  --event-recorded: #756d64;
 }
 
-/* 事件类型图例标签（全局共享：时序事件视图、年表视图） */
-.legend-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  height: 20px;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-  color: var(--event-recorded);
-  background: color-mix(in srgb, var(--event-recorded) 8%, var(--paper));
-  font-size: 9px;
-  font-style: normal;
-  line-height: 1;
-  white-space: nowrap;
+/* 事件类型图例标记（全局共享：时序事件视图、年表视图） */
+.legend-marker {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 50%;
+  background: var(--paper);
 }
 
-.legend-chip.event-established,
-.legend-chip.event-restored {
-  color: var(--event-established);
-  background: color-mix(in srgb, var(--event-established) 10%, var(--paper));
+.legend-marker.mk-established,
+.legend-marker.mk-restored {
+  background: var(--teal);
 }
 
-.legend-chip.event-abolished {
-  color: var(--event-abolished);
-  background: color-mix(in srgb, var(--event-abolished) 10%, var(--paper));
+.legend-marker.mk-abolished {
+  border-radius: 0;
+  background: var(--rust);
+  transform: rotate(45deg) scale(0.75);
 }
 
-.legend-chip.event-renamed,
-.legend-chip.event-merged {
-  color: var(--event-changed);
-  background: color-mix(in srgb, var(--event-changed) 10%, var(--paper));
+.legend-marker.mk-renamed,
+.legend-marker.mk-merged {
+  border-radius: 0;
 }
 
 * {
@@ -1548,27 +1536,26 @@ button {
   left: 3px;
   width: 9px;
   height: 9px;
-  border: 1.5px solid var(--event-recorded);
+  border: 1.5px solid var(--ink-soft);
   border-radius: 50%;
-  background: var(--event-recorded);
+  background: var(--paper);
   content: "";
 }
 
 .entry-card.event-established::before,
 .entry-card.event-restored::before {
-  border-color: var(--event-established);
-  background: var(--event-established);
+  background: var(--teal);
 }
 
 .entry-card.event-abolished::before {
-  border-color: var(--event-abolished);
-  background: var(--event-abolished);
+  border-radius: 0;
+  transform: rotate(45deg) scale(0.75);
+  background: var(--rust);
 }
 
 .entry-card.event-renamed::before,
 .entry-card.event-merged::before {
-  border-color: var(--event-changed);
-  background: var(--event-changed);
+  border-radius: 0;
 }
 
 .entry-card:not(.in-range) {
@@ -1668,29 +1655,34 @@ button {
 
 .center-card.event-established,
 .center-card.event-restored {
-  border-top-color: var(--event-established);
+  border-top-color: var(--teal);
 }
 
 .center-card.event-abolished {
-  border-top-color: var(--event-abolished);
+  border-top-color: var(--rust);
 }
 
 .center-card.event-renamed,
 .center-card.event-merged {
-  border-top-color: var(--event-changed);
+  border-top-color: var(--line);
 }
 
 .rail-legend {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 5px;
+  gap: 4px 12px;
   border-top: 1px solid var(--line-light);
   padding: 7px 8px 7px 4px;
   color: rgba(90, 58, 32, 0.6);
   font-family: "FZQINGKBYSJF", serif;
   font-size: 10px;
+}
+
+.rail-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .center-card-head {
