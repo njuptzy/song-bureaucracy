@@ -1066,6 +1066,15 @@ def main():
         editor["text"] = "元祐前为差遣，其后为职事官。"
         print("  [跨栏归位] '枢密院编修'(p119)：页末跨行的‘事官。’移回‘其后为职’之后")
 
+        back_office, _ = by_name["中书后省"]
+        wrong_case = "设案四：上案、下案、制造、记注案。"
+        assert wrong_case in back_office["编制"]
+        back_office["编制"] = back_office["编制"].replace(
+            wrong_case,
+            "设案四：上案、下案、制诰、记注案。",
+        )
+        print("  [OCR字误] '中书后省'(p187)：核原书将南宋四案中的‘制造’恢复为‘制诰’")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
