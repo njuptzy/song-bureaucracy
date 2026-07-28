@@ -110,6 +110,13 @@ PROFILES = {
             {"bogus": "勾院", "page": "136", "into": "判三司户部勾院公事",
              "reason": "判三司户部勾院公事的正文在‘户部/勾院’换行处被误拆；"
                        "‘勾院主判官，掌本部帐籍考校、勾销事’及简称均属本条"},
+            {"bogus": "勾院", "page": "141", "into": "提举三司帐勾磨勘司",
+             "reason": "提举三司帐勾磨勘司的正文在‘帐司/勾院磨勘司’换行处被误拆；"
+                       "‘勾院磨勘司的衔名’是本条定义的后半句"},
+            {"bogus": "同提举", "page": "141", "into": "同提举三司帐司、勾院磨勘司",
+             "status": "from_surname", "promote_target": True,
+             "reason": "目录完整标题在正文被拆成‘同提举/三司帐司勾院磨勘司’两段；"
+                       "应将误作别称条的正文并回目录占位并恢复为真实条目"},
         ],
         "embedded_splits": [
             {"source": "都大提举在京诸司库务司", "target": "都大提举在京诸司库务",
@@ -931,7 +938,8 @@ def main():
             continue
         bogus = all_entries.pop(bi)
         all_meta.pop(bi)
-        target = all_entries[ti if ti < bi else ti - 1]
+        target_i = ti if ti < bi else ti - 1
+        target = all_entries[target_i]
         # 伪条目名本身是被拆走的正文文字，一并接回。通常接回正文；若断点
         # 位于属性字段中（如“主/判官一人”），则由 target_field 指定归位字段。
         target_field = join.get("target_field", "text")
@@ -945,6 +953,9 @@ def main():
                 target[k] += v
             else:
                 target[k] = v
+        if join.get("promote_target"):
+            target.pop("_placeholder", None)
+            all_meta[target_i]["status"] = "ok"
         print(f"  [粘连修补] '{join['bogus']}'(p{join['page']}) 并回 '{join['into']}'："
               f"{join['reason']}")
 
