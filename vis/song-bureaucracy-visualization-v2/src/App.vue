@@ -377,7 +377,7 @@ const selectedEntityId = ref(null);
 const hoveredHierarchyEntityId = ref(null);
 const timelineEntityId = ref(null);
 const timelineEvent = ref(null);
-const viewMode = ref("events");
+const viewMode = ref("hierarchy");
 const entityFilter = ref("all");
 const eventFilter = ref("all");
 const dataVersion = ref(null);
@@ -439,7 +439,7 @@ function applyInitialNavigation() {
   initialNavigationApplied = true;
   const params = new URLSearchParams(window.location.search);
   const view = params.get("view");
-  if (view === "hierarchy" || view === "timeline") viewMode.value = view;
+  if (view === "events" || view === "hierarchy" || view === "timeline") viewMode.value = view;
   const entityId = Number(params.get("entity"));
   if (entityId) {
     researchEntityId.value = entityId;
