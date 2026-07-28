@@ -75,10 +75,10 @@
           title="事件类型目前根据事件文字中的关键词自动归类，仅用于辅助阅读，点击标记可查看原句核验。"
         >
           <strong>事件标记<em>自动归类</em></strong>
-          <span><i class="legend-marker mk-established"></i>设置或恢复</span>
-          <span><i class="legend-marker mk-abolished"></i>罢废</span>
-          <span><i class="legend-marker mk-renamed"></i>改名或合并</span>
-          <span><i class="legend-marker mk-recorded"></i>一般记载</span>
+          <span class="legend-chip event-established">设置/恢复</span>
+          <span class="legend-chip event-abolished">罢废</span>
+          <span class="legend-chip event-renamed">改称/合并</span>
+          <span class="legend-chip event-recorded">一般记载</span>
         </span>
         <button
           v-if="timelineMode === 'single'"
@@ -846,7 +846,6 @@ onBeforeUnmount(() => {
     span {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
     }
   }
 
@@ -1070,10 +1069,10 @@ onBeforeUnmount(() => {
   width: 9px;
   height: 9px;
   transform: translate(-50%, -50%);
-  border: 1.5px solid var(--ink-soft);
+  border: 1.5px solid var(--event-recorded);
   border-radius: 50%;
   padding: 0;
-  background: var(--paper);
+  background: var(--event-recorded);
   cursor: pointer;
 
   &:hover,
@@ -1083,29 +1082,29 @@ onBeforeUnmount(() => {
   }
 
   &.in-range {
-    border-color: var(--rust);
+    box-shadow: 0 0 0 3px rgba(90, 58, 32, 0.12);
   }
 
   &.event-established,
   &.event-restored {
-    background: var(--ink-soft);
+    border-color: var(--event-established);
+    background: var(--event-established);
   }
 
   &.event-abolished {
-    border-radius: 0;
-    background: var(--rust);
-    transform: translate(-50%, -50%) rotate(45deg) scale(0.76);
+    border-color: var(--event-abolished);
+    background: var(--event-abolished);
   }
 
   &.event-renamed,
   &.event-merged {
-    border-radius: 1px;
+    border-color: var(--event-changed);
+    background: var(--event-changed);
   }
 
   &.event-recorded {
-    width: 6px;
-    height: 6px;
-    border-color: rgba(90, 58, 32, 0.58);
+    border-color: var(--event-recorded);
+    background: var(--event-recorded);
   }
 }
 
@@ -1165,25 +1164,26 @@ onBeforeUnmount(() => {
   left: 60px;
   width: 9px;
   height: 9px;
-  border: 1.5px solid var(--ink-soft);
+  border: 1.5px solid var(--event-recorded);
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--event-recorded);
   transform: translate(-50%, -50%);
 
   &.event-established,
   &.event-restored {
-    background: var(--teal);
+    border-color: var(--event-established);
+    background: var(--event-established);
   }
 
   &.event-abolished {
-    border-radius: 0;
-    background: var(--rust);
-    transform: translate(-50%, -50%) rotate(45deg) scale(0.75);
+    border-color: var(--event-abolished);
+    background: var(--event-abolished);
   }
 
   &.event-renamed,
   &.event-merged {
-    border-radius: 0;
+    border-color: var(--event-changed);
+    background: var(--event-changed);
   }
 }
 
@@ -1256,33 +1256,40 @@ onBeforeUnmount(() => {
 }
 
 .type-chip {
-  border-radius: 999px;
-  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0;
+  color: var(--event-recorded);
+  background: color-mix(in srgb, var(--event-recorded) 8%, var(--paper));
   font-family: "FZQINGKBYSJF", serif;
   font-size: 10px;
   font-style: normal;
-  line-height: 1.7;
+  line-height: 1;
 
   &.event-established,
   &.event-restored {
-    color: #fff;
-    background: var(--teal);
+    color: var(--event-established);
+    background: color-mix(in srgb, var(--event-established) 10%, var(--paper));
   }
 
   &.event-abolished {
-    color: #fff;
-    background: var(--rust);
+    color: var(--event-abolished);
+    background: color-mix(in srgb, var(--event-abolished) 10%, var(--paper));
   }
 
   &.event-renamed,
   &.event-merged {
-    border: 1px solid var(--line);
-    color: var(--ink-soft);
+    color: var(--event-changed);
+    background: color-mix(in srgb, var(--event-changed) 10%, var(--paper));
   }
 
   &.event-recorded {
-    border: 1px solid var(--line-light);
-    color: rgba(90, 58, 32, 0.66);
+    color: var(--event-recorded);
   }
 }
 
