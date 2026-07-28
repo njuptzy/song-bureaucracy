@@ -419,12 +419,13 @@ const comparisonRows = computed(() => {
           : null;
       })
       .filter(Boolean)
-      .sort(
-        (a, b) =>
-          Number(b.entity.id === props.entityId) - Number(a.entity.id === props.entityId) ||
-          a.entity.title.localeCompare(b.entity.title, "zh")
-      ),
-  ];
+      .sort((a, b) => a.entity.title.localeCompare(b.entity.title, "zh")),
+  ].sort(
+    (a, b) =>
+      Number(b.entity.id === props.entityId) - Number(a.entity.id === props.entityId) ||
+      Number(b.entity.type === "机构") - Number(a.entity.type === "机构") ||
+      a.entity.title.localeCompare(b.entity.title, "zh")
+  );
 
   return items.map((item) => {
     const datedEvents = props.dataset.events
@@ -590,31 +591,6 @@ watch(
   (event) => {
     if (event && !playing.value) scrollToEvent(event.id);
   }
-);
-
-// 底部时间段变化后，定位到该实体在区间内的第一条记录；没有命中时定位到最近记录。
-watch(
-  () => props.range,
-  () => {
-    if (playing.value || !props.range || !entityEvents.value.length) return;
-    const matched = rangeMatchedEvents.value[0];
-    if (matched) {
-      scrollToEvent(matched.id);
-      return;
-    }
-    const center = (props.range[0] + props.range[1]) / 2;
-    const nearest = entityEvents.value
-      .filter((event) => event.timeType !== "bounded" && event.yearStart != null)
-      .reduce(
-        (best, event) =>
-          !best || Math.abs(event.yearStart - center) < Math.abs(best.yearStart - center)
-            ? event
-            : best,
-        null
-      );
-    if (nearest) scrollToEvent(nearest.id);
-  },
-  { deep: true }
 );
 
 onBeforeUnmount(() => {
