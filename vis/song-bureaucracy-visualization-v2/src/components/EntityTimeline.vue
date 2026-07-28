@@ -1,5 +1,5 @@
 <template>
-  <div class="timeline-view">
+  <div class="timeline-view" :class="{ 'comparison-mode': timelineMode === 'comparison' }">
     <aside class="entity-rail">
       <div class="rail-caption" aria-hidden="true">
         <span>机构 / 官职</span>
@@ -391,8 +391,8 @@ const comparisonContext = computed(() => {
 });
 
 function yearPercent(year) {
-  const clamped = Math.max(960, Math.min(1279, year));
-  return `${((clamped - 960) / (1279 - 960)) * 100}%`;
+  const clamped = Math.max(960, Math.min(1280, year));
+  return `${((clamped - 960) / (1280 - 960)) * 100}%`;
 }
 
 const comparisonRows = computed(() => {
@@ -484,7 +484,7 @@ const comparisonTicks = computed(() =>
 const rangeBandStyle = computed(() => {
   if (!props.range) return null;
   const left = Number.parseFloat(yearPercent(props.range[0]));
-  const right = Number.parseFloat(yearPercent(props.range[1]));
+  const right = Number.parseFloat(yearPercent(Math.min(props.range[1] + 1, 1280)));
   return {
     left: `${left}%`,
     width: `${Math.max(0.35, right - left)}%`,
@@ -629,6 +629,26 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   padding-right: 10px;
+}
+
+.timeline-view.comparison-mode {
+  padding-right: 0;
+
+  .entity-rail {
+    display: none;
+  }
+
+  .comparison-chart {
+    padding-right: 0.2vw;
+  }
+
+  .comparison-axis,
+  .comparison-row {
+    // 下方总时间线的年份轴起点为 2vw 外边距 + 9.6vw 控制栏 = 11.6vw。
+    // 主内容左边界为 1.8vw，扣除 comparison-chart 的 4px 左内边距后，
+    // 上方标签栏使用剩余的 9.8vw - 4px，年份轴即可在同一位置起步。
+    grid-template-columns: calc(9.8vw - 4px) minmax(480px, 1fr);
+  }
 }
 
 .entity-rail {
