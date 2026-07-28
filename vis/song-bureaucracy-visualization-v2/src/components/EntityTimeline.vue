@@ -1088,7 +1088,7 @@ onBeforeUnmount(() => {
 
   &.event-established,
   &.event-restored {
-    background: var(--ink-soft);
+    background: var(--teal);
   }
 
   &.event-abolished {
@@ -1103,8 +1103,6 @@ onBeforeUnmount(() => {
   }
 
   &.event-recorded {
-    width: 6px;
-    height: 6px;
     border-color: rgba(90, 58, 32, 0.58);
   }
 }
