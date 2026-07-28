@@ -99,7 +99,7 @@
           </div>
           <div class="comparison-axis">
             <span class="comparison-label-head">机构 / 官职</span>
-            <div class="comparison-track axis-track">
+            <div ref="axisTrackRef" class="comparison-track axis-track">
               <i
                 v-for="tick in comparisonTicks"
                 :key="tick"
@@ -284,7 +284,7 @@ const props = defineProps({
   selectedEvent: { type: Object, default: null },
   range: { type: Array, default: null },
 });
-const emit = defineEmits(["select-entity", "select-event"]);
+const emit = defineEmits(["select-entity", "select-event", "axis-bounds-change"]);
 
 const GAP_YEARS = 4; // 相邻纪年相差达到该年数即插入「隔 N 年」行
 const DIVIDER_YEAR = 1127;
@@ -300,10 +300,12 @@ const typeLabels = {
 
 const scrollRef = ref(null);
 const entityListRef = ref(null);
+const axisTrackRef = ref(null);
 const playing = ref(false);
 const timelineMode = ref("single");
 let playTimer = null;
 let playIndex = -1;
+let axisResizeObserver = null;
 
 const rangeLabel = computed(() => {
   if (!props.range) return "未选择时段";
@@ -391,8 +393,8 @@ const comparisonContext = computed(() => {
 });
 
 function yearPercent(year) {
-  const clamped = Math.max(960, Math.min(1279, year));
-  return `${((clamped - 960) / (1279 - 960)) * 100}%`;
+  const clamped = Math.max(960, Math.min(1280, year));
+  return `${((clamped - 960) / (1280 - 960)) * 100}%`;
 }
 
 const comparisonRows = computed(() => {
@@ -484,12 +486,36 @@ const comparisonTicks = computed(() =>
 const rangeBandStyle = computed(() => {
   if (!props.range) return null;
   const left = Number.parseFloat(yearPercent(props.range[0]));
-  const right = Number.parseFloat(yearPercent(props.range[1]));
+  const right = Number.parseFloat(yearPercent(Math.min(props.range[1] + 1, 1280)));
   return {
     left: `${left}%`,
     width: `${Math.max(0.35, right - left)}%`,
   };
 });
+
+function reportAxisBounds() {
+  const track = axisTrackRef.value;
+  const rect = track?.getBoundingClientRect();
+  emit(
+    "axis-bounds-change",
+    rect && rect.width > 0
+      ? { left: rect.left + track.clientLeft, right: rect.right }
+      : null
+  );
+}
+
+async function observeAxisTrack() {
+  await nextTick();
+  axisResizeObserver?.disconnect();
+  axisResizeObserver = null;
+  if (!axisTrackRef.value) {
+    emit("axis-bounds-change", null);
+    return;
+  }
+  axisResizeObserver = new ResizeObserver(reportAxisBounds);
+  axisResizeObserver.observe(axisTrackRef.value);
+  reportAxisBounds();
+}
 
 // 行序列：事件行 + 「隔 N 年」压缩行 + 1127 分隔行
 const rows = computed(() => {
@@ -567,6 +593,12 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => [timelineMode.value, props.entityId, comparisonRows.value.length],
+  observeAxisTrack,
+  { immediate: true, flush: "post" }
+);
+
 // 选中原本未命中的实体后，它会随新时间段提升到列表首位，并让列表回到该实体位置。
 watch(
   () => [props.entityId, props.range?.[0], props.range?.[1]],
@@ -619,6 +651,8 @@ watch(
 
 onBeforeUnmount(() => {
   if (playTimer) clearInterval(playTimer);
+  axisResizeObserver?.disconnect();
+  emit("axis-bounds-change", null);
 });
 </script>
 
