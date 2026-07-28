@@ -1519,7 +1519,7 @@ defineExpose({ focusEntity });
     width: 12px;
     height: 12px;
     fill: none;
-    stroke: #55756c;
+    stroke: var(--rust);
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 1.5;
@@ -1550,18 +1550,18 @@ defineExpose({ focusEntity });
     flex: 0 0 auto;
     align-items: center;
     gap: 4px;
-    border: 1px solid rgba(85, 117, 108, 0.4);
+    border: 1px solid rgba(90, 58, 32, 0.28);
     border-radius: 12px;
     padding: 2px 7px;
-    color: #45635b;
-    background: rgba(85, 117, 108, 0.08);
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.5);
     font-family: inherit;
     font-size: 10px;
     cursor: pointer;
 
     &:hover {
-      border-color: #55756c;
-      background: rgba(85, 117, 108, 0.16);
+      border-color: var(--rust);
+      background: rgba(157, 83, 52, 0.1);
     }
 
     i {
@@ -1579,7 +1579,7 @@ defineExpose({ focusEntity });
     }
 
     small {
-      color: rgba(69, 99, 91, 0.66);
+      color: rgba(90, 58, 32, 0.6);
       font-size: 8px;
     }
   }
