@@ -118,8 +118,8 @@
         <template v-if="viewMode === 'events'">
           <div class="entry-rail">
             <div class="rail-caption" aria-hidden="true">
-              <span>词条记录</span>
-              <span>按时间匹配排序</span>
+              <span>{{ researchEntity?.title || "尚未选择对象" }}</span>
+              <span>本体及直接相关</span>
             </div>
 
             <div v-if="rankedEvents.length" ref="railStreamRef" class="rail-stream">
@@ -141,7 +141,7 @@
                 </span>
                 <span class="entry-title-line">
                   <strong :title="item.event.title">{{ item.event.title }}</strong>
-                  <em>{{ item.event.entityType }}</em>
+                  <em>{{ item.scopeLabel }} · {{ item.event.entityType }}</em>
                 </span>
                 <span class="entry-snippet">{{ item.event.event }}</span>
               </button>
@@ -149,7 +149,8 @@
 
             <div v-else class="empty-state">
               <span class="empty-seal">无</span>
-              <p>没有符合当前筛选条件的精确纪年记录。</p>
+              <p v-if="!researchEntity">请先通过顶部搜索，或从层级结构、年表中选择研究对象。</p>
+              <p v-else>当前对象及直接关联实体没有符合筛选条件的带纪年记录。</p>
             </div>
 
             <div class="rail-legend" aria-hidden="true">
@@ -509,47 +510,88 @@ const exactEvents = computed(() => {
   });
 });
 
-const visibleEvents = computed(() => {
-  return exactEvents.value
-    .filter((event) => entityFilter.value === "all" || event.entityType === entityFilter.value)
-    .filter((event) => eventFilter.value === "all" || event.eventType === eventFilter.value)
-    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
+const researchScope = computed(() => {
+  const entityIds = new Set();
+  const relationTypesByEntity = new Map();
+  if (!dataset.value || researchEntityId.value == null) {
+    return { entityIds, relationTypesByEntity };
+  }
+
+  entityIds.add(researchEntityId.value);
+  for (const relation of dataset.value.relations) {
+    let relatedEntityId = null;
+    if (relation.subjectEntityId === researchEntityId.value) {
+      relatedEntityId = relation.objectEntityId;
+    } else if (relation.objectEntityId === researchEntityId.value) {
+      relatedEntityId = relation.subjectEntityId;
+    }
+    if (relatedEntityId == null) continue;
+    entityIds.add(relatedEntityId);
+    if (!relationTypesByEntity.has(relatedEntityId)) {
+      relationTypesByEntity.set(relatedEntityId, new Set());
+    }
+    relationTypesByEntity.get(relatedEntityId).add(relation.type);
+  }
+  return { entityIds, relationTypesByEntity };
 });
 
-// 左栏词条：所有精确纪年事件按与当前区间的时间距离排序，区间内的排在最前
-const filteredExactEvents = computed(() => {
-  if (!dataset.value) return [];
+const filteredResearchEvents = computed(() => {
+  if (!dataset.value || researchEntityId.value == null) return [];
   return dataset.value.events
-    .filter((event) => event.timeType === "exact" && event.yearStart != null)
+    .filter((event) => event.yearStart != null)
+    .filter((event) => researchScope.value.entityIds.has(event.entityId))
     .filter((event) => entityFilter.value === "all" || event.entityType === entityFilter.value)
     .filter((event) => eventFilter.value === "all" || event.eventType === eventFilter.value);
 });
 
+const visibleEvents = computed(() => {
+  return filteredResearchEvents.value
+    .filter((event) => eventOverlapsRange(event, selectedRange.value))
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
+});
+
+// 左栏只显示当前研究对象及其一跳关联实体；区间内优先，其次按变化事件、当前对象排序。
 const rankedEvents = computed(() => {
   const [start, end] = selectedRange.value;
-  return filteredExactEvents.value
+  return filteredResearchEvents.value
     .map((event) => {
-      const inRange = event.yearStart >= start && event.yearStart <= end;
+      const eventEnd = event.yearEnd ?? event.yearStart;
+      const inRange = eventOverlapsRange(event, selectedRange.value);
       const distance = inRange
         ? 0
-        : Math.min(Math.abs(event.yearStart - start), Math.abs(event.yearStart - end));
+        : eventEnd < start
+          ? start - eventEnd
+          : event.yearStart - end;
+      const relationTypes = researchScope.value.relationTypesByEntity.get(event.entityId);
       return {
         event,
         inRange,
         distance,
-        gapText: inRange ? "" : event.yearStart < start ? `早 ${distance} 年` : `晚 ${distance} 年`,
+        changePriority: event.eventType === "recorded" ? 1 : 0,
+        focusPriority: event.entityId === researchEntityId.value ? 0 : 1,
+        scopeLabel:
+          event.entityId === researchEntityId.value
+            ? "当前对象"
+            : [...(relationTypes || [])].join("／") || "直接相关",
+        gapText: inRange ? "" : eventEnd < start ? `早 ${distance} 年` : `晚 ${distance} 年`,
       };
     })
     .sort(
       (a, b) =>
         a.distance - b.distance ||
+        a.changePriority - b.changePriority ||
+        a.focusPriority - b.focusPriority ||
         (a.event.sortOrder || 0) - (b.event.sortOrder || 0) ||
         a.event.id - b.event.id
     );
 });
 
-const institutionCount = computed(() => visibleEvents.value.filter((item) => item.entityType === "机构").length);
-const officeCount = computed(() => visibleEvents.value.filter((item) => item.entityType === "官职").length);
+const institutionCount = computed(
+  () => new Set(visibleEvents.value.filter((item) => item.entityType === "机构").map((item) => item.entityId)).size
+);
+const officeCount = computed(
+  () => new Set(visibleEvents.value.filter((item) => item.entityType === "官职").map((item) => item.entityId)).size
+);
 
 const entityGraph = computed(() => (dataset.value ? buildEntityGraph(dataset.value) : null));
 const researchEntity = computed(() => {
@@ -780,7 +822,7 @@ function onTimelineEvent(event) {
   }
   const eventRange = rangeForEvent(event);
   if (eventRange) setRange(eventRange);
-  setResearchEvent(event);
+  setResearchEvent(event, { updateEntity: false });
   timelineEvent.value = event;
 }
 
@@ -833,7 +875,7 @@ async function handleEntryClick(event, mouseEvent) {
     return;
   }
   const sourceRect = mouseEvent.currentTarget?.getBoundingClientRect();
-  setResearchEvent(event);
+  setResearchEvent(event, { updateEntity: false });
   centeredEvent.value = event;
   await nextTick();
   flyCardFrom(sourceRect);
@@ -868,12 +910,12 @@ function closeCentered(clearResearchEvent = true) {
   detailOpen.value = false;
 }
 
-function setResearchEvent(event) {
+function setResearchEvent(event, { updateEntity = true } = {}) {
   if (!event) {
     researchEventId.value = null;
     return;
   }
-  researchEntityId.value = event.entityId;
+  if (updateEntity) researchEntityId.value = event.entityId;
   researchEventId.value = event.id;
 }
 
@@ -887,7 +929,7 @@ function onHierarchyEntity(id) {
 function bestEventForEntity(entityId) {
   if (!dataset.value || entityId == null) return null;
   const retained = eventIndex.value.get(researchEventId.value);
-  if (retained?.entityId === entityId) return retained;
+  if (retained && researchScope.value.entityIds.has(retained.entityId)) return retained;
   const [start, end] = selectedRange.value;
   return (
     dataset.value.events
@@ -919,7 +961,7 @@ async function syncResearchContext(mode = viewMode.value) {
     return;
   }
   if (!event) return;
-  setResearchEvent(event);
+  setResearchEvent(event, { updateEntity: false });
   centeredEvent.value = event;
   detailOpen.value = true;
   await nextTick();
