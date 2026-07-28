@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -19,17 +20,31 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_OUTPUT = ROOT / "vis/song-bureaucracy-visualization-v2/public/data/song-bureaucracy.json"
 
+RESTORED_WORDS = ("复置", "复设", "恢复", "复称", "复旧", "再置", "重置", "重新设置")
+ABOLISHED_WORDS = ("罢", "废", "解散", "撤销")
+NEGATED_RESTORATION_WORDS = ("不复置", "不再置", "未复置", "不复设", "未复设")
+RENAMED_WORDS = ("改名", "改称", "易名", "更名", "改置")
+ESTABLISHED_WORDS = (
+    "始置", "初置", "设置", "设立", "置司", "创置",
+    "始设", "初设", "增设", "添设", "创设", "建置", "增置", "添置",
+)
+# “置”是辞典最常见的新设动词，但沿置、已置、见置、不置等不表示本次新设，
+# “安置”也不是官制设置。改置、复置等先由上面的专门规则处理。
+POSITIVE_ZHI_PATTERN = re.compile(r"(?<![不未罕沿已见原安制若或所仍])置")
+
 
 def classify_event(event: str) -> str:
-    if any(word in event for word in ("复置", "恢复", "复称", "复旧")):
-        return "restored"
-    if any(word in event for word in ("罢", "废", "解散", "撤销")):
+    if any(word in event for word in NEGATED_RESTORATION_WORDS):
         return "abolished"
-    if any(word in event for word in ("改名", "改称", "易名", "更名")):
-        return "renamed"
+    if any(word in event for word in RESTORED_WORDS):
+        return "restored"
+    if any(word in event for word in ABOLISHED_WORDS):
+        return "abolished"
     if any(word in event for word in ("并入", "合并", "并归")):
         return "merged"
-    if any(word in event for word in ("始置", "设置", "设立", "初置", "置司", "创置")):
+    if any(word in event for word in RENAMED_WORDS):
+        return "renamed"
+    if any(word in event for word in ESTABLISHED_WORDS) or POSITIVE_ZHI_PATTERN.search(event):
         return "established"
     return "recorded"
 

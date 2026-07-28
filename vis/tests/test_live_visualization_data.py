@@ -5,7 +5,7 @@ import time
 import unittest
 from pathlib import Path
 
-from vis.backend.export_visualization_data import build_payload
+from vis.backend.export_visualization_data import build_payload, classify_event
 from vis.backend.serve_visualization_v2 import LivePayloadCache
 
 
@@ -31,6 +31,25 @@ class LiveVisualizationDataTest(unittest.TestCase):
             }
         finally:
             conn.close()
+
+    def test_event_classification_distinguishes_setting_from_existing_or_negated(self):
+        expected = {
+            "置枢密副使，副佐枢密使协理院事": "established",
+            "三司分三部，各部置副使": "established",
+            "始设三班院机构": "established",
+            "增设一人": "established",
+            "复置一员": "restored",
+            "由左补阙改置，初为职事官": "renamed",
+            "随两专勾司合并改置": "merged",
+            "不复置": "abolished",
+            "沿置，掌选人履历验审": "recorded",
+            "已见置": "recorded",
+            "三司分部，均不置使": "recorded",
+            "安置陈献边事可采的进士": "recorded",
+        }
+        for event, event_type in expected.items():
+            with self.subTest(event=event):
+                self.assertEqual(classify_event(event), event_type)
 
     def test_current_database_builds_complete_payload(self):
         counts = self._table_counts()
