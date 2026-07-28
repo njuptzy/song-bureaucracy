@@ -1,7 +1,8 @@
 // 由导出 JSON 构建实体级层级图。
-// 三种层级边：上下级机构（subject=上级 -> object=下级）、
-// 编制隶属（subject=机构 -> object=属官，可带员额）、统称与实例（subject=统称 -> object=实例）。
-// 前后演变不属于层级结构，不在此构建。
+// 只有上下级机构（subject=上级 -> object=下级）构成行政层级树。
+// 编制隶属（subject=机构 -> object=属官）和统称与实例
+// （subject=统称 -> object=实例）分别进入独立关系索引，不再冒充父子层级。
+// 前后演变属于时间结构，不在此构建。
 // 关系的纪年依据是离散的：periods 里每段来自关系某一端时间点自身的纪年，
 // 不做两端合并（两端相隔很远时，合并跨度会编造出没有依据的连续期）。
 // 传入 range = [起, 止] 时按时间过滤层级边：
@@ -9,7 +10,7 @@
 // - 关系两端时间点都无纪年（periods 为空）时，仅当两端实体在该区间均有纪年活动才认为成立；
 //   完全没有时间依据的边在任何区间都不显示（实体仍可从有纪年的边挂出）。
 
-export const HIERARCHY_TYPES = ["上下级机构", "编制隶属", "统称与实例"];
+export const HIERARCHY_TYPES = ["上下级机构"];
 
 export const RELATION_TYPE_ORDER = ["上下级机构", "编制隶属", "前后演变", "统称与实例"];
 
@@ -99,16 +100,18 @@ export function buildEntityGraph(dataset, range = null) {
 
   const childrenOf = new Map(); // parentId -> [{entityId, via, quota, staffType, relationId}]
   const parentRelsOf = new Map(); // childId -> [{entityId, via, relationId}]
+  const staffChildrenOf = new Map(); // institutionId -> [office relation item]
+  const staffParentsOf = new Map(); // officeId -> [institution relation item]
+  const instancesOf = new Map(); // collectiveId -> [instance relation item]
+  const collectivesOf = new Map(); // instanceId -> [collective relation item]
   const hierarchyTypeSet = new Set(HIERARCHY_TYPES);
 
   for (const rel of dataset.relations) {
-    if (!hierarchyTypeSet.has(rel.type)) continue;
     if (range && !relationInRange(rel, entityById, range)) continue;
     const parent = rel.subjectEntityId;
     const child = rel.objectEntityId;
     if (parent === child || !entityById.has(parent) || !entityById.has(child)) continue;
-    if (!childrenOf.has(parent)) childrenOf.set(parent, []);
-    childrenOf.get(parent).push({
+    const item = {
       entityId: child,
       via: rel.type,
       quota: rel.staffQuota,
@@ -117,42 +120,65 @@ export function buildEntityGraph(dataset, range = null) {
       relationIds: [rel.id],
       hasUndated: !rel.periods?.length,
       periods: (rel.periods || []).map((p) => ({ start: p.start, end: p.end })),
-    });
+    };
+
+    if (rel.type === "编制隶属") {
+      if (!staffChildrenOf.has(parent)) staffChildrenOf.set(parent, []);
+      staffChildrenOf.get(parent).push(item);
+      if (!staffParentsOf.has(child)) staffParentsOf.set(child, []);
+      staffParentsOf.get(child).push({ ...item, entityId: parent });
+      continue;
+    }
+    if (rel.type === "统称与实例") {
+      if (!instancesOf.has(parent)) instancesOf.set(parent, []);
+      instancesOf.get(parent).push(item);
+      if (!collectivesOf.has(child)) collectivesOf.set(child, []);
+      collectivesOf.get(child).push({ ...item, entityId: parent });
+      continue;
+    }
+    if (!hierarchyTypeSet.has(rel.type)) continue;
+    if (!childrenOf.has(parent)) childrenOf.set(parent, []);
+    childrenOf.get(parent).push(item);
     if (!parentRelsOf.has(child)) parentRelsOf.set(child, []);
     parentRelsOf.get(child).push({ entityId: parent, via: rel.type, relationId: rel.id });
   }
 
-  // 同一 (父, 子, 类型) 可能因多个时间点出现多条关系，去重并优先保留带员额的记录
-  for (const list of childrenOf.values()) {
-    const deduped = new Map();
-    for (const item of list) {
-      const key = `${item.entityId}|${item.via}`;
-      const existing = deduped.get(key);
-      if (!existing) {
-        deduped.set(key, item);
-        continue;
-      }
-      for (const relationId of item.relationIds) {
-        if (!existing.relationIds.includes(relationId)) existing.relationIds.push(relationId);
-      }
-      for (const period of item.periods) {
-        if (!existing.periods.some((p) => p.start === period.start && p.end === period.end)) {
-          existing.periods.push(period);
+  // 同一对实体可能因多个时间点出现多条关系，合并关系、纪年与员额。
+  function dedupeRelationMaps(...maps) {
+    for (const map of maps) {
+      for (const list of map.values()) {
+        const deduped = new Map();
+        for (const item of list) {
+          const key = `${item.entityId}|${item.via}`;
+          const existing = deduped.get(key);
+          if (!existing) {
+            deduped.set(key, item);
+            continue;
+          }
+          for (const relationId of item.relationIds) {
+            if (!existing.relationIds.includes(relationId)) existing.relationIds.push(relationId);
+          }
+          for (const period of item.periods) {
+            if (!existing.periods.some((p) => p.start === period.start && p.end === period.end)) {
+              existing.periods.push(period);
+            }
+          }
+          existing.hasUndated ||= item.hasUndated;
+          if (existing.quota == null && item.quota != null) {
+            existing.quota = item.quota;
+            existing.staffType = item.staffType;
+          }
         }
-      }
-      existing.hasUndated ||= item.hasUndated;
-      if (existing.quota == null && item.quota != null) {
-        existing.quota = item.quota;
-        existing.staffType = item.staffType;
+        list.length = 0;
+        for (const item of deduped.values()) {
+          item.periods.sort((a, b) => a.start - b.start || a.end - b.end);
+          list.push(item);
+        }
+        list.sort((a, b) => compareEntities(entityById)(a.entityId, b.entityId));
       }
     }
-    list.length = 0;
-    for (const item of deduped.values()) {
-      item.periods.sort((a, b) => a.start - b.start || a.end - b.end);
-      list.push(item);
-    }
-    list.sort((a, b) => compareEntities(entityById)(a.entityId, b.entityId));
   }
+  dedupeRelationMaps(childrenOf, staffChildrenOf, staffParentsOf, instancesOf, collectivesOf);
 
   // 主父 = relation id 最小的上级，用于面包屑与“其余上级”提示
   const primaryParent = new Map();
@@ -181,5 +207,17 @@ export function buildEntityGraph(dataset, range = null) {
     return chain;
   }
 
-  return { entityById, childrenOf, parentRelsOf, primaryParent, roots, isolated, ancestorChain };
+  return {
+    entityById,
+    childrenOf,
+    parentRelsOf,
+    staffChildrenOf,
+    staffParentsOf,
+    instancesOf,
+    collectivesOf,
+    primaryParent,
+    roots,
+    isolated,
+    ancestorChain,
+  };
 }

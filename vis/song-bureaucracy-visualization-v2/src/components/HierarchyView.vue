@@ -4,8 +4,8 @@
       <div class="toolbar-copy">
         <strong>{{ focusTitle || "官制层级结构" }}</strong>
         <span>
-          {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}有层级实体
-          · {{ isolatedEntities.length }} 个无层级实体
+          {{ listedEntities.length }} 个{{ structureScope === "current" ? "所选时段" : "历时" }}机构层级实体
+          · {{ isolatedEntities.length }} 个无上下级机构关系
         </span>
       </div>
 
@@ -22,15 +22,14 @@
 
       <span class="toolbar-legend" aria-label="层级图图例">
         <span class="legend-item"><i class="node-sample org"></i>机构</span>
-        <span class="legend-item"><i class="node-sample office"></i>官职</span>
         <span class="legend-item via-sup">
-          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.sup" /></svg></i>上下级
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.sup" /></svg></i>机构树
         </span>
         <span class="legend-item via-staff">
-          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.staff" /></svg></i>隶属
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.staff" /></svg></i>机构编制
         </span>
         <span class="legend-item via-alias">
-          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg></i>统称
+          <i class="edge-mark-sample"><svg viewBox="0 0 16 16"><path :d="VIA_ICONS.alias" /></svg></i>分类集合
         </span>
       </span>
 
@@ -84,7 +83,7 @@
             <span v-if="activeEntities.has(item.id)" class="item-dot" title="所选时段有记录">●</span>
           </button>
           <div v-if="isolatedEntities.length" class="list-divider">
-            {{ structureScope === "current" ? "所选时段无层级关系" : "历时无层级关系" }}
+            {{ structureScope === "current" ? "所选时段无上下级机构关系" : "历时无上下级机构关系" }}
           </div>
           <button
             v-for="item in isolatedEntities"
@@ -308,6 +307,51 @@
         </g>
       </svg>
 
+      <aside v-if="focusId != null && semanticSections.length" class="semantic-relations">
+        <header>
+          <strong>非层级关系</strong>
+          <span>不进入机构树</span>
+        </header>
+        <section v-for="section in semanticSections" :key="section.key">
+          <h3>
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path :d="VIA_ICONS[section.icon]" />
+            </svg>
+            {{ section.title }}
+            <small>{{ section.items.length }}</small>
+          </h3>
+          <div class="semantic-list">
+            <article v-for="item in section.items" :key="item.key">
+              <div class="semantic-row">
+                <button type="button" class="semantic-name" @click="toggleSelection(item.entity.id)">
+                  <i :class="{ office: item.entity.type === '官职' }"></i>
+                  <span>{{ item.entity.title }}</span>
+                </button>
+                <span v-if="item.edge.quota != null" class="semantic-quota">
+                  {{ item.edge.quota }}{{ item.edge.staffType || "员" }}
+                </span>
+                <button type="button" class="semantic-action" @click="toggleSemanticEvidence(item)">
+                  {{ semanticEvidenceKey === item.key ? "收起" : "证据" }}
+                </button>
+                <button type="button" class="semantic-action" @click="focusEntity(item.entity.id)">
+                  中心
+                </button>
+              </div>
+              <p class="semantic-period">{{ edgePeriodLabel(item.edge) }}</p>
+              <div v-if="semanticEvidenceKey === item.key" class="semantic-evidence">
+                <template v-for="relation in item.relations" :key="relation.id">
+                  <article v-for="(citation, index) in relation.citations" :key="`${relation.id}-${index}`">
+                    <cite>{{ citation.citation }}</cite>
+                    <blockquote>{{ citation.quotation }}</blockquote>
+                  </article>
+                </template>
+                <p v-if="!item.citationCount" class="quiet-text">该关系暂无引文记录。</p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </aside>
+
       <div v-if="focusId != null" class="canvas-caption">
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
@@ -373,7 +417,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["select-entity"]);
 
-const PRIMARY_VIA = { 上下级机构: 0, 编制隶属: 1, 统称与实例: 2 };
+const PRIMARY_VIA = { 上下级机构: 0 };
 // 关系类型图标（16×16 简笔，stroke=currentColor）：建筑=上下级机构、人形=编制隶属、交叠方框=统称与实例
 const VIA_ICONS = {
   sup: "M2 13h12M3.5 13V5.5L8 2l4.5 3.5V13M6 13V8.5h1.6V13M8.4 13V8.5H10V13",
@@ -397,6 +441,7 @@ const focusId = ref(null);
 const expanded = reactive(new Set());
 const childLimits = reactive(new Map());
 const evidenceCard = ref(null);
+const semanticEvidenceKey = ref(null);
 const otherParentCardId = ref(null);
 const activeOtherParent = ref(null);
 const rootRef = ref(null);
@@ -446,6 +491,53 @@ const ancestorTrail = computed(() => {
 });
 
 const focusTitle = computed(() => graph.value.entityById.get(focusId.value)?.title ?? "");
+
+function semanticItems(map, id, prefix) {
+  return (map.get(id) || []).map((edge) => {
+    const entity = graph.value.entityById.get(edge.entityId);
+    const relations = edge.relationIds
+      .map((relationId) => relationById.value.get(relationId))
+      .filter(Boolean);
+    return {
+      key: `${prefix}-${id}-${edge.entityId}-${edge.relationIds.join("-")}`,
+      entity,
+      edge,
+      relations,
+      citationCount: relations.reduce((sum, relation) => sum + relation.citations.length, 0),
+    };
+  }).filter((item) => item.entity);
+}
+
+const semanticSections = computed(() => {
+  if (focusId.value == null) return [];
+  const sections = [
+    {
+      key: "staff-children",
+      title: "本机构设置的官职",
+      icon: "staff",
+      items: semanticItems(graph.value.staffChildrenOf, focusId.value, "staff-child"),
+    },
+    {
+      key: "staff-parents",
+      title: "任职机构",
+      icon: "staff",
+      items: semanticItems(graph.value.staffParentsOf, focusId.value, "staff-parent"),
+    },
+    {
+      key: "instances",
+      title: "这一统称包含的实例",
+      icon: "alias",
+      items: semanticItems(graph.value.instancesOf, focusId.value, "instance"),
+    },
+    {
+      key: "collectives",
+      title: "所属统称",
+      icon: "alias",
+      items: semanticItems(graph.value.collectivesOf, focusId.value, "collective"),
+    },
+  ];
+  return sections.filter((section) => section.items.length);
+});
 
 function sortedChildren(id) {
   return [...(graph.value.childrenOf.get(id) || [])].sort(
@@ -920,6 +1012,11 @@ function clearOtherParentCard() {
 function closeFloaters() {
   clearOtherParentCard();
   evidenceCard.value = null;
+  semanticEvidenceKey.value = null;
+}
+
+function toggleSemanticEvidence(item) {
+  semanticEvidenceKey.value = semanticEvidenceKey.value === item.key ? null : item.key;
 }
 
 // 证据卡样式：贴在被点连线/节点的屏幕位置旁，随缩放平移跟随，夹回视口内
@@ -1017,6 +1114,7 @@ async function focusEntity(id, emitSelection = true) {
   clearOtherParentCard();
   focusId.value = id;
   evidenceCard.value = null;
+  semanticEvidenceKey.value = null;
   childLimits.clear();
   expandFocusedTree();
   await nextTick();
@@ -1299,6 +1397,176 @@ defineExpose({ focusEntity });
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.semantic-relations {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  width: 292px;
+  max-height: calc(100% - 54px);
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+  border: 1px solid rgba(90, 58, 32, 0.28);
+  border-radius: 7px;
+  padding: 10px;
+  background: rgba(244, 241, 234, 0.96);
+  box-shadow: 0 5px 18px rgba(75, 52, 32, 0.12);
+
+  > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line-light);
+    padding-bottom: 6px;
+
+    strong {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    span {
+      color: rgba(90, 58, 32, 0.52);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+    }
+  }
+
+  section h3 {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0 0 4px;
+    color: var(--ink-soft);
+    font-size: 11px;
+    font-weight: 400;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.5;
+    }
+
+    small {
+      margin-left: auto;
+      color: rgba(90, 58, 32, 0.48);
+      font-size: 9px;
+    }
+  }
+}
+
+.semantic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  > article {
+    border: 1px solid var(--line-light);
+    border-radius: 4px;
+    padding: 5px 6px;
+    background: rgba(255, 255, 255, 0.35);
+  }
+}
+
+.semantic-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.semantic-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+
+  i {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border: 1px solid #6d4a2e;
+    border-radius: 1px;
+    background: rgba(106, 74, 42, 0.16);
+
+    &.office {
+      border-color: #55756c;
+      border-radius: 50%;
+      background: rgba(85, 117, 108, 0.16);
+    }
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.semantic-quota,
+.semantic-period {
+  color: rgba(90, 58, 32, 0.56);
+  font-size: 9px;
+}
+
+.semantic-period {
+  margin: 3px 0 0 14px;
+}
+
+.semantic-action {
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 1px 0;
+  color: var(--rust);
+  background: transparent;
+  font-family: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.semantic-evidence {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px dashed var(--line-light);
+  margin-top: 5px;
+  padding-top: 4px;
+
+  article {
+    margin-bottom: 5px;
+  }
+
+  cite {
+    color: rgba(90, 58, 32, 0.62);
+    font-size: 9px;
+    font-style: normal;
+  }
+
+  blockquote {
+    border-left: 2px solid rgba(157, 83, 52, 0.35);
+    margin: 3px 0 0;
+    padding-left: 6px;
+    color: var(--ink-soft);
+    font-size: 10px;
+    line-height: 1.45;
+  }
 }
 
 .hierarchy-canvas {
