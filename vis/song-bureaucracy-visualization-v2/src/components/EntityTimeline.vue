@@ -52,10 +52,12 @@
             {{ timelineMode === "comparison" ? comparisonRangeEventCount : rangeMatchedEvents.length }} 条命中
           </small>
         </div>
-        <div v-if="comparisonAvailable" class="timeline-mode-switch" aria-label="年表显示模式">
+        <div class="timeline-mode-switch" aria-label="年表显示模式">
           <button
             type="button"
             :class="{ active: timelineMode === 'comparison' }"
+            :disabled="!comparisonAvailable"
+            :title="comparisonAvailable ? '比较所属机构及其编制官职' : '当前对象没有可用于比较的编制隶属关系'"
             @click="timelineMode = 'comparison'"
           >
             相关官职对比
@@ -890,6 +892,12 @@ onBeforeUnmount(() => {
     &.active {
       color: var(--paper);
       background: var(--ink-soft);
+    }
+
+    &:disabled {
+      color: rgba(90, 58, 32, 0.3);
+      background: rgba(114, 74, 43, 0.04);
+      cursor: not-allowed;
     }
   }
 }
