@@ -73,6 +73,14 @@ PROFILES = {
             ("第二编 宰执官类", "相", "83"),
             ("第二编 宰执官类", "昭文馆大学士", "85"),
         },
+        # 目录 OCR 把正文“简称与别名”中的别称误标成了独立主条目。
+        # 每项按编、名称、页码精确匹配，只修正目录类型，不改正文内容。
+        "catalog_retypes": [
+            {"h1": "第四编 元丰正名后中枢机构类之一",
+             "text": "大两省", "page": "176", "to": "surname",
+             "reason": "该项是给事中条“简称与别名”的第⑫项，原始正文连续作"
+                       "“⑫大两省。官称……”，并无第二个独立词条头"},
+        ],
         # 正文粘连修补：把误切出的伪条目并回真正的条目（并保留伪条目名本身，
         # 它是被拆走的正文文字）。每项: bogus 名+页码 -> into 条目名。
         "joins": [
@@ -396,6 +404,20 @@ def load_catalog():
             r["text"] = rename["to"]
             fix_log.append(
                 f"name '{old}'(p{r.get('page')}) -> '{r['text']}'（{rename['reason']}）"
+            )
+        retype = next(
+            (item for item in PROFILE.get("catalog_retypes", [])
+             if cur_h1 == item["h1"] and r["type"] == "name"
+             and r["text"] == item["text"]
+             and str(r.get("page")) == item["page"]),
+            None,
+        )
+        if retype:
+            old_type = r["type"]
+            r["type"] = retype["to"]
+            fix_log.append(
+                f"{old_type} '{r['text']}'(p{r.get('page')}) -> {r['type']}"
+                f"（{retype['reason']}）"
             )
         if (
             PROFILE.get("fix_xiangmen")
