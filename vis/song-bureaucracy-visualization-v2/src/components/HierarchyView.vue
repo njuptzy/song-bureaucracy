@@ -109,7 +109,8 @@
         </div>
       </aside>
 
-      <div ref="stageRef" class="canvas-stage">
+      <div class="canvas-stage">
+      <div ref="stageRef" class="canvas-drawing">
       <div v-if="focusId == null" class="stage-hint">
         <span class="empty-seal">选</span>
         <p>从左侧实体目录或上方搜索选择机构或官职。</p>
@@ -307,6 +308,44 @@
         </g>
       </svg>
 
+      <div v-if="focusId != null" class="canvas-caption">
+        <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
+        <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
+        <span>· 单击看详情</span>
+        <span>· 节点左上数字角标查看多上级</span>
+      </div>
+
+      <div class="canvas-controls">
+        <button type="button" class="reset-view-control" aria-label="重置视图" title="重置视图" @click="resetViewport">
+          ↺
+        </button>
+        <div class="zoom-controls">
+          <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
+          <button type="button" aria-label="放大" @click="changeZoom(0.15)">＋</button>
+        </div>
+      </div>
+
+      <aside v-if="evidenceCard" class="evidence-pop" :style="evidencePopStyle" @click.stop>
+        <div class="evidence-head">
+          <span>{{ evidenceCard.relations[0].type }} · {{ evidencePeriodLabel(evidenceCard.relations) }}</span>
+          <button type="button" aria-label="关闭" @click="evidenceCard = null">×</button>
+        </div>
+        <p class="evidence-pair">
+          {{ evidenceCard.relations[0].subjectTitle }} → {{ evidenceCard.relations[0].objectTitle }}
+        </p>
+        <div v-for="relation in evidenceCard.relations" :key="relation.id" class="evidence-record">
+          <p v-if="evidenceCard.relations.length > 1" class="evidence-period">
+            {{ relationPeriodLabel(relation) }}
+          </p>
+          <article v-for="(citation, index) in relation.citations" :key="index">
+            <cite>{{ citation.citation }}</cite>
+            <blockquote>{{ citation.quotation }}</blockquote>
+            <p v-if="citation.note">{{ citation.note }}</p>
+          </article>
+          <p v-if="!relation.citations.length" class="quiet-text">该期关系暂无引文记录。</p>
+        </div>
+      </aside>
+      </div>
       <aside v-if="focusId != null && semanticSections.length" class="semantic-relations">
         <header>
           <strong>非层级关系</strong>
@@ -350,44 +389,6 @@
             </article>
           </div>
         </section>
-      </aside>
-
-      <div v-if="focusId != null" class="canvas-caption">
-        <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
-        <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
-        <span>· 单击看详情</span>
-        <span>· 节点左上数字角标查看多上级</span>
-      </div>
-
-      <div class="canvas-controls">
-        <button type="button" class="reset-view-control" aria-label="重置视图" title="重置视图" @click="resetViewport">
-          ↺
-        </button>
-        <div class="zoom-controls">
-          <button type="button" aria-label="缩小" @click="changeZoom(-0.15)">−</button>
-          <button type="button" aria-label="放大" @click="changeZoom(0.15)">＋</button>
-        </div>
-      </div>
-
-      <aside v-if="evidenceCard" class="evidence-pop" :style="evidencePopStyle" @click.stop>
-        <div class="evidence-head">
-          <span>{{ evidenceCard.relations[0].type }} · {{ evidencePeriodLabel(evidenceCard.relations) }}</span>
-          <button type="button" aria-label="关闭" @click="evidenceCard = null">×</button>
-        </div>
-        <p class="evidence-pair">
-          {{ evidenceCard.relations[0].subjectTitle }} → {{ evidenceCard.relations[0].objectTitle }}
-        </p>
-        <div v-for="relation in evidenceCard.relations" :key="relation.id" class="evidence-record">
-          <p v-if="evidenceCard.relations.length > 1" class="evidence-period">
-            {{ relationPeriodLabel(relation) }}
-          </p>
-          <article v-for="(citation, index) in relation.citations" :key="index">
-            <cite>{{ citation.citation }}</cite>
-            <blockquote>{{ citation.quotation }}</blockquote>
-            <p v-if="citation.note">{{ citation.note }}</p>
-          </article>
-          <p v-if="!relation.citations.length" class="quiet-text">该期关系暂无引文记录。</p>
-        </div>
       </aside>
       </div>
     </div>
@@ -1392,6 +1393,14 @@ defineExpose({ focusEntity });
 }
 
 .canvas-stage {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.canvas-drawing {
   position: relative;
   flex: 1;
   min-width: 0;
@@ -1400,21 +1409,16 @@ defineExpose({ focusEntity });
 }
 
 .semantic-relations {
-  position: absolute;
   z-index: 4;
-  top: 12px;
-  right: 12px;
   display: flex;
   width: 292px;
-  max-height: calc(100% - 54px);
+  flex: 0 0 292px;
   flex-direction: column;
   gap: 9px;
   overflow-y: auto;
-  border: 1px solid rgba(90, 58, 32, 0.28);
-  border-radius: 7px;
+  border-left: 1px solid rgba(90, 58, 32, 0.28);
   padding: 10px;
-  background: rgba(244, 241, 234, 0.96);
-  box-shadow: 0 5px 18px rgba(75, 52, 32, 0.12);
+  background: rgba(244, 241, 234, 0.74);
 
   > header {
     display: flex;
