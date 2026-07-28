@@ -54,6 +54,10 @@
         </div>
 
         <div class="stage-summary">
+          <span v-if="researchEntity" class="research-object">
+            <em>当前对象</em>
+            <strong>{{ researchEntity.title }}</strong>
+          </span>
           <span v-for="item in summaryItems" :key="item.label">
             <strong>{{ item.value }}</strong> {{ item.label }}
           </span>
@@ -218,7 +222,7 @@
             v-if="timelineEvent"
             :event="timelineEvent"
             :relations="timelineRelations"
-            @close="timelineEvent = null"
+            @close="closeTimelineEvent"
             @follow-relation="followRelation"
           />
         </template>
@@ -231,7 +235,7 @@
             :hovered-entity-id="hoveredHierarchyEntityId"
             :active-entities="activeEntities"
             :range="selectedRange"
-            @select-entity="(id) => (selectedEntityId = id)"
+            @select-entity="onHierarchyEntity"
           />
 
           <Transition name="hierarchy-detail">
@@ -263,7 +267,7 @@
                 v-for="node in entityBreadcrumb"
                 :key="node.id"
                 type="button"
-                @click="selectedEntityId = node.id"
+                @click="onHierarchyEntity(node.id)"
               >
                 {{ node.title }}
               </button>
@@ -366,6 +370,8 @@ const detailOpen = ref(false);
 const centerCardRef = ref(null);
 const railStreamRef = ref(null);
 const hierarchyViewRef = ref(null);
+const researchEntityId = ref(null);
+const researchEventId = ref(null);
 const selectedEntityId = ref(null);
 const hoveredHierarchyEntityId = ref(null);
 const timelineEntityId = ref(null);
@@ -400,6 +406,12 @@ function applyDataset(nextDataset) {
   const eventsById = new Map(nextDataset.events.map((item) => [item.id, item]));
 
   dataset.value = nextDataset;
+  if (researchEntityId.value != null && !entityIds.has(researchEntityId.value)) {
+    researchEntityId.value = null;
+  }
+  if (researchEventId.value != null && !eventsById.has(researchEventId.value)) {
+    researchEventId.value = null;
+  }
   if (selectedEntityId.value != null && !entityIds.has(selectedEntityId.value)) {
     selectedEntityId.value = null;
   }
@@ -429,8 +441,10 @@ function applyInitialNavigation() {
   if (view === "hierarchy" || view === "timeline") viewMode.value = view;
   const entityId = Number(params.get("entity"));
   if (entityId) {
-    if (view === "timeline") onTimelineEntity(entityId);
+    researchEntityId.value = entityId;
+    if (view === "timeline") timelineEntityId.value = entityId;
     else selectedEntityId.value = entityId;
+    syncResearchContext(viewMode.value);
   }
   scrollRailToRange();
 }
@@ -538,6 +552,10 @@ const institutionCount = computed(() => visibleEvents.value.filter((item) => ite
 const officeCount = computed(() => visibleEvents.value.filter((item) => item.entityType === "官职").length);
 
 const entityGraph = computed(() => (dataset.value ? buildEntityGraph(dataset.value) : null));
+const researchEntity = computed(() => {
+  if (researchEntityId.value == null || !entityGraph.value) return null;
+  return entityGraph.value.entityById.get(researchEntityId.value) || null;
+});
 
 // 当前时间区间内有精确纪年记录的实体，用于层级树的活跃高亮
 const activeEntities = computed(() => {
@@ -738,31 +756,37 @@ const entityAttrs = computed(() => {
   return attrs;
 });
 
-watch(rankedEvents, (items) => {
-  if (centeredEvent.value && !items.some((item) => item.event.id === centeredEvent.value.id)) {
-    closeCentered();
-  }
-});
-
-watch(viewMode, (mode) => {
+watch(viewMode, async (mode) => {
   query.value = "";
   hoveredHierarchyEntityId.value = null;
-  if (mode !== "events") closeCentered();
-  if (mode !== "hierarchy") selectedEntityId.value = null;
-  if (mode !== "timeline") timelineEvent.value = null;
+  await syncResearchContext(mode);
 });
 
 function onTimelineEntity(id) {
+  if (id == null) return;
+  const changedEntity = researchEntityId.value !== id;
+  researchEntityId.value = id;
   timelineEntityId.value = id;
-  timelineEvent.value = null;
-  const entityRange = rangeForEntity(id);
-  if (entityRange) setRange(entityRange);
+  if (changedEntity) {
+    researchEventId.value = null;
+    timelineEvent.value = null;
+  }
 }
 
 function onTimelineEvent(event) {
+  if (timelineEvent.value?.id === event.id) {
+    closeTimelineEvent();
+    return;
+  }
   const eventRange = rangeForEvent(event);
   if (eventRange) setRange(eventRange);
-  timelineEvent.value = timelineEvent.value?.id === event.id ? null : event;
+  setResearchEvent(event);
+  timelineEvent.value = event;
+}
+
+function closeTimelineEvent() {
+  if (timelineEvent.value?.id === researchEventId.value) researchEventId.value = null;
+  timelineEvent.value = null;
 }
 
 function rangeForEvent(event) {
@@ -774,21 +798,6 @@ function rangeForEvent(event) {
   return [start, end];
 }
 
-// 以该实体全部带纪年的记录（含范围纪年）计算宋代范围内的完整生命期。
-function rangeForEntity(entityId) {
-  if (!dataset.value || entityId == null) return null;
-  let start = Infinity;
-  let end = -Infinity;
-  for (const event of dataset.value.events) {
-    if (event.entityId !== entityId) continue;
-    const eventRange = rangeForEvent(event);
-    if (!eventRange) continue;
-    start = Math.min(start, eventRange[0]);
-    end = Math.max(end, eventRange[1]);
-  }
-  return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
-}
-
 function eventOverlapsRange(event, range) {
   if (!event || event.yearStart == null || !range) return false;
   const eventEnd = event.yearEnd ?? event.yearStart;
@@ -797,11 +806,10 @@ function eventOverlapsRange(event, range) {
 
 function setRange(range) {
   selectedRange.value = range;
-  if (
-    viewMode.value === "timeline" &&
-    timelineEvent.value &&
-    !eventOverlapsRange(timelineEvent.value, range)
-  ) {
+  const researchEvent = eventIndex.value.get(researchEventId.value);
+  if (researchEvent && !eventOverlapsRange(researchEvent, range)) {
+    researchEventId.value = null;
+    if (centeredEvent.value?.id === researchEvent.id) closeCentered(false);
     timelineEvent.value = null;
   }
   scrollRailToRange();
@@ -825,6 +833,7 @@ async function handleEntryClick(event, mouseEvent) {
     return;
   }
   const sourceRect = mouseEvent.currentTarget?.getBoundingClientRect();
+  setResearchEvent(event);
   centeredEvent.value = event;
   await nextTick();
   flyCardFrom(sourceRect);
@@ -851,9 +860,70 @@ function openDetail() {
   detailOpen.value = true;
 }
 
-function closeCentered() {
+function closeCentered(clearResearchEvent = true) {
+  if (clearResearchEvent && centeredEvent.value?.id === researchEventId.value) {
+    researchEventId.value = null;
+  }
   centeredEvent.value = null;
   detailOpen.value = false;
+}
+
+function setResearchEvent(event) {
+  if (!event) {
+    researchEventId.value = null;
+    return;
+  }
+  researchEntityId.value = event.entityId;
+  researchEventId.value = event.id;
+}
+
+function onHierarchyEntity(id) {
+  selectedEntityId.value = id;
+  if (id == null) return;
+  if (researchEntityId.value !== id) researchEventId.value = null;
+  researchEntityId.value = id;
+}
+
+function bestEventForEntity(entityId) {
+  if (!dataset.value || entityId == null) return null;
+  const retained = eventIndex.value.get(researchEventId.value);
+  if (retained?.entityId === entityId) return retained;
+  const [start, end] = selectedRange.value;
+  return (
+    dataset.value.events
+      .filter((event) => event.entityId === entityId && event.yearStart != null)
+      .sort((a, b) => {
+        const aDistance = eventOverlapsRange(a, selectedRange.value)
+          ? 0
+          : Math.min(Math.abs(a.yearStart - start), Math.abs((a.yearEnd ?? a.yearStart) - end));
+        const bDistance = eventOverlapsRange(b, selectedRange.value)
+          ? 0
+          : Math.min(Math.abs(b.yearStart - start), Math.abs((b.yearEnd ?? b.yearStart) - end));
+        return aDistance - bDistance || (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id;
+      })[0] || null
+  );
+}
+
+async function syncResearchContext(mode = viewMode.value) {
+  if (!dataset.value || researchEntityId.value == null) return;
+  const entityId = researchEntityId.value;
+  const event = bestEventForEntity(entityId);
+
+  if (mode === "hierarchy") {
+    selectedEntityId.value = entityId;
+    return;
+  }
+  if (mode === "timeline") {
+    timelineEntityId.value = entityId;
+    timelineEvent.value = event?.id === researchEventId.value ? event : null;
+    return;
+  }
+  if (!event) return;
+  setResearchEvent(event);
+  centeredEvent.value = event;
+  detailOpen.value = true;
+  await nextTick();
+  scrollRailToEvent(event.id);
 }
 
 function scrollRailToRange() {
@@ -872,8 +942,10 @@ function scrollRailToEvent(id) {
 
 function locateSearchResult(item) {
   query.value = "";
+  researchEntityId.value = item.entityId;
   if (viewMode.value === "hierarchy") {
     selectedEntityId.value = item.entityId;
+    researchEventId.value = null;
     return;
   }
   if (viewMode.value === "timeline") {
@@ -881,6 +953,7 @@ function locateSearchResult(item) {
     return;
   }
   if (item.yearStart != null) selectedRange.value = [item.yearStart, item.yearStart];
+  setResearchEvent(item);
   centeredEvent.value = item;
   detailOpen.value = true;
   scrollRailToEvent(item.id);
@@ -889,7 +962,7 @@ function locateSearchResult(item) {
 function followRelation(relation) {
   hoveredHierarchyEntityId.value = null;
   if (viewMode.value === "hierarchy") {
-    selectedEntityId.value = relation.otherEntityId;
+    onHierarchyEntity(relation.otherEntityId);
     return;
   }
   if (viewMode.value === "timeline") {
@@ -899,12 +972,14 @@ function followRelation(relation) {
     if (target.entityId !== timelineEntityId.value) onTimelineEntity(target.entityId);
     const targetRange = rangeForEvent(target);
     if (targetRange) setRange(targetRange);
+    setResearchEvent(target);
     timelineEvent.value = target;
     return;
   }
   const event = eventIndex.value.get(relation.otherId);
   if (!event) return;
   if (event.yearStart != null) selectedRange.value = [event.yearStart, event.yearStart];
+  setResearchEvent(event);
   centeredEvent.value = event;
   detailOpen.value = true;
   scrollRailToEvent(event.id);
@@ -1226,6 +1301,31 @@ button {
   font-family: "FZQINGKBYSJF", serif;
   font-size: 17px;
   font-weight: 400;
+}
+
+.stage-summary .research-object {
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(157, 83, 52, 0.34);
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: rgba(157, 83, 52, 0.07);
+
+  em {
+    color: rgba(90, 58, 32, 0.56);
+    font-size: 8px;
+    font-style: normal;
+    letter-spacing: 0.08em;
+  }
+
+  strong {
+    overflow: hidden;
+    max-width: 130px;
+    color: var(--rust);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .filters {
