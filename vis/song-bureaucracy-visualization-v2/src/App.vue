@@ -215,6 +215,7 @@
             :entity-id="timelineEntityId"
             :selected-event="timelineEvent"
             :range="selectedRange"
+            :selection-active="timelineSelectionActive"
             @select-entity="onTimelineEntity"
             @select-event="onTimelineEvent"
           />

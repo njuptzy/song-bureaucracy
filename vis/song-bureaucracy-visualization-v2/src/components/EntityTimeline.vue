@@ -283,6 +283,7 @@ const props = defineProps({
   entityId: { type: Number, default: null },
   selectedEvent: { type: Object, default: null },
   range: { type: Array, default: null },
+  selectionActive: { type: Boolean, default: true },
 });
 const emit = defineEmits(["select-entity", "select-event"]);
 
@@ -306,13 +307,20 @@ let playTimer = null;
 let playIndex = -1;
 
 const rangeLabel = computed(() => {
-  if (!props.range) return "未选择时段";
+  if (!props.selectionActive || !props.range) return "未选择时段";
   const [start, end] = props.range;
   return start === end ? `${start}年` : `${start}—${end}年`;
 });
 
 function eventOverlapsRange(event) {
-  if (!props.range || event.timeType === "bounded" || event.yearStart == null) return false;
+  if (
+    !props.selectionActive ||
+    !props.range ||
+    event.timeType === "bounded" ||
+    event.yearStart == null
+  ) {
+    return false;
+  }
   const [start, end] = props.range;
   return event.yearStart <= end && (event.yearEnd ?? event.yearStart) >= start;
 }
@@ -483,7 +491,7 @@ const comparisonTicks = computed(() =>
   [960, 1000, 1040, 1080, 1120, 1127, 1160, 1200, 1240, 1279]
 );
 const rangeBandStyle = computed(() => {
-  if (!props.range) return null;
+  if (!props.selectionActive || !props.range) return null;
   const left = Number.parseFloat(yearPercent(props.range[0]));
   const right = Number.parseFloat(yearPercent(Math.min(props.range[1] + 1, 1280)));
   return {
