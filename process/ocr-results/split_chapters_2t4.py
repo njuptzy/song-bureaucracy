@@ -117,6 +117,10 @@ PROFILES = {
              "status": "from_surname", "promote_target": True,
              "reason": "目录完整标题在正文被拆成‘同提举/三司帐司勾院磨勘司’两段；"
                        "应将误作别称条的正文并回目录占位并恢复为真实条目"},
+            {"bogus": "监牧使", "page": "148", "into": "河南、北监牧使司",
+             "status": "from_surname", "target_field": "简称",
+             "reason": "河南、北监牧使司的简称引文跨页断成‘并送/监牧使司。’；"
+                       "‘监牧使’不是独立词条，应连同‘司。’并回上一条简称字段"},
         ],
         "embedded_splits": [
             {"source": "都大提举在京诸司库务司", "target": "都大提举在京诸司库务",
