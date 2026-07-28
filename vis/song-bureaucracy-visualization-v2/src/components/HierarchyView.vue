@@ -51,6 +51,44 @@
       </div>
     </div>
 
+    <section v-if="compositionSection" class="institution-composition">
+      <div class="composition-container">
+        <header>
+          <span>{{ focusEntityRecord?.type || "实体" }}</span>
+          <strong>{{ focusTitle }}</strong>
+          <small>{{ compositionSection.items.length }} 项编制关系</small>
+        </header>
+        <div class="composition-content">
+          <div class="composition-label">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path :d="VIA_ICONS.staff" />
+            </svg>
+            <span>{{ compositionSection.title }}</span>
+            <em>不是下属机构</em>
+          </div>
+          <div class="composition-items">
+            <button
+              v-for="item in compositionSection.items"
+              :key="item.key"
+              type="button"
+              :title="`${item.entity.title} · ${edgePeriodLabel(item.edge)}`"
+              @click="toggleSelection(item.entity.id)"
+            >
+              <i :class="{ office: item.entity.type === '官职' }"></i>
+              <span>{{ item.entity.title }}</span>
+              <small v-if="item.edge.quota != null">
+                {{ item.edge.quota }}{{ item.edge.staffType || "员" }}
+              </small>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="composition-tree-cue">
+        <span>下方仅显示上下级机构</span>
+        <i>↓</i>
+      </div>
+    </section>
+
     <div class="canvas-shell">
       <aside
         class="entity-list"
@@ -492,6 +530,7 @@ const ancestorTrail = computed(() => {
 });
 
 const focusTitle = computed(() => graph.value.entityById.get(focusId.value)?.title ?? "");
+const focusEntityRecord = computed(() => graph.value.entityById.get(focusId.value) ?? null);
 
 function semanticItems(map, id, prefix) {
   return (map.get(id) || []).map((edge) => {
@@ -509,21 +548,40 @@ function semanticItems(map, id, prefix) {
   }).filter((item) => item.entity);
 }
 
-const semanticSections = computed(() => {
-  if (focusId.value == null) return [];
-  const sections = [
-    {
+const compositionSection = computed(() => {
+  if (focusId.value == null) return null;
+  const staffChildren = semanticItems(
+    graph.value.staffChildrenOf,
+    focusId.value,
+    "staff-child"
+  );
+  if (staffChildren.length) {
+    return {
       key: "staff-children",
       title: "本机构设置的官职",
       icon: "staff",
-      items: semanticItems(graph.value.staffChildrenOf, focusId.value, "staff-child"),
-    },
-    {
+      items: staffChildren,
+    };
+  }
+  const staffParents = semanticItems(
+    graph.value.staffParentsOf,
+    focusId.value,
+    "staff-parent"
+  );
+  if (staffParents.length) {
+    return {
       key: "staff-parents",
       title: "任职机构",
       icon: "staff",
-      items: semanticItems(graph.value.staffParentsOf, focusId.value, "staff-parent"),
-    },
+      items: staffParents,
+    };
+  }
+  return null;
+});
+
+const semanticSections = computed(() => {
+  if (focusId.value == null) return [];
+  const sections = [
     {
       key: "instances",
       title: "这一统称包含的实例",
@@ -1390,6 +1448,159 @@ defineExpose({ focusEntity });
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.institution-composition {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 8px;
+  border-bottom: 1px solid var(--line-light);
+  padding: 6px 12px;
+  background: rgba(244, 241, 234, 0.42);
+}
+
+.composition-container {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  border: 1px solid rgba(90, 58, 32, 0.48);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.34);
+
+  > header {
+    display: flex;
+    width: 150px;
+    flex: 0 0 150px;
+    flex-direction: column;
+    justify-content: center;
+    border-right: 1px solid rgba(90, 58, 32, 0.32);
+    padding: 5px 10px;
+    background: rgba(109, 74, 46, 0.1);
+
+    span,
+    small {
+      color: rgba(90, 58, 32, 0.56);
+      font-size: 8px;
+      letter-spacing: 0.08em;
+    }
+
+    strong {
+      overflow: hidden;
+      margin: 2px 0;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.composition-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 7px;
+}
+
+.composition-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-soft);
+  font-size: 9px;
+
+  svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: #55756c;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+  }
+
+  em {
+    border-left: 1px solid var(--line);
+    margin-left: 3px;
+    padding-left: 8px;
+    color: rgba(90, 58, 32, 0.48);
+    font-size: 8px;
+    font-style: normal;
+  }
+}
+
+.composition-items {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-color: var(--line) transparent;
+  scrollbar-width: thin;
+
+  button {
+    display: inline-flex;
+    height: 23px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(85, 117, 108, 0.4);
+    border-radius: 12px;
+    padding: 2px 7px;
+    color: #45635b;
+    background: rgba(85, 117, 108, 0.08);
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+
+    &:hover {
+      border-color: #55756c;
+      background: rgba(85, 117, 108, 0.16);
+    }
+
+    i {
+      width: 7px;
+      height: 7px;
+      border: 1px solid #6d4a2e;
+      border-radius: 1px;
+      background: rgba(106, 74, 42, 0.15);
+
+      &.office {
+        border-color: #55756c;
+        border-radius: 50%;
+        background: rgba(85, 117, 108, 0.18);
+      }
+    }
+
+    small {
+      color: rgba(69, 99, 91, 0.66);
+      font-size: 8px;
+    }
+  }
+}
+
+.composition-tree-cue {
+  display: flex;
+  width: 112px;
+  flex: 0 0 112px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: rgba(90, 58, 32, 0.54);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+
+  i {
+    color: var(--rust);
+    font-size: 14px;
+    font-style: normal;
+  }
 }
 
 .canvas-stage {
