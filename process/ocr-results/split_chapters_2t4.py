@@ -1075,6 +1075,34 @@ def main():
         )
         print("  [OCR字误] '中书后省'(p187)：核原书将南宋四案中的‘制造’恢复为‘制诰’")
 
+        room_post, room_meta = by_name["中书检正逐房（吏、户、礼刑、孔目房)公事"]
+        bogus_zhongshu, bogus_meta = by_name["中书"]
+        assert room_post.get("_placeholder") is True
+        assert bogus_zhongshu.get("_from_surname") is True
+        assert bogus_zhongshu.get("text") == "检正逐房（吏、户、礼、刑、孔目房）公事 宰属官名。"
+        for key, value in list(bogus_zhongshu.items()):
+            if key in ("name", "_from_surname"):
+                continue
+            room_post[key] = value
+        room_post["name"] = "中书检正逐房（吏、户、礼、刑、孔目房）公事"
+        room_post.pop("_placeholder", None)
+        room_meta["name"] = room_post["name"]
+        room_meta["status"] = "ok"
+        bogus_zhongshu.clear()
+        bogus_zhongshu.update({"name": "中书", "text": "", "_placeholder": True})
+        bogus_meta["status"] = "placeholder"
+        print("  [跨栏归位] '中书检正逐房公事'(p191)：正文从误切伪条目‘中书’移回，"
+              "并保留空占位以稳定后续词条ID")
+
+        right_remonstrance, _ = by_name["右谏议大夫"]
+        wrong_origin = "谭议大夫始置于后汉"
+        assert wrong_origin in right_remonstrance["职源"]
+        right_remonstrance["职源"] = right_remonstrance["职源"].replace(
+            wrong_origin,
+            "谏议大夫始置于后汉",
+        )
+        print("  [OCR字误] '右谏议大夫'(p189)：核原书将‘谭议大夫’恢复为‘谏议大夫’")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
