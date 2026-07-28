@@ -13,7 +13,6 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 const props = defineProps({
   years: { type: Array, required: true },
   range: { type: Array, required: true },
-  axisBounds: { type: Object, default: null },
 });
 const emit = defineEmits(["change-range"]);
 
@@ -53,19 +52,8 @@ function draw() {
   const width = WIDTH;
   const height = (sHeight / sWidth) * width;
   const ih = height * (1 - MARGIN.top - MARGIN.bottom);
-  let iw = width * (1 - MARGIN.left - MARGIN.right);
-  let cw = iw / 10; // 控制栏总宽度
-  if (props.axisBounds) {
-    const rootRect = root.value.getBoundingClientRect();
-    const scale = width / sWidth;
-    const containerOffset = width * MARGIN.left;
-    const alignedLeft = (props.axisBounds.left - rootRect.left) * scale - containerOffset;
-    const alignedRight = (props.axisBounds.right - rootRect.left) * scale - containerOffset;
-    if (alignedRight - alignedLeft > 100) {
-      cw = alignedLeft;
-      iw = alignedRight;
-    }
-  }
+  const iw = width * (1 - MARGIN.left - MARGIN.right);
+  const cw = iw / 10; // 控制栏总宽度
   const gap = ih / 15; // 分割线与文字分隔竖线之间的距离
   const divloc = ih / 3; // 分割线起始位置
   const th = (ih * 3) / 15; // 文字分割线高度
@@ -395,11 +383,6 @@ watch(
 );
 watch(
   () => props.years,
-  () => nextTick(draw),
-  { deep: true }
-);
-watch(
-  () => props.axisBounds,
   () => nextTick(draw),
   { deep: true }
 );

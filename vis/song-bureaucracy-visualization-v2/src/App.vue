@@ -215,7 +215,6 @@
             :entity-id="timelineEntityId"
             :selected-event="timelineEvent"
             :range="selectedRange"
-            @axis-bounds-change="timelineAxisBounds = $event"
             @select-entity="onTimelineEntity"
             @select-event="onTimelineEvent"
           />
@@ -367,7 +366,6 @@
       class="song-timeline"
       :years="dataset.years"
       :range="selectedRange"
-      :axis-bounds="viewMode === 'timeline' ? timelineAxisBounds : null"
       @change-range="setRange"
     />
   </div>
@@ -396,7 +394,6 @@ const hoveredHierarchyEntityId = ref(null);
 const timelineEntityId = ref(null);
 const timelineEvent = ref(null);
 const viewMode = ref("hierarchy");
-const timelineAxisBounds = ref(null);
 const entityFilter = ref("all");
 const eventFilter = ref("all");
 const dataVersion = ref(null);
