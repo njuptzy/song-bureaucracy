@@ -115,7 +115,7 @@
             class="comparison-row"
             :class="{
               institution: row.entity.type === '机构',
-              current: row.entity.id === comparisonFocusEntityId,
+              current: row.entity.id === entityId,
             }"
           >
             <button
@@ -429,11 +429,16 @@ const comparisonRows = computed(() => {
       })
       .filter(Boolean)
       .sort((a, b) => a.entity.title.localeCompare(b.entity.title, "zh")),
-  ].sort(
+  ];
+  const priority = (item) => {
+    if (item.entity.id === props.entityId) return 0;
+    if (item.entity.id === comparisonFocusEntityId.value) return 1;
+    if (item.entity.type === "机构") return 2;
+    return 3;
+  };
+  items.sort(
     (a, b) =>
-      Number(b.entity.id === comparisonFocusEntityId.value) -
-        Number(a.entity.id === comparisonFocusEntityId.value) ||
-      Number(b.entity.type === "机构") - Number(a.entity.type === "机构") ||
+      priority(a) - priority(b) ||
       a.entity.title.localeCompare(b.entity.title, "zh")
   );
 
