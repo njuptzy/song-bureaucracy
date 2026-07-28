@@ -235,7 +235,10 @@
           />
 
           <Transition name="hierarchy-detail">
-          <aside v-if="selectedEntity" class="detail-panel hierarchy-detail-panel">
+          <aside
+            v-if="selectedEntity && selectedEntityInRange"
+            class="detail-panel hierarchy-detail-panel"
+          >
             <div class="detail-head">
               <span>{{ selectedEntity.type }} · {{ entityAttrs.category || "未分类" }}</span>
               <div class="detail-actions">
@@ -268,10 +271,7 @@
 
             <h3>{{ selectedEntity.title }}</h3>
             <p class="detail-time">
-              <template v-if="selectedEntity.yearMin != null">
-                公元{{ selectedEntity.yearMin }}—{{ selectedEntity.yearMax }}年 ·
-              </template>
-              {{ selectedEntity.eventCount }} 条记录
+              {{ rangeTitle }} · {{ entityEvents.length }} 条纪事 · {{ entityRelations.length }} 条关系
             </p>
 
             <dl v-if="entityAttrs.officerType || entityAttrs.grade" class="attributes">
@@ -665,11 +665,21 @@ const selectedEntity = computed(() => {
   return entityGraph.value.entityById.get(selectedEntityId.value) || null;
 });
 
+function periodIntersectsRange(start, end, range = selectedRange.value) {
+  if (start == null) return false;
+  const periodEnd = end ?? start;
+  return start <= range[1] && periodEnd >= range[0];
+}
+
+const currentEntityGraph = computed(() =>
+  dataset.value ? buildEntityGraph(dataset.value, selectedRange.value) : null
+);
+
 const entityBreadcrumb = computed(() => {
-  if (!selectedEntity.value || !entityGraph.value) return [];
-  return entityGraph.value
+  if (!selectedEntity.value || !currentEntityGraph.value) return [];
+  return currentEntityGraph.value
     .ancestorChain(selectedEntity.value.id)
-    .map((id) => entityGraph.value.entityById.get(id))
+    .map((id) => currentEntityGraph.value.entityById.get(id))
     .filter(Boolean);
 });
 
@@ -678,6 +688,13 @@ const entityRelations = computed(() => {
   const id = selectedEntity.value.id;
   const list = [];
   for (const relation of dataset.value.relations) {
+    if (
+      !relation.periods?.some((period) =>
+        periodIntersectsRange(period.start, period.end)
+      )
+    ) {
+      continue;
+    }
     if (relation.subjectEntityId === id) {
       list.push({
         ...relation,
@@ -703,8 +720,13 @@ const entityEvents = computed(() => {
   if (!selectedEntity.value || !dataset.value) return [];
   return dataset.value.events
     .filter((event) => event.entityId === selectedEntity.value.id)
+    .filter((event) => periodIntersectsRange(event.yearStart, event.yearEnd))
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
 });
+
+const selectedEntityInRange = computed(
+  () => entityEvents.value.length > 0 || entityRelations.value.length > 0
+);
 
 const entityAttrs = computed(() => {
   const attrs = { category: null, officerType: null, grade: null };
