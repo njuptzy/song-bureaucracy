@@ -1,20 +1,33 @@
 <template>
-  <div ref="root" class="timeline-root" aria-label="公元960年至1279年宋代官制时间线"></div>
+  <div class="timeline-shell">
+    <div ref="root" class="timeline-root" aria-label="公元960年至1279年宋代官制时间线"></div>
+    <button
+      v-if="selectionActive"
+      type="button"
+      class="clear-selection"
+      title="取消当前时间段选择，恢复显示全宋"
+      @click="emit('cancel-selection')"
+    >
+      × 取消选择
+    </button>
+  </div>
 </template>
 
 <script setup>
 // 时间轴复刻 CBDB-Migration-Map src/components/TimeLine.vue 的样式：
 // 固定 2560 内部画幅 + viewBox 缩放；左侧控制栏（年 / 朝代 / 官制事件三行标签）、
 // 顶部年刻度轴、朝代分隔带、事件刻度行、底部粗拖动轴 + 实心刷选框。
-// 对外接口不变：props.years / props.range，emit("change-range", [start, end])。
+// 对外接口：props.years / props.range / props.selectionActive，
+// emit("change-range", [start, end]) 或 emit("cancel-selection")。
 import * as d3 from "d3";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
   years: { type: Array, required: true },
   range: { type: Array, required: true },
+  selectionActive: { type: Boolean, default: true },
 });
-const emit = defineEmits(["change-range"]);
+const emit = defineEmits(["change-range", "cancel-selection"]);
 
 const root = ref(null);
 let resizeObserver;
@@ -363,12 +376,16 @@ function draw() {
     emit("change-range", [start, end]);
   });
 
-  moveBrush(props.range);
+  moveBrush(props.selectionActive ? props.range : null);
 }
 
 // 把刷选框移动到指定年份区间（[start, end] 为闭区间）
 function moveBrush(range) {
   if (!brushGroup || !yearScale || !brush) return;
+  if (!range) {
+    brushGroup.call(brush.move, null);
+    return;
+  }
   const [start, end] = range;
   brushGroup.call(brush.move, [
     yearScale(start),
@@ -377,8 +394,8 @@ function moveBrush(range) {
 }
 
 watch(
-  () => props.range,
-  (range) => nextTick(() => moveBrush(range)),
+  () => [props.range, props.selectionActive],
+  ([range, selectionActive]) => nextTick(() => moveBrush(selectionActive ? range : null)),
   { deep: true }
 );
 watch(
@@ -397,11 +414,39 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 </script>
 
 <style scoped>
+.timeline-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .timeline-root {
   width: 100%;
   height: 100%;
   overflow: hidden;
   user-select: none;
+}
+
+.clear-selection {
+  position: absolute;
+  z-index: 3;
+  top: 5px;
+  right: 2vw;
+  height: 23px;
+  border: 1px solid rgba(114, 74, 43, 0.46);
+  border-radius: 3px;
+  padding: 0 8px;
+  color: rgba(90, 58, 32, 0.72);
+  background: rgba(244, 241, 234, 0.9);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.clear-selection:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink-soft);
+  background: var(--paper);
 }
 
 :deep(.timeline-root .overlay) {

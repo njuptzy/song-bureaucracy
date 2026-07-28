@@ -366,6 +366,8 @@
       class="song-timeline"
       :years="dataset.years"
       :range="selectedRange"
+      :selection-active="timelineSelectionActive"
+      @cancel-selection="clearRangeSelection"
       @change-range="setRange"
     />
   </div>
@@ -382,6 +384,7 @@ import { buildEntityGraph, groupRelationsByType, relationDirectionLabel, relatio
 const dataset = ref(null);
 const query = ref("");
 const selectedRange = ref([1132, 1132]);
+const timelineSelectionActive = ref(true);
 const centeredEvent = ref(null);
 const detailOpen = ref(false);
 const centerCardRef = ref(null);
@@ -871,8 +874,9 @@ function eventOverlapsRange(event, range) {
   return event.yearStart <= range[1] && eventEnd >= range[0];
 }
 
-function setRange(range) {
+function setRange(range, { selectionActive = true } = {}) {
   selectedRange.value = range;
+  timelineSelectionActive.value = selectionActive;
   const researchEvent = eventIndex.value.get(researchEventId.value);
   if (researchEvent && !eventOverlapsRange(researchEvent, range)) {
     researchEventId.value = null;
@@ -880,6 +884,12 @@ function setRange(range) {
     timelineEvent.value = null;
   }
   scrollRailToRange();
+}
+
+function clearRangeSelection() {
+  const start = dataset.value?.meta.yearStart ?? 960;
+  const end = dataset.value?.meta.yearEnd ?? 1279;
+  setRange([start, end], { selectionActive: false });
 }
 
 function adjustRange(action) {
