@@ -573,11 +573,14 @@ const rankedEvents = computed(() => {
     .map((event) => {
       const eventEnd = event.yearEnd ?? event.yearStart;
       const inRange = eventOverlapsRange(event, selectedRange.value);
-      const distance = inRange
-        ? 0
-        : eventEnd < start
-          ? start - eventEnd
-          : event.yearStart - end;
+      const isBounded = event.timeType === "bounded";
+      const distance = isBounded
+        ? Number.MAX_SAFE_INTEGER
+        : inRange
+          ? 0
+          : eventEnd < start
+            ? start - eventEnd
+            : event.yearStart - end;
       const relationTypes = researchScope.value.relationTypesByEntity.get(event.entityId);
       return {
         event,
@@ -589,7 +592,13 @@ const rankedEvents = computed(() => {
           event.entityId === researchEntityId.value
             ? "当前对象"
             : [...(relationTypes || [])].join("／") || "直接相关",
-        gapText: inRange ? "" : eventEnd < start ? `早 ${distance} 年` : `晚 ${distance} 年`,
+        gapText: isBounded
+          ? "仅知范围"
+          : inRange
+            ? ""
+            : eventEnd < start
+              ? `早 ${distance} 年`
+              : `晚 ${distance} 年`,
       };
     })
     .sort(
@@ -848,7 +857,7 @@ function closeTimelineEvent() {
 }
 
 function rangeForEvent(event) {
-  if (event?.yearStart == null) return null;
+  if (event?.yearStart == null || event.timeType === "bounded") return null;
   const rawEnd = event.yearEnd ?? event.yearStart;
   if (rawEnd < 960 || event.yearStart > 1279) return null;
   const start = Math.max(960, Math.min(1279, event.yearStart));
@@ -857,7 +866,7 @@ function rangeForEvent(event) {
 }
 
 function eventOverlapsRange(event, range) {
-  if (!event || event.yearStart == null || !range) return false;
+  if (!event || event.timeType === "bounded" || event.yearStart == null || !range) return false;
   const eventEnd = event.yearEnd ?? event.yearStart;
   return event.yearStart <= range[1] && eventEnd >= range[0];
 }
@@ -949,7 +958,12 @@ function bestEventForEntity(entityId) {
   const [start, end] = selectedRange.value;
   return (
     dataset.value.events
-      .filter((event) => event.entityId === entityId && event.yearStart != null)
+      .filter(
+        (event) =>
+          event.entityId === entityId &&
+          event.timeType !== "bounded" &&
+          event.yearStart != null
+      )
       .sort((a, b) => {
         const aDistance = eventOverlapsRange(a, selectedRange.value)
           ? 0
@@ -1010,7 +1024,8 @@ function locateSearchResult(item) {
     onTimelineEntity(item.entityId);
     return;
   }
-  if (item.yearStart != null) selectedRange.value = [item.yearStart, item.yearStart];
+  const itemRange = rangeForEvent(item);
+  if (itemRange) setRange(itemRange);
   setResearchEvent(item);
   centeredEvent.value = item;
   detailOpen.value = true;
@@ -1036,7 +1051,8 @@ function followRelation(relation) {
   }
   const event = eventIndex.value.get(relation.otherId);
   if (!event) return;
-  if (event.yearStart != null) selectedRange.value = [event.yearStart, event.yearStart];
+  const eventRange = rangeForEvent(event);
+  if (eventRange) setRange(eventRange);
   setResearchEvent(event);
   centeredEvent.value = event;
   detailOpen.value = true;

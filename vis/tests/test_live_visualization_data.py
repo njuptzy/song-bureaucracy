@@ -100,6 +100,30 @@ class LiveVisualizationDataTest(unittest.TestCase):
         )
         self.assertNotIn("yearStart", relation)
 
+    def test_bounded_endpoint_does_not_become_relation_period(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rel_id, subject_id, object_id = conn.execute(
+                "SELECT id, subject_id, object_id FROM Relationships LIMIT 1"
+            ).fetchone()
+            conn.execute(
+                "UPDATE Timepoints SET time = ? WHERE id = ?",
+                ("宋代（未载具体年月）", subject_id),
+            )
+            conn.execute(
+                "UPDATE Timepoints SET time = ? WHERE id = ?",
+                ("北宋太平兴国三年", object_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload = build_payload(self.db_path)
+        relation = next(item for item in payload["relations"] if item["id"] == rel_id)
+        bounded_event = next(item for item in payload["events"] if item["id"] == subject_id)
+        self.assertEqual(bounded_event["timeType"], "bounded")
+        self.assertEqual(relation["periods"], [{"start": 978, "end": 978}])
+
     def test_cache_version_changes_after_database_commit(self):
         cache = LivePayloadCache(self.db_path, min_stable_seconds=0)
         version_before, _, _ = cache.get()

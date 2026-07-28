@@ -43,7 +43,7 @@ class NormalizeTimesTest(unittest.TestCase):
     def test_undated_and_pre_song(self):
         song = normalize_time("宋代（未载具体年月）")
         self.assertEqual((song.year_start, song.year_end), (960, 1279))
-        self.assertEqual(song.time_type, "range")
+        self.assertEqual(song.time_type, "bounded")
         self.assertEqual(normalize_time("魏文帝黄初三年").time_type, "pre_song")
 
     def test_known_invalid(self):
@@ -61,7 +61,7 @@ class NormalizeTimesTest(unittest.TestCase):
             with self.subTest(raw=raw):
                 item = normalize_time(raw)
                 self.assertEqual((item.year_start, item.year_end), years)
-                self.assertEqual(item.time_type, "range")
+                self.assertEqual(item.time_type, "bounded")
 
     def test_reign_and_composite_ranges(self):
         expected = {
@@ -75,7 +75,7 @@ class NormalizeTimesTest(unittest.TestCase):
             with self.subTest(raw=raw):
                 item = normalize_time(raw)
                 self.assertEqual((item.year_start, item.year_end), years)
-                self.assertEqual(item.time_type, "range")
+                self.assertEqual(item.time_type, "bounded")
 
     def test_relative_ranges_keep_boundary_year(self):
         expected = {
@@ -89,7 +89,18 @@ class NormalizeTimesTest(unittest.TestCase):
             with self.subTest(raw=raw):
                 item = normalize_time(raw)
                 self.assertEqual((item.year_start, item.year_end), years)
-                self.assertEqual(item.time_type, "range")
+                self.assertEqual(item.time_type, "bounded")
+
+    def test_invalid_era_year_does_not_fall_back_to_era_range(self):
+        item = normalize_time("北宋淳化九年")
+        self.assertEqual((item.year_start, item.year_end), (None, None))
+        self.assertEqual(item.time_type, "unresolved")
+        self.assertIn("年号年次超出有效范围", item.parse_note)
+
+    def test_era_period_is_bounded_not_continuous_range(self):
+        item = normalize_time("南宋绍兴年间")
+        self.assertEqual((item.year_start, item.year_end), (1131, 1162))
+        self.assertEqual(item.time_type, "bounded")
 
     def test_accession_year_is_exact(self):
         item = normalize_time("北宋英宗即位")

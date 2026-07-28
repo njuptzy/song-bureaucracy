@@ -10,9 +10,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 try:
-    from .normalize_times import ERA_YEARS, normalize_time
+    from .normalize_times import ERA_YEARS, NORMALIZATION_VERSION, normalize_time
 except ImportError:  # 直接执行 python3 vis/backend/export_visualization_data.py
-    from normalize_times import ERA_YEARS, normalize_time
+    from normalize_times import ERA_YEARS, NORMALIZATION_VERSION, normalize_time
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,7 +40,11 @@ def phase_for_era(start: int) -> str:
 
 def endpoint_period(event: dict | None) -> dict | None:
     """单个时间点自身的纪年段，作为关系的一条离散依据。无纪年时返回 None。"""
-    if not event or event["yearStart"] is None:
+    if (
+        not event
+        or event["timeType"] not in {"exact", "range"}
+        or event["yearStart"] is None
+    ):
         return None
     return {
         "start": event["yearStart"],
@@ -75,6 +79,12 @@ def build_payload(db_path: Path) -> dict:
             })
 
         has_normalized_times = _has_table(conn, "NormalizedTimes")
+        normalization_is_current = False
+        if has_normalized_times and _has_table(conn, "TimeNormalizationMetadata"):
+            row = conn.execute(
+                "SELECT value FROM TimeNormalizationMetadata WHERE key = 'normalization_version'"
+            ).fetchone()
+            normalization_is_current = bool(row and row[0] == NORMALIZATION_VERSION)
         if has_normalized_times:
             normalized_columns = """
                 n.timepoint_id AS normalized_timepoint_id,
@@ -108,6 +118,8 @@ def build_payload(db_path: Path) -> dict:
         ):
             raw_time = row["time"] or ""
             normalized_is_current = (
+                normalization_is_current
+                and
                 row["normalized_timepoint_id"] is not None
                 and row["normalized_raw_time"] == raw_time
             )
@@ -253,7 +265,11 @@ def build_payload(db_path: Path) -> dict:
                 "eventCount": len(events),
                 "relationCount": len(relations),
                 "entityCount": len(entities),
+                "boundedCount": sum(event["timeType"] == "bounded" for event in events),
                 "undatedCount": sum(event["timeType"] == "undated" for event in events),
+                "timeUncertainCount": sum(
+                    event["timeType"] in {"bounded", "undated"} for event in events
+                ),
             },
             "years": years,
             "eras": eras,

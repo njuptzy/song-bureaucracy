@@ -163,7 +163,7 @@
                 @click="onCardClick(event)"
               ></button>
               <span v-if="!row.datedEvents.length" class="comparison-undated-only">
-                仅有时间未明记录
+                仅有时间未明或仅知范围记录
               </span>
             </div>
           </div>
@@ -231,7 +231,7 @@
         </div>
 
         <div v-if="undatedEvents.length" class="undated-block">
-          <div class="undated-title">无精确纪年 · {{ undatedEvents.length }}</div>
+          <div class="undated-title">时间未明 / 仅知范围 · {{ undatedEvents.length }}</div>
           <button
             v-for="event in undatedEvents"
             :key="event.id"
@@ -244,7 +244,10 @@
             :data-event-id="event.id"
             @click="onCardClick(event)"
           >
-            <span class="u-time">{{ event.rawTime }}</span>
+            <span class="u-time">
+              {{ event.rawTime }}
+              <em v-if="event.timeType === 'bounded'">仅知范围，不表示持续</em>
+            </span>
             <span class="u-event">{{ event.event }}</span>
           </button>
         </div>
@@ -309,7 +312,7 @@ const rangeLabel = computed(() => {
 });
 
 function eventOverlapsRange(event) {
-  if (!props.range || event.yearStart == null) return false;
+  if (!props.range || event.timeType === "bounded" || event.yearStart == null) return false;
   const [start, end] = props.range;
   return event.yearStart <= end && (event.yearEnd ?? event.yearStart) >= start;
 }
@@ -428,6 +431,7 @@ const comparisonRows = computed(() => {
       .filter(
         (event) =>
           event.entityId === item.entity.id &&
+          event.timeType !== "bounded" &&
           event.yearStart != null &&
           event.yearStart <= 1279 &&
           (event.yearEnd ?? event.yearStart) >= 960
@@ -600,7 +604,7 @@ watch(
     }
     const center = (props.range[0] + props.range[1]) / 2;
     const nearest = entityEvents.value
-      .filter((event) => event.yearStart != null)
+      .filter((event) => event.timeType !== "bounded" && event.yearStart != null)
       .reduce(
         (best, event) =>
           !best || Math.abs(event.yearStart - center) < Math.abs(best.yearStart - center)
@@ -1392,6 +1396,12 @@ onBeforeUnmount(() => {
       display: block;
       color: rgba(90, 58, 32, 0.6);
       font-size: 11px;
+
+      em {
+        margin-left: 6px;
+        color: rgba(142, 83, 43, 0.78);
+        font-style: normal;
+      }
     }
 
     .u-event {

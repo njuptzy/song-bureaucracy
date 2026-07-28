@@ -21,7 +21,7 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.1.0"
+NORMALIZATION_VERSION = "1.2.0"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
@@ -347,12 +347,37 @@ def make_sort_order(year: int, month: int | None, leap: int, day: int | None) ->
     return year * 100_000 + month_order * 100 + (day or 0)
 
 
-def make_year_range(start: int, end: int, note: str) -> Normalized:
+def make_year_range(
+    start: int,
+    end: int,
+    note: str | None = None,
+    *,
+    time_type: str = "range",
+) -> Normalized:
     return Normalized(
         start, end, None, 0, None, None, 0, None,
         None, None, None, None,
-        make_sort_order(start, None, 0, None), "range", note,
+        make_sort_order(start, None, 0, None), time_type, note,
     )
+
+
+def invalid_era_year(raw: str) -> tuple[str, int] | None:
+    """Return an explicitly written reign year when it exceeds that era."""
+    for era_match in ERA_PATTERN.finditer(raw):
+        year_match = YEAR_PATTERN.search(raw, era_match.end())
+        if not year_match:
+            continue
+        # Do not attach a year that belongs to a later era in the same string.
+        next_era = ERA_PATTERN.search(raw, era_match.end())
+        if next_era and next_era.start() < year_match.start():
+            continue
+        era_year = chinese_number(year_match.group(1))
+        if era_year is None:
+            continue
+        start, end = ERA_YEARS[era_match.group(0)]
+        if not start <= start + era_year - 1 <= end:
+            return era_match.group(0), era_year
+    return None
 
 
 def normalize_time(raw: str) -> Normalized:
@@ -373,7 +398,7 @@ def normalize_time(raw: str) -> Normalized:
 
     named_range = NAMED_TIME_RANGES.get(raw)
     if named_range:
-        return make_year_range(*named_range)
+        return make_year_range(*named_range, time_type="bounded")
 
     split = range_split(raw)
     if split:
@@ -402,6 +427,15 @@ def normalize_time(raw: str) -> Normalized:
             "exact",
         )
 
+    invalid = invalid_era_year(raw)
+    if invalid:
+        era, era_year = invalid
+        return Normalized(
+            None, None, None, 0, None, None, 0, None,
+            None, None, None, None, None, "unresolved",
+            f"年号年次超出有效范围：{era}{era_year}年",
+        )
+
     era_match = ERA_PATTERN.search(raw)
     if era_match:
         era = era_match.group(0)
@@ -412,7 +446,7 @@ def normalize_time(raw: str) -> Normalized:
         start, end = ERA_YEARS[era]
         return Normalized(start, end, None, 0, None, None, 0, None,
                           None, None, None, None,
-                          make_sort_order(start, None, 0, None), "range",
+                          make_sort_order(start, None, 0, None), "bounded",
                           f"仅识别到年号范围：{era}")
 
     if any(marker in raw for marker in SONG_MARKERS):
@@ -450,38 +484,61 @@ def normalized_values(timepoint_id: int, raw_time: str, item: Normalized) -> tup
     )
 
 
+def create_normalized_times_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE NormalizedTimes (
+            timepoint_id INTEGER PRIMARY KEY,
+            raw_time TEXT NOT NULL,
+            year_start INTEGER,
+            year_end INTEGER,
+            month INTEGER,
+            is_leap_month INTEGER NOT NULL DEFAULT 0,
+            day INTEGER,
+            end_month INTEGER,
+            end_is_leap_month INTEGER NOT NULL DEFAULT 0,
+            end_day INTEGER,
+            month_text TEXT,
+            day_text TEXT,
+            end_month_text TEXT,
+            end_day_text TEXT,
+            sort_order INTEGER,
+            time_type TEXT NOT NULL CHECK (
+                time_type IN (
+                    'exact', 'range', 'bounded', 'undated', 'pre_song', 'unresolved'
+                )
+            ),
+            parse_note TEXT,
+            FOREIGN KEY (timepoint_id) REFERENCES Timepoints(id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX idx_normalized_times_year ON NormalizedTimes(year_start, sort_order)"
+    )
+    conn.execute(
+        "CREATE INDEX idx_normalized_times_type ON NormalizedTimes(time_type)"
+    )
+
+
+def ensure_bounded_schema(conn: sqlite3.Connection) -> None:
+    """Upgrade the derived table when an older CHECK rejects ``bounded``."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'NormalizedTimes'"
+    ).fetchone()
+    if row and "bounded" in (row[0] or ""):
+        return
+    conn.execute("DROP TABLE IF EXISTS NormalizedTimes")
+    create_normalized_times_table(conn)
+
+
 def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
     conn = sqlite3.connect(output)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("DROP TABLE IF EXISTS NormalizedTimes")
         conn.execute("DROP TABLE IF EXISTS TimeNormalizationMetadata")
-        conn.execute(
-            """
-            CREATE TABLE NormalizedTimes (
-                timepoint_id INTEGER PRIMARY KEY,
-                raw_time TEXT NOT NULL,
-                year_start INTEGER,
-                year_end INTEGER,
-                month INTEGER,
-                is_leap_month INTEGER NOT NULL DEFAULT 0,
-                day INTEGER,
-                end_month INTEGER,
-                end_is_leap_month INTEGER NOT NULL DEFAULT 0,
-                end_day INTEGER,
-                month_text TEXT,
-                day_text TEXT,
-                end_month_text TEXT,
-                end_day_text TEXT,
-                sort_order INTEGER,
-                time_type TEXT NOT NULL CHECK (
-                    time_type IN ('exact', 'range', 'undated', 'pre_song', 'unresolved')
-                ),
-                parse_note TEXT,
-                FOREIGN KEY (timepoint_id) REFERENCES Timepoints(id)
-            )
-            """
-        )
+        create_normalized_times_table(conn)
         rows = conn.execute("SELECT id, time FROM Timepoints ORDER BY id").fetchall()
         counts: dict[str, int] = {}
         for timepoint_id, raw_time in rows:
@@ -500,12 +557,6 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
                 normalized_values(timepoint_id, raw_time, item),
             )
         conn.execute(
-            "CREATE INDEX idx_normalized_times_year ON NormalizedTimes(year_start, sort_order)"
-        )
-        conn.execute(
-            "CREATE INDEX idx_normalized_times_type ON NormalizedTimes(time_type)"
-        )
-        conn.execute(
             """
             CREATE TABLE TimeNormalizationMetadata (
                 key TEXT PRIMARY KEY,
@@ -518,8 +569,9 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source_database": str(source),
             "rule_summary": (
-                "年号换算公元年；朝代、帝王在位期、复合年号期及有明确上下文的相对时间"
-                "转换为可审计区间；区间表示史料时间约束，不表示全程持续；"
+                "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
+                "复合年号期及有明确上下文的相对时间为bounded，仅表示时间边界，"
+                "不表示全程持续；非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
             ),
             "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
@@ -544,6 +596,7 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         conn.execute("BEGIN IMMEDIATE")
+        ensure_bounded_schema(conn)
         rows = conn.execute(
             """
             SELECT
@@ -604,8 +657,9 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
             "normalization_version": NORMALIZATION_VERSION,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rule_summary": (
-                "年号换算公元年；朝代、帝王在位期、复合年号期及有明确上下文的相对时间"
-                "转换为可审计区间；区间表示史料时间约束，不表示全程持续；"
+                "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
+                "复合年号期及有明确上下文的相对时间为bounded，仅表示时间边界，"
+                "不表示全程持续；非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
             ),
             "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
@@ -655,7 +709,7 @@ def write_report(output: Path, report: Path, counts: dict[str, int]) -> None:
         "| 类型 | 数量 |",
         "| --- | ---: |",
     ]
-    for key in ("exact", "range", "undated", "pre_song", "unresolved"):
+    for key in ("exact", "range", "bounded", "undated", "pre_song", "unresolved"):
         lines.append(f"| `{key}` | {counts.get(key, 0)} |")
     lines.extend([
         "",
@@ -731,7 +785,7 @@ def main() -> None:
         for (old_type, new_type), count in sorted(transitions.items()):
             print(f"  {old_type} -> {new_type}: {count}")
         print("转换结果:")
-        for key in ("exact", "range", "undated", "pre_song", "unresolved"):
+        for key in ("exact", "range", "bounded", "undated", "pre_song", "unresolved"):
             print(f"  {key}: {counts.get(key, 0)}")
         return
 
@@ -750,7 +804,7 @@ def main() -> None:
     print(f"可视化工作库: {output}")
     print(f"运行报告: {args.report.resolve()}")
     print("转换结果:")
-    for key in ("exact", "range", "undated", "pre_song", "unresolved"):
+    for key in ("exact", "range", "bounded", "undated", "pre_song", "unresolved"):
         print(f"  {key}: {counts.get(key, 0)}")
 
 
