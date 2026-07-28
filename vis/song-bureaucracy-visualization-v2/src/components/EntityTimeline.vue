@@ -115,14 +115,14 @@
             class="comparison-row"
             :class="{
               institution: row.entity.type === '机构',
-              current: row.entity.id === entityId,
+              current: row.entity.id === comparisonFocusEntityId,
             }"
           >
             <button
               type="button"
               class="comparison-label"
               :title="row.entity.title"
-              @click="emit('select-entity', row.entity.id)"
+              @click="focusComparisonEntity(row.entity.id)"
             >
               <i :class="{ office: row.entity.type === '官职' }"></i>
               <span>{{ row.entity.title }}</span>
@@ -303,6 +303,7 @@ const scrollRef = ref(null);
 const entityListRef = ref(null);
 const playing = ref(false);
 const timelineMode = ref("single");
+const comparisonFocusEntityId = ref(props.entityId);
 let playTimer = null;
 let playIndex = -1;
 
@@ -430,7 +431,8 @@ const comparisonRows = computed(() => {
       .sort((a, b) => a.entity.title.localeCompare(b.entity.title, "zh")),
   ].sort(
     (a, b) =>
-      Number(b.entity.id === props.entityId) - Number(a.entity.id === props.entityId) ||
+      Number(b.entity.id === comparisonFocusEntityId.value) -
+        Number(a.entity.id === comparisonFocusEntityId.value) ||
       Number(b.entity.type === "机构") - Number(a.entity.type === "机构") ||
       a.entity.title.localeCompare(b.entity.title, "zh")
   );
@@ -535,6 +537,10 @@ function onCardClick(event) {
   emit("select-event", event);
 }
 
+function focusComparisonEntity(entityId) {
+  comparisonFocusEntityId.value = entityId;
+}
+
 function stopPlay() {
   playing.value = false;
   if (playTimer) clearInterval(playTimer);
@@ -570,6 +576,7 @@ watch(
   () => props.entityId,
   () => {
     stopPlay();
+    comparisonFocusEntityId.value = props.entityId;
     timelineMode.value = comparisonAvailable.value ? "comparison" : "single";
   },
   { immediate: true }
