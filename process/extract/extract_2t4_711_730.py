@@ -126,6 +126,23 @@ def chain(w, timepoint_ids, decision):
         )
 
 
+def chain_entity_times(w, entity_id, times, decision):
+    """按明确给出的时间顺序重排实体全链，避免新增节点形成第二个链头。"""
+    timepoint_ids = [ft(w, entity_id, time) for time in times]
+    all_ids = {
+        row[0]
+        for row in w.conn.execute(
+            "select id from Timepoints where entity_id=?", (entity_id,)
+        )
+    }
+    assert set(timepoint_ids) == all_ids, (
+        entity_id,
+        times,
+        sorted(all_ids - set(timepoint_ids)),
+    )
+    chain(w, timepoint_ids, decision)
+
+
 def refine(
     w,
     tid,
@@ -485,6 +502,19 @@ def entry713():
         "编制",
         chain="none",
     )
+    chain_entity_times(
+        w,
+        clerk_e,
+        [
+            "汉至唐",
+            "宋代（枢密院，未载具体年月）",
+            "北宋淳化四年二月",
+            "宋前期（通进司）",
+            "北宋元丰新制（门下省）",
+            "南宋嘉定五年",
+        ],
+        "把通进司书令史节点接入书令史既有全局时间链。",
+    )
     rel(
         w,
         combined,
@@ -716,7 +746,18 @@ def entry721():
         "建淳熙三年发敕制度变化节点。",
         chain="none",
     )
-    chain(w, [yf, south], "连接通进司发敕官元丰、淳熙节点。")
+    chain_entity_times(
+        w,
+        eid,
+        [
+            "宋前期",
+            "北宋淳化二年",
+            "未知",
+            "北宋元丰新制",
+            "南宋淳熙三年",
+        ],
+        "把通进司元丰、淳熙节点接入发敕官既有全局时间链。",
+    )
     rid = relation_id(
         w, "通进司", "发敕官", "编制隶属",
         "北宋元丰新制", "北宋元丰新制",
@@ -1018,6 +1059,19 @@ def entry723():
         "编制",
         chain="none",
     )
+    writer_times = [
+        "北宋咸平四年九月（都进奏院）",
+        "南宋初（都进奏院）",
+        "南宋淳熙十五年",
+    ]
+    if w.find_timepoint(writer_e, writer_times[0]) is None:
+        writer_times.pop(0)
+    chain_entity_times(
+        w,
+        writer_e,
+        writer_times,
+        "把都进奏院书写人节点接入书写人既有全局时间链。",
+    )
     rel(
         w,
         south,
@@ -1295,6 +1349,16 @@ def entry729():
         "别称",
         chain="none",
     )
+    chain_entity_times(
+        w,
+        writer_e,
+        [
+            "北宋咸平四年九月（都进奏院）",
+            "南宋初（都进奏院）",
+            "南宋淳熙十五年",
+        ],
+        "按咸平四年、南宋初、淳熙十五年重排书写人全局时间链。",
+    )
     rel(w, end, writer_t, "前后演变", i, main, "咸平四年私名副知改称书写人。")
     rel(
         w,
@@ -1386,5 +1450,58 @@ def main():
     entry730()
 
 
+def repair_global_chains():
+    """修复本批新增节点未接入同名实体既有链的问题，不重放整批提取。"""
+    w = W(713)
+    clerk_e = fe(w, "书令史", "官职")
+    chain_entity_times(
+        w,
+        clerk_e,
+        [
+            "汉至唐",
+            "宋代（枢密院，未载具体年月）",
+            "北宋淳化四年二月",
+            "宋前期（通进司）",
+            "北宋元丰新制（门下省）",
+            "南宋嘉定五年",
+        ],
+        "修复通进司书令史节点未接入既有全局时间链的问题。",
+    )
+    w.commit()
+
+    w = W(721)
+    decree_e = fe(w, "发敕官", "官职")
+    chain_entity_times(
+        w,
+        decree_e,
+        [
+            "宋前期",
+            "北宋淳化二年",
+            "未知",
+            "北宋元丰新制",
+            "南宋淳熙三年",
+        ],
+        "修复通进司发敕官节点未接入既有全局时间链的问题。",
+    )
+    w.commit()
+
+    w = W(729)
+    writer_e = fe(w, "书写人", "官职")
+    chain_entity_times(
+        w,
+        writer_e,
+        [
+            "北宋咸平四年九月（都进奏院）",
+            "南宋初（都进奏院）",
+            "南宋淳熙十五年",
+        ],
+        "修复都进奏院书写人节点未接入既有全局时间链的问题。",
+    )
+    w.commit()
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--repair-chains-only"]:
+        repair_global_chains()
+    else:
+        main()
