@@ -39,10 +39,34 @@
           <em>{{ entity.type }}</em>
           <small v-if="entity.yearMin != null">公元{{ entity.yearMin }}—{{ entity.yearMax }}年</small>
           <small>
-            {{ exactEvents.length }} 条纪年
-            <template v-if="undatedEvents.length"> · {{ undatedEvents.length }} 条无精确纪年</template>
+            <template v-if="timelineMode === 'comparison'">
+              {{ comparisonRows.length }} 个比较对象 · {{ comparisonEventCount }} 条带纪年记录
+            </template>
+            <template v-else>
+              {{ exactEvents.length }} 条纪年
+              <template v-if="undatedEvents.length"> · {{ undatedEvents.length }} 条无精确纪年</template>
+            </template>
           </small>
-          <small class="range-summary">{{ rangeLabel }} · {{ rangeMatchedEvents.length }} 条命中</small>
+          <small class="range-summary">
+            {{ rangeLabel }} ·
+            {{ timelineMode === "comparison" ? comparisonRangeEventCount : rangeMatchedEvents.length }} 条命中
+          </small>
+        </div>
+        <div v-if="comparisonAvailable" class="timeline-mode-switch" aria-label="年表显示模式">
+          <button
+            type="button"
+            :class="{ active: timelineMode === 'comparison' }"
+            @click="timelineMode = 'comparison'"
+          >
+            关联比较
+          </button>
+          <button
+            type="button"
+            :class="{ active: timelineMode === 'single' }"
+            @click="timelineMode = 'single'"
+          >
+            单体纪事
+          </button>
         </div>
         <span class="head-legend" aria-hidden="true">
           <span><i class="legend-marker mk-established"></i>设置/恢复</span>
@@ -51,6 +75,7 @@
           <span><i class="legend-marker mk-recorded"></i>记载</span>
         </span>
         <button
+          v-if="timelineMode === 'single'"
           type="button"
           class="play-btn"
           :disabled="!exactEvents.length"
@@ -61,6 +86,84 @@
       </div>
 
       <div ref="scrollRef" class="timeline-scroll">
+        <div v-if="timelineMode === 'comparison'" class="comparison-chart">
+          <div class="comparison-note">
+            <span>{{ comparisonContextTitle }}</span>
+            <small>横线表示有纪年记录的跨度，不等同于完整任职期</small>
+          </div>
+          <div class="comparison-axis">
+            <span class="comparison-label-head">机构 / 官职</span>
+            <div class="comparison-track axis-track">
+              <i
+                v-for="tick in comparisonTicks"
+                :key="tick"
+                :style="{ left: yearPercent(tick) }"
+              >
+                {{ tick }}
+              </i>
+            </div>
+          </div>
+          <div
+            v-for="row in comparisonRows"
+            :key="row.entity.id"
+            class="comparison-row"
+            :class="{
+              institution: row.entity.type === '机构',
+              current: row.entity.id === entityId,
+            }"
+          >
+            <button
+              type="button"
+              class="comparison-label"
+              :title="row.entity.title"
+              @click="emit('select-entity', row.entity.id)"
+            >
+              <i :class="{ office: row.entity.type === '官职' }"></i>
+              <span>{{ row.entity.title }}</span>
+              <small v-if="row.quota != null">{{ row.quota }}{{ row.staffType || "员" }}</small>
+            </button>
+            <div class="comparison-track">
+              <span
+                v-if="rangeBandStyle"
+                class="comparison-selected-range"
+                :style="rangeBandStyle"
+              ></span>
+              <i
+                v-for="tick in comparisonTicks"
+                :key="tick"
+                class="comparison-gridline"
+                :style="{ left: yearPercent(tick) }"
+              ></i>
+              <span
+                v-if="row.spanStyle"
+                class="comparison-known-span"
+                :style="row.spanStyle"
+              ></span>
+              <button
+                v-for="event in row.datedEvents"
+                :key="event.id"
+                type="button"
+                class="comparison-event"
+                :class="[
+                  `event-${event.eventType}`,
+                  {
+                    selected: selectedEvent?.id === event.id,
+                    'in-range': eventOverlapsRange(event),
+                  },
+                ]"
+                :style="{ left: yearPercent(event.yearStart) }"
+                :data-event-id="event.id"
+                :title="`${event.rawTime} · ${event.event}`"
+                @click="onCardClick(event)"
+              ></button>
+              <span v-if="!row.datedEvents.length" class="comparison-undated-only">
+                仅有时间未明记录
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <template v-else>
         <div :key="entityId" class="timeline-rows">
           <template v-for="(row, index) in rows" :key="row.key">
             <div
@@ -139,6 +242,7 @@
             <span class="u-event">{{ event.event }}</span>
           </button>
         </div>
+        </template>
       </div>
     </div>
 
@@ -152,7 +256,9 @@
 </template>
 
 <script setup>
-// 单一机构 / 官职的完整时间线（纵向年表）：
+// 机构 / 官职时间分析：关联实体对齐比较 + 单体纵向纪事：
+// - 有编制关系时默认把机构及其官职逐行放到同一条 960—1279 横轴上；
+//   横线仅表达数据库中有纪年记录的跨度，事件标记可打开右侧证据；
 // - 时间自上而下流动，左侧脊线串联，公元年份直接标在脊线上；
 // - 每条记录一张信息卡：原始纪年、事件类型徽章、全文、关系/引文数，
 //   点击卡片在右侧打开详情；
@@ -186,6 +292,7 @@ const typeLabels = {
 const scrollRef = ref(null);
 const entityListRef = ref(null);
 const playing = ref(false);
+const timelineMode = ref("single");
 let playTimer = null;
 let playIndex = -1;
 
@@ -246,6 +353,133 @@ const undatedEvents = computed(() =>
 );
 
 const rangeMatchedEvents = computed(() => entityEvents.value.filter(eventOverlapsRange));
+
+const comparisonContext = computed(() => {
+  if (!entity.value) return { institution: null, staffRelations: [] };
+  const staffRelations = props.dataset.relations.filter(
+    (relation) => relation.type === "编制隶属"
+  );
+  let institutionId = null;
+  if (
+    entity.value.type === "机构" &&
+    staffRelations.some((relation) => relation.subjectEntityId === entity.value.id)
+  ) {
+    institutionId = entity.value.id;
+  } else {
+    institutionId =
+      staffRelations.find((relation) => relation.objectEntityId === entity.value.id)
+        ?.subjectEntityId ?? null;
+  }
+  if (institutionId == null) return { institution: null, staffRelations: [] };
+  const institution =
+    props.dataset.entities.find((item) => item.id === institutionId) ?? null;
+  return {
+    institution,
+    staffRelations: staffRelations.filter(
+      (relation) => relation.subjectEntityId === institutionId
+    ),
+  };
+});
+
+function yearPercent(year) {
+  const clamped = Math.max(960, Math.min(1279, year));
+  return `${((clamped - 960) / (1279 - 960)) * 100}%`;
+}
+
+const comparisonRows = computed(() => {
+  const institution = comparisonContext.value.institution;
+  if (!institution) return [];
+  const relationByOffice = new Map();
+  for (const relation of comparisonContext.value.staffRelations) {
+    const existing = relationByOffice.get(relation.objectEntityId);
+    if (!existing || (existing.staffQuota == null && relation.staffQuota != null)) {
+      relationByOffice.set(relation.objectEntityId, relation);
+    }
+  }
+  const items = [
+    { entity: institution, quota: null, staffType: null },
+    ...[...relationByOffice.entries()]
+      .map(([officeId, relation]) => {
+        const office = props.dataset.entities.find((item) => item.id === officeId);
+        return office
+          ? {
+              entity: office,
+              quota: relation.staffQuota,
+              staffType: relation.staffType,
+            }
+          : null;
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          Number(b.entity.id === props.entityId) - Number(a.entity.id === props.entityId) ||
+          a.entity.title.localeCompare(b.entity.title, "zh")
+      ),
+  ];
+
+  return items.map((item) => {
+    const datedEvents = props.dataset.events
+      .filter(
+        (event) =>
+          event.entityId === item.entity.id &&
+          event.yearStart != null &&
+          event.yearStart <= 1279 &&
+          (event.yearEnd ?? event.yearStart) >= 960
+      )
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
+    const spanStart = datedEvents.length
+      ? Math.min(...datedEvents.map((event) => Math.max(960, event.yearStart)))
+      : null;
+    const spanEnd = datedEvents.length
+      ? Math.max(
+          ...datedEvents.map((event) =>
+            Math.min(1279, event.yearEnd ?? event.yearStart)
+          )
+        )
+      : null;
+    const left = spanStart == null ? null : Number.parseFloat(yearPercent(spanStart));
+    const right = spanEnd == null ? null : Number.parseFloat(yearPercent(spanEnd));
+    return {
+      ...item,
+      datedEvents,
+      spanStyle:
+        left == null || right == null
+          ? null
+          : {
+              left: `${left}%`,
+              width: `${Math.max(0.45, right - left)}%`,
+            },
+    };
+  });
+});
+
+const comparisonAvailable = computed(() => comparisonRows.value.length > 1);
+const comparisonContextTitle = computed(() =>
+  comparisonContext.value.institution
+    ? `${comparisonContext.value.institution.title}及其编制官职`
+    : "当前对象没有可比较的编制官职"
+);
+const comparisonEventCount = computed(() =>
+  comparisonRows.value.reduce((sum, row) => sum + row.datedEvents.length, 0)
+);
+const comparisonRangeEventCount = computed(() =>
+  comparisonRows.value.reduce(
+    (sum, row) => sum + row.datedEvents.filter(eventOverlapsRange).length,
+    0
+  )
+);
+const comparisonTicks = computed(() =>
+  [960, 1000, 1040, 1080, 1120, 1127, 1160, 1200, 1240, 1279]
+);
+const rangeBandStyle = computed(() => {
+  if (!props.range) return null;
+  const left = Number.parseFloat(yearPercent(props.range[0]));
+  const right = Number.parseFloat(yearPercent(props.range[1]));
+  return {
+    left: `${left}%`,
+    width: `${Math.max(0.35, right - left)}%`,
+  };
+});
 
 // 行序列：事件行 + 「隔 N 年」压缩行 + 1127 分隔行
 const rows = computed(() => {
@@ -317,8 +551,10 @@ watch(
   () => props.entityId,
   () => {
     stopPlay();
+    timelineMode.value = comparisonAvailable.value ? "comparison" : "single";
     scrollRef.value?.scrollTo({ top: 0 });
-  }
+  },
+  { immediate: true }
 );
 
 // 选中原本未命中的实体后，它会随新时间段提升到列表首位，并让列表回到该实体位置。
@@ -610,12 +846,244 @@ onBeforeUnmount(() => {
   }
 }
 
+.timeline-mode-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+
+  button {
+    border: 0;
+    border-right: 1px solid var(--line-light);
+    padding: 3px 7px;
+    color: rgba(90, 58, 32, 0.62);
+    background: transparent;
+    font-family: "FZQINGKBYSJF", serif;
+    font-size: 9px;
+    cursor: pointer;
+
+    &:last-child {
+      border-right: 0;
+    }
+
+    &.active {
+      color: var(--paper);
+      background: var(--ink-soft);
+    }
+  }
+}
+
 .timeline-scroll {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0 60px;
   scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
+}
+
+// —— 关联实体对齐比较 ——
+.comparison-chart {
+  min-width: 680px;
+  padding: 4px 12px 50px 4px;
+}
+
+.comparison-note {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line-light);
+  padding: 5px 4px 7px;
+  color: var(--ink);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 11px;
+
+  small {
+    color: rgba(90, 58, 32, 0.52);
+    font-size: 8px;
+  }
+}
+
+.comparison-axis,
+.comparison-row {
+  display: grid;
+  grid-template-columns: 165px minmax(480px, 1fr);
+  align-items: stretch;
+}
+
+.comparison-axis {
+  position: sticky;
+  z-index: 4;
+  top: -4px;
+  height: 36px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(244, 241, 234, 0.97);
+}
+
+.comparison-label-head {
+  display: flex;
+  align-items: end;
+  padding: 0 8px 6px;
+  color: rgba(90, 58, 32, 0.56);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.comparison-track {
+  position: relative;
+  min-width: 0;
+  border-left: 1px solid var(--line-light);
+}
+
+.axis-track i {
+  position: absolute;
+  bottom: 5px;
+  transform: translateX(-50%);
+  color: rgba(90, 58, 32, 0.58);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.comparison-row {
+  min-height: 35px;
+  border-bottom: 1px solid rgba(114, 74, 43, 0.12);
+
+  &.institution {
+    background: rgba(106, 74, 42, 0.06);
+  }
+
+  &.current {
+    box-shadow: inset 3px 0 0 var(--rust);
+  }
+}
+
+.comparison-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 0;
+  padding: 5px 8px;
+  color: var(--ink);
+  background: transparent;
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--wash);
+  }
+
+  i {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border: 1px solid var(--ink-soft);
+    border-radius: 1px;
+    background: rgba(106, 74, 42, 0.14);
+
+    &.office {
+      border-radius: 50%;
+      background: var(--paper);
+    }
+  }
+
+  span {
+    overflow: hidden;
+    flex: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  small {
+    flex: 0 0 auto;
+    color: rgba(90, 58, 32, 0.55);
+    font-size: 8px;
+  }
+}
+
+.comparison-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(114, 74, 43, 0.1);
+}
+
+.comparison-selected-range {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: rgba(157, 83, 52, 0.08);
+}
+
+.comparison-known-span {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  height: 3px;
+  min-width: 3px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: rgba(90, 58, 32, 0.38);
+}
+
+.comparison-event {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--paper);
+  cursor: pointer;
+
+  &:hover,
+  &.selected {
+    z-index: 3;
+    box-shadow: 0 0 0 4px rgba(157, 83, 52, 0.2);
+  }
+
+  &.in-range {
+    border-color: var(--rust);
+  }
+
+  &.event-established,
+  &.event-restored {
+    background: var(--ink-soft);
+  }
+
+  &.event-abolished {
+    border-radius: 0;
+    background: var(--rust);
+    transform: translate(-50%, -50%) rotate(45deg) scale(0.76);
+  }
+
+  &.event-renamed,
+  &.event-merged {
+    border-radius: 1px;
+  }
+
+  &.event-recorded {
+    width: 6px;
+    height: 6px;
+    border-color: rgba(90, 58, 32, 0.58);
+  }
+}
+
+.comparison-undated-only {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  color: rgba(90, 58, 32, 0.42);
+  font-size: 8px;
 }
 
 // —— 纵向年表 ——
