@@ -58,21 +58,25 @@
             :class="{ active: timelineMode === 'comparison' }"
             @click="timelineMode = 'comparison'"
           >
-            关联比较
+            相关官职对比
           </button>
           <button
             type="button"
             :class="{ active: timelineMode === 'single' }"
             @click="timelineMode = 'single'"
           >
-            单体纪事
+            当前对象详情
           </button>
         </div>
-        <span class="head-legend" aria-hidden="true">
-          <span><i class="legend-marker mk-established"></i>设置/恢复</span>
+        <span
+          class="head-legend"
+          title="事件类型目前根据事件文字中的关键词自动归类，仅用于辅助阅读，点击标记可查看原句核验。"
+        >
+          <strong>事件标记<em>自动归类</em></strong>
+          <span><i class="legend-marker mk-established"></i>设置或恢复</span>
           <span><i class="legend-marker mk-abolished"></i>罢废</span>
-          <span><i class="legend-marker mk-renamed"></i>改称/合并</span>
-          <span><i class="legend-marker mk-recorded"></i>记载</span>
+          <span><i class="legend-marker mk-renamed"></i>改名或合并</span>
+          <span><i class="legend-marker mk-recorded"></i>一般记载</span>
         </span>
         <button
           v-if="timelineMode === 'single'"
@@ -816,6 +820,22 @@ onBeforeUnmount(() => {
     font-family: "FZQINGKBYSJF", serif;
     font-size: 10px;
     white-space: nowrap;
+
+    > strong {
+      display: inline-flex;
+      flex-direction: column;
+      color: var(--ink-soft);
+      font-size: 9px;
+      font-weight: 400;
+      line-height: 1.05;
+
+      em {
+        color: var(--rust);
+        font-size: 7px;
+        font-style: normal;
+        letter-spacing: 0.04em;
+      }
+    }
 
     span {
       display: inline-flex;
