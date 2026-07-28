@@ -1259,9 +1259,9 @@ button {
 /* 层级实体详情停靠在画布右侧，保持画布和左侧可折叠实体目录互不遮挡。 */
 .detail-panel.hierarchy-detail-panel {
   flex: 0 0 auto;
-  width: min(230px, 19vw);
+  width: clamp(190px, 16vw, 220px);
   border-left: 1px solid var(--ink-soft);
-  padding: 12px 12px 20px;
+  padding: 10px 9px 18px;
   background-image: url("./assets/images/background.png");
 }
 

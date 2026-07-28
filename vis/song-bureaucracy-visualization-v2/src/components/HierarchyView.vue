@@ -1411,13 +1411,13 @@ defineExpose({ focusEntity });
 .semantic-relations {
   z-index: 4;
   display: flex;
-  width: 292px;
-  flex: 0 0 292px;
+  width: clamp(190px, 16vw, 220px);
+  flex: 0 0 clamp(190px, 16vw, 220px);
   flex-direction: column;
   gap: 9px;
   overflow-y: auto;
   border-left: 1px solid rgba(90, 58, 32, 0.28);
-  padding: 10px;
+  padding: 9px 7px;
   background: rgba(244, 241, 234, 0.74);
 
   > header {
