@@ -1677,6 +1677,51 @@ def main():
         print("  [OCR与字段修复] p278-279：恢复太史局学生‘吏名’、"
               "太史官生简称字段、天文院首字及草泽造历条跨栏中文括号")
 
+        calendar_copyist_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "楷书" and str(meta.get("page")) == "279"
+        ]
+        assert len(calendar_copyist_matches) == 1
+        calendar_copyist, _ = calendar_copyist_matches[0]
+        assert "誉抄历书" in calendar_copyist["text"]
+        calendar_copyist["text"] = calendar_copyist["text"].replace(
+            "誉抄历书", "誊抄历书",
+        )
+        history_institute_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "国史院" and str(meta.get("page")) == "280"
+        ]
+        assert len(history_institute_matches) == 1
+        history_institute, _ = history_institute_matches[0]
+        assert "《挥塵后录》" in history_institute["职掌"]
+        history_institute["职掌"] = history_institute["职掌"].replace(
+            "《挥塵后录》", "《挥麈后录》",
+        )
+
+        acting_history, _ = by_name["权提举国史院"]
+        continuation_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "国史院" and str(meta.get("page")) == "281"
+            and meta.get("status") == "not_in_catalog"
+        ]
+        assert len(continuation_matches) == 1
+        continuation, continuation_meta = continuation_matches[0]
+        assert acting_history["text"].endswith("由参知政事兼领")
+        assert continuation["text"].startswith("者，带“权”字。")
+        acting_history["text"] += continuation["text"]
+        acting_history["简称"] = continuation["简称"]
+        continuation.clear()
+        continuation.update({
+            "name": "国史院", "text": "", "_placeholder": True,
+        })
+        continuation_meta["status"] = "placeholder"
+        continuation_meta.pop("not_in_catalog", None)
+        print("  [跨栏与OCR修复] p279-281：恢复楷书‘誊抄’、"
+              "《挥麈后录》，并将国史院伪条目续文并回权提举国史院")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
