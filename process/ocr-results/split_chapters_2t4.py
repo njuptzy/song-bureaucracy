@@ -1342,6 +1342,61 @@ def main():
         print("  [跨页归位] '虞部司郎中'(p257-258)：页首‘主簿凡十一迁’为简称"
               "引文续文，接回本条；伪条目‘主簿’改为空占位以稳定后续词条ID")
 
+        library_director_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "秘书省监" and str(meta.get("page")) == "261"
+        ]
+        bogus_book_office_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "书省" and str(meta.get("page")) == "262"
+            and meta.get("status") == "from_surname"
+        ]
+        assert len(library_director_matches) == 1
+        assert len(bogus_book_office_matches) == 1
+        library_director, _ = library_director_matches[0]
+        bogus_book_office, bogus_book_office_meta = bogus_book_office_matches[0]
+        assert library_director["简称与别名"].endswith("：“（秘")
+        assert bogus_book_office["text"].startswith(")监淳熙以后三人")
+        library_director["简称与别名"] += (
+            bogus_book_office["name"] + bogus_book_office["text"]
+        )
+        library_director["简称与别名"] = library_director["简称与别名"].replace(
+            "（秘书省)监淳熙", "（秘书省）监淳熙",
+        )
+        bogus_book_office.clear()
+        bogus_book_office.update({"name": "书省", "text": "", "_placeholder": True})
+        bogus_book_office_meta["status"] = "placeholder"
+        print("  [跨页归位] '秘书省监'(p261-262)：页首‘书省）监淳熙以后’为"
+              "简称引文续文，接回本条；伪条目‘书省’改为空占位")
+
+        history_overseer_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "提纲史事" and str(meta.get("page")) == "262"
+        ]
+        bogus_secretariat_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "秘书省" and str(meta.get("page")) == "262"
+            and meta.get("status") == "not_in_catalog"
+        ]
+        assert len(history_overseer_matches) == 1
+        assert len(bogus_secretariat_matches) == 1
+        history_overseer, _ = history_overseer_matches[0]
+        bogus_secretariat, bogus_secretariat_meta = bogus_secretariat_matches[0]
+        assert history_overseer["text"].endswith("的提举")
+        assert bogus_secretariat["text"] == "官兼，提领本朝修史事（《馆阁续录》卷7）。"
+        history_overseer["text"] += (
+            bogus_secretariat["name"] + bogus_secretariat["text"]
+        )
+        bogus_secretariat.clear()
+        bogus_secretariat.update({"name": "秘书省", "text": "", "_placeholder": True})
+        bogus_secretariat_meta["status"] = "placeholder"
+        print("  [跨栏归位] '提纲史事'(p262)：将误切成伪条目‘秘书省’的标题尾"
+              "与正文接回本条，伪条目改为空占位以稳定后续词条ID")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
