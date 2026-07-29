@@ -1439,6 +1439,52 @@ def main():
         print("  [字段归位] '秘书省都监'(p265)：独立标题、正文及简称被前条"
               "‘秘书省都监司’的简称字段吞入；据原书拆回目录占位并保持ID")
 
+        fire_room, _ = by_name["潜火司"]
+        fire_soldier_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "潜火" and entry.get("_placeholder") is True
+            and str(meta.get("page")) == "军兵"
+        ]
+        assert len(fire_soldier_matches) == 1
+        fire_soldier, fire_soldier_meta = fire_soldier_matches[0]
+        embedded_fire_title = "潜火军兵 救火士兵，"
+        assert embedded_fire_title in fire_room["text"]
+        room_text, soldier_tail = fire_room["text"].split(
+            embedded_fire_title, 1
+        )
+        fire_room["text"] = room_text.rstrip()
+        fire_soldier.clear()
+        fire_soldier.update({
+            "name": "潜火军兵",
+            "text": "救火士兵，" + soldier_tail,
+        })
+        fire_soldier_meta["name"] = "潜火军兵"
+        fire_soldier_meta["page"] = "267"
+        fire_soldier_meta["body_page"] = "267"
+        fire_soldier_meta["status"] = "ok"
+        print("  [标题归位] '潜火军兵'(p267)：目录把标题两字误作词名、后两字"
+              "误作页码，正文又被‘潜火司’前缀吞入；据原书拆回并保持ID")
+
+        astronomy_office_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "司天监官" and str(meta.get("page")) == "268"
+            and meta.get("status") == "fuzzy"
+        ]
+        assert len(astronomy_office_matches) == 1
+        astronomy_office, astronomy_office_meta = astronomy_office_matches[0]
+        assert astronomy_office["text"] == "司名。隶京百司、提举所"
+        assert astronomy_office.get("_catalog_name") == "司天监"
+        astronomy_office["name"] = "司天监"
+        astronomy_office["text"] = "官司名。隶京百司、提举所。"
+        astronomy_office.pop("_catalog_name", None)
+        astronomy_office_meta["name"] = "司天监"
+        astronomy_office_meta["status"] = "ok"
+        astronomy_office_meta.pop("catalog_name", None)
+        print("  [标题归位] '司天监'(p268)：正文标题尾‘官’被吞入定义首字，"
+              "恢复原书标题及‘官司名’完整定义")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
