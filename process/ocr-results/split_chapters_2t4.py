@@ -1608,6 +1608,43 @@ def main():
         print("  [字段修复] p275-276：核原书恢复太史局丞出处"
               "‘职源撮要’，并将太史局挈壶正‘掌知漏刻’从沿革拆回职掌")
 
+        calendar_branch, _ = by_name["太史局历算科"]
+        calendar_dispatch, calendar_dispatch_meta = by_name["太史局历算"]
+        assert calendar_dispatch.get("_placeholder") is True
+        calendar_dispatch_marker = "太史局历算 差遣名。"
+        assert calendar_dispatch_marker in calendar_branch["text"]
+        branch_text, dispatch_text = calendar_branch["text"].split(
+            calendar_dispatch_marker, 1
+        )
+        calendar_branch["text"] = branch_text.rstrip()
+        calendar_dispatch.clear()
+        calendar_dispatch.update({
+            "name": "太史局历算",
+            "text": "差遣名。" + dispatch_text,
+            "简称": calendar_branch.pop("简称"),
+        })
+        calendar_dispatch_meta["status"] = "ok"
+        print("  [嵌入拆分] p277：将被‘太史局历算科’吞入的"
+              "‘太史局历算’正文与简称拆回独立目录条目")
+
+        astronomy_court, _ = by_name["太史局天文院"]
+        evening_report, evening_report_meta = by_name["酉点天文日状官"]
+        assert evening_report.get("_placeholder") is True
+        evening_report_marker = "西点天文日状官 差遣名。"
+        assert evening_report_marker in astronomy_court["简称"]
+        court_alias, evening_report_text = astronomy_court["简称"].split(
+            evening_report_marker, 1
+        )
+        astronomy_court["简称"] = court_alias.rstrip()
+        evening_report.clear()
+        evening_report.update({
+            "name": "酉点天文日状官",
+            "text": "差遣名。" + evening_report_text,
+        })
+        evening_report_meta["status"] = "ok"
+        print("  [嵌入拆分] p277：核原书将误识为‘西点’且吞入天文院"
+              "简称字段的‘酉点天文日状官’恢复为独立词条")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
