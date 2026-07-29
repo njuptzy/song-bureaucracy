@@ -1318,6 +1318,30 @@ def main():
         print("  [字段归位] '比部司、比部司郎中'(p251-252)：补元祐三年引文闭引号，"
               "并将误粘入官品的简称与别名拆回独立字段")
 
+        yu_office_clerk_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "虞部司郎中" and str(meta.get("page")) == "257"
+        ]
+        bogus_registry_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "主簿" and str(meta.get("page")) == "258"
+            and meta.get("status") == "from_surname"
+        ]
+        assert len(yu_office_clerk_matches) == 1
+        assert len(bogus_registry_matches) == 1
+        yu_office_clerk, _ = yu_office_clerk_matches[0]
+        bogus_registry, bogus_registry_meta = bogus_registry_matches[0]
+        assert yu_office_clerk["简称"].endswith("“自")
+        assert bogus_registry["text"] == "凡十一迁，其官至尚书虞部郎中。”"
+        yu_office_clerk["简称"] += bogus_registry["name"] + bogus_registry["text"]
+        bogus_registry.clear()
+        bogus_registry.update({"name": "主簿", "text": "", "_placeholder": True})
+        bogus_registry_meta["status"] = "placeholder"
+        print("  [跨页归位] '虞部司郎中'(p257-258)：页首‘主簿凡十一迁’为简称"
+              "引文续文，接回本条；伪条目‘主簿’改为空占位以稳定后续词条ID")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
