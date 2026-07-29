@@ -1485,6 +1485,67 @@ def main():
         print("  [标题归位] '司天监'(p268)：正文标题尾‘官’被吞入定义首字，"
               "恢复原书标题及‘官司名’完整定义")
 
+        monitor_student, _ = by_name["司天监监生"]
+        bogus_calendar_study_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "历算" and str(meta.get("page")) == "272"
+            and meta.get("status") == "from_surname"
+        ]
+        assert len(bogus_calendar_study_matches) == 1
+        bogus_calendar_study, bogus_calendar_study_meta = (
+            bogus_calendar_study_matches[0]
+        )
+        assert monitor_student["text"].endswith("监生须精熟")
+        assert bogus_calendar_study["text"].startswith("学，月终有俸钱")
+        monitor_student["text"] += (
+            bogus_calendar_study["name"] + bogus_calendar_study["text"]
+        )
+        monitor_student["简称"] = bogus_calendar_study["简称"]
+        bogus_calendar_study.clear()
+        bogus_calendar_study.update({
+            "name": "历算", "text": "", "_placeholder": True,
+        })
+        bogus_calendar_study_meta["status"] = "placeholder"
+        print("  [跨页归位] '司天监监生'(p271-272)：页首‘历算学’为上页"
+              "‘监生须精熟’续文，并连同简称接回；伪条目‘历算’改为空占位")
+
+        calendar_clerk, _ = by_name["司天监历算科主簿"]
+        calendar_official, calendar_official_meta = by_name["司天监历算"]
+        assert calendar_official.get("_placeholder") is True
+        embedded_calendar_title = "司天监历算 技术官。"
+        assert embedded_calendar_title in calendar_clerk["text"]
+        clerk_text, official_text = calendar_clerk["text"].split(
+            embedded_calendar_title, 1
+        )
+        calendar_clerk["text"] = clerk_text.rstrip().replace(
+            "隶司天监司天监官充。", "隶司天监。司天监官充。",
+        )
+        calendar_assistant, _ = by_name["司天监历算科丞"]
+        assert "隶司天监司天监官充。" in calendar_assistant["text"]
+        calendar_assistant["text"] = calendar_assistant["text"].replace(
+            "隶司天监司天监官充。", "隶司天监。司天监官充。",
+        )
+        calendar_official.clear()
+        calendar_official.update({
+            "name": "司天监历算",
+            "text": "技术官。" + official_text,
+            "简称": calendar_clerk.pop("简称"),
+        })
+        calendar_official_meta["status"] = "ok"
+        print("  [嵌入拆分] '司天监历算'(p272)：独立标题、正文和简称被"
+              "‘司天监历算科主簿’吞入，拆回目录占位并补历算科丞、主簿"
+              "正文句号")
+
+        for science_title in (
+            "司天监历算科", "司天监天文科", "司天监三式科",
+        ):
+            science_entry, _ = by_name[science_title]
+            assert science_entry["text"].startswith("窟名。")
+            science_entry["text"] = "窠名。" + science_entry["text"][3:]
+        print("  [OCR字误] p272：核原书将历算科、天文科、三式科定义首词"
+              "‘窟名’恢复为‘窠名’")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
