@@ -248,6 +248,14 @@ PROFILES = {
              "reason": "目录把正文差遣名‘同详定一司敕令’误识为‘同评定一司敕令’"},
             {"from": "提领三椎货务都茶场所", "to": "提领三榷货务都茶场所", "page": "205",
              "reason": "目录把官署名中的‘榷’误识为‘椎’，正文独立标题作‘提领三榷货务都茶场所’"},
+            {"from": "主管尚书省制造宣告局", "to": "主管尚书省制造官告局", "page": "224",
+             "reason": "核对原书p224，目录把‘官告局’误识为‘宣告局’"},
+            {"from": "宣告院", "to": "官告院", "page": "224",
+             "reason": "核对原书p224，目录把独立词条‘官告院’误识为‘宣告院’"},
+            {"from": "宣告院绫纸库", "to": "官告院绫纸库", "page": "224",
+             "reason": "核对原书p224，目录把‘官告院绫纸库’误识为‘宣告院绫纸库’"},
+            {"from": "主管宣告院", "to": "主管官告院", "page": "224",
+             "reason": "核对原书p224，目录把‘主管官告院’误识为‘主管宣告院’"},
             {"from": "尚书省讲议司", "to": "尚书省", "canonical": "尚书省讲议司", "page": "208",
              "reason": "正文标题被前条库子吞入，仅余简称引文续句以‘尚书省’开头；"
                        "先按被误切形态匹配，拆回正文后恢复目录正式名"},
@@ -1113,6 +1121,53 @@ def main():
 
     if PROFILE_NAME == "2t4":
         by_name = {e["name"]: (e, m) for e, m in zip(all_entries, all_meta)}
+
+        manufacturing_manager, manufacturing_manager_meta = by_name[
+            "主管尚书省制造官告局"
+        ]
+        bogus_notice_alias, bogus_notice_alias_meta = by_name["宣告局"]
+        assert manufacturing_manager["text"] == "差遣官名。"
+        assert bogus_notice_alias.get("_from_surname") is True
+        assert bogus_notice_alias["text"].startswith("主管官，由")
+        manufacturing_manager["text"] += "官告局" + bogus_notice_alias["text"]
+        for key, value in list(bogus_notice_alias.items()):
+            if key in ("name", "text", "_from_surname"):
+                continue
+            manufacturing_manager[key] = value
+        bogus_notice_alias.clear()
+        bogus_notice_alias.update({"name": "官告局", "text": "", "_placeholder": True})
+        bogus_notice_alias_meta["name"] = "官告局"
+        bogus_notice_alias_meta["status"] = "placeholder"
+        for key in ("h1", "h2", "h3"):
+            bogus_notice_alias_meta[key] = manufacturing_manager_meta.get(key)
+        print("  [跨栏归位] '主管尚书省制造官告局'(p224)：主管官正文从误切别称条"
+              "‘宣告局’接回，并将纯别称恢复为‘官告局’空占位")
+
+        notice_office, notice_office_meta = by_name["官告院"]
+        paper_store, paper_store_meta = by_name["官告院绫纸库"]
+        notice_manager, _ = by_name["主管官告院"]
+        assert notice_office["text"].startswith("官署名。")
+        assert notice_manager["text"].startswith("差遣官员。")
+
+        store_title = "告院绫纸库 官告院附属机构名。"
+        assert store_title in notice_office["别名"]
+        office_aliases, _ = notice_office["别名"].split(store_title, 1)
+        notice_office["别名"] = office_aliases.rstrip()
+        paper_store["text"] = "官告院附属机构名。"
+        paper_store["职能"] = notice_office.pop("职能")
+
+        store_staff_marker = "隶属机构：官告院绫纸库。"
+        assert store_staff_marker in notice_office["编制"]
+        office_staff, subordinate_staff = notice_office["编制"].split(
+            store_staff_marker, 1
+        )
+        notice_office["编制"] = office_staff.rstrip() + store_staff_marker
+        paper_store["编制"] = subordinate_staff.rstrip()
+        paper_store.pop("_placeholder", None)
+        paper_store_meta["status"] = "ok"
+        print("  [跨栏归位] '官告院绫纸库'(p224)：标题OCR漏首字‘官’，"
+              "从‘官告院’别名及编制字段拆回独立附属机构，保持词条ID")
+
         power, _ = by_name["权领枢密院事"]
         broken = power["text"]
         marker = "源与沿革"
