@@ -1645,6 +1645,38 @@ def main():
         print("  [嵌入拆分] p277：核原书将误识为‘西点’且吞入天文院"
               "简称字段的‘酉点天文日状官’恢复为独立词条")
 
+        taishi_student, _ = by_name["学生"]
+        assert str(_["page"]) == "278"
+        assert taishi_student["text"].startswith("更名。")
+        taishi_student["text"] = "吏名。" + taishi_student["text"][3:]
+
+        bureau_people, _ = by_name["太史局官生学生"]
+        embedded_alias = " 简称太史官生。"
+        assert embedded_alias in bureau_people["text"]
+        people_text, people_alias = bureau_people["text"].split(
+            embedded_alias, 1
+        )
+        bureau_people["text"] = people_text.replace(
+            "礼生、 历生", "礼生、历生",
+        ).rstrip()
+        bureau_people["简称"] = (
+            "太史官生。" + people_alias
+        ).replace("浑仪 之法", "浑仪之法")
+
+        observatory_students, _ = by_name["天文院司辰额内瞻望局学生"]
+        assert observatory_students["text"].startswith("文院所属")
+        observatory_students["text"] = (
+            "天" + observatory_students["text"]
+        )
+
+        commoner_calendarist, _ = by_name["草泽应聘造历人"]
+        assert commoner_calendarist["text"].endswith(
+            "（《宋会要·运历》1之13)。"
+        )
+        commoner_calendarist["text"] = commoner_calendarist["text"][:-2] + "）。"
+        print("  [OCR与字段修复] p278-279：恢复太史局学生‘吏名’、"
+              "太史官生简称字段、天文院首字及草泽造历条跨栏中文括号")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
