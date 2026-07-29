@@ -1591,6 +1591,23 @@ def main():
         print("  [嵌入拆分] p274：将被‘提举太史局所’吞入的"
               "‘提举太史局’正文与简称拆回独立目录条目")
 
+        taishi_cheng, _ = by_name["太史局丞"]
+        assert "《职源摄要》" in taishi_cheng["品位"]
+        taishi_cheng["品位"] = taishi_cheng["品位"].replace(
+            "《职源摄要》", "《职源撮要》",
+        )
+        qiehu, _ = by_name["太史局挈壶正"]
+        broken_qiehu_history = qiehu["职源与沿革"]
+        duty_marker = "掌 掌知漏刻"
+        assert duty_marker in broken_qiehu_history
+        qiehu_history, qiehu_duty = broken_qiehu_history.split(
+            duty_marker, 1
+        )
+        qiehu["职源与沿革"] = qiehu_history.rstrip()
+        qiehu["职掌"] = "掌知漏刻" + qiehu_duty
+        print("  [字段修复] p275-276：核原书恢复太史局丞出处"
+              "‘职源撮要’，并将太史局挈壶正‘掌知漏刻’从沿革拆回职掌")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
