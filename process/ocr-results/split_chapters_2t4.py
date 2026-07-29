@@ -1546,6 +1546,51 @@ def main():
         print("  [OCR字误] p272：核原书将历算科、天文科、三式科定义首词"
               "‘窟名’恢复为‘窠名’")
 
+        taiyi, _ = by_name["司天监三式科太乙"]
+        dunjia_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "司天监三式科通甲"
+            and str(meta.get("page")) == "273"
+            and meta.get("status") == "placeholder"
+        ]
+        assert len(dunjia_matches) == 1
+        dunjia, dunjia_meta = dunjia_matches[0]
+        embedded_dunjia_title = "司天监三式科循甲 技术官。"
+        assert embedded_dunjia_title in taiyi["text"]
+        taiyi_text, dunjia_text = taiyi["text"].split(
+            embedded_dunjia_title, 1
+        )
+        taiyi["text"] = taiyi_text.rstrip()
+        dunjia.clear()
+        dunjia.update({
+            "name": "司天监三式科遁甲",
+            "text": "技术官。" + dunjia_text,
+        })
+        dunjia_meta["name"] = "司天监三式科遁甲"
+        dunjia_meta["status"] = "ok"
+        print("  [嵌入拆分] p273：核原书将误识并吞入太乙条的"
+              "‘司天监三式科遁甲’拆回目录占位，恢复独立词条")
+
+        astronomy_proposal_office, _ = by_name["提举太史局所"]
+        astronomy_proposal, astronomy_proposal_meta = by_name["提举太史局"]
+        assert astronomy_proposal.get("_placeholder") is True
+        embedded_proposal_title = "提举太史局 差遣名。"
+        assert embedded_proposal_title in astronomy_proposal_office["text"]
+        office_text, proposal_text = astronomy_proposal_office["text"].split(
+            embedded_proposal_title, 1
+        )
+        astronomy_proposal_office["text"] = office_text.rstrip()
+        astronomy_proposal.clear()
+        astronomy_proposal.update({
+            "name": "提举太史局",
+            "text": "差遣名。" + proposal_text,
+            "简称": astronomy_proposal_office.pop("简称"),
+        })
+        astronomy_proposal_meta["status"] = "ok"
+        print("  [嵌入拆分] p274：将被‘提举太史局所’吞入的"
+              "‘提举太史局’正文与简称拆回独立目录条目")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
