@@ -1214,6 +1214,110 @@ def main():
         print("  [跨页归位] '主客司员外郎'(p238-239)：将‘员郎官’续文及简称字段"
               "并回本条，伪条目‘员郎’改为空占位以稳定后续词条ID")
 
+        capital_judge_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "都官司郎中" and str(meta.get("page")) == "250"
+        ]
+        bogus_shangshu_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "尚书" and str(meta.get("page")) == "251"
+            and meta.get("status") == "from_surname"
+        ]
+        capital_outside_placeholder_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "都官员外郎" and str(meta.get("page")) == "251"
+            and entry.get("_placeholder") is True
+        ]
+        bogus_capital_office_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "都官司" and str(meta.get("page")) == "251"
+            and meta.get("status") == "not_in_catalog"
+        ]
+        assert len(capital_judge_matches) == 1
+        assert len(bogus_shangshu_matches) == 1
+        assert len(capital_outside_placeholder_matches) == 1
+        assert len(bogus_capital_office_matches) == 1
+        capital_judge, _ = capital_judge_matches[0]
+        bogus_shangshu, bogus_shangshu_meta = bogus_shangshu_matches[0]
+        capital_outside, capital_outside_meta = capital_outside_placeholder_matches[0]
+        bogus_capital_office, bogus_capital_office_meta = bogus_capital_office_matches[0]
+
+        assert capital_judge["职源"].endswith("（《六典》卷6《刑部")
+        assert bogus_shangshu["text"] == "·都官郎中》）。"
+        capital_judge["职源"] += bogus_shangshu["name"] + bogus_shangshu["text"]
+        for key in ("职掌", "官品", "简称"):
+            capital_judge[key] = bogus_shangshu[key]
+        bogus_shangshu.clear()
+        bogus_shangshu.update({"name": "尚书", "text": "", "_placeholder": True})
+        bogus_shangshu_meta["status"] = "placeholder"
+
+        assert bogus_capital_office["text"] == "员外郎阶官名、职事官名。"
+        capital_outside.clear()
+        capital_outside.update({
+            "name": "都官司员外郎",
+            "text": "阶官名、职事官名。",
+        })
+        for key in ("职源", "职掌", "官品", "简称与别名"):
+            capital_outside[key] = bogus_capital_office[key]
+        capital_outside_meta["name"] = "都官司员外郎"
+        capital_outside_meta["status"] = "ok"
+        bogus_capital_office.clear()
+        bogus_capital_office.update({"name": "都官司", "text": "", "_placeholder": True})
+        bogus_capital_office_meta["status"] = "placeholder"
+        print("  [跨页归位] '都官司郎中、员外郎'(p250-251)：将页首‘尚书’续文及"
+              "职掌、官品、简称接回郎中条，将误切‘都官司+员外郎’恢复到目录占位；"
+              "两个伪条目改为空占位以稳定后续词条ID")
+
+        work_case_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "工部工作案" and str(meta.get("page")) == "254"
+            and entry.get("_placeholder") is True
+        ]
+        bogus_work_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "工部" and str(meta.get("page")) == "254"
+            and meta.get("status") == "from_surname"
+        ]
+        assert len(work_case_matches) == 1
+        assert len(bogus_work_matches) == 1
+        work_case, work_case_meta = work_case_matches[0]
+        bogus_work, bogus_work_meta = bogus_work_matches[0]
+        assert bogus_work["text"].startswith("工作方案 元丰新制")
+        work_case["text"] = (
+            "元丰新制尚书省工部六案之一，为本部常设办事部门。"
+            "掌舟、车、器械、钱货等百工制作"
+            "（《宋史·职官志》3《工部尚书》及《分纪》卷11《工部尚书》）。"
+        )
+        work_case.pop("_placeholder", None)
+        work_case_meta["status"] = "ok"
+        bogus_work.clear()
+        bogus_work.update({"name": "工部", "text": "", "_placeholder": True})
+        bogus_work_meta["status"] = "placeholder"
+        print("  [跨栏归位] '工部工作案'(p254)：原书独立标题与正文被别称‘工部’"
+              "误切并多识一‘方’字；正文移回目录占位，伪条目改为空占位")
+
+        audit_office, _ = by_name["比部司"]
+        broken_audit_quote = "“勾覆、理欠、凭由案及印发钞引事归比部（《宋史"
+        assert broken_audit_quote in audit_office["职掌"]
+        audit_office["职掌"] = audit_office["职掌"].replace(
+            broken_audit_quote,
+            "“勾覆、理欠、凭由案及印发钞引事归比部”（《宋史",
+        )
+        audit_clerk, _ = by_name["比部司郎中"]
+        alias_marker = "简称与别名 ①"
+        assert alias_marker in audit_clerk["官品"]
+        audit_grade, audit_aliases = audit_clerk["官品"].split(alias_marker, 1)
+        audit_clerk["官品"] = audit_grade.rstrip()
+        audit_clerk["简称与别名"] = "①" + audit_aliases
+        print("  [字段归位] '比部司、比部司郎中'(p251-252)：补元祐三年引文闭引号，"
+              "并将误粘入官品的简称与别名拆回独立字段")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
