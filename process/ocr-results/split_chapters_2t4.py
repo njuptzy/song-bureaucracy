@@ -1197,6 +1197,40 @@ def main():
         print("  [OCR字误] '仓部司柴采案'(p232)：核原书恢复独立词头、正文‘柴采’"
               "及仓部司六案编制中的‘柴采’，保持词条ID")
 
+        guest_post, _ = by_name["主客司员外郎"]
+        bogus_yuanlang, bogus_yuanlang_meta = by_name["员郎"]
+        assert guest_post["编制"].endswith("只置一")
+        assert bogus_yuanlang.get("_from_surname") is True
+        assert bogus_yuanlang["text"] == "官（《宋会要·职官》13之7）。"
+        assert "简称" in bogus_yuanlang
+        guest_post["编制"] += bogus_yuanlang["name"] + bogus_yuanlang["text"]
+        guest_post["简称"] = bogus_yuanlang["简称"]
+        guest_post["职源"] = guest_post["职源"].replace(
+            "开皇六年《隋书", "开皇六年（《隋书",
+        )
+        bogus_yuanlang.clear()
+        bogus_yuanlang.update({"name": "员郎", "text": "", "_placeholder": True})
+        bogus_yuanlang_meta["status"] = "placeholder"
+        print("  [跨页归位] '主客司员外郎'(p238-239)：将‘员郎官’续文及简称字段"
+              "并回本条，伪条目‘员郎’改为空占位以稳定后续词条ID")
+
+        meal_case, _ = by_name["祠祭生料知杂案"]
+        assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
+        meal_case["text"] = meal_case["text"].replace(
+            "膿部司", "膳部司",
+        ).replace("飪饥", "饔饩")
+        banquet_case, _ = by_name["宴设馆客供进给赐案"]
+        wrong_banquet_citation = "（《宋会要·职官》）13之43）。"
+        assert wrong_banquet_citation in banquet_case["text"]
+        banquet_case["text"] = banquet_case["text"].replace(
+            wrong_banquet_citation, "（《宋会要·职官》13之43）。",
+        )
+        tribute_office, _ = by_name["礼部贡院"]
+        assert tribute_office["text"] == "官司名。隶尚书省礼部"
+        tribute_office["text"] += "。"
+        print("  [OCR字误] p239：核原书恢复‘膳部司’‘祠祭饔饩’，修正宴设案"
+              "出处括号并补礼部贡院正文句号")
+
         power, _ = by_name["权领枢密院事"]
         broken = power["text"]
         marker = "源与沿革"
