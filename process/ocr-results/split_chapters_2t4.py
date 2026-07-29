@@ -196,6 +196,13 @@ PROFILES = {
              "target_tail_with_name": True,
              "reason": "左藏封桩库库子与尚书省讲议司标题被OCR并在同一文本块；"
                        "讲议司全部字段误挂前条，下一页‘尚书省讲义武备房……’又是简称引文续句"},
+            {"source": "吏部尚书左选催驱案", "target": "吏部尚书左选甲库案",
+             "page": "215", "field": "text",
+             "marker": "吏部尚书左选用库案 ",
+             "target_after_marker": True,
+             "reason": "原书p215在催驱案后另起‘吏部尚书左选甲库案’，"
+                       "OCR把‘甲’误识为‘用’并将整条正文吞入催驱案；"
+                       "按原书标题拆回目录占位，正文原样取标记后的内容"},
         ],
         # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
         "catalog_renames": [
@@ -1075,7 +1082,10 @@ def main():
         target_tail = all_entries[target_i].get("text", "")
         if item.get("target_tail_with_name"):
             target_tail = all_entries[target_i]["name"] + target_tail
-        all_entries[target_i]["text"] = item.get("target_text", marker + after)
+        if item.get("target_after_marker"):
+            all_entries[target_i]["text"] = after
+        else:
+            all_entries[target_i]["text"] = item.get("target_text", marker + after)
         for key in item.get("move_fields", []):
             if key in all_entries[source_i]:
                 all_entries[target_i][key] = all_entries[source_i].pop(key)
