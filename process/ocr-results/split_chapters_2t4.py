@@ -1397,6 +1397,25 @@ def main():
         print("  [跨栏归位] '提纲史事'(p262)：将误切成伪条目‘秘书省’的标题尾"
               "与正文接回本条，伪条目改为空占位以稳定后续词条ID")
 
+        secretary_assistant_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "秘书" and str(meta.get("page")) == "262"
+            and meta.get("status") == "fuzzy"
+        ]
+        assert len(secretary_assistant_matches) == 1
+        secretary_assistant, secretary_assistant_meta = secretary_assistant_matches[0]
+        assert secretary_assistant["text"] == "丞宋前期阶官名，元丰改制后职事"
+        assert secretary_assistant.get("_catalog_name") == "秘书承"
+        secretary_assistant["name"] = "秘书丞"
+        secretary_assistant["text"] = "宋前期阶官名，元丰改制后职事官名。"
+        secretary_assistant.pop("_catalog_name", None)
+        secretary_assistant_meta["name"] = "秘书丞"
+        secretary_assistant_meta["status"] = "ok"
+        secretary_assistant_meta.pop("catalog_name", None)
+        print("  [标题归位] '秘书丞'(p262)：标题末字‘丞’被吞入正文，目录又误作"
+              "‘秘书承’；据原书恢复标题及定义句末‘官名。’")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
