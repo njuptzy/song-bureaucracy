@@ -1416,6 +1416,29 @@ def main():
         print("  [标题归位] '秘书丞'(p262)：标题末字‘丞’被吞入正文，目录又误作"
               "‘秘书承’；据原书恢复标题及定义句末‘官名。’")
 
+        secretariat_supervisor_office, _ = by_name["秘书省都监司"]
+        secretariat_supervisor, secretariat_supervisor_meta = by_name["秘书省都监"]
+        assert secretariat_supervisor.get("_placeholder") is True
+        embedded_title = "秘书省都监 差遣名。"
+        embedded_alias = "都监。《宋会要·职官》18之11《秘书省》"
+        source_aliases = secretariat_supervisor_office["简称"]
+        assert embedded_title in source_aliases
+        office_alias, supervisor_tail = source_aliases.split(embedded_title, 1)
+        assert embedded_alias in supervisor_tail
+        supervisor_body, supervisor_alias_tail = supervisor_tail.split(
+            embedded_alias, 1
+        )
+        secretariat_supervisor_office["简称"] = office_alias.rstrip()
+        secretariat_supervisor.clear()
+        secretariat_supervisor.update({
+            "name": "秘书省都监",
+            "text": "差遣名。" + supervisor_body.rstrip(),
+            "简称": embedded_alias + supervisor_alias_tail,
+        })
+        secretariat_supervisor_meta["status"] = "ok"
+        print("  [字段归位] '秘书省都监'(p265)：独立标题、正文及简称被前条"
+              "‘秘书省都监司’的简称字段吞入；据原书拆回目录占位并保持ID")
+
         meal_case, _ = by_name["祠祭生料知杂案"]
         assert "膿部司" in meal_case["text"] and "飪饥" in meal_case["text"]
         meal_case["text"] = meal_case["text"].replace(
