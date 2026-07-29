@@ -187,6 +187,15 @@ PROFILES = {
              "marker": "御营宿卫使 武官名。",
              "reason": "御营宿卫使标题、始置年月与职掌被前条使司的编制字段吞入；"
                        "目录另列该武官，正文从“武官名”起独立定义"},
+            {"source": "左藏封桩库库子", "target": "尚书省",
+             "page": "208", "field": "text",
+             "marker": "尚书省讲议司 临时官署名。",
+             "target_text": "临时官署名。",
+             "move_fields": ["职源", "职掌", "编制", "简称"],
+             "target_tail_field": "简称",
+             "target_tail_with_name": True,
+             "reason": "左藏封桩库库子与尚书省讲议司标题被OCR并在同一文本块；"
+                       "讲议司全部字段误挂前条，下一页‘尚书省讲义武备房……’又是简称引文续句"},
         ],
         # 目录本身的 OCR 错字。只改用于条目识别的标题，不改正文引文。
         "catalog_renames": [
@@ -218,6 +227,13 @@ PROFILES = {
              "reason": "目录把正文差遣名‘同详定一司敕令’误识为‘同评定一司敕令’"},
             {"from": "提领三椎货务都茶场所", "to": "提领三榷货务都茶场所", "page": "205",
              "reason": "目录把官署名中的‘榷’误识为‘椎’，正文独立标题作‘提领三榷货务都茶场所’"},
+            {"from": "尚书省讲议司", "to": "尚书省", "canonical": "尚书省讲议司", "page": "208",
+             "reason": "正文标题被前条库子吞入，仅余简称引文续句以‘尚书省’开头；"
+                       "先按被误切形态匹配，拆回正文后恢复目录正式名"},
+            {"from": "讲议司评定官", "to": "讲议司", "canonical": "讲议司详定官", "page": "208",
+             "strip_text_prefix": "详定官 ",
+             "reason": "目录把‘详定官’误识为‘评定官’，正文标题‘讲议司详定官’"
+                       "又只按较短前缀‘讲议司’切开；恢复正式官名并移除正文中的标题尾"},
             {"from": "评定一司敕令所删定官", "to": "详定一司敕令所删定官", "page": "107",
              "reason": "目录把正文差遣名中的‘详定’误识为‘评定’"},
             {"from": "评定一司敕令所承受", "to": "详定一司敕令所承受", "page": "107",
@@ -1043,15 +1059,29 @@ def main():
 
     for item in PROFILE.get("embedded_splits", []):
         source_i = next(i for i,e in enumerate(all_entries) if e["name"] == item["source"])
-        target_i = next(i for i,e in enumerate(all_entries) if e["name"] == item["target"])
+        target_i = next(
+            i
+            for i, e in enumerate(all_entries)
+            if e["name"] == item["target"]
+            and (
+                not item.get("page")
+                or str(all_meta[i].get("page")) == str(item["page"])
+            )
+        )
         value = all_entries[source_i].get(item["field"], "")
         assert item["marker"] in value, f"嵌入拆分标记不存在：{item['marker']}"
         before, marker, after = value.partition(item["marker"])
         all_entries[source_i][item["field"]] = before.rstrip()
-        all_entries[target_i]["text"] = marker + after
+        target_tail = all_entries[target_i].get("text", "")
+        if item.get("target_tail_with_name"):
+            target_tail = all_entries[target_i]["name"] + target_tail
+        all_entries[target_i]["text"] = item.get("target_text", marker + after)
         for key in item.get("move_fields", []):
             if key in all_entries[source_i]:
                 all_entries[target_i][key] = all_entries[source_i].pop(key)
+        if item.get("target_tail_field") and target_tail:
+            key = item["target_tail_field"]
+            all_entries[target_i][key] = all_entries[target_i].get(key, "") + target_tail
         all_entries[target_i].pop("_placeholder", None)
         all_meta[target_i]["status"] = "ok"
         print(f"  [嵌入拆分] '{item['target']}'(p{item['page']}) 从 '{item['source']}' 的"
@@ -1160,6 +1190,13 @@ def main():
         i = matches[0]
         all_entries[i]["name"] = canonical
         all_meta[i]["name"] = canonical
+        prefix = rename.get("strip_text_prefix")
+        if prefix:
+            text = all_entries[i].get("text", "")
+            assert text.startswith(prefix), (
+                f"规范条目名 {canonical} 预期正文前缀不存在：{prefix!r}"
+            )
+            all_entries[i]["text"] = text[len(prefix):]
         print(
             f"  [规范条目名] '{rename['to']}' -> '{canonical}'(p{rename['page']})："
             f"{rename['reason']}"
