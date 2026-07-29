@@ -1114,6 +1114,16 @@ def main():
         book_clerk_meta["name"] = "书令史"
         print("  [OCR字误] '书令史'(p192)：核原书将误识标题‘书令吏’恢复为‘书令史’")
 
+        two_assistants_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "二丞" and str(meta.get("page")) == "贰丞"
+        ]
+        assert len(two_assistants_matches) == 1
+        _, two_assistants_meta = two_assistants_matches[0]
+        two_assistants_meta["page"] = "198"
+        print("  [页码归位] '二丞'(p198)：标题同行异写‘贰丞’误作页码，恢复原书页码198")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
