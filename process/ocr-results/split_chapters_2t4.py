@@ -258,6 +258,10 @@ PROFILES = {
              "reason": "核对原书p224，目录把‘主管官告院’误识为‘主管宣告院’"},
             {"from": "户部左曹课利窦", "to": "户部左曹课利窠", "page": "228",
              "reason": "核对原书p228，目录把独立词条‘户部左曹课利窠’末字误识为‘窦’"},
+            {"from": "仓部司棠柒案", "to": "仓部司棠余案", "canonical": "仓部司柴采案",
+             "page": "232",
+             "reason": "核对原书p232，目录与正文分别误识为‘棠柒案’和‘棠余案’，"
+                       "原书独立词头及正文均明确作‘仓部司柴采案’"},
             {"from": "尚书省讲议司", "to": "尚书省", "canonical": "尚书省讲议司", "page": "208",
              "reason": "正文标题被前条库子吞入，仅余简称引文续句以‘尚书省’开头；"
                        "先按被误切形态匹配，拆回正文后恢复目录正式名"},
@@ -1169,6 +1173,23 @@ def main():
         paper_store_meta["status"] = "ok"
         print("  [跨栏归位] '官告院绫纸库'(p224)：标题OCR漏首字‘官’，"
               "从‘官告院’别名及编制字段拆回独立附属机构，保持词条ID")
+
+        warehouse, _ = by_name["仓部司"]
+        wrong_cases = "分案六，即仓场、上供、巢籴、给纳、知杂、开拆。"
+        assert wrong_cases in warehouse["编制"]
+        warehouse["编制"] = warehouse["编制"].replace(
+            wrong_cases,
+            "分案六，即仓场、上供、柴采、给纳、知杂、开拆。",
+        )
+        forage_case, _ = by_name["仓部司棠余案"]
+        wrong_duty = "掌粮草巢籴、坐仓折纳"
+        assert wrong_duty in forage_case["text"]
+        forage_case["text"] = forage_case["text"].replace(
+            wrong_duty,
+            "掌粮草柴采、坐仓折纳",
+        )
+        print("  [OCR字误] '仓部司柴采案'(p232)：核原书恢复独立词头、正文‘柴采’"
+              "及仓部司六案编制中的‘柴采’，保持词条ID")
 
         power, _ = by_name["权领枢密院事"]
         broken = power["text"]
