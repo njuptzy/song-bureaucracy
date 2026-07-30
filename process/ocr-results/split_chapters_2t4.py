@@ -1892,6 +1892,47 @@ def main():
               "吞入的‘典御’拆回独立条目，恢复尚辇局‘曰尚辇’、尚乘局括号、"
               "监门引文右括号及医师品位句号")
 
+        garment_craftsman, _ = by_name["典功"]
+        assert "輞头、衣帽" in garment_craftsman["text"]
+        garment_craftsman["text"] = garment_craftsman["text"].replace(
+            "輞头、衣帽", "幞头、衣帽",
+        )
+
+        garment_attendant, _ = by_name["衣徒"]
+        curtain_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "幂士" and str(meta.get("page")) == "293"
+            and meta.get("status") == "placeholder"
+        ]
+        assert len(curtain_matches) == 1
+        curtain_attendant, curtain_meta = curtain_matches[0]
+        embedded_curtain_marker = "幕士 公吏名。"
+        assert embedded_curtain_marker in garment_attendant["text"]
+        garment_text, curtain_text = garment_attendant["text"].split(
+            embedded_curtain_marker, 1,
+        )
+        garment_attendant["text"] = garment_text.rstrip()
+        curtain_attendant.clear()
+        curtain_attendant.update({
+            "name": "幕士",
+            "text": "公吏名。" + curtain_text,
+        })
+        curtain_meta["name"] = "幕士"
+        curtain_meta["status"] = "ok"
+
+        clothing_store_supervisor, _ = by_name["监尚衣库"]
+        broken_clothing_store_citation = (
+            "（《宋会要·职官》19之2《宋会要·食货》52之25《尚衣库》）。"
+        )
+        assert broken_clothing_store_citation in clothing_store_supervisor["text"]
+        clothing_store_supervisor["text"] = clothing_store_supervisor["text"].replace(
+            broken_clothing_store_citation,
+            "（《宋会要·职官》19之2、《宋会要·食货》52之25《尚衣库》）。",
+        )
+        print("  [嵌入拆分与OCR修复] p292-293：恢复典功‘幞头’，将被衣徒"
+              "吞入的‘幕士’拆回独立条目，并补监尚衣库两处出处间顿隔")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
