@@ -2086,18 +2086,43 @@ def main():
         print("  [页码归位] '二丞'(p198)：标题同行异写‘贰丞’误作页码，恢复原书页码198")
 
     if PROFILE_NAME == "5t7":
+        temple_deputies = next(e for e in all_entries if e["name"] == "寺监副贰")
+        wrong_deputy = "元丰五年新制，九寺副贰，仍为九寺少监"
+        assert wrong_deputy in temple_deputies["text"]
+        temple_deputies["text"] = temple_deputies["text"].replace(
+            wrong_deputy, "元丰五年新制，九寺副贰，仍为九寺少卿"
+        )
+        print("  [OCR字误] '寺监副贰'(p295)：核第五编原页恢复‘九寺少卿’")
+
+        seven_temple_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "七寺"
+            and str(meta.get("page")) == "297"
+            and entry.get("text", "").startswith("宋代九寺")
+        ]
+        assert len(seven_temple_matches) == 1
+        seven_temple, seven_temple_meta = seven_temple_matches[0]
+        seven_temple.pop("_not_in_catalog", None)
+        seven_temple_meta["status"] = "ok"
+        seven_temple_meta.pop("not_in_catalog", None)
+
         seven_minister_matches = [
             (entry, meta)
             for entry, meta in zip(all_entries, all_meta)
             if entry["name"] == "七寺"
             and str(meta.get("page")) == "297"
-            and meta.get("status") == "not_in_catalog"
+            and re.match(r"^\s*卿\s+", entry.get("text", ""))
         ]
         assert len(seven_minister_matches) == 1
         seven_minister, seven_minister_meta = seven_minister_matches[0]
-        assert seven_minister["text"].startswith("卿 ")
+        assert re.match(r"^\s*卿\s+", seven_minister["text"]), repr(
+            seven_minister["text"][:40]
+        )
         seven_minister["name"] = "七寺卿"
-        seven_minister["text"] = seven_minister["text"][2:]
+        seven_minister["text"] = re.sub(
+            r"^\s*卿\s+", "", seven_minister["text"], count=1
+        )
         seven_minister.pop("_not_in_catalog", None)
         seven_minister_meta["name"] = "七寺卿"
         seven_minister_meta["status"] = "ok"
