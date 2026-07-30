@@ -1832,6 +1832,66 @@ def main():
               "殿中省‘禘祫’及出处括号、《麈史》、‘谙练’、尚食局‘膳羞’，"
               "并补太官局句号与‘膳徒三十人’")
 
+        imperial_carriage, _ = by_name["尚辇局"]
+        assert "……日尚辇" in imperial_carriage["简称"]
+        imperial_carriage["简称"] = imperial_carriage["简称"].replace(
+            "……日尚辇", "……曰尚辇",
+        )
+        imperial_stable, _ = by_name["尚乘局"]
+        broken_stable_history = (
+            "《建隆以后合班之制》、《元丰以后合班之制》，"
+            "而另新增尚酝局（《分纪》卷24）。"
+        )
+        assert broken_stable_history in imperial_stable["职源与沿革"]
+        imperial_stable["职源与沿革"] = imperial_stable[
+            "职源与沿革"
+        ].replace(
+            broken_stable_history,
+            "《建隆以后合班之制》、《元丰以后合班之制》），"
+            "而另新增尚酝局（《分纪》卷24）。",
+        )
+
+        bureau_manager, _ = by_name["管勾殿中省某局"]
+        controller_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "典范" and str(meta.get("page")) == "291"
+            and meta.get("status") == "placeholder"
+        ]
+        assert len(controller_matches) == 1
+        controller, controller_meta = controller_matches[0]
+        embedded_controller_marker = "典御 职事官名。"
+        assert embedded_controller_marker in bureau_manager["简称与别名"]
+        manager_alias, controller_text = bureau_manager["简称与别名"].split(
+            embedded_controller_marker, 1,
+        )
+        bureau_manager["简称与别名"] = manager_alias.rstrip()
+        controller.clear()
+        controller.update({
+            "name": "典御",
+            "text": "职事官名。" + controller_text,
+        })
+        for key in ("职源与沿革", "职掌", "编制", "品位", "合称"):
+            assert key in bureau_manager
+            controller[key] = bureau_manager.pop(key)
+        controller_meta["name"] = "典御"
+        controller_meta["status"] = "ok"
+
+        gate_guard, _ = by_name["监门"]
+        assert gate_guard["text"].endswith("同前书19之10）。")
+        assert "19之4、5、6)" in gate_guard["text"]
+        gate_guard["text"] = gate_guard["text"].replace(
+            "19之4、5、6)", "19之4、5、6）",
+        )
+        physician, _ = by_name["医师"]
+        assert "名医充政和二年" in physician["品位"]
+        physician["品位"] = physician["品位"].replace(
+            "名医充政和二年", "名医充。政和二年",
+        )
+        print("  [嵌入拆分与OCR修复] p290-292：将被管勾殿中省某局别名字段"
+              "吞入的‘典御’拆回独立条目，恢复尚辇局‘曰尚辇’、尚乘局括号、"
+              "监门引文右括号及医师品位句号")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
