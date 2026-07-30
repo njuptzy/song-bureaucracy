@@ -1933,6 +1933,31 @@ def main():
         print("  [嵌入拆分与OCR修复] p292-293：恢复典功‘幞头’，将被衣徒"
               "吞入的‘幕士’拆回独立条目，并补监尚衣库两处出处间顿隔")
 
+        new_clothing_store, _ = by_name["监新衣库"]
+        tailoring_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "栽造院" and str(meta.get("page")) == "294"
+            and meta.get("status") == "placeholder"
+        ]
+        assert len(tailoring_matches) == 1
+        tailoring_office, tailoring_meta = tailoring_matches[0]
+        embedded_tailoring_marker = "裁造院 官司名。"
+        assert embedded_tailoring_marker in new_clothing_store["简称"]
+        store_alias, tailoring_text = new_clothing_store["简称"].split(
+            embedded_tailoring_marker, 1,
+        )
+        new_clothing_store["简称"] = store_alias.rstrip()
+        tailoring_office.clear()
+        tailoring_office.update({
+            "name": "裁造院",
+            "text": "官司名。" + tailoring_text,
+        })
+        tailoring_meta["name"] = "裁造院"
+        tailoring_meta["status"] = "ok"
+        print("  [嵌入拆分] p294：将被监新衣库简称字段吞入的‘裁造院’"
+              "拆回独立条目，并恢复误识标题‘栽造院’")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
