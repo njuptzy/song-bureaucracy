@@ -324,6 +324,9 @@ PROFILES = {
             {"from": "三巫", "to": "三丞", "page": "297",
              "reason": "核对第五编 PDF p297，目录把独立词条‘三丞’误识为‘三巫’；"
                        "正文明确为宗正寺丞、太常寺丞、秘书省丞的合称"},
+            {"from": "廖牺案", "to": "廪牺案", "page": "301",
+             "reason": "核对第五编 PDF p301，目录把太常寺办事机构‘廪牺案’"
+                       "误识为‘廖牺案’，正文独立标题明确作‘廪牺案’"},
         ],
     },
     "11t12": {
@@ -2149,6 +2152,23 @@ def main():
         )
         print("  [OCR字误] '太常寺/太常寺卿'(p297-298)：核原书恢复‘奉礼郎’与"
               "‘坛壝’")
+
+        ritual_officer = next(e for e in all_entries if e["name"] == "太常寺奉礼郎")
+        rank_and_staff = ritual_officer["品位"]
+        staff_marker = "编制 元丰新制一人"
+        assert staff_marker in rank_and_staff
+        rank, staff = rank_and_staff.split("编制 ", 1)
+        ritual_officer["品位"] = rank.rstrip()
+        ritual_officer["编制"] = staff
+        print("  [字段归位] '太常寺奉礼郎'(p300)：将粘在品位末尾的编制段拆回"
+              "独立‘编制’字段")
+
+        suburban_officer = next(e for e in all_entries if e["name"] == "郊社局令")
+        assert "四郊坛壇" in suburban_officer["职掌"]
+        suburban_officer["职掌"] = suburban_officer["职掌"].replace(
+            "四郊坛壇", "四郊坛壝"
+        )
+        print("  [OCR字误] '郊社局令'(p301)：核原书恢复‘四郊坛壝’")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
