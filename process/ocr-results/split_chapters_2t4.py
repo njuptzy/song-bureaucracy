@@ -330,6 +330,9 @@ PROFILES = {
             {"from": "评定大乐所", "to": "详定大乐所", "page": "303",
              "reason": "核对第五编 PDF p303，目录把临时机构‘详定大乐所’"
                        "误识为‘评定大乐所’，正文独立标题明确作‘详定大乐所’"},
+            {"from": "衡前乐", "to": "衙前乐", "page": "307",
+             "reason": "核对第五编 PDF p307，目录把州府乐部‘衙前乐’"
+                       "误识为‘衡前乐’，正文独立标题明确作‘衙前乐’"},
         ],
     },
     "11t12": {
@@ -2179,6 +2182,44 @@ def main():
             "葫补官名", "荫补官名"
         )
         print("  [OCR字误] '挽郎'(p304)：核第五编原页恢复‘荫补官名’")
+
+        teaching_control = next(e for e in all_entries if e["name"] == "钤辖教坊所")
+        control_post = next(e for e in all_entries if e["name"] == "钤辖教坊")
+        assert control_post.get("_placeholder") is True
+        combined = teaching_control["品位"]
+        rank_marker = "\n编制 "
+        post_marker = "钤辖教坊 差遣官。"
+        assert rank_marker in combined and post_marker in combined
+        rank, tail = combined.split(rank_marker, 1)
+        roster, post_text = tail.split(post_marker, 1)
+        teaching_control["品位"] = rank
+        teaching_control["编制"] = roster.replace("铃辖官", "钤辖官")
+        control_post["text"] = "差遣官。" + post_text
+        control_post["简称"] = teaching_control.pop("简称").replace("铃辖", "钤辖")
+        control_post.pop("_placeholder", None)
+        control_post_meta = all_meta[all_entries.index(control_post)]
+        control_post_meta["status"] = "ok"
+        print("  [字段归位] '钤辖教坊所/钤辖教坊'(p307)：拆回所的编制字段及"
+              "独立差遣官正文、简称，并核原书恢复‘钤辖’字形")
+
+        yamen_music_i = next(
+            i for i, e in enumerate(all_entries) if e["name"] == "衙前乐"
+        )
+        yamen_music_meta = all_meta[yamen_music_i]
+        all_entries.insert(
+            yamen_music_i + 1,
+            {"name": "衙前", "text": "", "_placeholder": True},
+        )
+        all_meta.insert(
+            yamen_music_i + 1,
+            {
+                "name": "衙前", "page": "307",
+                "h1": yamen_music_meta["h1"], "h2": yamen_music_meta["h2"],
+                "h3": yamen_music_meta["h3"], "status": "placeholder",
+            },
+        )
+        print("  [ID占位] '衙前'(p307)：真实正文已归回‘衙前乐’，原多出条目位"
+              "保留为空占位，避免第93条以后既有辞典ID整体前移")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
