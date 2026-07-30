@@ -320,6 +320,11 @@ PROFILES = {
         "out": "第五至七编",
         "fix_xiangmen": False,
         "drop_surnames": set(),
+        "catalog_renames": [
+            {"from": "三巫", "to": "三丞", "page": "297",
+             "reason": "核对第五编 PDF p297，目录把独立词条‘三丞’误识为‘三巫’；"
+                       "正文明确为宗正寺丞、太常寺丞、秘书省丞的合称"},
+        ],
     },
     "11t12": {
         "chapters": [
@@ -2079,6 +2084,46 @@ def main():
         _, two_assistants_meta = two_assistants_matches[0]
         two_assistants_meta["page"] = "198"
         print("  [页码归位] '二丞'(p198)：标题同行异写‘贰丞’误作页码，恢复原书页码198")
+
+    if PROFILE_NAME == "5t7":
+        seven_minister_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "七寺"
+            and str(meta.get("page")) == "297"
+            and meta.get("status") == "not_in_catalog"
+        ]
+        assert len(seven_minister_matches) == 1
+        seven_minister, seven_minister_meta = seven_minister_matches[0]
+        assert seven_minister["text"].startswith("卿 ")
+        seven_minister["name"] = "七寺卿"
+        seven_minister["text"] = seven_minister["text"][2:]
+        seven_minister.pop("_not_in_catalog", None)
+        seven_minister_meta["name"] = "七寺卿"
+        seven_minister_meta["status"] = "ok"
+        print("  [标题归位] '七寺卿'(p297)：正文标题被较短目录词头‘七寺’截断，"
+              "恢复独立词条并移除正文首字‘卿’")
+
+        judge_taichang = next(e for e in all_entries if e["name"] == "判太常寺")
+        combined_history = judge_taichang["职源与沿革"]
+        duty_marker = "\n职掌 "
+        assert duty_marker in combined_history
+        history, duty = combined_history.split(duty_marker, 1)
+        judge_taichang["职源与沿革"] = history
+        judge_taichang["职掌"] = duty
+        print("  [字段归位] '判太常寺'(p298)：将粘在职源与沿革末尾的职掌段拆回"
+              "独立‘职掌’字段")
+
+        taichang = next(e for e in all_entries if e["name"] == "太常寺")
+        assert "奉礼部" in taichang["编制"]
+        taichang["编制"] = taichang["编制"].replace("奉礼部", "奉礼郎")
+        taichang_minister = next(e for e in all_entries if e["name"] == "太常寺卿")
+        assert "坛壻" in taichang_minister["职掌"]
+        taichang_minister["职掌"] = taichang_minister["职掌"].replace(
+            "坛壻", "坛壝"
+        )
+        print("  [OCR字误] '太常寺/太常寺卿'(p297-298)：核原书恢复‘奉礼郎’与"
+              "‘坛壝’")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
