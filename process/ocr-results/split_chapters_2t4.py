@@ -2173,6 +2173,13 @@ def main():
         )
         print("  [OCR字误] '郊社局令'(p301)：核原书恢复‘四郊坛壝’")
 
+        funeral_assistant = next(e for e in all_entries if e["name"] == "挽郎")
+        assert "葫补官名" in funeral_assistant["text"]
+        funeral_assistant["text"] = funeral_assistant["text"].replace(
+            "葫补官名", "荫补官名"
+        )
+        print("  [OCR字误] '挽郎'(p304)：核第五编原页恢复‘荫补官名’")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
