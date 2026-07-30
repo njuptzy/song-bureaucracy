@@ -1766,6 +1766,72 @@ def main():
               "都大提举诸司引文括号，将伪条目‘提举诸司’续文和简称归回"
               "承受官，并恢复投送文字大程官‘吏名’")
 
+        historian, _ = by_name["史官"]
+        assert "《攻瑰集》" in historian["text"]
+        assert historian["别称"].startswith("耳笔。")
+        historian["text"] = historian["text"].replace(
+            "《攻瑰集》", "《攻媿集》",
+        )
+        historian["别称"] = "珥笔。" + historian["别称"][3:]
+
+        palace_service, _ = by_name["殿中省"]
+        palace_history = palace_service["职源与沿革"]
+        assert "是为之始《隋书" in palace_history
+        assert "正月四日罢《十朝纲要》" in palace_history
+        palace_service["职源与沿革"] = palace_history.replace(
+            "是为之始《隋书", "是为之始（《隋书",
+        ).replace("正月四日罢《十朝纲要》", "正月四日罢（《十朝纲要》")
+        assert "祫祫" in palace_service["职掌"]
+        palace_service["职掌"] = palace_service["职掌"].replace(
+            "祫祫", "禘祫",
+        )
+        judge_palace, _ = by_name["判殿中省事"]
+        assert "祫洽" in judge_palace["text"]
+        judge_palace["text"] = judge_palace["text"].replace(
+            "祫洽", "禘祫",
+        )
+
+        palace_vice_director, _ = by_name["殿中省少监"]
+        assert "《虞史》" in palace_vice_director["职源与沿革"]
+        assert "《鏖史》" in palace_vice_director["简称"]
+        palace_vice_director["职源与沿革"] = palace_vice_director[
+            "职源与沿革"
+        ].replace("《虞史》", "《麈史》")
+        palace_vice_director["简称"] = palace_vice_director["简称"].replace(
+            "《鏖史》", "《麈史》",
+        )
+        palace_assistant, _ = by_name["殿中省丞"]
+        assert "《塵史》" in palace_assistant["职掌"]
+        palace_assistant["职掌"] = palace_assistant["职掌"].replace(
+            "《塵史》", "《麈史》",
+        )
+
+        palace_clerk, _ = by_name["令史"]
+        assert "谱练" in palace_clerk["text"]
+        palace_clerk["text"] = palace_clerk["text"].replace(
+            "谱练", "谙练",
+        )
+        copy_clerk, _ = by_name["贴司"]
+        assert "谱练行遣" in copy_clerk["text"]
+        copy_clerk["text"] = copy_clerk["text"].replace(
+            "谱练行遣", "谙练行遣",
+        )
+        imperial_food, _ = by_name["尚食局"]
+        assert "膳餳" in imperial_food["职掌"]
+        imperial_food["职掌"] = imperial_food["职掌"].replace(
+            "膳餳", "膳羞",
+        )
+        imperial_kitchen, _ = by_name["太官局"]
+        assert imperial_kitchen["text"] == "官司名。隶殿中省尚食局"
+        assert "膳徒三十（" in imperial_kitchen["编制"]
+        imperial_kitchen["text"] += "。"
+        imperial_kitchen["编制"] = imperial_kitchen["编制"].replace(
+            "膳徒三十（", "膳徒三十人（",
+        )
+        print("  [OCR字误] p286-289：核原书恢复史官‘珥笔’与《攻媿集》、"
+              "殿中省‘禘祫’及出处括号、《麈史》、‘谙练’、尚食局‘膳羞’，"
+              "并补太官局句号与‘膳徒三十人’")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
