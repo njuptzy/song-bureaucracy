@@ -1725,6 +1725,47 @@ def main():
         print("  [OCR与标点修复] p283-284：核原书补实录院同修撰出处"
               "右括号，恢复李焘名及日历所‘铨次’‘详赡’")
 
+        meeting_minutes_reader, _ = by_name["编修会要所检阅文字"]
+        assert "则下笔官" in meeting_minutes_reader["text"]
+        meeting_minutes_reader["text"] = meeting_minutes_reader["text"].replace(
+            "则下笔官", "即下笔官",
+        )
+        general_supervisor, _ = by_name["都大提举诸司官"]
+        assert "（乾道四年)" in general_supervisor["text"]
+        assert general_supervisor["text"].endswith("18之32)")
+        general_supervisor["text"] = general_supervisor["text"].replace(
+            "（乾道四年)", "（乾道四年）",
+        )[:-1] + "）"
+
+        receiver, _ = by_name["承受官"]
+        false_supervisor_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "提举诸司" and str(meta.get("page")) == "286"
+            and meta.get("status") == "from_surname"
+        ]
+        assert len(false_supervisor_matches) == 1
+        false_supervisor, false_supervisor_meta = false_supervisor_matches[0]
+        assert receiver["text"].endswith("位次于都大")
+        assert false_supervisor["text"] == "官、高于主管诸司官。"
+        receiver["text"] += false_supervisor["name"] + false_supervisor["text"]
+        receiver["简称"] = false_supervisor["简称"]
+        false_supervisor.clear()
+        false_supervisor.update({
+            "name": "提举诸司", "text": "", "_placeholder": True,
+        })
+        false_supervisor_meta["status"] = "placeholder"
+        false_supervisor_meta.pop("from_surname", None)
+
+        long_distance_courier, _ = by_name["投送文字大程官"]
+        assert long_distance_courier["text"].startswith("更名。")
+        long_distance_courier["text"] = (
+            "吏名。" + long_distance_courier["text"][3:]
+        )
+        print("  [跨页与OCR修复] p285-286：恢复会要所检阅文字‘即下笔官’、"
+              "都大提举诸司引文括号，将伪条目‘提举诸司’续文和简称归回"
+              "承受官，并恢复投送文字大程官‘吏名’")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
