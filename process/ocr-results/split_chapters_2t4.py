@@ -1700,6 +1700,31 @@ def main():
             "《挥塵后录》", "《挥麈后录》",
         )
 
+        co_compiler, _ = by_name["实录院同修撰"]
+        broken_co_compiler_citation = (
+            "（《宋史·宋绶传》、《玉海》卷48《乾兴真宗实录》，"
+            "但未冠以“实录院”之名。"
+        )
+        assert broken_co_compiler_citation in co_compiler["text"]
+        co_compiler["text"] = co_compiler["text"].replace(
+            broken_co_compiler_citation,
+            "（《宋史·宋绶传》、《玉海》卷48《乾兴真宗实录》），"
+            "但未冠以“实录院”之名。",
+        )
+        combined_compiler, _ = by_name["国史实录院编修检讨官"]
+        assert "（屋）寻迁著作郎" in combined_compiler["text"]
+        combined_compiler["text"] = combined_compiler["text"].replace(
+            "（屋）寻迁著作郎", "（焘）寻迁著作郎",
+        )
+        calendar_office, _ = by_name["日历所"]
+        assert "钰次成一朝编年" in calendar_office["职掌"]
+        assert "日历比实录更为详瞻" in calendar_office["职掌"]
+        calendar_office["职掌"] = calendar_office["职掌"].replace(
+            "钰次成一朝编年", "铨次成一朝编年",
+        ).replace("日历比实录更为详瞻", "日历比实录更为详赡")
+        print("  [OCR与标点修复] p283-284：核原书补实录院同修撰出处"
+              "右括号，恢复李焘名及日历所‘铨次’‘详赡’")
+
         acting_history, _ = by_name["权提举国史院"]
         continuation_matches = [
             (entry, meta)
