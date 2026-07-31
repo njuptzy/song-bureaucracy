@@ -2236,6 +2236,22 @@ def main():
         print("  [条目拆分] '提举太医局所/提举太医局'(p311)：按原书独立标题"
               "拆回官司与差遣官正文，简称归入差遣官条")
 
+        registry = next(e for e in all_entries if e["name"] == "宗正寺主簿")
+        continuation_matches = [
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "主簿" and e.get("text") == "一员。”"
+            and str(m.get("page")) == "316" and m.get("status") == "not_in_catalog"
+        ]
+        assert len(continuation_matches) == 1
+        continuation, continuation_meta = continuation_matches[0]
+        assert registry["简称"].endswith("宗正并省")
+        registry["简称"] += continuation["text"]
+        continuation.clear()
+        continuation.update({"name": "主簿", "text": "", "_placeholder": True})
+        continuation_meta["status"] = "placeholder"
+        print("  [跨页续文] '宗正寺主簿/主簿'(p315-316)：将简称引文末句"
+              "‘宗正并省一员’并回第166条，第167条保留为空占位")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
