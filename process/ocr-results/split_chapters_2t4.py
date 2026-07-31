@@ -2369,6 +2369,16 @@ def main():
         print("  [字段归位] '内物料库'(p329)：将粘在正文末尾的职源与沿革段拆回"
               "独立‘职源与沿革’字段")
 
+        weiyu_deputy = next(e for e in all_entries if e["name"] == "卫尉寺少卿")
+        combined_staff = weiyu_deputy["编制"]
+        alias_marker = "\n简称 "
+        assert alias_marker in combined_staff
+        staff_text, aliases = combined_staff.split(alias_marker, 1)
+        weiyu_deputy["编制"] = staff_text.rstrip()
+        weiyu_deputy["简称"] = aliases
+        print("  [字段归位] '卫尉寺少卿'(p332)：将粘在编制末尾的简称段拆回"
+              "独立‘简称’字段")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
