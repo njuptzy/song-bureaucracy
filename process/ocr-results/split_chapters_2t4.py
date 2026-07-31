@@ -2420,6 +2420,41 @@ def main():
         print("  [字段归位] '判左、右金吾引驾仗司事'(p337)：将粘在正文末尾的"
               "简称段拆回独立‘简称’字段")
 
+        street_guard_manager = next(
+            e for e in all_entries
+            if e["name"] == "勾当左右金吾街仗、六军仪仗司事"
+        )
+        street_guard_executor = next(
+            e for e in all_entries if e["name"] == "干办左、右金吾街仗司事"
+        )
+        assert street_guard_executor.get("_placeholder") is True
+        executor_marker = "南宋改勾当官为干办官。"
+        assert executor_marker in street_guard_manager["text"]
+        manager_text, executor_text = street_guard_manager["text"].split(
+            executor_marker, 1
+        )
+        street_guard_manager["text"] = manager_text.rstrip()
+        street_guard_executor["text"] = executor_marker + executor_text
+        street_guard_executor.pop("_placeholder", None)
+        executor_meta = all_meta[all_entries.index(street_guard_executor)]
+        executor_meta["status"] = "ok"
+        print("  [条目拆分] '勾当左右金吾街仗、六军仪仗司事/"
+              "干办左、右金吾街仗司事'(p338)：按目录独立词头拆回南宋干办官正文")
+
+        color_official = next(e for e in all_entries if e["name"] == "四色官")
+        sacrificial_spear = next(e for e in all_entries if e["name"] == "穰稍官")
+        assert sacrificial_spear.get("_placeholder") is True
+        spear_marker = "穣稍官 "
+        assert spear_marker in color_official["text"]
+        color_text, spear_text = color_official["text"].split(spear_marker, 1)
+        color_official["text"] = color_text.rstrip()
+        sacrificial_spear["text"] = spear_text
+        sacrificial_spear.pop("_placeholder", None)
+        spear_meta = all_meta[all_entries.index(sacrificial_spear)]
+        spear_meta["status"] = "ok"
+        print("  [条目拆分] '四色官/穰稍官'(p338)：将 OCR 连写的穣稍官正文"
+              "拆回目录占位，条目名按目录规范字形‘穰’保留")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
