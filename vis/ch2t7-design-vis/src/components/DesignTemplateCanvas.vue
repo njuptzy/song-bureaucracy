@@ -391,6 +391,37 @@ function replaceCompositionDescriptions(svg) {
 }
 
 function bindTemplateControls(svg) {
+  const categoryItems = [...svg.querySelectorAll("text")]
+    .map((textElement) => ({
+      category: normalizeText(textElement),
+      textElement,
+      group: textElement.parentElement,
+    }))
+    .filter(({ category, group }) => CATEGORY_NAMES.includes(category) && group?.tagName.toLowerCase() === "g");
+  const selectionTemplate = categoryItems
+    .map(({ group }) => [...group.children].find(
+      (child) => child.tagName.toLowerCase() === "g"
+        && (child.classList.contains("cls-81") || child.classList.contains("cls-59"))
+    ))
+    .find(Boolean)?.cloneNode(true);
+
+  for (const { group } of categoryItems) {
+    [...group.children]
+      .filter((child) => child.tagName.toLowerCase() === "g"
+        && (child.classList.contains("cls-81") || child.classList.contains("cls-59")))
+      .forEach((child) => child.remove());
+  }
+
+  const selectedItem = categoryItems.find(({ category }) => category === selectedCategory.value);
+  const selectedOutline = selectedItem
+    ? [...selectedItem.group.children].find((child) => child.tagName.toLowerCase() === "polygon")
+    : null;
+  if (selectionTemplate && selectedItem && selectedOutline) {
+    const selectionPolygon = selectionTemplate.querySelector("polygon");
+    selectionPolygon?.setAttribute("points", selectedOutline.getAttribute("points") || "");
+    selectedItem.group.insertBefore(selectionTemplate, selectedItem.group.firstChild);
+  }
+
   d3.select(svg)
     .selectAll("text")
     .each(function () {
@@ -406,35 +437,20 @@ function bindTemplateControls(svg) {
 
       if (CATEGORY_NAMES.includes(text)) {
         const category = text;
-        const point = position(this);
+        const group = this.parentElement;
+        const activate = (event) => {
+          event.stopPropagation();
+          selectedCategory.value = category;
+          const focus = categoryFocus(category);
+          selectedId.value = focus?.id ?? null;
+          renderTemplate();
+        };
         this.style.cursor = "pointer";
-        this.style.fontWeight = category === selectedCategory.value ? "700" : "400";
-        this.style.filter = category === selectedCategory.value ? "drop-shadow(0 0 1px #351704)" : "";
-
-        // Illustrator 导出的按钮没有独立语义组；在原文字的实际包围盒上加透明点击层。
-        if (point && !this.dataset.hitAreaAdded) {
-          const bbox = this.getBBox();
-          const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          hit.setAttribute("x", String(bbox.x - 9));
-          hit.setAttribute("y", String(bbox.y - 9));
-          hit.setAttribute("width", String(Math.max(28, bbox.width + 18)));
-          hit.setAttribute("height", String(Math.max(88, bbox.height + 18)));
-          hit.setAttribute("transform", this.getAttribute("transform") || "");
-          hit.setAttribute("fill", category === selectedCategory.value ? "rgba(165,166,141,.22)" : "transparent");
-          hit.setAttribute("stroke", category === selectedCategory.value ? "#563905" : "transparent");
-          hit.setAttribute("stroke-width", ".8");
-          hit.style.cursor = "pointer";
-          const activate = (event) => {
-            event.stopPropagation();
-            selectedCategory.value = category;
-            const focus = categoryFocus(category);
-            selectedId.value = focus?.id ?? null;
-            renderTemplate();
-          };
-          hit.addEventListener("click", activate);
-          this.parentNode.insertBefore(hit, this);
-          this.dataset.hitAreaAdded = "true";
-          d3.select(this).on("click.category", activate);
+        d3.select(this).on("click.category", activate);
+        if (group?.tagName.toLowerCase() === "g") {
+          group.style.cursor = "pointer";
+          group.style.pointerEvents = "bounding-box";
+          d3.select(group).on("click.category", activate);
         }
       }
     });
