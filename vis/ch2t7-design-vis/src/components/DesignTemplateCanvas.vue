@@ -260,8 +260,8 @@ function elementBounds(element) {
 
 function fitDynamicNodeLabel(label, fullTitle, polygonBounds, hiddenCount) {
   if (!label || !polygonBounds) return;
-  const contentTop = polygonBounds.y + 8;
-  const contentBottom = polygonBounds.y + polygonBounds.height - (hiddenCount ? 20 : 8);
+  const contentTop = polygonBounds.y + 3;
+  const contentBottom = polygonBounds.y + polygonBounds.height - (hiddenCount ? 18 : 3);
   const availableLength = contentBottom - contentTop;
   const measuredLength = () => {
     const measured = label.getComputedTextLength?.() || 0;
@@ -360,9 +360,9 @@ function renderDynamicHierarchy(svg) {
       clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
       const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       clipRect.setAttribute("x", String(polygonBounds.x + 3));
-      clipRect.setAttribute("y", String(polygonBounds.y + 5));
+      clipRect.setAttribute("y", String(polygonBounds.y + 3));
       clipRect.setAttribute("width", String(polygonBounds.width - 6));
-      clipRect.setAttribute("height", String(polygonBounds.height - (hiddenCount ? 22 : 10)));
+      clipRect.setAttribute("height", String(polygonBounds.height - (hiddenCount ? 21 : 6)));
       clipPath.appendChild(clipRect);
       svg.querySelector("defs")?.appendChild(clipPath);
       const labelClipGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
