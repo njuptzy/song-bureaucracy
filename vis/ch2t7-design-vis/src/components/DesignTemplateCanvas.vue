@@ -258,14 +258,16 @@ function elementBounds(element) {
   }
 }
 
-function fitDynamicNodeLabel(label, fullTitle, polygonBounds, hiddenCount) {
+function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
   if (!label || !polygonBounds) return;
-  const contentTop = polygonBounds.y + 3;
-  const contentBottom = polygonBounds.y + polygonBounds.height - (hiddenCount ? 18 : 3);
+  const contentTop = polygonBounds.y + 2;
+  const contentBottom = polygonBounds.y + polygonBounds.height - 2;
   const availableLength = contentBottom - contentTop;
   const measuredLength = () => {
-    const measured = label.getComputedTextLength?.() || 0;
-    return measured > 0 ? measured : (label.textContent || "").length * 17.14;
+    const visibleHeight = elementBounds(label)?.height || 0;
+    if (visibleHeight > 0) return visibleHeight;
+    const advanceLength = label.getComputedTextLength?.() || 0;
+    return advanceLength > 0 ? advanceLength : (label.textContent || "").length * 17.14;
   };
 
   setText(label, fullTitle);
@@ -351,7 +353,7 @@ function renderDynamicHierarchy(svg) {
 
     const templatePolygon = nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
-    fitDynamicNodeLabel(label, node.data.title, polygonBounds, hiddenCount);
+    fitDynamicNodeLabel(label, node.data.title, polygonBounds);
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
@@ -360,9 +362,9 @@ function renderDynamicHierarchy(svg) {
       clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
       const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       clipRect.setAttribute("x", String(polygonBounds.x + 3));
-      clipRect.setAttribute("y", String(polygonBounds.y + 3));
+      clipRect.setAttribute("y", String(polygonBounds.y + 2));
       clipRect.setAttribute("width", String(polygonBounds.width - 6));
-      clipRect.setAttribute("height", String(polygonBounds.height - (hiddenCount ? 21 : 6)));
+      clipRect.setAttribute("height", String(polygonBounds.height - 4));
       clipPath.appendChild(clipRect);
       svg.querySelector("defs")?.appendChild(clipPath);
       const labelClipGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
