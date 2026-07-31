@@ -367,7 +367,7 @@ function setupDetailPanel(svg) {
     .map(([x, y]) => findTextAt(svg, x, y))
     .filter(Boolean);
   if (contentNodes.length) {
-    panelGroup.insertBefore(contentGroup, contentNodes[0]);
+    panelGroup.appendChild(contentGroup);
     contentNodes.forEach((node) => contentGroup.appendChild(node));
   }
 
