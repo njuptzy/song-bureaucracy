@@ -25,6 +25,10 @@ from normalize_times import normalize_time  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DIST_DIR = HERE / "dist"
+DESIGN_TIMELINE_SVG = (
+    REPO_ROOT
+    / "vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面字体转曲_画板 1 副本 4-01.svg"
+)
 
 SUMMARY_LEN = 400
 SECTION_LEN = 300
@@ -255,6 +259,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/design/timeline.svg":
+            self._send(200, DESIGN_TIMELINE_SVG.read_bytes(), "image/svg+xml")
+            return
         if path == "/api/data":
             try:
                 self._send(200, get_payload(), "application/json; charset=utf-8")

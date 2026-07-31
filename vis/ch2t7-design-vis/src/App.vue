@@ -380,7 +380,7 @@ function onHover(info) {
 
 .timeline {
   flex: none;
-  height: 108px;
+  height: clamp(160px, 20vh, 220px);
   border-top: 1px solid var(--line);
 }
 
