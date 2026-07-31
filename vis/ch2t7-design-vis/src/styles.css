@@ -1,9 +1,3 @@
-@font-face {
-  font-family: "FZQingK";
-  src: url("./assets/FZQingKBYSJW-M.TTF") format("truetype");
-  font-display: swap;
-}
-
 :root {
   /* 取自设计稿 SVG（字体转曲画板）的实际用色 */
   --ink: #351704; /* 深褐：标题文字、压深 */
@@ -17,7 +11,7 @@
   --paper-deep: #eceade;
   --panel: #fefefe;
   --line: rgba(86, 57, 5, 0.35);
-  --font-design: "FZQingK", "Songti SC", "STSong", "SimSun", serif;
+  --font-design: "Songti SC", "STSong", "SimSun", serif;
 }
 
 * {
@@ -32,7 +26,7 @@ body,
 }
 
 body {
-  background: var(--paper) url("./assets/paper-texture.png") center / cover fixed;
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-design);
   overflow: hidden;

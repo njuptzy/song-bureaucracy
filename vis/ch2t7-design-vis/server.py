@@ -25,10 +25,15 @@ from normalize_times import normalize_time  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DIST_DIR = HERE / "dist"
+DESIGN_DIR = REPO_ROOT / "vis/宋代职官体系可视化打包文件 /svg格式"
+DESIGN_HIERARCHY_SVG = DESIGN_DIR / "宋代职官体系可视化界面_画板 1 副本 4-01.svg"
+DESIGN_COMPOSITION_SVG = DESIGN_DIR / "宋代职官体系可视化界面_画板 1 副本 4-02.svg"
 DESIGN_TIMELINE_SVG = (
     REPO_ROOT
     / "vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面字体转曲_画板 1 副本 4-01.svg"
 )
+DESIGN_FZQING_FONT = REPO_ROOT / "vis/宋代职官体系可视化打包文件 /字体/FZQingKBYSJW-M.TTF"
+DESIGN_ADOBE_SONG_FONT = REPO_ROOT / "vis/宋代职官体系可视化打包文件 /字体/AdobeSongStd-Light.otf"
 
 SUMMARY_LEN = 400
 SECTION_LEN = 300
@@ -259,8 +264,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path == "/api/design/timeline.svg":
-            self._send(200, DESIGN_TIMELINE_SVG.read_bytes(), "image/svg+xml")
+        design_files = {
+            "/api/design/hierarchy.svg": DESIGN_HIERARCHY_SVG,
+            "/api/design/composition.svg": DESIGN_COMPOSITION_SVG,
+            "/api/design/timeline.svg": DESIGN_TIMELINE_SVG,
+            "/api/design/fzqing.ttf": DESIGN_FZQING_FONT,
+            "/api/design/adobe-song.otf": DESIGN_ADOBE_SONG_FONT,
+        }
+        if path in design_files:
+            content_type = {
+                ".svg": "image/svg+xml",
+                ".ttf": "font/ttf",
+                ".otf": "font/otf",
+            }.get(design_files[path].suffix.lower(), "application/octet-stream")
+            self._send(200, design_files[path].read_bytes(), content_type)
             return
         if path == "/api/data":
             try:
