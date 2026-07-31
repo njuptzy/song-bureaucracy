@@ -316,13 +316,9 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
     const label = nodeGroup.querySelector("text");
     const hiddenCount = node.data.hiddenCount || 0;
-    const displayTitle = node.data.title.length > 10 ? `${node.data.title.slice(0, 9)}…` : node.data.title;
+    const displayTitle = node.data.title.length > 5 ? `${node.data.title.slice(0, 4)}…` : node.data.title;
     setText(label, displayTitle);
-    if (label) {
-      const availableTextHeight = hiddenCount ? 72 : 90;
-      const fontSize = Math.max(7.2, Math.min(17.14, availableTextHeight / Math.max(1, displayTitle.length)));
-      label.style.fontSize = `${fontSize}px`;
-    }
+    if (label) label.style.fontSize = "14.36px";
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value) {
       nodeGroup.querySelector("g.cls-81")?.remove();
