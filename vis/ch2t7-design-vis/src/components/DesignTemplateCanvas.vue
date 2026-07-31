@@ -23,6 +23,8 @@ const selectedCategory = ref("中央机构");
 const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
+const collapsedHierarchyIds = new Set();
+const expandedHierarchyIds = new Set();
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -183,6 +185,182 @@ function hierarchyLevels(rootId, maxDepth) {
   return levels;
 }
 
+function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
+  const entity = entityMap.get(rootId);
+  if (!entity || visiting.has(rootId) || depth > 4) return null;
+  const nextVisiting = new Set(visiting).add(rootId);
+  const allChildren = childrenFor(rootId)
+    .map((edge) => edge.child)
+    .filter((id) => !nextVisiting.has(id))
+    .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
+  const shouldExpand = depth === 0
+    ? !collapsedHierarchyIds.has(rootId)
+    : expandedHierarchyIds.has(rootId);
+  const shownChildren = shouldExpand ? allChildren.slice(0, 12) : [];
+  return {
+    id: rootId,
+    title: entity.title,
+    childCount: allChildren.length,
+    hiddenCount: allChildren.length - shownChildren.length,
+    children: shownChildren
+      .map((id) => hierarchyTreeData(id, depth + 1, nextVisiting))
+      .filter(Boolean),
+  };
+}
+
+function categoryForestData(category) {
+  const candidateIds = new Set(
+    props.data.entities
+      .filter((entity) => entity.type === "机构" && entityCategory(entity) === category)
+      .map((entity) => entity.id)
+  );
+  const hasCategoryParent = new Set();
+  for (const edge of props.data.hierarchyEdges) {
+    if (!periodActive(edge.periods)) continue;
+    if (candidateIds.has(edge.parent) && candidateIds.has(edge.child)) hasCategoryParent.add(edge.child);
+  }
+  const roots = [...candidateIds].filter((id) => !hasCategoryParent.has(id));
+  const scoreCache = new Map();
+  const descendantScore = (entityId, visiting = new Set()) => {
+    if (scoreCache.has(entityId)) return scoreCache.get(entityId);
+    if (visiting.has(entityId)) return 0;
+    const nextVisiting = new Set(visiting).add(entityId);
+    const children = childrenFor(entityId).map((edge) => edge.child);
+    const score = children.length
+      + children.reduce((sum, childId) => sum + descendantScore(childId, nextVisiting), 0);
+    scoreCache.set(entityId, score);
+    return score;
+  };
+  const orderedRoots = roots.sort(
+    (a, b) => descendantScore(b) - descendantScore(a)
+      || titleOf(a).localeCompare(titleOf(b), "zh")
+  );
+  const virtualId = `category:${category}`;
+  const showRoots = !collapsedHierarchyIds.has(virtualId);
+  const visibleRoots = showRoots ? orderedRoots.slice(0, 12) : [];
+  return {
+    id: virtualId,
+    title: category,
+    childCount: orderedRoots.length,
+    hiddenCount: orderedRoots.length - visibleRoots.length,
+    isVirtual: true,
+    children: visibleRoots
+      .map((id) => hierarchyTreeData(id, 1))
+      .filter(Boolean),
+  };
+}
+
+function elementBounds(element) {
+  try {
+    return element.getBBox();
+  } catch {
+    return null;
+  }
+}
+
+function renderDynamicHierarchy(svg) {
+  const rootEntity = categoryFocus(selectedCategory.value);
+  const templateText = findTextAt(svg, 763.56, 196.11, 2);
+  const templateGroup = templateText?.parentElement?.cloneNode(true);
+  if (!rootEntity || !templateGroup) return;
+
+  const centerNodes = [...svg.children].filter((element) => {
+    if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return false;
+    const bounds = elementBounds(element);
+    return bounds
+      && bounds.x >= 480
+      && bounds.y >= 130
+      && bounds.x + bounds.width <= 1835
+      && bounds.y + bounds.height <= 885;
+  });
+  centerNodes.forEach((element) => {
+    element.style.display = "none";
+  });
+
+  const data = categoryForestData(selectedCategory.value);
+  if (!data) return;
+  const root = d3.hierarchy(data);
+  const maxDepth = Math.max(1, d3.max(root.descendants(), (node) => node.depth) || 1);
+  const area = { left: 520, right: 1795, top: 185, bottom: 835 };
+  const depthGap = Math.min(145, (area.bottom - area.top) / maxDepth);
+  d3.tree()
+    .size([area.right - area.left - 70, depthGap * maxDepth])
+    .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(root);
+
+  const layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  layer.classList.add("dynamic-tree-layer");
+  svg.appendChild(layer);
+
+  for (const link of root.links()) {
+    const sourceX = area.left + 35 + link.source.x;
+    const sourceY = area.top + link.source.y + 92;
+    const targetX = area.left + 35 + link.target.x;
+    const targetY = area.top + link.target.y - 25;
+    const middleY = (sourceY + targetY) / 2;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${sourceX},${sourceY} V${middleY} H${targetX} V${targetY}`);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "#563905");
+    path.setAttribute("stroke-width", ".75");
+    path.setAttribute("vector-effect", "non-scaling-stroke");
+    layer.appendChild(path);
+  }
+
+  for (const node of root.descendants()) {
+    const nodeGroup = templateGroup.cloneNode(true);
+    nodeGroup.classList.add("dynamic-tree-node");
+    if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
+    const x = area.left + 35 + node.x;
+    const y = area.top + node.y;
+    nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
+    const label = nodeGroup.querySelector("text");
+    setText(label, node.data.title.length > 12 ? `${node.data.title.slice(0, 11)}…` : node.data.title);
+    if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
+    if (!node.data.isVirtual && node.data.id !== selectedId.value) {
+      nodeGroup.querySelector("g.cls-81")?.remove();
+    }
+    layer.appendChild(nodeGroup);
+
+    const templatePolygon = nodeGroup.querySelector("polygon");
+    const hiddenCount = node.data.hiddenCount || 0;
+    if (templatePolygon && hiddenCount > 0) {
+      const bounds = elementBounds(templatePolygon);
+      const barCount = Math.min(5, Math.max(1, Math.ceil(Math.log2(hiddenCount + 1))));
+      for (let index = 0; index < barCount; index += 1) {
+        const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        bar.setAttribute("x", String(bounds.x + 1));
+        bar.setAttribute("y", String(bounds.y + bounds.height - 4 - index * 3));
+        bar.setAttribute("width", String(bounds.width - 2));
+        bar.setAttribute("height", "1.8");
+        bar.setAttribute("fill", "#563905");
+        bar.setAttribute("opacity", ".55");
+        nodeGroup.appendChild(bar);
+      }
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = `尚有 ${hiddenCount} 个下级机构未展开`;
+      nodeGroup.appendChild(title);
+    }
+
+    nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
+    d3.select(nodeGroup).on("click.dynamic-tree", (event) => {
+      event.stopPropagation();
+      detailPanelScrollOffset = 0;
+      if (!node.data.isVirtual) selectedId.value = node.data.id;
+      if (node.data.childCount) {
+        if (node.data.isVirtual) {
+          if (collapsedHierarchyIds.has(node.data.id)) collapsedHierarchyIds.delete(node.data.id);
+          else collapsedHierarchyIds.add(node.data.id);
+        } else if (expandedHierarchyIds.has(node.data.id)) {
+          expandedHierarchyIds.delete(node.data.id);
+        } else {
+          expandedHierarchyIds.add(node.data.id);
+        }
+      }
+      renderTemplate();
+    });
+  }
+}
+
 function assignSlots(slots, entityIds) {
   const ordered = [...slots].sort((a, b) => {
     const pa = position(a);
@@ -271,7 +449,7 @@ function populateCompositionCenter(svg) {
 }
 
 function populateCenter(svg) {
-  if (viewMode.value === "hierarchy") populateHierarchyCenter(svg);
+  if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
   else populateCompositionCenter(svg);
 }
 
@@ -293,6 +471,7 @@ function bindEntityTexts(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
+      if (this.closest(".dynamic-tree-layer")) return;
       const entity = this.dataset.entityId
         ? entityMap.get(Number(this.dataset.entityId))
         : titleMap.get(normalizeText(this));
@@ -653,6 +832,8 @@ function bindTemplateControls(svg) {
         const activate = (event) => {
           event.stopPropagation();
           detailPanelScrollOffset = 0;
+          collapsedHierarchyIds.clear();
+          expandedHierarchyIds.clear();
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
