@@ -319,8 +319,8 @@ function renderDynamicHierarchy(svg) {
 
   const nodeLayout = new Map(root.descendants().map((node) => {
     const x = area.left + 35 + node.x;
-    // 一级机构沿用原稿牌签的 y=196.11；分类根占用原“皇帝”中心位置。
-    const y = node.data.isVirtual ? 147.15 : 196.11 + (node.depth - 1) * depthGap;
+    // 分类根占用原“皇帝”中心位置；一级机构下移，为根节点与横向总线留出净空。
+    const y = node.data.isVirtual ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
       const width = Math.max(
         Number(emperorRect.getAttribute("width")),
@@ -337,30 +337,35 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  // 复用设计稿的 cls-26 折线样式。分类根到一级机构沿用原“皇帝”连线结构；
-  // 更深层级严格从父节点外框底边连到子节点外框顶边。
-  for (const link of root.links()) {
-    const source = nodeLayout.get(link.source);
-    const target = nodeLayout.get(link.target);
+  const appendLink = (points) => {
     const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
     polyline.setAttribute("class", "cls-26 dynamic-tree-link");
-    if (link.source.data.isVirtual && Math.abs(target.x - source.x) > source.width / 2) {
-      const rootEdgeX = target.x < source.x
-        ? source.x - source.width / 2
-        : source.x + source.width / 2;
-      polyline.setAttribute(
-        "points",
-        `${target.x},${target.top} ${target.x},${source.y} ${rootEdgeX},${source.y}`
-      );
-    } else {
-      const middleY = (source.bottom + target.top) / 2;
-      polyline.setAttribute(
-        "points",
-        `${source.x},${source.bottom} ${source.x},${middleY} ${target.x},${middleY} ${target.x},${target.top}`
-      );
-    }
+    polyline.setAttribute("points", points);
     polyline.style.pointerEvents = "none";
     layer.appendChild(polyline);
+  };
+
+  // 根节点与横向总线分离：根底部短竖线、下方总线、各一级机构独立竖线。
+  const firstLevelLinks = root.links().filter((link) => link.source.data.isVirtual);
+  if (firstLevelLinks.length) {
+    const rootLayout = nodeLayout.get(root);
+    const targets = firstLevelLinks.map((link) => nodeLayout.get(link.target));
+    const busY = (rootLayout.bottom + Math.min(...targets.map((target) => target.top))) / 2;
+    appendLink(`${rootLayout.x},${rootLayout.bottom} ${rootLayout.x},${busY}`);
+    appendLink(`${d3.min(targets, (target) => target.x)},${busY} ${d3.max(targets, (target) => target.x)},${busY}`);
+    targets.forEach((target) => {
+      appendLink(`${target.x},${busY} ${target.x},${target.top}`);
+    });
+  }
+
+  // 更深层级严格从父节点外框底边连到子节点外框顶边。
+  for (const link of root.links().filter((item) => !item.source.data.isVirtual)) {
+    const source = nodeLayout.get(link.source);
+    const target = nodeLayout.get(link.target);
+    const middleY = (source.bottom + target.top) / 2;
+    appendLink(
+      `${source.x},${source.bottom} ${source.x},${middleY} ${target.x},${middleY} ${target.x},${target.top}`
+    );
   }
 
   let nodeIndex = 0;
