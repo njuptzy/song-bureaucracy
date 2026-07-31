@@ -333,6 +333,12 @@ PROFILES = {
             {"from": "衡前乐", "to": "衙前乐", "page": "307",
              "reason": "核对第五编 PDF p307，目录把州府乐部‘衙前乐’"
                        "误识为‘衡前乐’，正文独立标题明确作‘衙前乐’"},
+            {"from": "议案", "to": "仪案", "page": "320",
+             "reason": "核对第五编 PDF p320，目录把大宗正司六案之一‘仪案’"
+                       "误识为‘议案’，正文独立标题明确作‘仪案’"},
+            {"from": "刑事", "to": "刑案", "page": "320",
+             "reason": "核对第五编 PDF p320，目录把大宗正司六案之一‘刑案’"
+                       "误识为‘刑事’，正文独立标题明确作‘刑案’"},
         ],
     },
     "11t12": {
@@ -2277,6 +2283,60 @@ def main():
         inspection_meta["status"] = "ok"
         print("  [条目拆分] '攒宫都监/检察宫陵所'(p317-318)：按原书独立标题"
               "拆回检察宫陵所正文、职源与职掌，并恢复‘宫’字")
+
+        household_case = next(e for e in all_entries if e["name"] == "户案")
+        ritual_case = next(e for e in all_entries if e["name"] == "仪案")
+        ritual_marker = "仪案 大宗正司办事机构之一。"
+        if ritual_case.get("_placeholder") is True:
+            assert ritual_marker in household_case["text"]
+            household_text, ritual_text = household_case["text"].split(
+                ritual_marker, 1
+            )
+            household_case["text"] = household_text.rstrip()
+            ritual_case["text"] = "大宗正司办事机构之一。" + ritual_text
+            ritual_case.pop("_placeholder", None)
+            ritual_meta = all_meta[all_entries.index(ritual_case)]
+            ritual_meta["status"] = "ok"
+        else:
+            assert ritual_marker not in household_case["text"]
+            assert ritual_case["text"].startswith("大宗正司办事机构之一。")
+
+        military_case = next(e for e in all_entries if e["name"] == "兵案")
+        criminal_case = next(e for e in all_entries if e["name"] == "刑案")
+        criminal_marker = "刑案 大宗正司办事机构之一。"
+        if criminal_case.get("_placeholder") is True:
+            assert criminal_marker in military_case["text"]
+            military_text, criminal_text = military_case["text"].split(
+                criminal_marker, 1
+            )
+            military_case["text"] = military_text.rstrip()
+            criminal_case["text"] = "大宗正司办事机构之一。" + criminal_text
+            criminal_case.pop("_placeholder", None)
+            criminal_meta = all_meta[all_entries.index(criminal_case)]
+            criminal_meta["status"] = "ok"
+        else:
+            assert criminal_marker not in military_case["text"]
+            assert criminal_case["text"].startswith("大宗正司办事机构之一。")
+        print("  [条目拆分] '户案/仪案、兵案/刑案'(p320)：按原书独立标题"
+              "拆回大宗正司仪案与刑案正文，并恢复目录误识字形")
+
+        for page_title in ("绍兴府大宗正行司", "主管宗室财用", "教授"):
+            page_matches = [
+                m for e, m in zip(all_entries, all_meta)
+                if e["name"] == page_title and str(m.get("page")) == "32"
+            ]
+            assert len(page_matches) == 1, (page_title, page_matches)
+            page_meta = page_matches[0]
+            page_meta["page"] = "321"
+        print("  [页码归位] '绍兴府大宗正行司/主管宗室财用/教授'(p321)："
+              "核原书补回目录 OCR 漏失的末位页码‘1’")
+
+        front_clerk = next(e for e in all_entries if e["name"] == "前行")
+        assert "(《(宋会要·职官》20之20)" in front_clerk["text"]
+        front_clerk["text"] = front_clerk["text"].replace(
+            "(《(宋会要·职官》20之20)", "(《宋会要·职官》20之20)", 1
+        )
+        print("  [OCR符号] '前行'(p320)：核原书恢复引书括号次序")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
