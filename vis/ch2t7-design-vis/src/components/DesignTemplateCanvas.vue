@@ -21,6 +21,14 @@ const selectedYear = ref(1080);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
+const detailPanelOffset = { x: 0, y: 0 };
+
+const DETAIL_PANEL_BOUNDS = {
+  x: 81.77,
+  y: 497.57,
+  width: 393.72,
+  height: 380.1,
+};
 
 const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
 const titleMap = new Map();
@@ -306,6 +314,81 @@ function bindEntityTexts(svg) {
     });
 }
 
+function setupDetailPanel(svg) {
+  const panelNodes = [...svg.children].filter((element) => {
+    if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return false;
+    let bounds;
+    try {
+      bounds = element.getBBox();
+    } catch {
+      return false;
+    }
+    return bounds.x >= 70
+      && bounds.y >= 480
+      && bounds.x + bounds.width <= 482
+      && bounds.y + bounds.height <= 885;
+  });
+  if (!panelNodes.length) return;
+
+  const panelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  panelGroup.classList.add("detail-panel-group");
+  panelGroup.setAttribute("transform", `translate(${detailPanelOffset.x} ${detailPanelOffset.y})`);
+  svg.insertBefore(panelGroup, panelNodes[0]);
+  panelNodes.forEach((node) => panelGroup.appendChild(node));
+
+  const defs = svg.querySelector("defs") || svg.insertBefore(
+    document.createElementNS("http://www.w3.org/2000/svg", "defs"),
+    svg.firstChild
+  );
+  const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+  clipPath.id = "detail-panel-content-clip";
+  clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+  const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  clipRect.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x + 7));
+  clipRect.setAttribute("y", String(DETAIL_PANEL_BOUNDS.y + 2));
+  clipRect.setAttribute("width", String(DETAIL_PANEL_BOUNDS.width - 17));
+  clipRect.setAttribute("height", String(DETAIL_PANEL_BOUNDS.height - 7));
+  clipPath.appendChild(clipRect);
+  defs.appendChild(clipPath);
+
+  const dragHandle = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  dragHandle.classList.add("detail-panel-drag-handle");
+  dragHandle.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x));
+  dragHandle.setAttribute("y", String(DETAIL_PANEL_BOUNDS.y));
+  dragHandle.setAttribute("width", String(DETAIL_PANEL_BOUNDS.width));
+  dragHandle.setAttribute("height", "52");
+  dragHandle.setAttribute("fill", "transparent");
+  dragHandle.setAttribute("pointer-events", "all");
+  dragHandle.style.cursor = "grab";
+  panelGroup.appendChild(dragHandle);
+
+  const viewBox = svg.viewBox.baseVal;
+  const minX = viewBox.x - DETAIL_PANEL_BOUNDS.x;
+  const maxX = viewBox.x + viewBox.width - DETAIL_PANEL_BOUNDS.x - DETAIL_PANEL_BOUNDS.width;
+  const minY = viewBox.y - DETAIL_PANEL_BOUNDS.y;
+  const maxY = viewBox.y + viewBox.height - DETAIL_PANEL_BOUNDS.y - DETAIL_PANEL_BOUNDS.height;
+  const movePanel = () => {
+    panelGroup.setAttribute("transform", `translate(${detailPanelOffset.x} ${detailPanelOffset.y})`);
+  };
+  d3.select(dragHandle)
+    .on("click", (event) => event.stopPropagation())
+    .call(
+      d3.drag()
+        .on("start", (event) => {
+          event.sourceEvent?.stopPropagation();
+          dragHandle.style.cursor = "grabbing";
+        })
+        .on("drag", (event) => {
+          detailPanelOffset.x = Math.max(minX, Math.min(maxX, detailPanelOffset.x + event.dx));
+          detailPanelOffset.y = Math.max(minY, Math.min(maxY, detailPanelOffset.y + event.dy));
+          movePanel();
+        })
+        .on("end", () => {
+          dragHandle.style.cursor = "grab";
+        })
+    );
+}
+
 function updateDetails(svg) {
   const entity = selectedEntity();
   if (!entity) return;
@@ -318,13 +401,25 @@ function updateDetails(svg) {
   const staffText = staff.length ? staff.map(quotaText).join("；") : "当前年份未载明确编制。";
   const childText = children.length ? children.map((edge) => titleOf(edge.child)).join("、") : "当前年份未载明确下级机构。";
 
-  setText(findTextAt(svg, 99.85, 505.87), entity.title);
-  setText(findTextAt(svg, 189.74, 502.91), `公元${selectedYear.value}年制度截面`);
-  wrapText(findTextAt(svg, 101.29, 570.06), mainText, 31, 24, 7);
-  setText(findTextAt(svg, 100.33, 536.92), "编制与沿革");
-  wrapText(findTextAt(svg, 101.29, 783.54), staffText, 31, 22, 2);
-  setText(findTextAt(svg, 100.33, 750.4), "编制");
-  setText(findTextAt(svg, 100.33, 846.08), `下级机构：${childText}`);
+  const detailSlots = {
+    title: findTextAt(svg, 99.85, 505.87),
+    year: findTextAt(svg, 189.74, 502.91),
+    main: findTextAt(svg, 101.29, 570.06),
+    mainLabel: findTextAt(svg, 100.33, 536.92),
+    staff: findTextAt(svg, 101.29, 783.54),
+    staffLabel: findTextAt(svg, 100.33, 750.4),
+    children: findTextAt(svg, 100.33, 846.08),
+  };
+  Object.values(detailSlots).forEach((slot) => {
+    slot?.setAttribute("clip-path", "url(#detail-panel-content-clip)");
+  });
+  setText(detailSlots.title, entity.title);
+  setText(detailSlots.year, `公元${selectedYear.value}年制度截面`);
+  wrapText(detailSlots.main, mainText, 31, 24, 7);
+  setText(detailSlots.mainLabel, "编制与沿革");
+  wrapText(detailSlots.staff, staffText, 31, 22, 2);
+  setText(detailSlots.staffLabel, "编制");
+  wrapText(detailSlots.children, `下级机构：${childText}`, 31, 18, 2);
 
   // 第一画板顶部浮动卡：仍使用原有框、竖排槽位和官职条，只替换内容。
   if (viewMode.value === "hierarchy") {
@@ -497,6 +592,7 @@ async function renderTemplate() {
     bindEntityTexts(svg);
     replaceCompositionDescriptions(svg);
     bindTemplateControls(svg);
+    setupDetailPanel(svg);
     updateDetails(svg);
   } catch (reason) {
     error.value = `SVG 设计稿加载失败：${reason.message}`;
