@@ -351,6 +351,26 @@ function setupDetailPanel(svg) {
   clipPath.appendChild(clipRect);
   defs.appendChild(clipPath);
 
+  const contentGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  contentGroup.classList.add("detail-panel-content");
+  contentGroup.setAttribute("clip-path", "url(#detail-panel-content-clip)");
+  const contentPositions = [
+    [99.85, 505.87],
+    [189.74, 502.91],
+    [101.29, 570.06],
+    [100.33, 536.92],
+    [101.29, 783.54],
+    [100.33, 750.4],
+    [100.33, 846.08],
+  ];
+  const contentNodes = contentPositions
+    .map(([x, y]) => findTextAt(svg, x, y))
+    .filter(Boolean);
+  if (contentNodes.length) {
+    panelGroup.insertBefore(contentGroup, contentNodes[0]);
+    contentNodes.forEach((node) => contentGroup.appendChild(node));
+  }
+
   const dragHandle = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   dragHandle.classList.add("detail-panel-drag-handle");
   dragHandle.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x));
@@ -410,9 +430,6 @@ function updateDetails(svg) {
     staffLabel: findTextAt(svg, 100.33, 750.4),
     children: findTextAt(svg, 100.33, 846.08),
   };
-  Object.values(detailSlots).forEach((slot) => {
-    slot?.setAttribute("clip-path", "url(#detail-panel-content-clip)");
-  });
   setText(detailSlots.title, entity.title);
   setText(detailSlots.year, `公元${selectedYear.value}年制度截面`);
   wrapText(detailSlots.main, mainText, 31, 24, 7);
