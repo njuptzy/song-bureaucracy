@@ -258,31 +258,20 @@ function elementBounds(element) {
   }
 }
 
-function fitDynamicNodeLabel(label, fullTitle, polygonBounds, polygon) {
-  if (!label || !polygonBounds || !polygon) return;
+function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
+  if (!label || !polygonBounds) return;
   const availableLength = polygonBounds.height - 4;
   const maxGlyphs = Math.max(1, Math.floor(availableLength / 17.14));
   const displayTitle = fullTitle.length > maxGlyphs
     ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
     : fullTitle;
   setText(label, displayTitle);
-
-  const point = position(label);
-  const labelRect = label.getBoundingClientRect();
-  const polygonRect = polygon.getBoundingClientRect();
-  if (point && labelRect.width > 0 && labelRect.height > 0 && polygonRect.width > 0 && polygonRect.height > 0) {
-    const scaleX = polygonRect.width / polygonBounds.width;
-    const scaleY = polygonRect.height / polygonBounds.height;
-    const centerDeltaX = (
-      polygonRect.left + polygonRect.width / 2
-      - (labelRect.left + labelRect.width / 2)
-    ) / scaleX;
-    const centerDeltaY = (
-      polygonRect.top + polygonRect.height / 2
-      - (labelRect.top + labelRect.height / 2)
-    ) / scaleY;
-    label.setAttribute("transform", `translate(${point.x + centerDeltaX} ${point.y + centerDeltaY})`);
-  }
+  label.setAttribute("text-anchor", "middle");
+  label.setAttribute("dominant-baseline", "central");
+  label.setAttribute(
+    "transform",
+    `translate(${polygonBounds.x + polygonBounds.width / 2} ${polygonBounds.y + polygonBounds.height / 2})`
+  );
 }
 
 function renderDynamicHierarchy(svg) {
@@ -352,7 +341,7 @@ function renderDynamicHierarchy(svg) {
 
     const templatePolygon = nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
-    fitDynamicNodeLabel(label, node.data.title, polygonBounds, templatePolygon);
+    fitDynamicNodeLabel(label, node.data.title, polygonBounds);
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
