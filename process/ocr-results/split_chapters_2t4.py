@@ -2379,6 +2379,47 @@ def main():
         print("  [字段归位] '卫尉寺少卿'(p332)：将粘在编制末尾的简称段拆回"
               "独立‘简称’字段")
 
+        right_street = next(e for e in all_entries if e["name"] == "知右街司事")
+        street_continuations = [
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "街司" and str(m.get("page")) == "337"
+            and m.get("status") == "from_surname"
+        ]
+        assert len(street_continuations) == 1
+        street_tail, street_tail_meta = street_continuations[0]
+        assert right_street["text"] == "差遣名。以诸司使充。领右"
+        assert street_tail["text"] == "事(《宋会要·职官》22之13)。"
+        right_street["text"] += street_tail["name"] + street_tail["text"]
+        street_tail.clear()
+        street_tail.update({"name": "街司", "text": "", "_placeholder": True})
+        street_tail_meta["status"] = "placeholder"
+        print("  [跨页续文] '知右街司事/街司'(p336-337)：将页首续文"
+              "‘街司事’并回第373条，第374条保留为空占位")
+
+        golden_guard = next(
+            e for e in all_entries if e["name"] == "左、右金吾引驾仗司"
+        )
+        combined_duty = golden_guard["职掌"]
+        roster_marker = "编制 "
+        assert roster_marker in combined_duty
+        duty_text, roster_text = combined_duty.split(roster_marker, 1)
+        golden_guard["职掌"] = duty_text.rstrip()
+        golden_guard["编制"] = roster_text
+        print("  [字段归位] '左、右金吾引驾仗司'(p337)：将粘在职掌末尾的"
+              "编制段拆回独立‘编制’字段")
+
+        judge_guard = next(
+            e for e in all_entries if e["name"] == "判左、右金吾引驾仗司事"
+        )
+        combined_text = judge_guard["text"]
+        alias_marker = "\n简称 "
+        assert alias_marker in combined_text
+        body_text, aliases = combined_text.split(alias_marker, 1)
+        judge_guard["text"] = body_text.rstrip()
+        judge_guard["简称"] = aliases
+        print("  [字段归位] '判左、右金吾引驾仗司事'(p337)：将粘在正文末尾的"
+              "简称段拆回独立‘简称’字段")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
