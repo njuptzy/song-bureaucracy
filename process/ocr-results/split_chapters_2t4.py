@@ -348,6 +348,8 @@ PROFILES = {
             {"from": "刑事", "to": "刑案", "page": "320",
              "reason": "核对第五编 PDF p320，目录把大宗正司六案之一‘刑案’"
                        "误识为‘刑事’，正文独立标题明确作‘刑案’"},
+            {"from": "肾佐", "to": "胥佐", "page": "327",
+             "reason": "第五编 p327 正文独立标题及释文均明确作‘胥佐’，目录误识为‘肾佐’"},
         ],
     },
     "11t12": {
@@ -2346,6 +2348,16 @@ def main():
             "(《(宋会要·职官》20之20)", "(《宋会要·职官》20之20)", 1
         )
         print("  [OCR符号] '前行'(p320)：核原书恢复引书括号次序")
+
+        guanglu_registry = next(e for e in all_entries if e["name"] == "光禄寺主簿")
+        combined_staff = guanglu_registry["编制"]
+        alias_marker = "\n简称 "
+        assert alias_marker in combined_staff
+        staff, aliases = combined_staff.split(alias_marker, 1)
+        guanglu_registry["编制"] = staff.rstrip()
+        guanglu_registry["简称"] = aliases
+        print("  [字段归位] '光禄寺主簿'(p326)：将粘在编制末尾的简称段拆回"
+              "独立‘简称’字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
