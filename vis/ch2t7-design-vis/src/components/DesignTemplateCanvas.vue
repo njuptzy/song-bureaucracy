@@ -258,6 +258,32 @@ function elementBounds(element) {
   }
 }
 
+function fitDynamicNodeLabel(label, fullTitle, polygonBounds, hiddenCount) {
+  if (!label || !polygonBounds) return;
+  const contentTop = polygonBounds.y + 8;
+  const contentBottom = polygonBounds.y + polygonBounds.height - (hiddenCount ? 20 : 8);
+  const availableLength = contentBottom - contentTop;
+  const measuredLength = () => {
+    const measured = label.getComputedTextLength?.() || 0;
+    return measured > 0 ? measured : (label.textContent || "").length * 17.14;
+  };
+
+  setText(label, fullTitle);
+  if (measuredLength() > availableLength) {
+    for (let length = Math.max(1, fullTitle.length - 1); length >= 1; length -= 1) {
+      setText(label, `${fullTitle.slice(0, length)}…`);
+      if (measuredLength() <= availableLength) break;
+    }
+  }
+
+  const point = position(label);
+  const finalLength = Math.min(availableLength, measuredLength());
+  if (point) {
+    const centeredY = contentTop + (availableLength - finalLength) / 2;
+    label.setAttribute("transform", `translate(${point.x} ${centeredY})`);
+  }
+}
+
 function renderDynamicHierarchy(svg) {
   const rootEntity = categoryFocus(selectedCategory.value);
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
@@ -316,8 +342,7 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
     const label = nodeGroup.querySelector("text");
     const hiddenCount = node.data.hiddenCount || 0;
-    const displayTitle = node.data.title.length > 4 ? `${node.data.title.slice(0, 3)}…` : node.data.title;
-    setText(label, displayTitle);
+    setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value) {
       nodeGroup.querySelector("g.cls-81")?.remove();
@@ -326,6 +351,7 @@ function renderDynamicHierarchy(svg) {
 
     const templatePolygon = nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
+    fitDynamicNodeLabel(label, node.data.title, polygonBounds, hiddenCount);
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
@@ -926,8 +952,13 @@ async function renderTemplate() {
 
 watch(viewMode, renderTemplate);
 watch(selectedYear, () => renderTemplate());
-onMounted(() => {
+onMounted(async () => {
   installDesignFonts();
+  try {
+    await document.fonts?.load('17.14px "FZQINGKBYSS-M--GB1-0"');
+  } catch {
+    // 字体加载失败时仍保留 SVG 自带的回退字体。
+  }
   renderTemplate();
 });
 </script>
