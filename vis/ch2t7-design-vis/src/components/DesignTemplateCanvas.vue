@@ -102,6 +102,127 @@ function selectedEntity() {
   return entityMap.get(selectedId.value) || titleMap.get("尚书省") || props.data.entities[0];
 }
 
+function graphFocusEntity() {
+  const selected = selectedEntity();
+  if (selected?.type === "机构") return selected;
+  const affiliation = props.data.staffEdges.find(
+    (edge) => edge.official === selected?.id && periodActive(edge.periods)
+  );
+  return affiliation ? entityMap.get(affiliation.org) : titleMap.get("尚书省") || selected;
+}
+
+function hierarchyLevels(rootId, maxDepth) {
+  const levels = [[rootId]];
+  const visited = new Set([rootId]);
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    const next = [];
+    for (const parentId of levels[depth - 1]) {
+      const children = childrenFor(parentId)
+        .map((edge) => edge.child)
+        .filter((id) => !visited.has(id))
+        .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
+      for (const childId of children) {
+        visited.add(childId);
+        next.push(childId);
+      }
+    }
+    levels.push(next);
+  }
+  return levels;
+}
+
+function assignSlots(slots, entityIds) {
+  const ordered = [...slots].sort((a, b) => {
+    const pa = position(a);
+    const pb = position(b);
+    return pa.x - pb.x || pa.y - pb.y;
+  });
+  ordered.forEach((slot, index) => {
+    const entityId = entityIds[index];
+    if (entityId == null) {
+      slot.style.opacity = "0";
+      slot.removeAttribute("data-entity-id");
+      return;
+    }
+    const title = titleOf(entityId);
+    slot.style.opacity = "1";
+    slot.dataset.entityId = String(entityId);
+    setText(slot, title.length > 13 ? `${title.slice(0, 12)}…` : title);
+  });
+}
+
+function populateHierarchyCenter(svg) {
+  const focus = graphFocusEntity();
+  if (!focus) return;
+  const texts = [...svg.querySelectorAll("text")];
+  const rootSlot = findTextAt(svg, 763.56, 196.11, 2);
+  const buckets = [
+    rootSlot ? [rootSlot] : [],
+    texts.filter((element) => {
+      const point = position(element);
+      return point && point.x > 480 && point.y >= 300 && point.y < 400 && element.getAttribute("class") === "cls-56";
+    }),
+    texts.filter((element) => {
+      const point = position(element);
+      return point && point.x > 480 && point.y >= 430 && point.y < 550 && ["cls-48", "cls-56"].includes(element.getAttribute("class"));
+    }),
+    texts.filter((element) => {
+      const point = position(element);
+      return point && point.x > 480 && point.y >= 570 && point.y < 700 && ["cls-38", "cls-59"].includes(element.getAttribute("class"));
+    }),
+    texts.filter((element) => {
+      const point = position(element);
+      return point && point.x > 480 && point.y >= 700 && point.y < 850 && element.getAttribute("class") === "cls-59";
+    }),
+  ];
+  const levels = hierarchyLevels(focus.id, buckets.length - 1);
+  buckets.forEach((slots, depth) => assignSlots(slots, levels[depth] || []));
+
+  // 原画板还预留了两个皇帝直属机构槽；填入焦点机构的同级机构，而非保留示例名称。
+  const siblingSlots = [findTextAt(svg, 1735.2, 196.3, 2), findTextAt(svg, 1780.8, 196.3, 2)].filter(Boolean);
+  const parentEdge = props.data.hierarchyEdges.find(
+    (edge) => edge.child === focus.id && periodActive(edge.periods)
+  );
+  const siblings = parentEdge
+    ? childrenFor(parentEdge.parent).map((edge) => edge.child).filter((id) => id !== focus.id)
+    : [];
+  assignSlots(siblingSlots, siblings);
+  const contextSlot = findTextAt(svg, 1446.2, 183, 2);
+  if (contextSlot) assignSlots([contextSlot], parentEdge ? [parentEdge.parent] : []);
+}
+
+function populateCompositionCenter(svg) {
+  const focus = graphFocusEntity();
+  if (!focus) return;
+  const slots = [...svg.querySelectorAll("text")].filter((element) => {
+    const point = position(element);
+    const className = element.getAttribute("class");
+    return (
+      point &&
+      point.x > 500 &&
+      point.y > 140 &&
+      point.y < 850 &&
+      ["cls-28", "cls-38", "cls-50"].includes(className) &&
+      normalizeText(element).length <= 16
+    );
+  });
+  const levels = hierarchyLevels(focus.id, 5);
+  const flattened = levels.flat();
+  const seen = new Set();
+  const unique = flattened.filter((id) => !seen.has(id) && seen.add(id));
+  const orderedSlots = [...slots].sort((a, b) => {
+    const pa = position(a);
+    const pb = position(b);
+    return pa.y - pb.y || pa.x - pb.x;
+  });
+  assignSlots(orderedSlots, unique);
+}
+
+function populateCenter(svg) {
+  if (viewMode.value === "hierarchy") populateHierarchyCenter(svg);
+  else populateCompositionCenter(svg);
+}
+
 function bindEntityTexts(svg) {
   const activeIds = new Set();
   for (const edge of props.data.hierarchyEdges) {
@@ -120,7 +241,9 @@ function bindEntityTexts(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
-      const entity = titleMap.get(normalizeText(this));
+      const entity = this.dataset.entityId
+        ? entityMap.get(Number(this.dataset.entityId))
+        : titleMap.get(normalizeText(this));
       if (!entity) return;
       const point = position(this);
       // 左侧详情标题和顶部信息卡由 updateDetails 单独处理。
@@ -135,7 +258,7 @@ function bindEntityTexts(svg) {
         .on("click", (event) => {
           event.stopPropagation();
           selectedId.value = entity.id;
-          updateDetails(svg);
+          renderTemplate();
         });
     });
 }
@@ -178,7 +301,7 @@ function updateDetails(svg) {
       d3.select(slot).on("click", (event) => {
         event.stopPropagation();
         selectedId.value = edge.official;
-        updateDetails(svg);
+        renderTemplate();
       });
       const slotPoint = position(slot);
       const quotaSlot = [...svg.querySelectorAll("text")].find((candidate) => {
@@ -199,7 +322,9 @@ function replaceCompositionDescriptions(svg) {
   });
   const institutionSlots = [...svg.querySelectorAll("text")].filter((element) => {
     const point = position(element);
-    const entity = titleMap.get(normalizeText(element));
+    const entity = element.dataset.entityId
+      ? entityMap.get(Number(element.dataset.entityId))
+      : titleMap.get(normalizeText(element));
     return point && point.x > 500 && point.y > 130 && point.y < 870 && entity?.type === "机构";
   });
   const used = new Set();
@@ -214,7 +339,9 @@ function replaceCompositionDescriptions(svg) {
       .sort((a, b) => a.distance - b.distance)[0];
     if (!nearest) continue;
     used.add(nearest.slot);
-    const entity = titleMap.get(normalizeText(nearest.slot));
+    const entity = nearest.slot.dataset.entityId
+      ? entityMap.get(Number(nearest.slot.dataset.entityId))
+      : titleMap.get(normalizeText(nearest.slot));
     const staff = staffFor(entity.id);
     setText(candidate, staff.length ? staff.slice(0, 10).map(quotaText).join("；") : "当前年份未载明确编制");
   }
@@ -273,6 +400,7 @@ async function renderTemplate() {
     svg.removeAttribute("height");
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.classList.add("live-design-svg");
+    populateCenter(svg);
     bindEntityTexts(svg);
     replaceCompositionDescriptions(svg);
     bindTemplateControls(svg);
