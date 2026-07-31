@@ -270,13 +270,18 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds, polygon) {
   const point = position(label);
   const labelRect = label.getBoundingClientRect();
   const polygonRect = polygon.getBoundingClientRect();
-  if (point && labelRect.height > 0 && polygonRect.height > 0) {
-    const scale = polygonRect.height / polygonBounds.height;
-    const centerDelta = (
+  if (point && labelRect.width > 0 && labelRect.height > 0 && polygonRect.width > 0 && polygonRect.height > 0) {
+    const scaleX = polygonRect.width / polygonBounds.width;
+    const scaleY = polygonRect.height / polygonBounds.height;
+    const centerDeltaX = (
+      polygonRect.left + polygonRect.width / 2
+      - (labelRect.left + labelRect.width / 2)
+    ) / scaleX;
+    const centerDeltaY = (
       polygonRect.top + polygonRect.height / 2
       - (labelRect.top + labelRect.height / 2)
-    ) / scale;
-    label.setAttribute("transform", `translate(${point.x} ${point.y + centerDelta})`);
+    ) / scaleY;
+    label.setAttribute("transform", `translate(${point.x + centerDeltaX} ${point.y + centerDeltaY})`);
   }
 }
 
