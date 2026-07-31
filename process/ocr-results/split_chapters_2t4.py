@@ -2221,6 +2221,21 @@ def main():
         print("  [ID占位] '衙前'(p307)：真实正文已归回‘衙前乐’，原多出条目位"
               "保留为空占位，避免第93条以后既有辞典ID整体前移")
 
+        medical_office = next(e for e in all_entries if e["name"] == "提举太医局所")
+        medical_supervisor = next(e for e in all_entries if e["name"] == "提举太医局")
+        assert medical_supervisor.get("_placeholder") is True
+        post_marker = "提举太医局 差遣名。"
+        assert post_marker in medical_office["text"]
+        office_text, post_text = medical_office["text"].split(post_marker, 1)
+        medical_office["text"] = office_text.rstrip()
+        medical_supervisor["text"] = "差遣名。" + post_text
+        medical_supervisor["简称"] = medical_office.pop("简称")
+        medical_supervisor.pop("_placeholder", None)
+        medical_supervisor_meta = all_meta[all_entries.index(medical_supervisor)]
+        medical_supervisor_meta["status"] = "ok"
+        print("  [条目拆分] '提举太医局所/提举太医局'(p311)：按原书独立标题"
+              "拆回官司与差遣官正文，简称归入差遣官条")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
