@@ -258,31 +258,25 @@ function elementBounds(element) {
   }
 }
 
-function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
-  if (!label || !polygonBounds) return;
-  const contentTop = polygonBounds.y + 2;
-  const contentBottom = polygonBounds.y + polygonBounds.height - 2;
-  const availableLength = contentBottom - contentTop;
-  const measuredLength = () => {
-    const visibleHeight = elementBounds(label)?.height || 0;
-    if (visibleHeight > 0) return visibleHeight;
-    const advanceLength = label.getComputedTextLength?.() || 0;
-    return advanceLength > 0 ? advanceLength : (label.textContent || "").length * 17.14;
-  };
-
-  setText(label, fullTitle);
-  if (measuredLength() > availableLength) {
-    for (let length = Math.max(1, fullTitle.length - 1); length >= 1; length -= 1) {
-      setText(label, `${fullTitle.slice(0, length)}…`);
-      if (measuredLength() <= availableLength) break;
-    }
-  }
+function fitDynamicNodeLabel(label, fullTitle, polygonBounds, polygon) {
+  if (!label || !polygonBounds || !polygon) return;
+  const availableLength = polygonBounds.height - 4;
+  const maxGlyphs = Math.max(1, Math.floor(availableLength / 17.14));
+  const displayTitle = fullTitle.length > maxGlyphs
+    ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
+    : fullTitle;
+  setText(label, displayTitle);
 
   const point = position(label);
-  const finalLength = Math.min(availableLength, measuredLength());
-  if (point) {
-    const centeredY = contentTop + (availableLength - finalLength) / 2;
-    label.setAttribute("transform", `translate(${point.x} ${centeredY})`);
+  const labelRect = label.getBoundingClientRect();
+  const polygonRect = polygon.getBoundingClientRect();
+  if (point && labelRect.height > 0 && polygonRect.height > 0) {
+    const scale = polygonRect.height / polygonBounds.height;
+    const centerDelta = (
+      polygonRect.top + polygonRect.height / 2
+      - (labelRect.top + labelRect.height / 2)
+    ) / scale;
+    label.setAttribute("transform", `translate(${point.x} ${point.y + centerDelta})`);
   }
 }
 
@@ -353,7 +347,7 @@ function renderDynamicHierarchy(svg) {
 
     const templatePolygon = nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
-    fitDynamicNodeLabel(label, node.data.title, polygonBounds);
+    fitDynamicNodeLabel(label, node.data.title, polygonBounds, templatePolygon);
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
