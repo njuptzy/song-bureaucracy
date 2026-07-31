@@ -25,6 +25,8 @@ const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
+let hierarchyPanX = 0;
+let hierarchyPanY = 0;
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -109,29 +111,24 @@ function titleOf(entityId) {
 const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
 
 function entityCategory(entity) {
-  const categories = (props.data.timepoints[String(entity.id)] || [])
-    .map((timepoint) => timepoint.attr_category || "")
-    .join(" ");
-  const text = `${entity.title} ${categories}`;
-  if (/内廷|宫廷|宫闱|禁中|内侍|御前|供御|殿中省|尚[食药衣舍辇酝]/.test(text)) return "内廷机构";
-  if (/军队|军事|禁军|统兵|马军|步军|殿前司|侍卫|枢密|钤辖|都统制/.test(text)) return "军队机构";
-  if (/路级|转运|提刑|提举常平|安抚|发运|总领|经略|漕司/.test(text)) return "路级机构";
-  if (/州县|州府|府县|县衙|监当|税务|地方行政|知州|知县/.test(text)) return "州县机构";
-  return "中央机构";
+  return entity.category || "中央机构";
+}
+
+function hierarchyRootEntities(category) {
+  const childIds = new Set(
+    props.data.hierarchyEdges
+      .filter((edge) => periodActive(edge.periods))
+      .map((edge) => edge.child)
+  );
+  return props.data.entities.filter(
+    (entity) => entity.type === "机构"
+      && entityCategory(entity) === category
+      && !childIds.has(entity.id)
+  );
 }
 
 function categoryFocus(category) {
-  const candidates = props.data.entities.filter(
-    (entity) => entity.type === "机构" && entityCategory(entity) === category
-  );
-  const candidateIds = new Set(candidates.map((entity) => entity.id));
-  const hasCategoryParent = new Set();
-  for (const edge of props.data.hierarchyEdges) {
-    if (!periodActive(edge.periods)) continue;
-    if (candidateIds.has(edge.parent) && candidateIds.has(edge.child)) hasCategoryParent.add(edge.child);
-  }
-  const roots = candidates.filter((entity) => !hasCategoryParent.has(entity.id));
-  const pool = roots.length ? roots : candidates;
+  const roots = hierarchyRootEntities(category);
   const scoreCache = new Map();
   const score = (entityId, visiting = new Set()) => {
     if (scoreCache.has(entityId)) return scoreCache.get(entityId);
@@ -142,7 +139,7 @@ function categoryFocus(category) {
     scoreCache.set(entityId, value);
     return value;
   };
-  return [...pool].sort(
+  return [...roots].sort(
     (a, b) => score(b.id) - score(a.id) || a.title.localeCompare(b.title, "zh")
   )[0] || null;
 }
@@ -187,14 +184,14 @@ function hierarchyLevels(rootId, maxDepth) {
 
 function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
   const entity = entityMap.get(rootId);
-  if (!entity || visiting.has(rootId) || depth > 4) return null;
+  if (!entity || visiting.has(rootId)) return null;
   const nextVisiting = new Set(visiting).add(rootId);
   const allChildren = childrenFor(rootId)
     .map((edge) => edge.child)
     .filter((id) => !nextVisiting.has(id))
     .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
   const shouldExpand = expandedHierarchyPath.includes(rootId);
-  const shownChildren = shouldExpand ? allChildren.slice(0, 12) : [];
+  const shownChildren = shouldExpand ? allChildren : [];
   return {
     id: rootId,
     title: entity.title,
@@ -207,17 +204,7 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
 }
 
 function categoryForestData(category) {
-  const candidateIds = new Set(
-    props.data.entities
-      .filter((entity) => entity.type === "机构" && entityCategory(entity) === category)
-      .map((entity) => entity.id)
-  );
-  const hasCategoryParent = new Set();
-  for (const edge of props.data.hierarchyEdges) {
-    if (!periodActive(edge.periods)) continue;
-    if (candidateIds.has(edge.parent) && candidateIds.has(edge.child)) hasCategoryParent.add(edge.child);
-  }
-  const roots = [...candidateIds].filter((id) => !hasCategoryParent.has(id));
+  const roots = hierarchyRootEntities(category).map((entity) => entity.id);
   const scoreCache = new Map();
   const descendantScore = (entityId, visiting = new Set()) => {
     if (scoreCache.has(entityId)) return scoreCache.get(entityId);
@@ -235,7 +222,7 @@ function categoryForestData(category) {
   );
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
-  const visibleRoots = showRoots ? orderedRoots.slice(0, 12) : [];
+  const visibleRoots = showRoots ? orderedRoots : [];
   return {
     id: virtualId,
     title: category,
@@ -273,7 +260,6 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
 }
 
 function renderDynamicHierarchy(svg) {
-  const rootEntity = categoryFocus(selectedCategory.value);
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
   const templateGroup = templateText?.parentElement?.cloneNode(true);
   const templatePolygonBounds = elementBounds(templateText?.parentElement?.querySelector("polygon"));
@@ -284,7 +270,7 @@ function renderDynamicHierarchy(svg) {
       && Math.abs(Number(element.getAttribute("width")) - 60.84) <= 0.1
       && Math.abs(Number(element.getAttribute("height")) - 28.23) <= 0.1
   );
-  if (!rootEntity || !templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return;
+  if (!templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return;
 
   // 原稿的“皇帝”只作为横排分类根的样式模板，不在动态机构树中重复显示。
   emperorText.style.display = "none";
@@ -306,19 +292,42 @@ function renderDynamicHierarchy(svg) {
   const data = categoryForestData(selectedCategory.value);
   if (!data) return;
   const root = d3.hierarchy(data);
-  const maxDepth = Math.max(1, d3.max(root.descendants(), (node) => node.depth) || 1);
-  const area = { left: 520, right: 1795 };
+  const area = { left: 500, right: 1830, top: 130, bottom: 850 };
   const depthGap = 145;
   d3.tree()
-    .size([area.right - area.left - 70, depthGap * maxDepth])
+    .nodeSize([52, depthGap])
     .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(root);
+
+  const clipId = "dynamic-tree-viewport-clip";
+  const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+  clipPath.id = clipId;
+  const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  clipRect.setAttribute("x", String(area.left));
+  clipRect.setAttribute("y", String(area.top));
+  clipRect.setAttribute("width", String(area.right - area.left));
+  clipRect.setAttribute("height", String(area.bottom - area.top));
+  clipPath.appendChild(clipRect);
+  svg.querySelector("defs")?.appendChild(clipPath);
+
+  const viewport = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  viewport.classList.add("dynamic-tree-viewport");
+  viewport.setAttribute("clip-path", `url(#${clipId})`);
+  const dragSurface = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  dragSurface.setAttribute("x", String(area.left));
+  dragSurface.setAttribute("y", String(area.top));
+  dragSurface.setAttribute("width", String(area.right - area.left));
+  dragSurface.setAttribute("height", String(area.bottom - area.top));
+  dragSurface.setAttribute("fill", "transparent");
+  dragSurface.style.cursor = "grab";
+  viewport.appendChild(dragSurface);
 
   const layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   layer.classList.add("dynamic-tree-layer");
-  svg.appendChild(layer);
+  viewport.appendChild(layer);
+  svg.appendChild(viewport);
 
   const nodeLayout = new Map(root.descendants().map((node) => {
-    const x = area.left + 35 + node.x;
+    const x = (area.left + area.right) / 2 + node.x;
     // 分类根占用原“皇帝”中心位置；一级机构下移，为根节点与横向总线留出净空。
     const y = node.data.isVirtual ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
@@ -336,6 +345,52 @@ function renderDynamicHierarchy(svg) {
       bottom: y + templatePolygonBounds.y + templatePolygonBounds.height - 196.11,
     }];
   }));
+
+  const horizontalBounds = [...nodeLayout.values()].map((layout) => ({
+    left: layout.x - (layout.width || 34) / 2,
+    right: layout.x + (layout.width || 34) / 2,
+  }));
+  const contentLeft = d3.min(horizontalBounds, (bounds) => bounds.left) ?? area.left;
+  const contentRight = d3.max(horizontalBounds, (bounds) => bounds.right) ?? area.right;
+  const contentWidth = contentRight - contentLeft;
+  const viewportWidth = area.right - area.left;
+  const minPan = contentWidth <= viewportWidth ? 0 : area.right - contentRight;
+  const maxPan = contentWidth <= viewportWidth ? 0 : area.left - contentLeft;
+  const contentTop = d3.min([...nodeLayout.values()], (layout) => layout.top) ?? area.top;
+  const contentBottom = d3.max([...nodeLayout.values()], (layout) => layout.bottom) ?? area.bottom;
+  const contentHeight = contentBottom - contentTop;
+  const viewportHeight = area.bottom - area.top;
+  const minPanY = contentHeight <= viewportHeight ? 0 : area.bottom - contentBottom;
+  const maxPanY = contentHeight <= viewportHeight ? 0 : area.top - contentTop;
+  const applyHierarchyPan = (nextPanX, nextPanY = hierarchyPanY) => {
+    hierarchyPanX = Math.max(minPan, Math.min(maxPan, nextPanX));
+    hierarchyPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
+    layer.setAttribute("transform", `translate(${hierarchyPanX} ${hierarchyPanY})`);
+  };
+  applyHierarchyPan(hierarchyPanX, hierarchyPanY);
+
+  d3.select(viewport)
+    .call(d3.drag()
+      .filter((event) => !event.target.closest?.(".dynamic-tree-node"))
+      .on("start", () => {
+        dragSurface.style.cursor = "grabbing";
+      })
+      .on("drag", (event) => {
+        applyHierarchyPan(hierarchyPanX + event.dx, hierarchyPanY + event.dy);
+      })
+      .on("end", () => {
+        dragSurface.style.cursor = "grab";
+      }))
+    .on("wheel.tree-pan", (event) => {
+      if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) return;
+      event.preventDefault();
+      if (contentHeight > viewportHeight && !event.shiftKey && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
+        applyHierarchyPan(hierarchyPanX, hierarchyPanY - event.deltaY);
+      } else {
+        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        applyHierarchyPan(hierarchyPanX - delta, hierarchyPanY);
+      }
+    }, { passive: false });
 
   const appendLink = (points) => {
     const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
@@ -956,6 +1011,8 @@ function bindTemplateControls(svg) {
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
           expandedHierarchyPath = [];
+          hierarchyPanX = 0;
+          hierarchyPanY = 0;
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;

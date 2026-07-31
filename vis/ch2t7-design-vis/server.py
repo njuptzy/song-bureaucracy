@@ -13,6 +13,7 @@ import argparse
 import json
 import sqlite3
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -39,6 +40,41 @@ SUMMARY_LEN = 400
 SECTION_LEN = 300
 
 _cache = {}
+_cache_lock = threading.Lock()
+
+
+def _database_fingerprint() -> str:
+    parts = []
+    for path in (ENTRIES_DB, DICT_DB):
+        for candidate in (path, Path(f"{path}-wal")):
+            try:
+                stat = candidate.stat()
+                parts.append(f"{candidate.name}:{stat.st_mtime_ns}:{stat.st_size}")
+            except FileNotFoundError:
+                parts.append(f"{candidate.name}:missing")
+    return "|".join(parts)
+
+
+def _institution_category(attr_categories: list[str], source_catalogs: list[str]) -> tuple[str, str]:
+    """按结构化类别和辞典目录给机构归入设计稿的五类，不使用实体名称猜测。"""
+    attrs = " ".join(attr_categories)
+    if any(marker in attrs for marker in ("州府", "州县", "县级")):
+        return "州县机构", "时间点类别"
+    if "路级" in attrs:
+        return "路级机构", "时间点类别"
+    if any(marker in attrs for marker in ("军事", "军队", "禁军", "军号", "统兵")):
+        return "军队机构", "时间点类别"
+    if any(marker in attrs for marker in ("内廷", "宫廷")):
+        return "内廷机构", "时间点类别"
+
+    catalogs = " ".join(source_catalogs)
+    if "第七编 皇宫京城禁卫侍奉机构类" in catalogs:
+        military_sections = ("禁军三衙门", "三卫官与六统军门", "环卫官门")
+        if any(section in catalogs for section in military_sections):
+            return "军队机构", "辞典目录"
+        return "内廷机构", "辞典目录"
+    # 二至六编均属于宰执、中枢、寺监或司法监察体系，归入中央机构。
+    return "中央机构", "辞典编目范围"
 
 
 def _connect(path: Path) -> sqlite3.Connection:
@@ -180,8 +216,11 @@ def build_payload() -> dict:
 
     # 辞典匹配：按 title 精确匹配 chapter2t7，抽取摘要与 fields 中的职源/职掌
     dict_rows = {}
+    catalogs_by_title = {}
     for r in dictionary.execute("SELECT title, catalog, page, text, fields FROM chapter2t7"):
         title = r["title"]
+        full_catalog = r["catalog"] or ""
+        catalogs_by_title.setdefault(title, set()).add(full_catalog)
         if title in dict_rows:
             continue
         fields = {}
@@ -196,12 +235,38 @@ def build_payload() -> dict:
         text = (r["text"] or "").strip()
         dict_rows[title] = {
             "page": r["page"],
-            "catalog": (r["catalog"] or "").split("/")[-1],
+            "catalog": full_catalog.split("/")[-1],
             "summary": text[:SUMMARY_LEN],
             "text": text,
             "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
             "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
         }
+
+    sources_by_entity = {}
+    for r in entries.execute(
+        "SELECT target_id, source_entry FROM BuildRecords WHERE target_table = 'Entities'"
+    ):
+        sources_by_entity.setdefault(r["target_id"], set()).add(r["source_entry"])
+
+    category_counts = {}
+    for entity in entities:
+        if entity["type"] != "机构":
+            continue
+        source_catalogs = sorted({
+            catalog
+            for source_entry in sources_by_entity.get(entity["id"], ())
+            for catalog in catalogs_by_title.get(source_entry, ())
+            if catalog
+        })
+        attr_categories = sorted({
+            item["attr_category"]
+            for item in timepoints.get(entity["id"], ())
+            if item["attr_category"]
+        })
+        category, category_basis = _institution_category(attr_categories, source_catalogs)
+        entity["category"] = category
+        entity["category_basis"] = category_basis
+        category_counts[category] = category_counts.get(category, 0) + 1
 
     entries.close()
     dictionary.close()
@@ -221,6 +286,7 @@ def build_payload() -> dict:
             "hierarchyEdges": len(hierarchy_edges),
             "staffEdges": len(staff_edges),
             "dictionaryMatched": len(dictionary_payload),
+            "categoryCounts": category_counts,
             "source": ENTRIES_DB.name,
             "yearMin": 960,
             "yearMax": 1279,
@@ -229,11 +295,18 @@ def build_payload() -> dict:
 
 
 def get_payload() -> bytes:
-    if "data" not in _cache:
-        print("[server] 构建 /api/data payload ...", flush=True)
-        _cache["data"] = json.dumps(build_payload(), ensure_ascii=False).encode("utf-8")
-        print(f"[server] payload 大小 {len(_cache['data']) / 1024 / 1024:.1f} MB", flush=True)
-    return _cache["data"]
+    fingerprint = _database_fingerprint()
+    with _cache_lock:
+        if _cache.get("fingerprint") != fingerprint:
+            print("[server] 数据库已更新，重建 /api/data payload ...", flush=True)
+            _cache["data"] = json.dumps(build_payload(), ensure_ascii=False).encode("utf-8")
+            _cache["fingerprint"] = fingerprint
+            print(f"[server] payload 大小 {len(_cache['data']) / 1024 / 1024:.1f} MB", flush=True)
+        return _cache["data"]
+
+
+def get_version() -> bytes:
+    return json.dumps({"version": _database_fingerprint()}, ensure_ascii=False).encode("utf-8")
 
 
 CONTENT_TYPES = {
@@ -284,6 +357,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, get_payload(), "application/json; charset=utf-8")
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+            return
+        if path == "/api/version":
+            self._send(200, get_version(), "application/json; charset=utf-8")
             return
         if path == "/api/health":
             self._send(200, b'{"ok":true}', "application/json")
