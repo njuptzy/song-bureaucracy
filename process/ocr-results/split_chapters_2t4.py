@@ -2252,6 +2252,32 @@ def main():
         print("  [跨页续文] '宗正寺主簿/主簿'(p315-316)：将简称引文末句"
               "‘宗正并省一员’并回第166条，第167条保留为空占位")
 
+        kuaiji = next(
+            e for e in all_entries if e["name"] == "知会稽县事兼主管攒宫事务"
+        )
+        assert kuaiji["text"].startswith("兴二十九年九月十日置")
+        kuaiji["text"] = "绍" + kuaiji["text"]
+        print("  [OCR漏字] '知会稽县事兼主管攒宫事务'(p317)：核原书补回"
+              "句首‘绍’，恢复‘绍兴二十九年九月十日置’")
+
+        palace_supervisor = next(e for e in all_entries if e["name"] == "攒宫都监")
+        palace_inspection = next(e for e in all_entries if e["name"] == "检察宫陵所")
+        assert palace_inspection.get("_placeholder") is True
+        inspection_marker = "检察官陵所 官司名。隶宗正司。"
+        assert inspection_marker in palace_supervisor["text"]
+        supervisor_text, _ = palace_supervisor["text"].split(inspection_marker, 1)
+        palace_supervisor["text"] = supervisor_text.rstrip()
+        palace_inspection["text"] = "官司名。隶宗正司。"
+        palace_inspection["职源"] = palace_supervisor.pop("职源")
+        palace_inspection["职掌"] = palace_supervisor.pop("职掌").replace(
+            "诸攒官司", "诸攒宫司"
+        )
+        palace_inspection.pop("_placeholder", None)
+        inspection_meta = all_meta[all_entries.index(palace_inspection)]
+        inspection_meta["status"] = "ok"
+        print("  [条目拆分] '攒宫都监/检察宫陵所'(p317-318)：按原书独立标题"
+              "拆回检察宫陵所正文、职源与职掌，并恢复‘宫’字")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
