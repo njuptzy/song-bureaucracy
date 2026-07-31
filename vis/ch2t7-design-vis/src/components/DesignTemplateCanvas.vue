@@ -22,6 +22,7 @@ const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
+let detailPanelScrollOffset = 0;
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -58,7 +59,7 @@ function setText(element, text) {
 }
 
 function wrapText(element, text, charsPerLine = 31, lineHeight = 24, maxLines = 7) {
-  if (!element) return;
+  if (!element) return 0;
   const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
   const lines = [];
   for (let i = 0; i < content.length && lines.length < maxLines; i += charsPerLine) {
@@ -74,6 +75,7 @@ function wrapText(element, text, charsPerLine = 31, lineHeight = 24, maxLines = 
     tspan.textContent = line;
     element.appendChild(tspan);
   }
+  return lines.length;
 }
 
 function periodActive(periods) {
@@ -307,6 +309,7 @@ function bindEntityTexts(svg) {
         .on("mouseleave", () => this.classList.remove("svg-entity-hover"))
         .on("click", (event) => {
           event.stopPropagation();
+          detailPanelScrollOffset = 0;
           selectedId.value = entity.id;
           selectedCategory.value = entityCategory(entity);
           renderTemplate();
@@ -344,31 +347,109 @@ function setupDetailPanel(svg) {
   clipPath.id = "detail-panel-content-clip";
   clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
   const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  clipRect.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x + 7));
-  clipRect.setAttribute("y", String(DETAIL_PANEL_BOUNDS.y + 2));
-  clipRect.setAttribute("width", String(DETAIL_PANEL_BOUNDS.width - 17));
-  clipRect.setAttribute("height", String(DETAIL_PANEL_BOUNDS.height - 7));
+  clipRect.setAttribute("x", "88");
+  clipRect.setAttribute("y", "524.81");
+  clipRect.setAttribute("width", "379");
+  clipRect.setAttribute("height", "352.41");
   clipPath.appendChild(clipRect);
   defs.appendChild(clipPath);
 
-  const contentGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  contentGroup.classList.add("detail-panel-content");
-  contentGroup.setAttribute("clip-path", "url(#detail-panel-content-clip)");
-  const contentPositions = [
-    [99.85, 505.87],
-    [189.74, 502.91],
+  const scrollViewport = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  scrollViewport.classList.add("detail-panel-scroll-viewport");
+  scrollViewport.setAttribute("clip-path", "url(#detail-panel-content-clip)");
+  const scrollContent = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  scrollContent.classList.add("detail-panel-scroll-content");
+  scrollViewport.appendChild(scrollContent);
+  panelGroup.appendChild(scrollViewport);
+
+  const bodyPositions = [
     [101.29, 570.06],
     [100.33, 536.92],
     [101.29, 783.54],
     [100.33, 750.4],
     [100.33, 846.08],
   ];
-  const contentNodes = contentPositions
+  const contentNodes = bodyPositions
     .map(([x, y]) => findTextAt(svg, x, y))
     .filter(Boolean);
-  if (contentNodes.length) {
-    panelGroup.appendChild(contentGroup);
-    contentNodes.forEach((node) => contentGroup.appendChild(node));
+  contentNodes.forEach((node) => scrollContent.appendChild(node));
+  const mainTextNode = findTextAt(svg, 101.29, 570.06);
+  if (mainTextNode) {
+    const childrenContent = mainTextNode.cloneNode(false);
+    childrenContent.dataset.detailChildrenContent = "true";
+    scrollContent.appendChild(childrenContent);
+  }
+
+  const scrollTrack = [...panelGroup.querySelectorAll("rect")].find((rect) => (
+    Math.abs(Number(rect.getAttribute("x")) - 471.34) < 1
+      && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
+      && Number(rect.getAttribute("height")) > 300
+  ));
+  const scrollThumb = [...panelGroup.querySelectorAll("rect")].find((rect) => (
+    Math.abs(Number(rect.getAttribute("x")) - 471.34) < 1
+      && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
+      && Number(rect.getAttribute("height")) > 20
+      && Number(rect.getAttribute("height")) < 200
+  ));
+
+  const scrollHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  scrollHitArea.classList.add("detail-panel-scroll-hit-area");
+  scrollHitArea.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x));
+  scrollHitArea.setAttribute("y", "524.81");
+  scrollHitArea.setAttribute("width", String(DETAIL_PANEL_BOUNDS.width));
+  scrollHitArea.setAttribute("height", "352.41");
+  scrollHitArea.setAttribute("fill", "transparent");
+  scrollHitArea.setAttribute("pointer-events", "all");
+  scrollHitArea.style.cursor = "ns-resize";
+  panelGroup.appendChild(scrollHitArea);
+  if (scrollThumb) panelGroup.appendChild(scrollThumb);
+
+  const updateScroll = () => {
+    const contentBottom = Number(scrollContent.dataset.contentBottom || 536.92);
+    const viewportBottom = 872;
+    const maxScroll = Math.max(0, contentBottom - viewportBottom);
+    detailPanelScrollOffset = Math.max(0, Math.min(maxScroll, detailPanelScrollOffset));
+    scrollContent.setAttribute("transform", `translate(0 ${-detailPanelScrollOffset})`);
+    if (!scrollTrack || !scrollThumb) return;
+    const trackY = Number(scrollTrack.getAttribute("y"));
+    const trackHeight = Number(scrollTrack.getAttribute("height"));
+    const contentHeight = Math.max(1, contentBottom - 536.92);
+    const viewportHeight = viewportBottom - 536.92;
+    const thumbHeight = Math.max(34, Math.min(trackHeight, trackHeight * viewportHeight / contentHeight));
+    const thumbTravel = trackHeight - thumbHeight;
+    const thumbY = trackY + (maxScroll ? detailPanelScrollOffset / maxScroll * thumbTravel : 0);
+    scrollThumb.setAttribute("y", String(thumbY));
+    scrollThumb.setAttribute("height", String(thumbHeight));
+    scrollThumb.style.cursor = maxScroll ? "grab" : "default";
+  };
+  panelGroup.__updateDetailScroll = updateScroll;
+
+  scrollHitArea.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const renderedHeight = svg.getBoundingClientRect().height || svg.viewBox.baseVal.height;
+    detailPanelScrollOffset += event.deltaY * svg.viewBox.baseVal.height / renderedHeight;
+    updateScroll();
+  }, { passive: false });
+
+  if (scrollThumb) {
+    d3.select(scrollThumb).call(
+      d3.drag()
+        .on("start", (event) => {
+          event.sourceEvent?.stopPropagation();
+          scrollThumb.style.cursor = "grabbing";
+        })
+        .on("drag", (event) => {
+          const contentBottom = Number(scrollContent.dataset.contentBottom || 536.92);
+          const maxScroll = Math.max(0, contentBottom - 872);
+          const trackHeight = Number(scrollTrack?.getAttribute("height") || 352.41);
+          const thumbHeight = Number(scrollThumb.getAttribute("height"));
+          const thumbTravel = Math.max(1, trackHeight - thumbHeight);
+          detailPanelScrollOffset += event.dy * maxScroll / thumbTravel;
+          updateScroll();
+        })
+        .on("end", updateScroll)
+    );
   }
 
   const dragHandle = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -429,14 +510,32 @@ function updateDetails(svg) {
     staff: findTextAt(svg, 101.29, 783.54),
     staffLabel: findTextAt(svg, 100.33, 750.4),
     children: findTextAt(svg, 100.33, 846.08),
+    childrenContent: svg.querySelector("[data-detail-children-content='true']"),
   };
   setText(detailSlots.title, entity.title);
   setText(detailSlots.year, `公元${selectedYear.value}年制度截面`);
-  wrapText(detailSlots.main, mainText, 31, 24, 7);
+  let cursorY = 536.92;
+  detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.mainLabel, "编制与沿革");
-  wrapText(detailSlots.staff, staffText, 31, 22, 2);
+  cursorY += 25;
+  detailSlots.main?.setAttribute("transform", `translate(101.29 ${cursorY})`);
+  const mainLines = wrapText(detailSlots.main, mainText, 31, 18, Infinity);
+  cursorY += Math.max(1, mainLines) * 18 + 13;
+  detailSlots.staffLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.staffLabel, "编制");
-  wrapText(detailSlots.children, `下级机构：${childText}`, 31, 18, 2);
+  cursorY += 25;
+  detailSlots.staff?.setAttribute("transform", `translate(101.29 ${cursorY})`);
+  const staffLines = wrapText(detailSlots.staff, staffText, 31, 18, Infinity);
+  cursorY += Math.max(1, staffLines) * 18 + 13;
+  detailSlots.children?.setAttribute("transform", `translate(100.33 ${cursorY})`);
+  setText(detailSlots.children, "下级机构");
+  cursorY += 25;
+  detailSlots.childrenContent?.setAttribute("transform", `translate(101.29 ${cursorY})`);
+  const childrenLines = wrapText(detailSlots.childrenContent, childText, 31, 18, Infinity);
+  cursorY += Math.max(1, childrenLines) * 18 + 10;
+  const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+  if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY);
+  svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
 
   // 第一画板顶部浮动卡：仍使用原有框、竖排槽位和官职条，只替换内容。
   if (viewMode.value === "hierarchy") {
@@ -455,6 +554,7 @@ function updateDetails(svg) {
       slot.dataset.entityId = String(edge.official);
       d3.select(slot).on("click", (event) => {
         event.stopPropagation();
+        detailPanelScrollOffset = 0;
         selectedId.value = edge.official;
         renderTemplate();
       });
@@ -552,6 +652,7 @@ function bindTemplateControls(svg) {
         const group = this.parentElement;
         const activate = (event) => {
           event.stopPropagation();
+          detailPanelScrollOffset = 0;
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
