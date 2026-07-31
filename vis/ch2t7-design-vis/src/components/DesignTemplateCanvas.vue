@@ -19,6 +19,7 @@ const error = ref("");
 const viewMode = ref("hierarchy");
 const selectedYear = ref(1080);
 const selectedId = ref(null);
+const selectedCategory = ref("中央机构");
 const svgCache = new Map();
 
 const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
@@ -91,6 +92,47 @@ function childrenFor(entityId) {
 
 function titleOf(entityId) {
   return entityMap.get(entityId)?.title || `#${entityId}`;
+}
+
+const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
+
+function entityCategory(entity) {
+  const categories = (props.data.timepoints[String(entity.id)] || [])
+    .map((timepoint) => timepoint.attr_category || "")
+    .join(" ");
+  const text = `${entity.title} ${categories}`;
+  if (/内廷|宫廷|宫闱|禁中|内侍|御前|供御|殿中省|尚[食药衣舍辇酝]/.test(text)) return "内廷机构";
+  if (/军队|军事|禁军|统兵|马军|步军|殿前司|侍卫|枢密|钤辖|都统制/.test(text)) return "军队机构";
+  if (/路级|转运|提刑|提举常平|安抚|发运|总领|经略|漕司/.test(text)) return "路级机构";
+  if (/州县|州府|府县|县衙|监当|税务|地方行政|知州|知县/.test(text)) return "州县机构";
+  return "中央机构";
+}
+
+function categoryFocus(category) {
+  const candidates = props.data.entities.filter(
+    (entity) => entity.type === "机构" && entityCategory(entity) === category
+  );
+  const candidateIds = new Set(candidates.map((entity) => entity.id));
+  const hasCategoryParent = new Set();
+  for (const edge of props.data.hierarchyEdges) {
+    if (!periodActive(edge.periods)) continue;
+    if (candidateIds.has(edge.parent) && candidateIds.has(edge.child)) hasCategoryParent.add(edge.child);
+  }
+  const roots = candidates.filter((entity) => !hasCategoryParent.has(entity.id));
+  const pool = roots.length ? roots : candidates;
+  const scoreCache = new Map();
+  const score = (entityId, visiting = new Set()) => {
+    if (scoreCache.has(entityId)) return scoreCache.get(entityId);
+    if (visiting.has(entityId)) return 0;
+    const nextVisiting = new Set(visiting).add(entityId);
+    const children = childrenFor(entityId).map((edge) => edge.child);
+    const value = children.length + children.reduce((sum, childId) => sum + score(childId, nextVisiting), 0);
+    scoreCache.set(entityId, value);
+    return value;
+  };
+  return [...pool].sort(
+    (a, b) => score(b.id) - score(a.id) || a.title.localeCompare(b.title, "zh")
+  )[0] || null;
 }
 
 function quotaText(edge) {
@@ -258,6 +300,7 @@ function bindEntityTexts(svg) {
         .on("click", (event) => {
           event.stopPropagation();
           selectedId.value = entity.id;
+          selectedCategory.value = entityCategory(entity);
           renderTemplate();
         });
     });
@@ -359,6 +402,40 @@ function bindTemplateControls(svg) {
           event.stopPropagation();
           viewMode.value = text === "层级视图" ? "hierarchy" : "composition";
         });
+      }
+
+      if (CATEGORY_NAMES.includes(text)) {
+        const category = text;
+        const point = position(this);
+        this.style.cursor = "pointer";
+        this.style.fontWeight = category === selectedCategory.value ? "700" : "400";
+        this.style.filter = category === selectedCategory.value ? "drop-shadow(0 0 1px #351704)" : "";
+
+        // Illustrator 导出的按钮没有独立语义组；在原文字的实际包围盒上加透明点击层。
+        if (point && !this.dataset.hitAreaAdded) {
+          const bbox = this.getBBox();
+          const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          hit.setAttribute("x", String(bbox.x - 9));
+          hit.setAttribute("y", String(bbox.y - 9));
+          hit.setAttribute("width", String(Math.max(28, bbox.width + 18)));
+          hit.setAttribute("height", String(Math.max(88, bbox.height + 18)));
+          hit.setAttribute("transform", this.getAttribute("transform") || "");
+          hit.setAttribute("fill", category === selectedCategory.value ? "rgba(165,166,141,.22)" : "transparent");
+          hit.setAttribute("stroke", category === selectedCategory.value ? "#563905" : "transparent");
+          hit.setAttribute("stroke-width", ".8");
+          hit.style.cursor = "pointer";
+          const activate = (event) => {
+            event.stopPropagation();
+            selectedCategory.value = category;
+            const focus = categoryFocus(category);
+            selectedId.value = focus?.id ?? null;
+            renderTemplate();
+          };
+          hit.addEventListener("click", activate);
+          this.parentNode.insertBefore(hit, this);
+          this.dataset.hitAreaAdded = "true";
+          d3.select(this).on("click.category", activate);
+        }
       }
     });
 
