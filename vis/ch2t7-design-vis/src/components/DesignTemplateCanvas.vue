@@ -276,6 +276,7 @@ function renderDynamicHierarchy(svg) {
   const rootEntity = categoryFocus(selectedCategory.value);
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
   const templateGroup = templateText?.parentElement?.cloneNode(true);
+  const templatePolygonBounds = elementBounds(templateText?.parentElement?.querySelector("polygon"));
   const emperorText = findTextAt(svg, 1141.69, 153.09, 2);
   const emperorRect = [...svg.querySelectorAll("rect")].find(
     (element) => Math.abs(Number(element.getAttribute("x")) - 1128.61) <= 0.1
@@ -283,7 +284,6 @@ function renderDynamicHierarchy(svg) {
       && Math.abs(Number(element.getAttribute("width")) - 60.84) <= 0.1
       && Math.abs(Number(element.getAttribute("height")) - 28.23) <= 0.1
   );
-  const templatePolygonBounds = elementBounds(templateGroup?.querySelector("polygon"));
   if (!rootEntity || !templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return;
 
   // 原稿的“皇帝”只作为横排分类根的样式模板，不在动态机构树中重复显示。
@@ -307,8 +307,8 @@ function renderDynamicHierarchy(svg) {
   if (!data) return;
   const root = d3.hierarchy(data);
   const maxDepth = Math.max(1, d3.max(root.descendants(), (node) => node.depth) || 1);
-  const area = { left: 520, right: 1795, top: 147.15, bottom: 835 };
-  const depthGap = Math.min(145, (area.bottom - area.top) / maxDepth);
+  const area = { left: 520, right: 1795 };
+  const depthGap = 145;
   d3.tree()
     .size([area.right - area.left - 70, depthGap * maxDepth])
     .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(root);
@@ -319,7 +319,8 @@ function renderDynamicHierarchy(svg) {
 
   const nodeLayout = new Map(root.descendants().map((node) => {
     const x = area.left + 35 + node.x;
-    const y = area.top + node.y;
+    // 一级机构沿用原稿牌签的 y=196.11；分类根占用原“皇帝”中心位置。
+    const y = node.data.isVirtual ? 147.15 : 196.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
       const width = Math.max(
         Number(emperorRect.getAttribute("width")),
@@ -336,21 +337,28 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  // 复用设计稿的 cls-26 折线样式，并严格从外框底边连到外框顶边。
+  // 复用设计稿的 cls-26 折线样式。分类根到一级机构沿用原“皇帝”连线结构；
+  // 更深层级严格从父节点外框底边连到子节点外框顶边。
   for (const link of root.links()) {
     const source = nodeLayout.get(link.source);
     const target = nodeLayout.get(link.target);
-    const sourceX = source.x;
-    const sourceY = source.bottom;
-    const targetX = target.x;
-    const targetY = target.top;
-    const middleY = (sourceY + targetY) / 2;
     const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
     polyline.setAttribute("class", "cls-26 dynamic-tree-link");
-    polyline.setAttribute(
-      "points",
-      `${sourceX},${sourceY} ${sourceX},${middleY} ${targetX},${middleY} ${targetX},${targetY}`
-    );
+    if (link.source.data.isVirtual && Math.abs(target.x - source.x) > source.width / 2) {
+      const rootEdgeX = target.x < source.x
+        ? source.x - source.width / 2
+        : source.x + source.width / 2;
+      polyline.setAttribute(
+        "points",
+        `${target.x},${target.top} ${target.x},${source.y} ${rootEdgeX},${source.y}`
+      );
+    } else {
+      const middleY = (source.bottom + target.top) / 2;
+      polyline.setAttribute(
+        "points",
+        `${source.x},${source.bottom} ${source.x},${middleY} ${target.x},${middleY} ${target.x},${target.top}`
+      );
+    }
     polyline.style.pointerEvents = "none";
     layer.appendChild(polyline);
   }
