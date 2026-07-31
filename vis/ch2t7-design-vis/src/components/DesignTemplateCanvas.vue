@@ -276,7 +276,19 @@ function renderDynamicHierarchy(svg) {
   const rootEntity = categoryFocus(selectedCategory.value);
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
   const templateGroup = templateText?.parentElement?.cloneNode(true);
-  if (!rootEntity || !templateGroup) return;
+  const emperorText = findTextAt(svg, 1141.69, 153.09, 2);
+  const emperorRect = [...svg.querySelectorAll("rect")].find(
+    (element) => Math.abs(Number(element.getAttribute("x")) - 1128.61) <= 0.1
+      && Math.abs(Number(element.getAttribute("y")) - 133.04) <= 0.1
+      && Math.abs(Number(element.getAttribute("width")) - 60.84) <= 0.1
+      && Math.abs(Number(element.getAttribute("height")) - 28.23) <= 0.1
+  );
+  const templatePolygonBounds = elementBounds(templateGroup?.querySelector("polygon"));
+  if (!rootEntity || !templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return;
+
+  // 原稿的“皇帝”只作为横排分类根的样式模板，不在动态机构树中重复显示。
+  emperorText.style.display = "none";
+  emperorRect.style.display = "none";
 
   const centerNodes = [...svg.children].filter((element) => {
     if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return false;
@@ -295,7 +307,7 @@ function renderDynamicHierarchy(svg) {
   if (!data) return;
   const root = d3.hierarchy(data);
   const maxDepth = Math.max(1, d3.max(root.descendants(), (node) => node.depth) || 1);
-  const area = { left: 520, right: 1795, top: 185, bottom: 835 };
+  const area = { left: 520, right: 1795, top: 147.15, bottom: 835 };
   const depthGap = Math.min(145, (area.bottom - area.top) / maxDepth);
   d3.tree()
     .size([area.right - area.left - 70, depthGap * maxDepth])
@@ -305,32 +317,75 @@ function renderDynamicHierarchy(svg) {
   layer.classList.add("dynamic-tree-layer");
   svg.appendChild(layer);
 
+  const nodeLayout = new Map(root.descendants().map((node) => {
+    const x = area.left + 35 + node.x;
+    const y = area.top + node.y;
+    if (node.data.isVirtual) {
+      const width = Math.max(
+        Number(emperorRect.getAttribute("width")),
+        node.data.title.length * 17.14 + 24
+      );
+      const height = Number(emperorRect.getAttribute("height"));
+      return [node, { x, y, top: y - height / 2, bottom: y + height / 2, width, height }];
+    }
+    return [node, {
+      x,
+      y,
+      top: y + templatePolygonBounds.y - 196.11,
+      bottom: y + templatePolygonBounds.y + templatePolygonBounds.height - 196.11,
+    }];
+  }));
+
+  // 复用设计稿的 cls-26 折线样式，并严格从外框底边连到外框顶边。
   for (const link of root.links()) {
-    const sourceX = area.left + 35 + link.source.x;
-    const sourceY = area.top + link.source.y + 92;
-    const targetX = area.left + 35 + link.target.x;
-    const targetY = area.top + link.target.y - 25;
+    const source = nodeLayout.get(link.source);
+    const target = nodeLayout.get(link.target);
+    const sourceX = source.x;
+    const sourceY = source.bottom;
+    const targetX = target.x;
+    const targetY = target.top;
     const middleY = (sourceY + targetY) / 2;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M${sourceX},${sourceY} V${middleY} H${targetX} V${targetY}`);
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "#563905");
-    path.setAttribute("stroke-width", ".75");
-    path.setAttribute("vector-effect", "non-scaling-stroke");
-    layer.appendChild(path);
+    const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("class", "cls-26 dynamic-tree-link");
+    polyline.setAttribute(
+      "points",
+      `${sourceX},${sourceY} ${sourceX},${middleY} ${targetX},${middleY} ${targetX},${targetY}`
+    );
+    polyline.style.pointerEvents = "none";
+    layer.appendChild(polyline);
   }
 
   let nodeIndex = 0;
   for (const node of root.descendants()) {
-    const nodeGroup = templateGroup.cloneNode(true);
+    const layout = nodeLayout.get(node);
+    const nodeGroup = node.data.isVirtual
+      ? document.createElementNS("http://www.w3.org/2000/svg", "g")
+      : templateGroup.cloneNode(true);
     nodeGroup.classList.add("dynamic-tree-node");
     if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
-    const x = area.left + 35 + node.x;
-    const y = area.top + node.y;
-    nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
+    if (node.data.isVirtual) {
+      const rootRect = emperorRect.cloneNode(true);
+      rootRect.style.removeProperty("display");
+      rootRect.setAttribute("x", String(-layout.width / 2));
+      rootRect.setAttribute("y", String(-layout.height / 2));
+      rootRect.setAttribute("width", String(layout.width));
+      rootRect.setAttribute("height", String(layout.height));
+      const rootLabel = emperorText.cloneNode(true);
+      rootLabel.style.removeProperty("display");
+      rootLabel.removeAttribute("transform");
+      rootLabel.setAttribute("x", "0");
+      rootLabel.setAttribute("y", "0");
+      rootLabel.setAttribute("text-anchor", "middle");
+      rootLabel.setAttribute("dominant-baseline", "central");
+      setText(rootLabel, node.data.title);
+      nodeGroup.append(rootRect, rootLabel);
+      nodeGroup.setAttribute("transform", `translate(${layout.x} ${layout.y})`);
+    } else {
+      nodeGroup.setAttribute("transform", `translate(${layout.x - 763.56} ${layout.y - 196.11})`);
+    }
     const label = nodeGroup.querySelector("text");
     const hiddenCount = node.data.hiddenCount || 0;
-    setText(label, node.data.title);
+    if (!node.data.isVirtual) setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     const isExpanded = node.data.isVirtual
       ? !collapsedHierarchyIds.has(node.data.id)
@@ -340,9 +395,9 @@ function renderDynamicHierarchy(svg) {
     }
     layer.appendChild(nodeGroup);
 
-    const templatePolygon = nodeGroup.querySelector("polygon");
+    const templatePolygon = node.data.isVirtual ? null : nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
-    fitDynamicNodeLabel(label, node.data.title, polygonBounds);
+    if (!node.data.isVirtual) fitDynamicNodeLabel(label, node.data.title, polygonBounds);
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
@@ -361,7 +416,7 @@ function renderDynamicHierarchy(svg) {
       label.parentNode.insertBefore(labelClipGroup, label);
       labelClipGroup.appendChild(label);
     }
-    if (polygonBounds && hiddenCount > 0) {
+    if (!node.data.isVirtual && polygonBounds && hiddenCount > 0) {
       const bounds = polygonBounds;
       const barCount = Math.min(5, Math.max(1, Math.ceil(Math.log2(hiddenCount + 1))));
       for (let index = 0; index < barCount; index += 1) {
