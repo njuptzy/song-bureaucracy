@@ -6,14 +6,18 @@
         <h1>中国古代职官体系导览 <small>- 宋朝 · 二至七编</small></h1>
       </div>
       <div class="controls" v-if="data">
-        <label class="check">
+        <div class="view-switch" role="tablist" aria-label="视图切换">
+          <button :class="{ active: viewMode === 'hierarchy' }" @click="viewMode = 'hierarchy'">层级视图</button>
+          <button :class="{ active: viewMode === 'composition' }" @click="viewMode = 'composition'">编制视图</button>
+        </div>
+        <label v-if="viewMode === 'hierarchy'" class="check">
           <input type="checkbox" v-model="showOfficials" />
           显示官职
         </label>
-        <span class="sep"></span>
-        <button @click="sendExpand('all')">展开全部</button>
-        <button @click="sendExpand('collapse')">全部收起</button>
-        <label class="level-label">
+        <span v-if="viewMode === 'hierarchy'" class="sep"></span>
+        <button v-if="viewMode === 'hierarchy'" @click="sendExpand('all')">展开全部</button>
+        <button v-if="viewMode === 'hierarchy'" @click="sendExpand('collapse')">全部收起</button>
+        <label v-if="viewMode === 'hierarchy'" class="level-label">
           展开到第
           <select v-model.number="expandLevel" @change="sendExpand('level')">
             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
@@ -33,12 +37,20 @@
       />
       <main class="canvas-wrap">
         <InstitutionTree
-          :data="data"
+          v-if="viewMode === 'hierarchy'"
+          :data="visibleData"
           :show-officials="showOfficials"
           :expand-command="expandCommand"
           :locate-target="locateTarget"
           :selected-id="selectedId"
           :staff-by-org="staffByOrg"
+          @select="onSelect"
+          @hover="onHover"
+        />
+        <CompositionView
+          v-else
+          :data="visibleData"
+          :selected-id="selectedId"
           @select="onSelect"
           @hover="onHover"
         />
@@ -58,6 +70,7 @@
         class="detail"
         :entity-id="selectedId"
         :data="data"
+        :selected-year="selectedYear"
         :staff-by-org="staffByOrg"
         :staff-by-official="staffByOfficial"
         @select="onSelect"
@@ -66,7 +79,7 @@
     </div>
     <div v-else class="loading">{{ loadError || '数据加载中…' }}</div>
 
-    <SongTimelineBar v-if="data" class="timeline" />
+    <SongTimelineBar v-if="data" v-model="selectedYear" class="timeline" />
   </div>
 </template>
 
@@ -76,10 +89,13 @@ import NavPanel from "./components/NavPanel.vue";
 import InstitutionTree from "./components/InstitutionTree.vue";
 import DetailPanel from "./components/DetailPanel.vue";
 import SongTimelineBar from "./components/SongTimelineBar.vue";
+import CompositionView from "./components/CompositionView.vue";
 
 const data = ref(null);
 const loadError = ref("");
 const showOfficials = ref(false);
+const viewMode = ref("hierarchy");
+const selectedYear = ref(1080);
 const selectedId = ref(null);
 const hoverInfo = ref(null);
 const expandLevel = ref(2);
@@ -104,11 +120,37 @@ const entityMap = computed(() => {
   return m;
 });
 
+function periodActive(periods) {
+  if (!periods || periods.length === 0) return true;
+  return periods.some((p) => selectedYear.value >= p.start && selectedYear.value <= p.end);
+}
+
+function timepointActive(tp) {
+  if (tp.year_start == null || tp.year_end == null) return true;
+  return selectedYear.value >= tp.year_start && selectedYear.value <= tp.year_end;
+}
+
+// 两张设计画板共享同一时间截面。年代未明的数据保留，明确不属于当前年的数据隐藏。
+const visibleData = computed(() => {
+  if (!data.value) return null;
+  const timepoints = {};
+  for (const [entityId, items] of Object.entries(data.value.timepoints)) {
+    const visible = items.filter(timepointActive);
+    if (visible.length) timepoints[entityId] = visible;
+  }
+  return {
+    ...data.value,
+    timepoints,
+    hierarchyEdges: data.value.hierarchyEdges.filter((e) => periodActive(e.periods)),
+    staffEdges: data.value.staffEdges.filter((e) => periodActive(e.periods)),
+  };
+});
+
 // 编制隶属：机构 id -> [边]，官职 id -> [边]
 const staffByOrg = computed(() => {
   const m = new Map();
-  if (!data.value) return m;
-  for (const e of data.value.staffEdges) {
+  if (!visibleData.value) return m;
+  for (const e of visibleData.value.staffEdges) {
     if (!m.has(e.org)) m.set(e.org, []);
     m.get(e.org).push(e);
   }
@@ -116,8 +158,8 @@ const staffByOrg = computed(() => {
 });
 const staffByOfficial = computed(() => {
   const m = new Map();
-  if (!data.value) return m;
-  for (const e of data.value.staffEdges) {
+  if (!visibleData.value) return m;
+  for (const e of visibleData.value.staffEdges) {
     if (!m.has(e.official)) m.set(e.official, []);
     m.get(e.official).push(e);
   }
@@ -135,10 +177,10 @@ function classify(title, cats) {
 }
 
 const rootList = computed(() => {
-  if (!data.value) return [];
-  const childSet = new Set(data.value.hierarchyEdges.map((e) => e.child));
+  if (!visibleData.value) return [];
+  const childSet = new Set(visibleData.value.hierarchyEdges.map((e) => e.child));
   const participant = new Set();
-  for (const e of data.value.hierarchyEdges) {
+  for (const e of visibleData.value.hierarchyEdges) {
     participant.add(e.parent);
     participant.add(e.child);
   }
@@ -147,7 +189,7 @@ const rootList = computed(() => {
   const descendantCount = (id) => {
     if (sizeCache.has(id)) return sizeCache.get(id);
     sizeCache.set(id, 0); // 防环
-    const kids = data.value.hierarchyEdges.filter((e) => e.parent === id).map((e) => e.child);
+    const kids = visibleData.value.hierarchyEdges.filter((e) => e.parent === id).map((e) => e.child);
     let n = kids.length;
     for (const k of kids) n += descendantCount(k);
     sizeCache.set(id, n);
@@ -156,7 +198,7 @@ const rootList = computed(() => {
   return roots
     .map((id) => {
       const title = entityMap.value.get(id)?.title || `#${id}`;
-      const tps = data.value.timepoints[String(id)] || [];
+      const tps = visibleData.value.timepoints[String(id)] || [];
       const cats = tps.map((t) => t.attr_category).join(" ");
       return {
         id,
@@ -281,6 +323,25 @@ function onHover(info) {
 .controls button:hover {
   border-color: var(--ink-2);
   color: var(--ink);
+}
+
+.view-switch {
+  display: flex;
+  gap: 4px;
+  margin-right: 6px;
+}
+
+.view-switch button {
+  min-width: 82px;
+  border-color: var(--line);
+  background: rgba(254, 254, 254, 0.45);
+}
+
+.view-switch button.active {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: rgba(165, 166, 141, 0.32);
+  font-weight: 700;
 }
 
 .sep {

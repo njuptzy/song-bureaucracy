@@ -19,6 +19,9 @@ from urllib.parse import urlparse
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
+sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
+
+from normalize_times import normalize_time  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DIST_DIR = HERE / "dist"
@@ -55,10 +58,19 @@ def build_payload() -> dict:
     ]
 
     timepoints = {}
+    normalized_by_id = {}
     for r in entries.execute(
         "SELECT id, entity_id, time, event, prev_id, succ_id, attr_category,"
         " attr_officer_type, attr_grade, quotation FROM Timepoints ORDER BY entity_id, id"
     ):
+        normalized = normalize_time(r["time"] or "")
+        normalized_payload = {
+            "year_start": normalized.year_start,
+            "year_end": normalized.year_end,
+            "time_type": normalized.time_type,
+            "parse_note": normalized.parse_note or "",
+        }
+        normalized_by_id[r["id"]] = normalized_payload
         timepoints.setdefault(r["entity_id"], []).append(
             {
                 "id": r["id"],
@@ -68,13 +80,15 @@ def build_payload() -> dict:
                 "attr_officer_type": r["attr_officer_type"] or "",
                 "attr_grade": r["attr_grade"] or "",
                 "quotation": r["quotation"] or "",
+                **normalized_payload,
             }
         )
 
     def entity_edges(relation_type: str):
         rows = entries.execute(
             """
-            SELECT r.id AS rid, s.entity_id AS subj, o.entity_id AS obj,
+            SELECT r.id AS rid, r.subject_id, r.object_id,
+                   s.entity_id AS subj, o.entity_id AS obj,
                    r.staff_quota, r.staff_type
             FROM Relationships r
             JOIN Timepoints s ON r.subject_id = s.id
@@ -85,34 +99,60 @@ def build_payload() -> dict:
         )
         return list(rows)
 
+    def periods_for(row):
+        periods = []
+        seen_periods = set()
+        for timepoint_id in (row["subject_id"], row["object_id"]):
+            item = normalized_by_id.get(timepoint_id) or {}
+            start = item.get("year_start")
+            end = item.get("year_end")
+            if start is None or end is None:
+                continue
+            key = (start, end, item.get("time_type"))
+            if key in seen_periods:
+                continue
+            seen_periods.add(key)
+            periods.append(
+                {"start": start, "end": end, "time_type": item.get("time_type", "")}
+            )
+        return periods
+
     # 上下级机构：映射回实体 id 对并去重（subject=上级 → object=下级）
-    seen = set()
-    hierarchy_edges = []
+    hierarchy_by_key = {}
     for r in entity_edges("上下级机构"):
         key = (r["subj"], r["obj"])
-        if key in seen:
-            continue
-        seen.add(key)
-        hierarchy_edges.append({"parent": r["subj"], "child": r["obj"]})
+        if key not in hierarchy_by_key:
+            hierarchy_by_key[key] = {
+                "id": r["rid"],
+                "parent": r["subj"],
+                "child": r["obj"],
+                "periods": [],
+            }
+        existing = hierarchy_by_key[key]["periods"]
+        for period in periods_for(r):
+            if period not in existing:
+                existing.append(period)
+    hierarchy_edges = list(hierarchy_by_key.values())
 
     # 编制隶属：subject=机构时间点 → object=官职时间点；同一实体对可能有多条
     # （不同时间点的员额变化），全部保留，按 (org, official, quota, type) 去重
-    seen = set()
-    staff_edges = []
+    staff_by_key = {}
     for r in entity_edges("编制隶属"):
         key = (r["subj"], r["obj"], r["staff_quota"] or "", r["staff_type"] or "")
-        if key in seen:
-            continue
-        seen.add(key)
-        staff_edges.append(
-            {
+        if key not in staff_by_key:
+            staff_by_key[key] = {
                 "id": r["rid"],
                 "org": r["subj"],
                 "official": r["obj"],
                 "staff_quota": r["staff_quota"] or "",
                 "staff_type": r["staff_type"] or "",
+                "periods": [],
             }
-        )
+        existing = staff_by_key[key]["periods"]
+        for period in periods_for(r):
+            if period not in existing:
+                existing.append(period)
+    staff_edges = list(staff_by_key.values())
 
     citations = {}
     for r in entries.execute(
@@ -149,6 +189,7 @@ def build_payload() -> dict:
             "page": r["page"],
             "catalog": (r["catalog"] or "").split("/")[-1],
             "summary": text[:SUMMARY_LEN],
+            "text": text,
             "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
             "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
         }
@@ -171,6 +212,9 @@ def build_payload() -> dict:
             "hierarchyEdges": len(hierarchy_edges),
             "staffEdges": len(staff_edges),
             "dictionaryMatched": len(dictionary_payload),
+            "source": ENTRIES_DB.name,
+            "yearMin": 960,
+            "yearMax": 1279,
         },
     }
 

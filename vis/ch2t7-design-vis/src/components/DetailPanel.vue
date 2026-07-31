@@ -4,6 +4,7 @@
       <div>
         <h2>{{ entity.title }}</h2>
         <span class="badge">{{ entity.type }}</span>
+        <span class="badge year">{{ selectedYear }}年截面</span>
         <span v-if="dict" class="badge page">辞典页 {{ dict.page }}</span>
       </div>
       <button class="close" @click="emit('close')">×</button>
@@ -15,8 +16,8 @@
       <p v-if="dict.origin"><b>职源与沿革</b>：{{ dict.origin }}</p>
       <p v-if="dict.duty"><b>职掌</b>：{{ dict.duty }}</p>
       <details>
-        <summary>词条摘要</summary>
-        <p>{{ dict.summary }}</p>
+        <summary>查看词条原文</summary>
+        <p class="source-text">{{ dict.text || dict.summary }}</p>
       </details>
     </section>
 
@@ -36,6 +37,7 @@
           <span class="name">{{ s.title }}</span>
           <span v-if="s.quota" class="quota">员 {{ s.quota }}</span>
           <span v-if="s.staffType" class="quota">{{ s.staffType }}</span>
+          <span v-if="relationCitation(s.edgeId)" class="evidence-dot" title="此关系有原文证据">据</span>
         </li>
       </ul>
     </section>
@@ -48,6 +50,18 @@
           <span v-if="s.quota" class="quota">员 {{ s.quota }}</span>
         </li>
       </ul>
+    </section>
+
+    <section v-if="relationEvidence.length">
+      <h3>当前关系原文（{{ relationEvidence.length }}）</h3>
+      <details v-for="item in relationEvidence" :key="item.key" class="relation-proof">
+        <summary>{{ item.label }}</summary>
+        <div v-for="(citation, index) in item.citations" :key="index" class="citation">
+          <b>{{ citation.citation || "出处未标" }}</b>
+          <p v-if="citation.quotation">「{{ citation.quotation }}」</p>
+          <p v-if="citation.note">{{ citation.note }}</p>
+        </div>
+      </details>
     </section>
 
     <section v-if="timepoints.length">
@@ -80,6 +94,7 @@ const props = defineProps({
   data: { type: Object, required: true },
   staffByOrg: { type: Map, required: true },
   staffByOfficial: { type: Map, required: true },
+  selectedYear: { type: Number, required: true },
 });
 const emit = defineEmits(["select", "close"]);
 
@@ -91,7 +106,17 @@ const dict = computed(() =>
   entity.value ? props.data.dictionary[entity.value.title] || null : null
 );
 
-const timepoints = computed(() => props.data.timepoints[String(props.entityId)] || []);
+function periodActive(periods) {
+  if (!periods || periods.length === 0) return true;
+  return periods.some((p) => props.selectedYear >= p.start && props.selectedYear <= p.end);
+}
+
+const timepoints = computed(() =>
+  (props.data.timepoints[String(props.entityId)] || []).filter((tp) => {
+    if (tp.year_start == null || tp.year_end == null) return true;
+    return props.selectedYear >= tp.year_start && props.selectedYear <= tp.year_end;
+  })
+);
 
 const titleOf = computed(() => {
   const m = new Map();
@@ -122,9 +147,9 @@ const childList = computed(() => {
   const seen = new Set();
   const out = [];
   for (const e of props.data.hierarchyEdges) {
-    if (e.parent !== props.entityId || seen.has(e.child)) continue;
+    if (e.parent !== props.entityId || seen.has(e.child) || !periodActive(e.periods)) continue;
     seen.add(e.child);
-    out.push({ id: e.child, title: titleOf.value(e.child) });
+    out.push({ edgeId: e.id, id: e.child, title: titleOf.value(e.child) });
   }
   return out;
 });
@@ -132,6 +157,25 @@ const childList = computed(() => {
 function citationsOf(tpId) {
   return props.data.citations["T" + tpId] || [];
 }
+
+function relationCitation(edgeId) {
+  return (props.data.citations["R" + edgeId] || [])[0] || null;
+}
+
+const relationEvidence = computed(() => {
+  const candidates = [
+    ...childList.value.map((item) => ({ edgeId: item.edgeId, label: `下级机构：${item.title}` })),
+    ...staffList.value.map((item) => ({ edgeId: item.edgeId, label: `编制官职：${item.title}` })),
+    ...orgList.value.map((item) => ({ edgeId: item.edgeId, label: `所属机构：${item.title}` })),
+  ];
+  const seen = new Set();
+  return candidates.flatMap((item) => {
+    if (seen.has(item.edgeId)) return [];
+    seen.add(item.edgeId);
+    const citations = props.data.citations["R" + item.edgeId] || [];
+    return citations.length ? [{ ...item, key: `R${item.edgeId}`, citations }] : [];
+  });
+});
 </script>
 
 <style scoped>
@@ -169,6 +213,21 @@ function citationsOf(tpId) {
 .badge.page {
   color: var(--ink);
   border-color: var(--ink-2);
+}
+
+.badge.year { background: rgba(165, 166, 141, 0.25); }
+
+.evidence-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  border: 1px solid var(--ink-2);
+  border-radius: 50%;
+  color: var(--ink-2);
+  font-size: 9px;
 }
 
 .close {
@@ -272,6 +331,14 @@ details summary {
   padding-left: 8px;
   border-left: 1px dotted var(--line);
 }
+
+.source-text { white-space: pre-wrap; }
+
+.relation-proof { margin: 5px 0; }
+
+.relation-proof summary { cursor: pointer; color: var(--ink-2); }
+
+.relation-proof p { margin: 3px 0; }
 
 .conflict {
   color: #a03c28;

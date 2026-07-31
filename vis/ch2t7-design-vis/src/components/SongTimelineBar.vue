@@ -1,12 +1,26 @@
 <template>
   <div ref="wrapRef" class="timeline-bar">
     <svg ref="svgRef"></svg>
+    <input
+      class="year-slider"
+      type="range"
+      min="960"
+      max="1279"
+      step="1"
+      :value="modelValue"
+      aria-label="当前公元年份"
+      @input="emit('update:modelValue', Number($event.target.value))"
+    />
+    <div class="year-readout" :style="readoutStyle">{{ modelValue }}年</div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import * as d3 from "d3";
+
+const props = defineProps({ modelValue: { type: Number, default: 1080 } });
+const emit = defineEmits(["update:modelValue"]);
 
 // 与 vis/song-bureaucracy-visualization-v2/src/components/SongTimeline.vue 一致
 const EMPERORS = [
@@ -46,6 +60,9 @@ const OLIVE = "#918069";
 
 const wrapRef = ref(null);
 const svgRef = ref(null);
+const readoutStyle = computed(() => ({
+  left: `calc(56px + (100% - 372px) * ${(props.modelValue - 960) / 319})`,
+}));
 
 onMounted(() => {
   const wrap = wrapRef.value;
@@ -224,9 +241,46 @@ onMounted(() => {
 
 <style scoped>
 .timeline-bar {
+  position: relative;
   width: 100%;
   height: 100%;
   background: rgba(254, 254, 254, 0.45);
+}
+
+.year-slider {
+  position: absolute;
+  left: 56px;
+  right: 316px;
+  bottom: 19px;
+  width: calc(100% - 372px);
+  height: 24px;
+  margin: 0;
+  opacity: 0.01;
+  cursor: ew-resize;
+}
+
+.year-readout {
+  position: absolute;
+  top: 45px;
+  transform: translateX(-50%);
+  padding: 1px 5px;
+  border: 1px solid var(--ink-2);
+  background: rgba(254, 254, 254, 0.9);
+  color: var(--ink);
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.year-readout::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 27px;
+  background: var(--ink-2);
+  opacity: 0.75;
 }
 
 svg {
