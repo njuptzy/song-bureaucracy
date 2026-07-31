@@ -306,6 +306,7 @@ function renderDynamicHierarchy(svg) {
     layer.appendChild(path);
   }
 
+  let nodeIndex = 0;
   for (const node of root.descendants()) {
     const nodeGroup = templateGroup.cloneNode(true);
     nodeGroup.classList.add("dynamic-tree-node");
@@ -314,7 +315,14 @@ function renderDynamicHierarchy(svg) {
     const y = area.top + node.y;
     nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
     const label = nodeGroup.querySelector("text");
-    setText(label, node.data.title.length > 12 ? `${node.data.title.slice(0, 11)}…` : node.data.title);
+    const hiddenCount = node.data.hiddenCount || 0;
+    const displayTitle = node.data.title.length > 10 ? `${node.data.title.slice(0, 9)}…` : node.data.title;
+    setText(label, displayTitle);
+    if (label) {
+      const availableTextHeight = hiddenCount ? 72 : 90;
+      const fontSize = Math.max(7.2, Math.min(17.14, availableTextHeight / Math.max(1, displayTitle.length)));
+      label.style.fontSize = `${fontSize}px`;
+    }
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value) {
       nodeGroup.querySelector("g.cls-81")?.remove();
@@ -322,9 +330,27 @@ function renderDynamicHierarchy(svg) {
     layer.appendChild(nodeGroup);
 
     const templatePolygon = nodeGroup.querySelector("polygon");
-    const hiddenCount = node.data.hiddenCount || 0;
-    if (templatePolygon && hiddenCount > 0) {
-      const bounds = elementBounds(templatePolygon);
+    const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
+    if (label && polygonBounds) {
+      const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
+      nodeIndex += 1;
+      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+      clipPath.id = clipId;
+      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+      const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      clipRect.setAttribute("x", String(polygonBounds.x + 3));
+      clipRect.setAttribute("y", String(polygonBounds.y + 5));
+      clipRect.setAttribute("width", String(polygonBounds.width - 6));
+      clipRect.setAttribute("height", String(polygonBounds.height - (hiddenCount ? 22 : 10)));
+      clipPath.appendChild(clipRect);
+      svg.querySelector("defs")?.appendChild(clipPath);
+      const labelClipGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      labelClipGroup.setAttribute("clip-path", `url(#${clipId})`);
+      label.parentNode.insertBefore(labelClipGroup, label);
+      labelClipGroup.appendChild(label);
+    }
+    if (polygonBounds && hiddenCount > 0) {
+      const bounds = polygonBounds;
       const barCount = Math.min(5, Math.max(1, Math.ceil(Math.log2(hiddenCount + 1))));
       for (let index = 0; index < barCount; index += 1) {
         const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -336,10 +362,13 @@ function renderDynamicHierarchy(svg) {
         bar.setAttribute("opacity", ".55");
         nodeGroup.appendChild(bar);
       }
-      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      title.textContent = `尚有 ${hiddenCount} 个下级机构未展开`;
-      nodeGroup.appendChild(title);
     }
+
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = hiddenCount
+      ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开`
+      : node.data.title;
+    nodeGroup.appendChild(title);
 
     nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
     d3.select(nodeGroup).on("click.dynamic-tree", (event) => {
