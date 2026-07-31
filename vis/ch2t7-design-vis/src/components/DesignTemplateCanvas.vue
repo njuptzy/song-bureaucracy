@@ -316,9 +316,8 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.setAttribute("transform", `translate(${x - 763.56} ${y - 196.11})`);
     const label = nodeGroup.querySelector("text");
     const hiddenCount = node.data.hiddenCount || 0;
-    const displayTitle = node.data.title.length > 5 ? `${node.data.title.slice(0, 4)}…` : node.data.title;
+    const displayTitle = node.data.title.length > 4 ? `${node.data.title.slice(0, 3)}…` : node.data.title;
     setText(label, displayTitle);
-    if (label) label.style.fontSize = "14.36px";
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value) {
       nodeGroup.querySelector("g.cls-81")?.remove();
