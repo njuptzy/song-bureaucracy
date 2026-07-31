@@ -2461,6 +2461,20 @@ def main():
         print("  [条目拆分] '四色官/穰稍官'(p338)：将 OCR 连写的穣稍官正文"
               "拆回目录占位，条目名按目录规范字形‘穰’保留")
 
+        escort_grade = next(e for e in all_entries if e["name"] == "管押节级")
+        service_grade = next(e for e in all_entries if e["name"] == "祇应节级")
+        assert service_grade.get("_placeholder") is True
+        service_marker = "祗应节级 武职名。"
+        assert service_marker in escort_grade["text"]
+        escort_text, service_text = escort_grade["text"].split(service_marker, 1)
+        escort_grade["text"] = escort_text.rstrip()
+        service_grade["text"] = "武职名。" + service_text
+        service_grade.pop("_placeholder", None)
+        service_meta = all_meta[all_entries.index(service_grade)]
+        service_meta["status"] = "ok"
+        print("  [条目拆分] '管押节级/祇应节级'(p346)：将 OCR 连写的"
+              "祗应节级正文拆回目录占位，条目名按目录规范字形‘祇’保留")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
