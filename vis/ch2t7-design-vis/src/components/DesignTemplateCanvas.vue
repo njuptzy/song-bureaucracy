@@ -24,7 +24,7 @@ const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 const collapsedHierarchyIds = new Set();
-const expandedHierarchyIds = new Set();
+let expandedHierarchyPath = [];
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -193,9 +193,7 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
     .map((edge) => edge.child)
     .filter((id) => !nextVisiting.has(id))
     .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
-  const shouldExpand = depth === 0
-    ? !collapsedHierarchyIds.has(rootId)
-    : expandedHierarchyIds.has(rootId);
+  const shouldExpand = expandedHierarchyPath.includes(rootId);
   const shownChildren = shouldExpand ? allChildren.slice(0, 12) : [];
   return {
     id: rootId,
@@ -334,7 +332,10 @@ function renderDynamicHierarchy(svg) {
     const hiddenCount = node.data.hiddenCount || 0;
     setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
-    if (!node.data.isVirtual && node.data.id !== selectedId.value) {
+    const isExpanded = node.data.isVirtual
+      ? !collapsedHierarchyIds.has(node.data.id)
+      : expandedHierarchyPath.includes(node.data.id);
+    if (!node.data.isVirtual && node.data.id !== selectedId.value && !isExpanded) {
       nodeGroup.querySelector("g.cls-81")?.remove();
     }
     layer.appendChild(nodeGroup);
@@ -376,9 +377,12 @@ function renderDynamicHierarchy(svg) {
     }
 
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    const interactionHint = node.data.childCount
+      ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
+      : "";
     title.textContent = hiddenCount
-      ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开`
-      : node.data.title;
+      ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}`
+      : `${node.data.title}${interactionHint}`;
     nodeGroup.appendChild(title);
 
     nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
@@ -388,12 +392,22 @@ function renderDynamicHierarchy(svg) {
       if (!node.data.isVirtual) selectedId.value = node.data.id;
       if (node.data.childCount) {
         if (node.data.isVirtual) {
-          if (collapsedHierarchyIds.has(node.data.id)) collapsedHierarchyIds.delete(node.data.id);
-          else collapsedHierarchyIds.add(node.data.id);
-        } else if (expandedHierarchyIds.has(node.data.id)) {
-          expandedHierarchyIds.delete(node.data.id);
+          if (collapsedHierarchyIds.has(node.data.id)) {
+            collapsedHierarchyIds.delete(node.data.id);
+          } else {
+            collapsedHierarchyIds.add(node.data.id);
+            expandedHierarchyPath = [];
+          }
         } else {
-          expandedHierarchyIds.add(node.data.id);
+          const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
+          if (expandedIndex >= 0) {
+            expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
+          } else {
+            expandedHierarchyPath = node.ancestors()
+              .reverse()
+              .filter((ancestor) => !ancestor.data.isVirtual)
+              .map((ancestor) => ancestor.data.id);
+          }
         }
       }
       renderTemplate();
@@ -873,7 +887,7 @@ function bindTemplateControls(svg) {
           event.stopPropagation();
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
-          expandedHierarchyIds.clear();
+          expandedHierarchyPath = [];
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
