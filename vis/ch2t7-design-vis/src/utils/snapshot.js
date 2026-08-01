@@ -36,6 +36,27 @@ function compareTimepoints(a, b, byId) {
     || (a.id - b.id);
 }
 
+function compareKnownChainOrder(a, b, byId) {
+  if (!a || !b || a.id === b.id || a.entity_id !== b.entity_id) return 0;
+  let current = b;
+  const seen = new Set();
+  while (current?.prev_id != null && !seen.has(current.prev_id)) {
+    seen.add(current.prev_id);
+    current = byId.get(current.prev_id);
+    if (!current || current.entity_id !== b.entity_id) break;
+    if (current.id === a.id) return -1;
+  }
+  current = a;
+  seen.clear();
+  while (current?.prev_id != null && !seen.has(current.prev_id)) {
+    seen.add(current.prev_id);
+    current = byId.get(current.prev_id);
+    if (!current || current.entity_id !== a.entity_id) break;
+    if (current.id === b.id) return 1;
+  }
+  return 0;
+}
+
 function relationEffectiveYear(state, timepointById) {
   if (state.effective_year != null) return state.effective_year;
   const endpointYears = [state.subject_timepoint_id, state.object_timepoint_id]
@@ -131,7 +152,10 @@ export function buildYearSnapshot(data, year) {
     const relationEvidence = (presenceEvidenceByEntity.get(entityId) || [])
       .map((evidence) => ({ kind: "relation", ...evidence }));
     const evidenceTimeline = [...eligible, ...relationEvidence].sort((a, b) => (
-      a.effectiveYear - b.effectiveYear
+      // 关系证据挂在实体自身的时间点上；若链已明确先后，就不能让一个宽泛
+      // “熙宁间”关系按区间上界排到其后继的明确废罢事件之后，造成旧机构复活。
+      compareKnownChainOrder(a.timepoint, b.timepoint, timepointById)
+      || a.effectiveYear - b.effectiveYear
       // 同年关系先证明“这一年存在”，自身的明确罢废事件随后覆盖它。
       || (a.kind === b.kind ? 0 : a.kind === "relation" ? -1 : 1)
       || (a.kind === "timepoint" && b.kind === "timepoint"

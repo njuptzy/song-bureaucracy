@@ -32,6 +32,27 @@ function compareEvents(a, b, eventById) {
     || (a.id - b.id);
 }
 
+function compareKnownChainOrder(a, b, eventById) {
+  if (!a || !b || a.id === b.id || a.entityId !== b.entityId) return 0;
+  let current = b;
+  const seen = new Set();
+  while (current?.prevId != null && !seen.has(current.prevId)) {
+    seen.add(current.prevId);
+    current = eventById.get(current.prevId);
+    if (!current || current.entityId !== b.entityId) break;
+    if (current.id === a.id) return -1;
+  }
+  current = a;
+  seen.clear();
+  while (current?.prevId != null && !seen.has(current.prevId)) {
+    seen.add(current.prevId);
+    current = eventById.get(current.prevId);
+    if (!current || current.entityId !== a.entityId) break;
+    if (current.id === b.id) return 1;
+  }
+  return 0;
+}
+
 function relationEffectiveYear(relation, eventById) {
   const endpointYears = [relation.subjectId, relation.objectId]
     .map((id) => eventById.get(id))
@@ -83,7 +104,10 @@ export function buildYearSnapshot(dataset, year) {
     const relationEvidence = (presenceEvidenceByEntity.get(entityId) || [])
       .map((evidence) => ({ kind: "relation", ...evidence }));
     const evidenceTimeline = [...eligible, ...relationEvidence].sort((a, b) => (
-      a.effectiveYear - b.effectiveYear
+      // 与8050保持同一规则：实体链已明确先后的关系证据，不能因模糊纪年
+      // 取区间上界而越过后继废罢事件，错误复活旧机构。
+      compareKnownChainOrder(a.event, b.event, eventById)
+      || a.effectiveYear - b.effectiveYear
       || (a.kind === b.kind ? 0 : a.kind === "relation" ? -1 : 1)
       || (a.kind === "event" && b.kind === "event" ? compareEvents(a.event, b.event, eventById) : 0)
     ));
