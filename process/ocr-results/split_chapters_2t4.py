@@ -2558,6 +2558,86 @@ def main():
         print("  [条目拆分] '僧正司/僧正'(p353)：核原书将僧官词条的"
               "释义、职源与职掌从僧正司字段拆回目录占位")
 
+        virtue_office = next(e for e in all_entries if e["name"] == "道德院")
+        wrong_subject = "北宋徽宗宣和元年改名德士司"
+        assert wrong_subject in virtue_office["text"]
+        virtue_office["text"] = virtue_office["text"].replace(
+            wrong_subject, "北宋徽宗宣和元年由左、右街道录院改名", 1
+        )
+        print("  [OCR串条] '道德院'(p354)：据本条引文将误串的佛教机构"
+              "‘德士司’恢复为改名前身‘左、右街道录院’")
+
+        taoist_office = next(e for e in all_entries if e["name"] == "道正司")
+        taoist_post = next(e for e in all_entries if e["name"] == "道正")
+        assert taoist_post.get("_placeholder") is True
+        taoist_post_marker = "道正 道官名。"
+        assert taoist_post_marker in taoist_office["职掌"]
+        office_duty, post_duty = taoist_office["职掌"].split(
+            taoist_post_marker, 1
+        )
+        taoist_office["职掌"] = office_duty.rstrip()
+        taoist_post["text"] = "道官名。"
+        taoist_post["职掌"] = post_duty
+        taoist_post.pop("_placeholder", None)
+        taoist_post_meta = all_meta[all_entries.index(taoist_post)]
+        taoist_post_meta["status"] = "ok"
+        print("  [条目拆分] '道正司/道正'(p354)：按原书独立标题将道正官名、"
+              "职掌及置额从道正司职掌字段拆回目录占位")
+
+        chief_taoist = next(e for e in all_entries if e["name"] == "左、右街")
+        chief_taoist_meta = all_meta[all_entries.index(chief_taoist)]
+        assert chief_taoist.get("_catalog_name") == "左右街都道录"
+        assert chief_taoist_meta.get("status") == "fuzzy"
+        chief_taoist["name"] = "左右街都道录"
+        chief_taoist.pop("_catalog_name", None)
+        chief_taoist_meta["name"] = "左右街都道录"
+        chief_taoist_meta["status"] = "ok"
+        chief_taoist_meta.pop("catalog_name", None)
+        print("  [标题归位] '左右街都道录'(p355)：正文标题被短目录前缀"
+              "‘左、右街’截断，恢复完整正式词头")
+
+        joint_knowledge = next(
+            e for e in all_entries if e["name"] == "同知左右街道录院事"
+        )
+        bogus_joint = next(
+            e for e in all_entries
+            if e["name"] == "同知" and e.get("_from_surname") is True
+        )
+        assert joint_knowledge.get("_placeholder") is True
+        joint_prefix = "左、右街道录院事 "
+        assert bogus_joint["text"].startswith(joint_prefix)
+        joint_knowledge["text"] = bogus_joint["text"][len(joint_prefix):]
+        joint_knowledge.pop("_placeholder", None)
+        joint_meta = all_meta[all_entries.index(joint_knowledge)]
+        joint_meta["status"] = "ok"
+        bogus_joint.clear()
+        bogus_joint.update({"name": "同知", "text": "", "_placeholder": True})
+        bogus_joint_meta = all_meta[all_entries.index(bogus_joint)]
+        bogus_joint_meta["status"] = "placeholder"
+        bogus_joint_meta.pop("from_surname", None)
+        print("  [条目归位] '同知左右街道录院事/同知'(p355)：将被简称匹配"
+              "拆出的正文并回完整目录词头，原伪条位保留为空占位")
+
+        left_knowledge = next(e for e in all_entries if e["name"] == "知左街道录院事")
+        bogus_dudao = next(
+            e for e in all_entries
+            if e["name"] == "都道" and e.get("_from_surname") is True
+        )
+        assert left_knowledge["text"].rstrip().endswith("职事官。"), repr(
+            left_knowledge["text"][-100:]
+        )
+        assert bogus_dudao["text"].startswith("旧名：左街道录")
+        left_knowledge["text"] = (
+            left_knowledge["text"].rstrip() + "都道" + bogus_dudao["text"]
+        )
+        bogus_dudao.clear()
+        bogus_dudao.update({"name": "都道", "text": "", "_placeholder": True})
+        bogus_dudao_meta = all_meta[all_entries.index(bogus_dudao)]
+        bogus_dudao_meta["status"] = "placeholder"
+        bogus_dudao_meta.pop("from_surname", None)
+        print("  [跨页续文] '知左街道录院事/都道'(p355)：恢复引文连续句"
+              "‘都道旧名：左街道录’，原误拆伪条位保留为空占位")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
