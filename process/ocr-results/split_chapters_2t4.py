@@ -2638,6 +2638,62 @@ def main():
         print("  [跨页续文] '知左街道录院事/都道'(p355)：恢复引文连续句"
               "‘都道旧名：左街道录’，原误拆伪条位保留为空占位")
 
+        for title in ("左街副道录", "右街副道录"):
+            post = next(e for e in all_entries if e["name"] == title)
+            missing_book_mark = "。宋大诏令集》卷224"
+            assert missing_book_mark in post["text"]
+            post["text"] = post["text"].replace(
+                missing_book_mark, "。《宋大诏令集》卷224", 1
+            )
+        print("  [OCR符号] '左街副道录/右街副道录'(p356)：核原书补回"
+              "《宋大诏令集》的左书名号")
+
+        joint_left_signer = next(
+            e for e in all_entries if e["name"] == "同签书左街道录院事"
+        )
+        assert joint_left_signer["text"].startswith("八年由左街副都监改名")
+        joint_left_signer["text"] = "道官名。政和" + joint_left_signer["text"]
+        print("  [OCR漏文] '同签书左街道录院事'(p357)：核原书补回句首"
+              "‘道官名。政和’")
+
+        zen_office = next(
+            e for e in all_entries if e["name"] == "提点崇真圣禅院所"
+        )
+        bogus_supervisor = next(
+            e for e in all_entries
+            if e["name"] == "提点" and e.get("_from_surname") is True
+        )
+        assert zen_office.get("_placeholder") is True
+        zen_prefix = "崇真资圣禅院所 "
+        assert bogus_supervisor["text"].startswith(zen_prefix)
+        zen_office["name"] = "提点崇真资圣禅院所"
+        zen_office["text"] = bogus_supervisor["text"][len(zen_prefix):]
+        for key, value in bogus_supervisor.items():
+            if key not in ("name", "text", "_from_surname", "__status__"):
+                zen_office[key] = value
+        zen_office.pop("_placeholder", None)
+        zen_meta = all_meta[all_entries.index(zen_office)]
+        zen_meta["name"] = "提点崇真资圣禅院所"
+        zen_meta["status"] = "ok"
+        bogus_supervisor.clear()
+        bogus_supervisor.update(
+            {"name": "提点", "text": "", "_placeholder": True}
+        )
+        bogus_supervisor_meta = all_meta[all_entries.index(bogus_supervisor)]
+        bogus_supervisor_meta["status"] = "placeholder"
+        bogus_supervisor_meta.pop("from_surname", None)
+        print("  [条目归位] '提点崇真资圣禅院所/提点'(p357)：按原书"
+              "恢复完整词头，将误拆正文和字段并回目录位，伪条位保留为空占位")
+
+        agriculture = next(e for e in all_entries if e["name"] == "司农寺")
+        missing_parenthesis = "等事《宋会要·职官》26之1、2）"
+        assert missing_parenthesis in agriculture["职掌"]
+        agriculture["职掌"] = agriculture["职掌"].replace(
+            missing_parenthesis, "等事（《宋会要·职官》26之1、2）", 1
+        )
+        print("  [OCR符号] '司农寺'(p358)：核原书补回宋前期职掌引文前"
+              "的左括号")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
