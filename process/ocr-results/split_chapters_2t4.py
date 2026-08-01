@@ -2805,6 +2805,55 @@ def main():
         print("  [字段归位] '京北排岸司'(p363)：核原书将粘在职源末尾的"
               "职掌拆回独立字段")
 
+        yeast_office = next(
+            e for e in all_entries
+            if e["name"] == "都曲院" and e.get("text", "").startswith("监当局名。")
+        )
+        alias_marker = "\n简称 "
+        assert alias_marker in yeast_office["text"]
+        yeast_text, yeast_alias = yeast_office["text"].split(alias_marker, 1)
+        yeast_office["text"] = yeast_text.rstrip()
+        yeast_office["简称"] = yeast_alias
+
+        wine_retailer = next(e for e in all_entries if e["name"] == "小博士")
+        yeast_continuation = next(
+            e for e in all_entries
+            if e["name"] == "都曲院" and e.get("_not_in_catalog") is True
+        )
+        assert wine_retailer["text"].endswith("许")
+        assert yeast_continuation["text"].startswith("催理")
+        wine_retailer["text"] += "都曲院" + yeast_continuation["text"]
+        continuation_meta = all_meta[all_entries.index(yeast_continuation)]
+        yeast_continuation.clear()
+        yeast_continuation.update(
+            {"name": "都曲院", "text": "", "_placeholder": True}
+        )
+        continuation_meta["status"] = "placeholder"
+        continuation_meta.pop("not_in_catalog", None)
+        print("  [跨页续文] '都曲院/小博士'(p363-364)：拆回都曲院简称字段，"
+              "并将页首‘都曲院催理’并回小博士条，原伪条位保留为空占位")
+
+        treasury = next(e for e in all_entries if e["name"] == "太府寺")
+        missing_roster_parenthesis = "书状司一人《宋会要·职官》27之1、31）"
+        assert missing_roster_parenthesis in treasury["编制"]
+        treasury["编制"] = treasury["编制"].replace(
+            missing_roster_parenthesis,
+            "书状司一人（《宋会要·职官》27之1、31）",
+            1,
+        )
+
+        treasury_assistant = next(
+            e for e in all_entries if e["name"] == "太府寺丞"
+        )
+        assert "南宋建炎二年四月十三日罢" in treasury_assistant["职源与沿革"]
+        treasury_assistant["职源与沿革"] = treasury_assistant["职源与沿革"].replace(
+            "南宋建炎二年四月十三日罢",
+            "南宋建炎三年四月十三日罢",
+            1,
+        )
+        print("  [OCR符号字误] '太府寺/太府寺丞'(p364-365)：核原书补回"
+              "编制引文左括号，并将建炎罢置年由二年恢复为三年")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
