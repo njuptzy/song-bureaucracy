@@ -7,8 +7,9 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
+import { buildYearSnapshot } from "../utils/snapshot";
 
 const props = defineProps({ data: { type: Object, required: true } });
 
@@ -52,6 +53,9 @@ const titleMap = new Map();
 for (const entity of props.data.entities) {
   if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
 }
+const currentSnapshot = computed(() => (
+  timelineSelectionActive.value ? buildYearSnapshot(props.data, selectedRange.value[0]) : null
+));
 
 function normalizeText(element) {
   return (element.textContent || "").replace(/\s+/g, "").trim();
@@ -113,11 +117,6 @@ function intervalOverlapsRange(start, end) {
   return start <= rangeEnd && end >= rangeStart;
 }
 
-function periodActive(periods) {
-  if (!periods || periods.length === 0) return true;
-  return periods.some((period) => intervalOverlapsRange(period.start, period.end));
-}
-
 function timepointActive(timepoint) {
   if (timepoint.year_start == null || timepoint.year_end == null) return true;
   return intervalOverlapsRange(timepoint.year_start, timepoint.year_end);
@@ -131,24 +130,33 @@ function selectedRangeLabel() {
 }
 
 function activeTimepoints(entityId) {
+  if (currentSnapshot.value) {
+    const timepoint = currentSnapshot.value.currentTimepointByEntity.get(entityId);
+    return timepoint ? [timepoint] : [];
+  }
   return (props.data.timepoints[String(entityId)] || []).filter(timepointActive);
 }
 
 function entityActive(entityId) {
+  if (currentSnapshot.value) return currentSnapshot.value.entityIds.has(entityId);
   const timepoints = props.data.timepoints[String(entityId)] || [];
-  const dated = timepoints.filter(
-    (timepoint) => timepoint.year_start != null && timepoint.year_end != null
-  );
-  if (dated.length) return dated.some(timepointActive);
   return timepoints.length > 0;
 }
 
+function hierarchyEdgesForView() {
+  return currentSnapshot.value?.hierarchyEdges || props.data.hierarchyEdges;
+}
+
+function staffEdgesForView() {
+  return currentSnapshot.value?.staffEdges || props.data.staffEdges;
+}
+
 function staffFor(entityId) {
-  return props.data.staffEdges.filter((edge) => edge.org === entityId && periodActive(edge.periods));
+  return staffEdgesForView().filter((edge) => edge.org === entityId);
 }
 
 function childrenFor(entityId) {
-  return props.data.hierarchyEdges.filter((edge) => edge.parent === entityId && periodActive(edge.periods));
+  return hierarchyEdgesForView().filter((edge) => edge.parent === entityId);
 }
 
 function titleOf(entityId) {
@@ -163,9 +171,7 @@ function entityCategory(entity) {
 
 function hierarchyRootEntities(category) {
   const childIds = new Set(
-    props.data.hierarchyEdges
-      .filter((edge) => periodActive(edge.periods))
-      .map((edge) => edge.child)
+    hierarchyEdgesForView().map((edge) => edge.child)
   );
   return props.data.entities.filter(
     (entity) => entity.type === "机构"
@@ -198,15 +204,19 @@ function quotaText(edge) {
 }
 
 function selectedEntity() {
-  return entityMap.get(selectedId.value) || titleMap.get("尚书省") || props.data.entities[0];
+  const selected = entityMap.get(selectedId.value);
+  if (!currentSnapshot.value || currentSnapshot.value.entityIds.has(selected?.id)) {
+    return selected || titleMap.get("尚书省") || props.data.entities[0];
+  }
+  const preferred = titleMap.get("尚书省");
+  if (preferred && currentSnapshot.value.entityIds.has(preferred.id)) return preferred;
+  return props.data.entities.find((entity) => currentSnapshot.value.entityIds.has(entity.id)) || null;
 }
 
 function graphFocusEntity() {
   const selected = selectedEntity();
   if (selected?.type === "机构") return selected;
-  const affiliation = props.data.staffEdges.find(
-    (edge) => edge.official === selected?.id && periodActive(edge.periods)
-  );
+  const affiliation = staffEdgesForView().find((edge) => edge.official === selected?.id);
   return affiliation ? entityMap.get(affiliation.org) : titleMap.get("尚书省") || selected;
 }
 
@@ -635,9 +645,7 @@ function populateHierarchyCenter(svg) {
 
   // 原画板还预留了两个皇帝直属机构槽；填入焦点机构的同级机构，而非保留示例名称。
   const siblingSlots = [findTextAt(svg, 1735.2, 196.3, 2), findTextAt(svg, 1780.8, 196.3, 2)].filter(Boolean);
-  const parentEdge = props.data.hierarchyEdges.find(
-    (edge) => edge.child === focus.id && periodActive(edge.periods)
-  );
+  const parentEdge = hierarchyEdgesForView().find((edge) => edge.child === focus.id);
   const siblings = parentEdge
     ? childrenFor(parentEdge.parent).map((edge) => edge.child).filter((id) => id !== focus.id)
     : [];
@@ -680,17 +688,13 @@ function populateCenter(svg) {
 
 function bindEntityTexts(svg) {
   const activeIds = new Set();
-  for (const edge of props.data.hierarchyEdges) {
-    if (periodActive(edge.periods)) {
-      activeIds.add(edge.parent);
-      activeIds.add(edge.child);
-    }
+  for (const edge of hierarchyEdgesForView()) {
+    activeIds.add(edge.parent);
+    activeIds.add(edge.child);
   }
-  for (const edge of props.data.staffEdges) {
-    if (periodActive(edge.periods)) {
-      activeIds.add(edge.org);
-      activeIds.add(edge.official);
-    }
+  for (const edge of staffEdgesForView()) {
+    activeIds.add(edge.org);
+    activeIds.add(edge.official);
   }
 
   d3.select(svg)
@@ -1250,20 +1254,10 @@ function bindTimelineRange(svg) {
     }
   };
 
-  const rangeFromSelection = (selection) => {
-    if (selection[1] - selection[0] <= TIMELINE_YEAR_WIDTH * 1.5) {
-      let year;
-      if (selection[0] <= TIMELINE_X_MIN + 0.1) year = YEAR_MIN;
-      else if (selection[1] >= TIMELINE_X_MAX - 0.1) year = YEAR_MAX;
-      else year = Math.round(yearScale.invert((selection[0] + selection[1]) / 2));
-      year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, year));
-      return [year, year];
-    }
-    let start = Math.round(yearScale.invert(selection[0]));
-    let end = Math.round(yearScale.invert(selection[1]));
-    start = Math.max(YEAR_MIN, Math.min(YEAR_MAX, start));
-    end = Math.max(start, Math.min(YEAR_MAX, end));
-    return [start, end];
+  const rangeFromPointer = (event) => {
+    const x = d3.pointer(event.sourceEvent, timelineLayer)[0];
+    const year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(x))));
+    return [year, year];
   };
 
   const moveBrush = (range) => {
@@ -1281,18 +1275,11 @@ function bindTimelineRange(svg) {
   brush.on("brush", (event) => {
     if (!event.sourceEvent || !event.selection) return;
     timelineSelectionActive.value = true;
-    renderRange(rangeFromSelection(event.selection));
+    renderRange(rangeFromPointer(event));
   });
   brush.on("end", (event) => {
     if (!event.sourceEvent) return;
-    let nextRange;
-    if (event.selection) {
-      nextRange = rangeFromSelection(event.selection);
-    } else {
-      const x = d3.pointer(event.sourceEvent, timelineLayer)[0];
-      const year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(x))));
-      nextRange = [year, year];
-    }
+    const nextRange = rangeFromPointer(event);
     timelineSelectionActive.value = true;
     selectedRange.value = nextRange;
     moveBrush(nextRange);

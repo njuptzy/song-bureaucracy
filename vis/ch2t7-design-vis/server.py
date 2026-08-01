@@ -119,6 +119,8 @@ def build_payload() -> dict:
         timepoints.setdefault(r["entity_id"], []).append(
             {
                 "id": r["id"],
+                "prev_id": r["prev_id"],
+                "succ_id": r["succ_id"],
                 "time": r["time"] or "",
                 "event": r["event"] or "",
                 "attr_category": r["attr_category"] or "",
@@ -172,7 +174,15 @@ def build_payload() -> dict:
                 "parent": r["subj"],
                 "child": r["obj"],
                 "periods": [],
+                "states": [],
             }
+        hierarchy_by_key[key]["states"].append(
+            {
+                "id": r["rid"],
+                "subject_timepoint_id": r["subject_id"],
+                "object_timepoint_id": r["object_id"],
+            }
+        )
         existing = hierarchy_by_key[key]["periods"]
         for period in periods_for(r):
             if period not in existing:
@@ -192,7 +202,15 @@ def build_payload() -> dict:
                 "staff_quota": r["staff_quota"] or "",
                 "staff_type": r["staff_type"] or "",
                 "periods": [],
+                "states": [],
             }
+        staff_by_key[key]["states"].append(
+            {
+                "id": r["rid"],
+                "subject_timepoint_id": r["subject_id"],
+                "object_timepoint_id": r["object_id"],
+            }
+        )
         existing = staff_by_key[key]["periods"]
         for period in periods_for(r):
             if period not in existing:
