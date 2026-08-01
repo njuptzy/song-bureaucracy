@@ -1109,7 +1109,7 @@ function bindTimelineRange(svg) {
     hitArea.setAttribute("fill", "transparent");
     hitArea.setAttribute("pointer-events", "all");
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    title.textContent = index === 0 ? "拖动选择起始年份" : "拖动选择结束年份";
+    title.textContent = state.index === 0 ? "拖动选择起始年份" : "拖动选择结束年份";
     hitArea.appendChild(title);
 
     group.append(guide, triangle, label, hitArea);
