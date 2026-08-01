@@ -36,25 +36,29 @@ class LivePayloadCache:
         self.db_path = db_path.resolve()
         self.min_stable_seconds = min_stable_seconds
         self._lock = threading.Lock()
-        self._stamp: tuple[tuple[str, int, int], ...] | None = None
+        self._stamp: tuple[tuple[str, int, int, int, int], ...] | None = None
         self._version: str | None = None
         self._payload: dict[str, Any] | None = None
         self._body: bytes | None = None
-        self._pending_stamp: tuple[tuple[str, int, int], ...] | None = None
+        self._pending_stamp: tuple[tuple[str, int, int, int, int], ...] | None = None
         self._pending_since = 0.0
 
-    def _database_stamp(self) -> tuple[tuple[str, int, int], ...]:
+    def _database_stamp(self) -> tuple[tuple[str, int, int, int, int], ...]:
         parts = []
         for path in (self.db_path, Path(f"{self.db_path}-wal")):
             if path.exists():
                 stat = path.stat()
-                parts.append((path.name, stat.st_mtime_ns, stat.st_size))
+                # 只看 mtime 与大小会漏掉同尺寸替换或恢复过 mtime 的数据库。
+                # ctime 检测原位内容/元数据变化，inode 检测文件替换。
+                parts.append(
+                    (path.name, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+                )
         if not parts:
             raise FileNotFoundError(self.db_path)
         return tuple(parts)
 
     @staticmethod
-    def _stamp_version(stamp: tuple[tuple[str, int, int], ...]) -> str:
+    def _stamp_version(stamp: tuple[tuple[str, int, int, int, int], ...]) -> str:
         return hashlib.sha256(repr(stamp).encode("utf-8")).hexdigest()[:16]
 
     def get(self) -> tuple[str, dict[str, Any], bytes]:

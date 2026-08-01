@@ -49,7 +49,12 @@ def _database_fingerprint() -> str:
         for candidate in (path, Path(f"{path}-wal")):
             try:
                 stat = candidate.stat()
-                parts.append(f"{candidate.name}:{stat.st_mtime_ns}:{stat.st_size}")
+                # mtime 和文件大小可能在同尺寸数据库替换、原位更新后保持不变；
+                # ctime 与 inode 一并进入指纹，避免实时服务继续发送旧 payload。
+                parts.append(
+                    f"{candidate.name}:{stat.st_ino}:{stat.st_mtime_ns}:"
+                    f"{stat.st_ctime_ns}:{stat.st_size}"
+                )
             except FileNotFoundError:
                 parts.append(f"{candidate.name}:missing")
     return "|".join(parts)

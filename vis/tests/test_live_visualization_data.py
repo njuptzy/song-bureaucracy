@@ -1,3 +1,4 @@
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -158,6 +159,33 @@ class LiveVisualizationDataTest(unittest.TestCase):
         self.assertNotEqual(version_before, version_after)
         entity = next(item for item in payload["entities"] if item["id"] == 1)
         self.assertEqual(entity["title"], "实时标题变化")
+
+    def test_cache_detects_same_size_update_when_mtime_is_restored(self):
+        cache = LivePayloadCache(self.db_path, min_stable_seconds=0)
+        version_before, payload_before, _ = cache.get()
+        entity_before = next(item for item in payload_before["entities"] if item["id"] == 1)
+        old_title = entity_before["title"]
+        new_title = "乙" * len(old_title)
+        stat_before = self.db_path.stat()
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("UPDATE Entities SET title = ? WHERE id = 1", (new_title,))
+            conn.commit()
+        finally:
+            conn.close()
+        os.utime(
+            self.db_path,
+            ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns),
+        )
+
+        stat_after = self.db_path.stat()
+        self.assertEqual(stat_before.st_size, stat_after.st_size)
+        self.assertEqual(stat_before.st_mtime_ns, stat_after.st_mtime_ns)
+        version_after, payload_after, _ = cache.get()
+        self.assertNotEqual(version_before, version_after)
+        entity_after = next(item for item in payload_after["entities"] if item["id"] == 1)
+        self.assertEqual(entity_after["title"], new_title)
 
     def test_cache_waits_for_writes_to_settle(self):
         cache = LivePayloadCache(self.db_path, min_stable_seconds=0.2)
