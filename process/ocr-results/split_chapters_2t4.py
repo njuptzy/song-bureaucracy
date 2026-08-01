@@ -353,6 +353,9 @@ PROFILES = {
             {"from": "左、右天厥院", "to": "左、右天厩院", "page": "341",
              "reason": "第五编 p341 目录把马政机构名‘左、右天厩院’的‘厩’"
                        "误识为‘厥’，正文独立标题明确作‘天厩院’"},
+            {"from": "孽官", "to": "孽官", "canonical": "辇官", "page": "347",
+             "reason": "核对第五编 PDF p347，目录把御辇院三类辇官通称‘辇官’"
+                       "误识为‘孽官’，正文独立标题明确作‘辇官’"},
             {"from": "左、右天厥使", "to": "左、右天厩使", "page": "342",
              "reason": "第五编 p342 目录把差遣名‘左、右天厩使’的‘厩’"
                        "误识为‘厥’，正文独立标题及简称均明确作‘天厩使’"},
@@ -2474,6 +2477,45 @@ def main():
         service_meta["status"] = "ok"
         print("  [条目拆分] '管押节级/祇应节级'(p346)：将 OCR 连写的"
               "祗应节级正文拆回目录占位，条目名按目录规范字形‘祇’保留")
+
+        long_grade = next(e for e in all_entries if e["name"] == "下都辇官长行")
+        down_official = next(e for e in all_entries if e["name"] == "下都辇官")
+        generic_official = next(e for e in all_entries if e["name"] == "孽官")
+        assert down_official.get("_placeholder") is True
+        assert generic_official.get("_placeholder") is True
+        down_marker = "下都辇官 应奉人。"
+        assert down_marker in long_grade["text"]
+        long_text, down_text = long_grade["text"].split(down_marker, 1)
+        long_grade["text"] = long_text.rstrip()
+        down_official["text"] = "应奉人。" + down_text
+        down_official.pop("_placeholder", None)
+        combined_aliases = long_grade.pop("简称")
+        generic_marker = "辇官 挚官院所属"
+        assert generic_marker in combined_aliases
+        down_aliases, generic_text = combined_aliases.split(generic_marker, 1)
+        down_official["简称"] = down_aliases.rstrip()
+        generic_official["text"] = "御辇院所属" + generic_text
+        generic_official.pop("_placeholder", None)
+        for restored in (down_official, generic_official):
+            restored_meta = all_meta[all_entries.index(restored)]
+            restored_meta["status"] = "ok"
+        print("  [条目拆分] '下都辇官长行/下都辇官/辇官'(p347)："
+              "核原书拆回三个独立词条，并恢复‘御辇院’OCR误字")
+
+        royal_stable = next(e for e in all_entries if e["name"] == "御前马院")
+        riding_staff = next(e for e in all_entries if e["name"] == "御前马院习马使效")
+        assert riding_staff.get("_placeholder") is True
+        riding_marker = "前马院供职骑习御马祗应者"
+        aliases = royal_stable["简称"]
+        assert riding_marker in aliases
+        stable_aliases, riding_tail = aliases.split(riding_marker, 1)
+        royal_stable["简称"] = stable_aliases.rstrip()
+        riding_staff["text"] = "诸军将校差在御前马院供职骑习御马祗应者" + riding_tail
+        riding_staff.pop("_placeholder", None)
+        riding_meta = all_meta[all_entries.index(riding_staff)]
+        riding_meta["status"] = "ok"
+        print("  [条目拆分] '御前马院/御前马院习马使效'(p347-348)："
+              "核原书将跨页正文从御前马院简称字段拆回独立词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
