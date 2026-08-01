@@ -17,7 +17,6 @@ const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
 const viewMode = ref("hierarchy");
-const selectedYear = ref(1080);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
@@ -82,14 +81,12 @@ function wrapText(element, text, charsPerLine = 31, lineHeight = 24, maxLines = 
   return lines.length;
 }
 
-function periodActive(periods) {
-  if (!periods || periods.length === 0) return true;
-  return periods.some((period) => selectedYear.value >= period.start && selectedYear.value <= period.end);
+function periodActive() {
+  return true;
 }
 
-function timepointActive(timepoint) {
-  if (timepoint.year_start == null || timepoint.year_end == null) return true;
-  return selectedYear.value >= timepoint.year_start && selectedYear.value <= timepoint.year_end;
+function timepointActive() {
+  return true;
 }
 
 function activeTimepoints(entityId) {
@@ -869,7 +866,7 @@ function updateDetails(svg) {
     childrenContent: svg.querySelector("[data-detail-children-content='true']"),
   };
   setText(detailSlots.title, entity.title);
-  setText(detailSlots.year, `公元${selectedYear.value}年制度截面`);
+  setText(detailSlots.year, "宋代历史全貌");
   let cursorY = 536.92;
   detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.mainLabel, "编制与沿革");
@@ -1028,11 +1025,6 @@ function bindTemplateControls(svg) {
       }
     });
 
-  d3.select(svg).on("click.timeline", (event) => {
-    const [x, y] = d3.pointer(event, svg);
-    if (y < 890 || x < 200 || x > 1570) return;
-    selectedYear.value = Math.round(d3.scaleLinear().domain([210, 1559]).range([960, 1279]).clamp(true)(x));
-  });
 }
 
 function installDesignFonts() {
@@ -1080,7 +1072,6 @@ async function renderTemplate() {
 }
 
 watch(viewMode, renderTemplate);
-watch(selectedYear, () => renderTemplate());
 onMounted(async () => {
   installDesignFonts();
   try {
