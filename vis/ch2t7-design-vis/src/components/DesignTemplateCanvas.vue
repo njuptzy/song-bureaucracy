@@ -1097,6 +1097,15 @@ function bindTimelineRange(svg) {
     .attr("stroke", "none")
     .attr("cursor", "ew-resize");
 
+  const rangeLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  rangeLine.classList.add("timeline-selected-range");
+  rangeLine.setAttribute("y1", "1024");
+  rangeLine.setAttribute("y2", "1024");
+  rangeLine.setAttribute("stroke", "#563905");
+  rangeLine.setAttribute("stroke-width", "3");
+  rangeLine.setAttribute("pointer-events", "none");
+  timelineLayer.appendChild(rangeLine);
+
   const handleGroups = [0, 1].map((index) => {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.classList.add("timeline-range-handle");
@@ -1129,6 +1138,9 @@ function bindTimelineRange(svg) {
   const renderRange = (range) => {
     const [start, end] = range;
     const years = [start, end];
+    rangeLine.setAttribute("x1", String(yearScale(start)));
+    rangeLine.setAttribute("x2", String(yearScale(end)));
+    rangeLine.style.display = start === end ? "none" : "";
     for (const handle of handleGroups) {
       const year = years[handle.index];
       const x = yearScale(year);
