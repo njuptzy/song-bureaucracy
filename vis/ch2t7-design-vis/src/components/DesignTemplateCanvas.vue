@@ -17,6 +17,10 @@ const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
 const viewMode = ref("hierarchy");
+const selectedRange = ref([
+  props.data.meta?.yearMin ?? 960,
+  props.data.meta?.yearMax ?? 1279,
+]);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
@@ -26,6 +30,15 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
+
+const YEAR_MIN = props.data.meta?.yearMin ?? 960;
+const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
+const TIMELINE_X_MIN = 210;
+const TIMELINE_X_MAX = 1559;
+const yearScale = d3.scaleLinear()
+  .domain([YEAR_MIN, YEAR_MAX])
+  .range([TIMELINE_X_MIN, TIMELINE_X_MAX])
+  .clamp(true);
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -81,16 +94,39 @@ function wrapText(element, text, charsPerLine = 31, lineHeight = 24, maxLines = 
   return lines.length;
 }
 
-function periodActive() {
-  return true;
+function intervalOverlapsRange(start, end) {
+  const [rangeStart, rangeEnd] = selectedRange.value;
+  return start <= rangeEnd && end >= rangeStart;
 }
 
-function timepointActive() {
-  return true;
+function periodActive(periods) {
+  if (!periods || periods.length === 0) return true;
+  return periods.some((period) => intervalOverlapsRange(period.start, period.end));
+}
+
+function timepointActive(timepoint) {
+  if (timepoint.year_start == null || timepoint.year_end == null) return true;
+  return intervalOverlapsRange(timepoint.year_start, timepoint.year_end);
+}
+
+function selectedRangeLabel() {
+  const [start, end] = selectedRange.value;
+  if (start === YEAR_MIN && end === YEAR_MAX) return `宋代历史全貌（${start}—${end}年）`;
+  if (start === end) return `公元${start}年制度截面`;
+  return `公元${start}—${end}年制度范围`;
 }
 
 function activeTimepoints(entityId) {
   return (props.data.timepoints[String(entityId)] || []).filter(timepointActive);
+}
+
+function entityActive(entityId) {
+  const timepoints = props.data.timepoints[String(entityId)] || [];
+  const dated = timepoints.filter(
+    (timepoint) => timepoint.year_start != null && timepoint.year_end != null
+  );
+  if (dated.length) return dated.some(timepointActive);
+  return timepoints.length > 0;
 }
 
 function staffFor(entityId) {
@@ -120,6 +156,7 @@ function hierarchyRootEntities(category) {
   return props.data.entities.filter(
     (entity) => entity.type === "机构"
       && entityCategory(entity) === category
+      && entityActive(entity.id)
       && !childIds.has(entity.id)
   );
 }
@@ -866,7 +903,7 @@ function updateDetails(svg) {
     childrenContent: svg.querySelector("[data-detail-children-content='true']"),
   };
   setText(detailSlots.title, entity.title);
-  setText(detailSlots.year, "宋代历史全貌");
+  setText(detailSlots.year, selectedRangeLabel());
   let cursorY = 536.92;
   detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.mainLabel, "编制与沿革");
@@ -1027,6 +1064,91 @@ function bindTemplateControls(svg) {
 
 }
 
+function bindTimelineRange(svg) {
+  const timelineLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  timelineLayer.classList.add("timeline-range-control");
+  svg.appendChild(timelineLayer);
+
+  const rangeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  rangeText.setAttribute("x", "1595");
+  rangeText.setAttribute("y", "1008");
+  rangeText.setAttribute("fill", "#563905");
+  rangeText.setAttribute("font-size", "12");
+  rangeText.setAttribute("text-anchor", "start");
+  rangeText.style.letterSpacing = "0.5px";
+  timelineLayer.appendChild(rangeText);
+
+  const startText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  const endText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  for (const label of [startText, endText]) {
+    label.setAttribute("y", "1044");
+    label.setAttribute("fill", "#351704");
+    label.setAttribute("font-size", "11");
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("pointer-events", "none");
+    timelineLayer.appendChild(label);
+  }
+
+  const updateLabels = (selection, range = selectedRange.value) => {
+    const [x0, x1] = selection;
+    const [start, end] = range;
+    startText.setAttribute("x", String(x0));
+    endText.setAttribute("x", String(x1));
+    startText.textContent = `${start}年`;
+    endText.textContent = `${end}年`;
+    rangeText.textContent = start === end ? `${start}年` : `${start}—${end}年`;
+  };
+
+  let installing = true;
+  const brush = d3.brushX()
+    .extent([[TIMELINE_X_MIN, 986], [TIMELINE_X_MAX, 1024]])
+    .handleSize(12)
+    .on("brush", (event) => {
+      if (!event.selection) return;
+      const nextRange = event.selection.map((x) => Math.round(yearScale.invert(x)));
+      updateLabels(event.selection, nextRange);
+    })
+    .on("end", (event) => {
+      if (installing) return;
+      if (!event.selection) {
+        selectedRange.value = [YEAR_MIN, YEAR_MAX];
+        renderTemplate();
+        return;
+      }
+      const nextStart = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(event.selection[0]))));
+      const nextEnd = Math.max(nextStart, Math.min(YEAR_MAX, Math.round(yearScale.invert(event.selection[1]))));
+      if (nextStart === selectedRange.value[0] && nextEnd === selectedRange.value[1]) {
+        updateLabels(event.selection, selectedRange.value);
+        return;
+      }
+      selectedRange.value = [nextStart, nextEnd];
+      renderTemplate();
+    });
+
+  const brushLayer = d3.select(timelineLayer)
+    .append("g")
+    .attr("class", "timeline-range-brush")
+    .call(brush);
+  brushLayer.select(".overlay")
+    .attr("cursor", "crosshair")
+    .append("title")
+    .text("拖拽选择时间范围；点击空白处恢复宋代全时段");
+  brushLayer.select(".selection")
+    .attr("fill", "#a5a68d")
+    .attr("fill-opacity", 0.3)
+    .attr("stroke", "#563905")
+    .attr("stroke-width", 1.2);
+  brushLayer.selectAll(".handle")
+    .attr("fill", "#f5f3ec")
+    .attr("stroke", "#563905")
+    .attr("stroke-width", 1.2);
+
+  const currentSelection = selectedRange.value.map((year) => yearScale(year));
+  brushLayer.call(brush.move, currentSelection);
+  updateLabels(currentSelection);
+  installing = false;
+}
+
 function installDesignFonts() {
   if (document.getElementById("ch2t7-design-fonts")) return;
   const style = document.createElement("style");
@@ -1062,6 +1184,7 @@ async function renderTemplate() {
     bindEntityTexts(svg);
     replaceCompositionDescriptions(svg);
     bindTemplateControls(svg);
+    bindTimelineRange(svg);
     setupDetailPanel(svg);
     updateDetails(svg);
   } catch (reason) {
