@@ -690,6 +690,16 @@ class Model:
           "title": entry["title"],
           "page": entry["page"],
           "catalog": entry["catalog"],
+          # 结构库实体可能采用规范化简称，而辞典保留完整机构名，例如：
+          # 实体“礼部”对应辞典词条“尚书省礼部”。前端把这些主属实体名
+          # 作为检索别名，使用户可以用图谱中看到的名称直接找到原词条。
+          "search_aliases": sorted(
+            {
+              self.entity_by_id[entity_id]["title"]
+              for entity_id in primary_ids
+              if self.entity_by_id[entity_id]["title"] != entry["title"]
+            }
+          ),
           # 徽标只数主属实体，借引用实体不计入
           "entity_count": len(primary_ids),
           "referenced_count": len(referenced_ids),

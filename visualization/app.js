@@ -87,14 +87,40 @@ function renderMeta() {
 
 function entryVisible(e) {
   const q = state.filterText.trim();
-  if (q && !(`${e.title}`.includes(q) || `${e.page}`.includes(q))) return false;
+  const aliases = e.search_aliases || [];
+  if (q && !(
+    `${e.title}`.includes(q) ||
+    `${e.page}`.includes(q) ||
+    aliases.some((alias) => `${alias}`.includes(q))
+  )) return false;
   if (state.onlyIssues && e.issue_count === 0) return false;
   if (state.filterIssueType && !e.issue_types.includes(state.filterIssueType)) return false;
   return true;
 }
 
+function entrySearchScore(e) {
+  const q = state.filterText.trim();
+  if (!q) return 0;
+  const title = `${e.title}`;
+  const page = `${e.page}`;
+  const aliases = (e.search_aliases || []).map(String);
+  if (title === q || aliases.includes(q)) return 0;
+  if (title.startsWith(q) || aliases.some((alias) => alias.startsWith(q))) return 1;
+  if (title.includes(q) || aliases.some((alias) => alias.includes(q))) return 2;
+  if (page === q) return 3;
+  return 4;
+}
+
+function visibleEntries() {
+  return state.entries
+    .filter(entryVisible)
+    .map((entry, index) => ({ entry, index, score: entrySearchScore(entry) }))
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
 function renderEntryList() {
-  const rows = state.entries.filter(entryVisible);
+  const rows = visibleEntries();
   const unlinked = state.meta.unlinked_entities.length || state.meta.unlinked_issue_count;
   let html = "";
   if (unlinked && !state.filterText && !state.filterIssueType) {
@@ -112,7 +138,7 @@ function renderEntryList() {
     .map(
       (e) => `
       <div class="entry-item ${state.currentEntryId === e.id ? "selected" : ""}" data-id="${e.id}">
-        <span class="entry-name"><span class="entry-no" title="对应 records_${e.record_no}_*.json">#${e.record_no}</span>${escapeHtml(e.title)} <span class="entry-page">p${escapeHtml(e.page)}</span></span>
+        <span class="entry-name"><span class="entry-no" title="对应 records_${e.record_no}_*.json">#${e.record_no}</span>${escapeHtml(e.title)} <span class="entry-page">p${escapeHtml(e.page)}</span>${(e.search_aliases || []).length ? ` <span class="entry-alias">实体：${escapeHtml(e.search_aliases.join("、"))}</span>` : ""}</span>
         <span class="badges">
           ${e.entity_count ? `<span class="badge badge-entity">${e.entity_count} 实体</span>` : `<span class="badge badge-none">无数据</span>`}
           ${e.issue_count ? `<span class="badge badge-issue">${e.issue_count} 问题</span>` : ""}
@@ -389,6 +415,13 @@ async function init() {
   $("entrySearch").addEventListener("input", (ev) => {
     state.filterText = ev.target.value;
     renderEntryList();
+  });
+  $("entrySearch").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const first = visibleEntries()[0];
+    if (!first) return;
+    ev.preventDefault();
+    selectEntry(first.id);
   });
   $("onlyIssues").addEventListener("change", (ev) => {
     state.onlyIssues = ev.target.checked;
