@@ -2,6 +2,7 @@
 
 const state = {
   entries: [],
+  entities: [],
   meta: null,
   currentEntryId: null,
   filterText: "",
@@ -93,8 +94,30 @@ function entryVisible(e) {
   return true;
 }
 
+function matchingEntities() {
+  const q = state.filterText.trim();
+  if (!q || state.onlyIssues || state.filterIssueType) return [];
+  return state.entities
+    .filter((entity) => `${entity.title}`.includes(q) || `${entity.id}` === q)
+    .map((entity, index) => ({
+      entity,
+      index,
+      score: `${entity.title}` === q ? 0 : `${entity.title}`.startsWith(q) ? 1 : 2,
+    }))
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map(({ entity }) => entity);
+}
+
+async function selectSearchedEntity(entity) {
+  if (entity.primary_entry_id !== null) {
+    await selectEntry(entity.primary_entry_id);
+  }
+  await openEntityModal(entity.id);
+}
+
 function renderEntryList() {
   const rows = state.entries.filter(entryVisible);
+  const entityRows = matchingEntities();
   const unlinked = state.meta.unlinked_entities.length || state.meta.unlinked_issue_count;
   let html = "";
   if (unlinked && !state.filterText && !state.filterIssueType) {
@@ -107,6 +130,21 @@ function renderEntryList() {
           ${state.meta.unlinked_issue_count ? `<span class="badge badge-issue">${state.meta.unlinked_issue_count} 问题</span>` : ""}
         </span>
       </div>`;
+  }
+  if (entityRows.length) {
+    html += `<div class="search-section-title">结构化实体</div>`;
+    html += entityRows
+      .map(
+        (entity) => `
+      <div class="entry-item entity-search-item" data-entity-id="${entity.id}">
+        <span class="entry-name">${escapeHtml(entity.title)} <span class="entry-page">#${entity.id}</span>${entity.primary_entry_title ? `<small class="entity-source">来源：${escapeHtml(entity.primary_entry_title)} p${escapeHtml(entity.primary_entry_page)}</small>` : `<small class="entity-source">未关联辞典词条</small>`}</span>
+        <span class="badges"><span class="badge badge-entity">${escapeHtml(entity.type || "实体")}</span></span>
+      </div>`
+      )
+      .join("");
+  }
+  if (state.filterText.trim() && rows.length) {
+    html += `<div class="search-section-title">辞典词条</div>`;
   }
   html += rows
     .map(
@@ -122,7 +160,14 @@ function renderEntryList() {
     .join("");
   $("entryList").innerHTML = html || `<p class="placeholder-tip">没有符合条件的条目</p>`;
   $("entryList").querySelectorAll(".entry-item").forEach((el) => {
-    el.addEventListener("click", () => selectEntry(el.dataset.id));
+    el.addEventListener("click", () => {
+      if (el.dataset.entityId) {
+        const entity = state.entities.find((item) => String(item.id) === el.dataset.entityId);
+        if (entity) selectSearchedEntity(entity);
+        return;
+      }
+      selectEntry(el.dataset.id);
+    });
   });
 }
 
@@ -378,9 +423,10 @@ async function openEntityModal(entityId) {
 /* ---------------- 启动 ---------------- */
 
 async function init() {
-  [state.meta, state.entries] = await Promise.all([
+  [state.meta, state.entries, state.entities] = await Promise.all([
     fetchJson("/api/meta"),
     fetchJson("/api/entries"),
+    fetchJson("/api/entities"),
   ]);
   renderMeta();
   renderEntryList();
@@ -389,6 +435,20 @@ async function init() {
   $("entrySearch").addEventListener("input", (ev) => {
     state.filterText = ev.target.value;
     renderEntryList();
+  });
+  $("entrySearch").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const entity = matchingEntities()[0];
+    if (entity) {
+      ev.preventDefault();
+      selectSearchedEntity(entity);
+      return;
+    }
+    const entry = state.entries.find(entryVisible);
+    if (entry) {
+      ev.preventDefault();
+      selectEntry(entry.id);
+    }
   });
   $("onlyIssues").addEventListener("change", (ev) => {
     state.onlyIssues = ev.target.checked;

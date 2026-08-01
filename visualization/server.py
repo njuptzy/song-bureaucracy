@@ -699,6 +699,29 @@ class Model:
       )
     return rows
 
+  def api_entities(self) -> list[dict[str, Any]]:
+    """返回可供标注界面检索的结构化实体索引。
+
+    辞典词条与结构化实体是两套对象：实体可能由某个统称词条的正文提取，
+    因而没有同名辞典标题。这里显式提供实体索引，不把实体名伪装成词条别名。
+    """
+    rows = []
+    for entity in self.entities:
+      primary_entry_id = self.primary_entry_of_entity.get(entity["id"])
+      primary_entry = self.entry_by_id.get(primary_entry_id) if primary_entry_id else None
+      rows.append(
+        {
+          "id": entity["id"],
+          "title": entity["title"],
+          "type": entity["type"],
+          "primary_entry_id": primary_entry_id,
+          "primary_entry_title": primary_entry["title"] if primary_entry else None,
+          "primary_entry_page": primary_entry["page"] if primary_entry else None,
+          "entry_ids": self.entries_of_entity.get(entity["id"], []),
+        }
+      )
+    return rows
+
   def api_entry(self, entry_id: int) -> Optional[dict[str, Any]]:
     entry = self.entry_by_id.get(entry_id)
     if entry is None:
@@ -822,6 +845,8 @@ class Handler(BaseHTTPRequestHandler):
       self._send_json(model.api_meta())
     elif path == "/api/entries":
       self._send_json(model.api_entries())
+    elif path == "/api/entities":
+      self._send_json(model.api_entities())
     elif path == "/api/entry/unlinked":
       self._send_json(model.api_unlinked())
     elif (m := re.fullmatch(r"/api/entry/(\d+)", path)):
