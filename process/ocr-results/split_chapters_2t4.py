@@ -2854,6 +2854,17 @@ def main():
         print("  [OCR符号字误] '太府寺/太府寺丞'(p364-365)：核原书补回"
               "编制引文左括号，并将建炎罢置年由二年恢复为三年")
 
+        left_treasury = next(e for e in all_entries if e["name"] == "左藏库")
+        wrong_transfer_date = "淳熙十年八月二十八日拨隶户部"
+        assert wrong_transfer_date in left_treasury["职源与沿革"]
+        left_treasury["职源与沿革"] = left_treasury["职源与沿革"].replace(
+            wrong_transfer_date,
+            "淳熙十年六月二十八日拨隶户部",
+            1,
+        )
+        print("  [OCR字误] '左藏库'(p366)：核原书将左藏南库拨隶户部日期"
+              "由淳熙十年八月二十八日恢复为六月二十八日")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
