@@ -2517,6 +2517,47 @@ def main():
         print("  [条目拆分] '御前马院/御前马院习马使效'(p347-348)："
               "核原书将跨页正文从御前马院简称字段拆回独立词条")
 
+        temple_manager = next(e for e in all_entries if e["name"] == "提点在京寺务司")
+        manager_office = next(e for e in all_entries if e["name"] == "提点在京寺务所")
+        assert manager_office.get("_placeholder") is True
+        combined_aliases = temple_manager["简称"]
+        office_marker = "务司官办事机构"
+        assert office_marker in combined_aliases
+        manager_aliases, office_tail = combined_aliases.split(office_marker, 1)
+        temple_manager["简称"] = manager_aliases.rstrip()
+        office_body = "提点在京寺务司官办事机构" + office_tail
+        alias_marker = "提点所。"
+        assert alias_marker in office_body
+        body_text, office_aliases = office_body.split(alias_marker, 1)
+        manager_office["text"] = "官司名。" + body_text.rstrip()
+        manager_office["简称"] = alias_marker + office_aliases
+        manager_office.pop("_placeholder", None)
+        manager_office_meta = all_meta[all_entries.index(manager_office)]
+        manager_office_meta["status"] = "ok"
+        print("  [条目拆分] '提点在京寺务司/提点在京寺务所'(p352)："
+              "核原书将提点官办事机构及简称拆回独立词条")
+
+        monk_office = next(e for e in all_entries if e["name"] == "僧正司")
+        monk_post = next(e for e in all_entries if e["name"] == "僧正")
+        assert monk_post.get("_placeholder") is True
+        post_marker = "僧正 僧官名。"
+        assert post_marker in monk_office["简称"]
+        office_aliases, post_tail = monk_office["简称"].split(post_marker, 1)
+        assert not post_tail.strip()
+        monk_office["简称"] = office_aliases.rstrip()
+        duty_marker = "僧正司主管官。"
+        assert duty_marker in monk_office["职掌"]
+        office_duty, post_duty = monk_office["职掌"].split(duty_marker, 1)
+        monk_office["职掌"] = office_duty.rstrip()
+        monk_post["text"] = "僧官名。"
+        monk_post["职源"] = monk_office.pop("职源")
+        monk_post["职掌"] = duty_marker + post_duty
+        monk_post.pop("_placeholder", None)
+        monk_post_meta = all_meta[all_entries.index(monk_post)]
+        monk_post_meta["status"] = "ok"
+        print("  [条目拆分] '僧正司/僧正'(p353)：核原书将僧官词条的"
+              "释义、职源与职掌从僧正司字段拆回目录占位")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
