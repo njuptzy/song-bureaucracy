@@ -2793,6 +2793,18 @@ def main():
         print("  [标题归位] '都大提点在京仓草场司'(p362)：恢复被短前缀"
               "截断的完整官司词头及正文定义")
 
+        north_bank_office = next(
+            e for e in all_entries if e["name"] == "京北排岸司"
+        )
+        combined_origin = north_bank_office["职源"]
+        duty_marker = "\n职掌 "
+        assert duty_marker in combined_origin
+        origin_text, duty_text = combined_origin.split(duty_marker, 1)
+        north_bank_office["职源"] = origin_text.rstrip()
+        north_bank_office["职掌"] = duty_text
+        print("  [字段归位] '京北排岸司'(p363)：核原书将粘在职源末尾的"
+              "职掌拆回独立字段")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
