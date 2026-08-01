@@ -6,9 +6,11 @@ const ACTIVATION_VERBS = [
   "犹存", "仍存", "尚存",
 ];
 const NEGATED_ACTIVATION_VERBS = ["不复置", "不再置", "未复置", "不复设", "未复设"];
-const TERMINATION_VERBS = ["解散", "撤销", "裁撤", "废止", "终结", "名止", "消亡", "罢", "废"];
+const TERMINATION_VERBS = ["废罢", "罢废", "解散", "撤销", "裁撤", "废止", "终结", "名止", "消亡", "罢", "废"];
 const FAILED_CHANGE_WORDS = ["未果", "未成", "未行", "未施行", "未实行", "收回诏书", "作罢"];
-const IMPLICIT_SOURCE_VERBS = ["并入", "并归", "改为", "改名为", "改名", "改称为", "改称", "改置为"];
+const IMPLICIT_SOURCE_VERBS = [
+  "复分为", "分为", "并入", "并归", "改为", "改名为", "改名", "改称为", "改称", "改置为",
+];
 
 function splitClauses(text) {
   const clauses = [];
@@ -40,7 +42,9 @@ function exactEntityPhrase(text, title) {
 
 function stripDiscourseLead(text) {
   let result = text;
-  const leads = ["与此同时", "其后", "此后", "一度", "后来", "旋即", "旋", "遂", "寻", "又", "后", "但", "而", "诏"];
+  const leads = [
+    "与此同时", "其后", "此后", "一度", "后来", "旋即", "统一", "避讳", "旋", "遂", "寻", "又", "后", "但", "而", "诏",
+  ];
   let changed = true;
   while (changed) {
     changed = false;
@@ -130,11 +134,25 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
       }
     }
 
+    // 当前实体作为省略的并列主语：“与外剥马务合为皮剥所”；或前半句先叙述
+    // 当前实体的位置变化，后半句“并与……合并”。这种结构的被合并者就是当前实体。
+    if ((clause.startsWith("与") && /(?:合并|合为)/.test(clause))
+      || /并与[^，；。]*(?:合并|合为)/.test(clause)) {
+      const index = Math.max(clause.lastIndexOf("合并"), clause.lastIndexOf("合为"));
+      addTransition(transitions, "deactivate", start + index, "当前实体与其他实体合并", 2);
+    }
+
+    if (clause.includes("实体官署实废")) {
+      addTransition(transitions, "deactivate", start + clause.indexOf("实废"), "原文明确实体官署实废", 2);
+    }
+
     // 这些动词的宾语是去向而不是被处置对象；仅在分句以动词起首、明确省略当前实体
     // 这个主语时，才把当前实体判为终止。“某下属改为……”不会命中。
+    const actionClause = stripDiscourseLead(clause);
+    const actionStart = clause.length - actionClause.length;
     for (const verb of IMPLICIT_SOURCE_VERBS) {
-      if (clause.startsWith(verb)) {
-        addTransition(transitions, "deactivate", start, `当前实体${verb}其他实体`, 2);
+      if (actionClause.startsWith(verb)) {
+        addTransition(transitions, "deactivate", start + actionStart, `当前实体${verb}其他实体`, 2);
       }
     }
   }

@@ -215,3 +215,35 @@ test("关系存在证据不能越过同年或更晚的明确罢废", () => {
   ], hierarchyEdges);
   assert.equal(buildYearSnapshot(data, 1000).entityIds.has(1), false);
 });
+
+test("罢废和废罢复合词明确终止当前实体", () => {
+  const entity = { id: 1, title: "某司", type: "机构" };
+  assert.equal(classifyExistenceEffect(timepoint(10, 1058, "废罢，归其他机构兼领"), entity), "deactivate");
+  assert.equal(classifyExistenceEffect(timepoint(11, 1071, "罢废，职事归某寺"), entity), "deactivate");
+});
+
+test("省略当前主语的合并和复分会终止来源实体", () => {
+  const entity = { id: 1, title: "内剥马务", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1072, "与外剥马务合为皮剥所"), entity),
+    "deactivate",
+  );
+  assert.equal(
+    classifyExistenceEffect(timepoint(11, 988, "复分为马军、步军粮料院"), entity),
+    "deactivate",
+  );
+});
+
+test("统一改称和避讳改为会终止旧实体", () => {
+  const entity = { id: 1, title: "旧机构", type: "机构" };
+  assert.equal(classifyExistenceEffect(timepoint(10, 1005, "统一改称监"), entity), "deactivate");
+  assert.equal(classifyExistenceEffect(timepoint(11, 960, "避讳改为昭文馆"), entity), "deactivate");
+});
+
+test("明确写实体官署实废时不被后续名号记载保留", () => {
+  const entity = { id: 1, title: "进奏院", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 982, "诸州进奏院归并都进奏院，实体官署实废但各州朱记名仍存"), entity),
+    "deactivate",
+  );
+});
