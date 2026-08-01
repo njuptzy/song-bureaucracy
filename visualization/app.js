@@ -102,7 +102,15 @@ function matchingEntities() {
     .map((entity, index) => ({
       entity,
       index,
-      score: `${entity.title}` === q ? 0 : `${entity.title}`.startsWith(q) ? 1 : 2,
+      // “礼部”应优先命中原词条实体“尚书省礼部”，而不是“礼部尚书”。
+      // 后缀匹配只用于检索排序，不生成别名，也不改变数据库标题。
+      score: `${entity.title}` === q
+        ? 0
+        : `${entity.title}`.endsWith(q)
+          ? 1
+          : `${entity.title}`.startsWith(q)
+            ? 2
+            : 3,
     }))
     .sort((a, b) => a.score - b.score || a.index - b.index)
     .map(({ entity }) => entity);
