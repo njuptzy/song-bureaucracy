@@ -742,6 +742,9 @@ function setupDetailPanel(svg) {
   panelGroup.setAttribute("transform", `translate(${detailPanelOffset.x} ${detailPanelOffset.y})`);
   svg.insertBefore(panelGroup, panelNodes[0]);
   panelNodes.forEach((node) => panelGroup.appendChild(node));
+  panelGroup.__topRightBorder = [...panelGroup.querySelectorAll("polyline")].find((polyline) => (
+    (polyline.getAttribute("points") || "").includes("475.49 497.57 308.55 497.57")
+  ));
 
   const defs = svg.querySelector("defs") || svg.insertBefore(
     document.createElementNS("http://www.w3.org/2000/svg", "defs"),
@@ -941,6 +944,19 @@ function updateDetails(svg) {
   setText(detailSlots.year, selectedRangeLabel());
   constrainTextWidth(detailSlots.title, 78);
   constrainTextWidth(detailSlots.year, 270);
+  const panelGroup = svg.querySelector(".detail-panel-group");
+  const topRightBorder = panelGroup?.__topRightBorder;
+  if (topRightBorder && detailSlots.year) {
+    const yearX = position(detailSlots.year)?.x ?? 189.74;
+    const lineStart = Math.max(
+      308.55,
+      Math.min(468, yearX + detailSlots.year.getComputedTextLength() + 8)
+    );
+    topRightBorder.setAttribute(
+      "points",
+      `229.27 877.67 475.49 877.67 475.49 497.57 ${lineStart} 497.57`
+    );
+  }
   let cursorY = 536.92;
   detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.mainLabel, "编制与沿革");
