@@ -2694,6 +2694,105 @@ def main():
         print("  [OCR符号] '司农寺'(p358)：核原书补回宋前期职掌引文前"
               "的左括号")
 
+        agriculture_minister = next(e for e in all_entries if e["name"] == "司农寺卿")
+        assert "元丰新制一人《宋会要·职官》26之2）" in agriculture_minister["编制"]
+        agriculture_minister["编制"] = agriculture_minister["编制"].replace(
+            "元丰新制一人《宋会要·职官》26之2）",
+            "元丰新制一人（《宋会要·职官》26之2）",
+            1,
+        )
+        agriculture_deputy = next(
+            e for e in all_entries if e["name"] == "司农寺少卿"
+        )
+        assert "(《宋史·职官志》)9)" in agriculture_deputy["职掌"]
+        agriculture_deputy["职掌"] = agriculture_deputy["职掌"].replace(
+            "(《宋史·职官志》)9)", "（《宋史·职官志》9）", 1
+        )
+        agriculture_assistant = next(
+            e for e in all_entries if e["name"] == "司农寺丞"
+        )
+        bad_rank_citation = "(《宋史·职官志》9《元丰以后合班之制》。"
+        assert bad_rank_citation in agriculture_assistant["品位"]
+        agriculture_assistant["品位"] = agriculture_assistant["品位"].replace(
+            bad_rank_citation, "（《宋史·职官志》9《元丰以后合班之制》）。", 1
+        )
+        print("  [OCR符号] '司农寺卿/少卿/丞'(p359)：核原书恢复编制、"
+              "职掌与品位三处引文括号")
+
+        chief_assistant = next(e for e in all_entries if e["name"] == "司农寺都丞")
+        combined_rank = chief_assistant["品位"]
+        staff_marker = "编制 一员"
+        assert staff_marker in combined_rank
+        rank, staff_text = combined_rank.split("编制 ", 1)
+        chief_assistant["品位"] = rank.rstrip()
+        chief_assistant["编制"] = staff_text
+        print("  [字段归位] '司农寺都丞'(p360)：将粘在品位末尾的编制一员"
+              "拆回独立编制字段")
+
+        water_mill = next(e for e in all_entries if e["name"] == "水辗磨务")
+        water_mill_meta = all_meta[all_entries.index(water_mill)]
+        history_marker = "\n职源与沿革 "
+        assert history_marker in water_mill["text"]
+        summary, history_text = water_mill["text"].split(history_marker, 1)
+        water_mill["name"] = "水碾磨务"
+        water_mill["text"] = summary
+        water_mill["职源与沿革"] = history_text.replace("水辗磨务", "水碾磨务")
+        combined_duty = water_mill["职掌"]
+        roster_marker = "编制 "
+        assert roster_marker in combined_duty
+        duty_text, roster_text = combined_duty.split(roster_marker, 1)
+        water_mill["职掌"] = duty_text.rstrip().replace("水砓辗磨", "水硙碾磨")
+        water_mill["编制"] = roster_text.replace("水辗磨务", "水碾磨务")
+        water_mill_meta["name"] = "水碾磨务"
+        print("  [标题字段归位] '水碾磨务'(p361)：核原书恢复‘碾’字，"
+              "并将正文中的职源与沿革及职掌末尾的编制拆回独立字段")
+
+        fodder_yard = next(e for e in all_entries if e["name"] == "司农寺草料场")
+        assert fodder_yard["简称"].startswith("栫司。")
+        fodder_yard["简称"] = "秣司。" + fodder_yard["简称"][3:]
+        print("  [OCR字误] '司农寺草料场'(p361)：核原书将别称‘栫司’"
+              "恢复为‘秣司’")
+
+        warehouse_yard_office = next(
+            e for e in all_entries if e["name"] == "提点在京仓草场所"
+        )
+        warehouse_yard_post = next(
+            e for e in all_entries if e["name"] == "提点在京仓草场"
+        )
+        assert warehouse_yard_post.get("_placeholder") is True
+        post_marker = "提点在京仓草场 差遣名。"
+        combined_aliases = warehouse_yard_office["简称"]
+        assert post_marker in combined_aliases
+        office_aliases, post_tail = combined_aliases.split(post_marker, 1)
+        post_alias_marker = "①提点官。"
+        assert post_alias_marker in post_tail
+        post_text, post_aliases = post_tail.split(post_alias_marker, 1)
+        warehouse_yard_office["简称"] = office_aliases.rstrip()
+        warehouse_yard_post["text"] = "差遣名。" + post_text.rstrip()
+        warehouse_yard_post["简称"] = post_alias_marker + post_aliases
+        warehouse_yard_post.pop("_placeholder", None)
+        warehouse_yard_post_meta = all_meta[all_entries.index(warehouse_yard_post)]
+        warehouse_yard_post_meta["status"] = "ok"
+        print("  [条目拆分] '提点在京仓草场所/提点在京仓草场'(p361)："
+              "将差遣官正文及简称从前条简称字段拆回目录占位")
+
+        chief_warehouse_yard = next(
+            e for e in all_entries if e["name"] == "都大提点在京仓草场"
+        )
+        chief_warehouse_yard_meta = all_meta[all_entries.index(chief_warehouse_yard)]
+        assert chief_warehouse_yard.get("_catalog_name") == "都大提点在京仓草场司"
+        assert chief_warehouse_yard["text"].startswith("官之治所。")
+        chief_warehouse_yard["name"] = "都大提点在京仓草场司"
+        chief_warehouse_yard["text"] = (
+            "官司名。都大提点在京仓草场" + chief_warehouse_yard["text"]
+        )
+        chief_warehouse_yard.pop("_catalog_name", None)
+        chief_warehouse_yard_meta["name"] = "都大提点在京仓草场司"
+        chief_warehouse_yard_meta["status"] = "ok"
+        chief_warehouse_yard_meta.pop("catalog_name", None)
+        print("  [标题归位] '都大提点在京仓草场司'(p362)：恢复被短前缀"
+              "截断的完整官司词头及正文定义")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
