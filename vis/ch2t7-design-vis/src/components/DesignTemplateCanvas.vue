@@ -18,6 +18,7 @@ const loading = ref(true);
 const error = ref("");
 const viewMode = ref("hierarchy");
 const selectedRange = ref([1109, 1109]);
+const timelineSelectionActive = ref(true);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
@@ -1070,9 +1071,16 @@ function bindTimelineRange(svg) {
   const originalYear = [...svg.querySelectorAll("text")].find(
     (text) => normalizeText(text) === "1109年" && Math.abs((position(text)?.y ?? 0) - 1035.22) < 1
   );
+  const originalGuideLine = [...svg.querySelectorAll("line")].find(
+    (line) => Math.abs(Number(line.getAttribute("x1")) - 838.19) < 0.1
+      && Math.abs(Number(line.getAttribute("y1")) - 913.08) < 0.1
+      && Math.abs(Number(line.getAttribute("y2")) - 1021.73) < 0.1
+  );
   if (!originalTriangle || !originalYear) return;
   originalTriangle.style.display = "none";
   originalYear.style.display = "none";
+  // 设计稿的 1109 年标记由三段竖线和上下端帽组成，需与静态三角一起隐藏。
+  originalGuideLine?.parentElement?.parentElement?.style.setProperty("display", "none");
 
   const timelineLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   timelineLayer.classList.add("timeline-range-control");
@@ -1135,7 +1143,45 @@ function bindTimelineRange(svg) {
     return { group, guide, triangle, label, index };
   });
 
+  const cancelControl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  cancelControl.classList.add("timeline-cancel-selection");
+  cancelControl.style.cursor = "pointer";
+  cancelControl.setAttribute("role", "button");
+  cancelControl.setAttribute("aria-label", "取消当前时间选择，恢复显示全宋");
+  cancelControl.setAttribute("tabindex", "0");
+  const cancelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  cancelBackground.setAttribute("x", "1594");
+  cancelBackground.setAttribute("y", "1028");
+  cancelBackground.setAttribute("width", "76");
+  cancelBackground.setAttribute("height", "21");
+  cancelBackground.setAttribute("rx", "2");
+  cancelBackground.setAttribute("fill", "#f5f3ec");
+  cancelBackground.setAttribute("fill-opacity", "0.92");
+  cancelBackground.setAttribute("stroke", "#866d6d");
+  cancelBackground.setAttribute("stroke-opacity", "0.68");
+  cancelBackground.setAttribute("stroke-width", "0.8");
+  const cancelLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  cancelLabel.setAttribute("x", "1632");
+  cancelLabel.setAttribute("y", "1038.5");
+  cancelLabel.setAttribute("text-anchor", "middle");
+  cancelLabel.setAttribute("dominant-baseline", "central");
+  cancelLabel.setAttribute("fill", "#563905");
+  cancelLabel.setAttribute("font-size", "10");
+  cancelLabel.setAttribute("font-family", "FZQINGKBYSS-R--GB1-0, serif");
+  cancelLabel.textContent = "× 取消选择";
+  const cancelTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  cancelTitle.textContent = "取消当前时间选择，恢复显示全宋";
+  cancelControl.append(cancelBackground, cancelLabel, cancelTitle);
+  timelineLayer.appendChild(cancelControl);
+
   const renderRange = (range) => {
+    const selectionVisible = timelineSelectionActive.value;
+    cancelControl.style.display = selectionVisible ? "" : "none";
+    rangeLine.style.display = selectionVisible ? "" : "none";
+    handleGroups.forEach((handle) => {
+      handle.group.style.display = selectionVisible ? "" : "none";
+    });
+    if (!selectionVisible) return;
     const [start, end] = range;
     const years = [start, end];
     rangeLine.setAttribute("x1", String(yearScale(start)));
@@ -1184,6 +1230,7 @@ function bindTimelineRange(svg) {
 
   brush.on("brush", (event) => {
     if (!event.sourceEvent || !event.selection) return;
+    timelineSelectionActive.value = true;
     renderRange(rangeFromSelection(event.selection));
   });
   brush.on("end", (event) => {
@@ -1196,13 +1243,29 @@ function bindTimelineRange(svg) {
       const year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(x))));
       nextRange = [year, year];
     }
+    timelineSelectionActive.value = true;
     selectedRange.value = nextRange;
     moveBrush(nextRange);
     renderTemplate();
   });
 
+  const cancelSelection = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    timelineSelectionActive.value = false;
+    selectedRange.value = [YEAR_MIN, YEAR_MAX];
+    brushLayer.call(brush.move, null);
+    renderRange(selectedRange.value);
+    renderTemplate();
+  };
+  d3.select(cancelControl)
+    .on("click.cancel-selection", cancelSelection)
+    .on("keydown.cancel-selection", (event) => {
+      if (event.key === "Enter" || event.key === " ") cancelSelection(event);
+    });
+
   renderRange(selectedRange.value);
-  moveBrush(selectedRange.value);
+  if (timelineSelectionActive.value) moveBrush(selectedRange.value);
 }
 
 function installDesignFonts() {
