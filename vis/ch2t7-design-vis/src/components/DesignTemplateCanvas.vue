@@ -74,40 +74,38 @@ function setText(element, text) {
   element.replaceChildren(document.createTextNode(text || "暂无资料"));
 }
 
-function wrapText(element, text, maxWidth = 345, lineHeight = 24, maxLines = 7) {
+function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 7) {
   if (!element) return 0;
   const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
-  element.replaceChildren();
   const lines = [];
-  let currentLine = "";
-  let currentTspan = null;
-  const appendLine = (line) => {
+  const closingPunctuation = /[，。；：！？、〉》）】」』]/;
+  let offset = 0;
+  while (offset < content.length && lines.length < maxLines) {
+    let end = Math.min(content.length, offset + charsPerLine);
+    while (end < content.length && closingPunctuation.test(content[end])) end += 1;
+    let line = content.slice(offset, end);
+    if (end < content.length && lines.length === maxLines - 1) line = `${line.slice(0, -1)}…`;
+    lines.push(line);
+    offset = end;
+  }
+  element.replaceChildren();
+  for (const [index, line] of lines.entries()) {
     const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     tspan.setAttribute("x", "0");
-    tspan.setAttribute("y", String(lines.length * lineHeight));
+    tspan.setAttribute("y", String(index * lineHeight));
     tspan.textContent = line;
     element.appendChild(tspan);
-    lines.push(line);
-    return tspan;
-  };
-  for (const character of content) {
-    if (!currentTspan) currentTspan = appendLine("");
-    const candidate = `${currentLine}${character}`;
-    currentTspan.textContent = candidate;
-    if (currentLine && currentTspan.getComputedTextLength() > maxWidth) {
-      currentTspan.textContent = currentLine;
-      if (lines.length >= maxLines) {
-        currentTspan.textContent = `${currentLine.slice(0, -1)}…`;
-        return lines.length;
-      }
-      currentLine = character;
-      currentTspan = appendLine(character);
-    } else {
-      currentLine = candidate;
-      lines[lines.length - 1] = currentLine;
-    }
   }
   return lines.length;
+}
+
+function constrainTextWidth(element, maxWidth) {
+  if (!element) return;
+  element.removeAttribute("textLength");
+  element.removeAttribute("lengthAdjust");
+  if (element.getComputedTextLength() <= maxWidth) return;
+  element.setAttribute("textLength", String(maxWidth));
+  element.setAttribute("lengthAdjust", "spacingAndGlyphs");
 }
 
 function intervalOverlapsRange(start, end) {
@@ -800,20 +798,20 @@ function setupDetailPanel(svg) {
   if (scrollTrack) {
     scrollTrack.removeAttribute("class");
     scrollTrack.classList.add("detail-panel-scroll-track");
-    scrollTrack.setAttribute("x", "466.5");
-    scrollTrack.setAttribute("width", "1");
-    scrollTrack.setAttribute("rx", "0.5");
+    scrollTrack.setAttribute("x", "465.25");
+    scrollTrack.setAttribute("width", "1.5");
+    scrollTrack.setAttribute("rx", "0.75");
     scrollTrack.setAttribute("fill", "#563905");
-    scrollTrack.setAttribute("opacity", "0.18");
+    scrollTrack.setAttribute("opacity", "0.2");
   }
   if (scrollThumb) {
     scrollThumb.removeAttribute("class");
     scrollThumb.classList.add("detail-panel-scroll-thumb");
-    scrollThumb.setAttribute("x", "465.75");
-    scrollThumb.setAttribute("width", "2.5");
-    scrollThumb.setAttribute("rx", "1.25");
+    scrollThumb.setAttribute("x", "464.25");
+    scrollThumb.setAttribute("width", "3.5");
+    scrollThumb.setAttribute("rx", "1.75");
     scrollThumb.setAttribute("fill", "#563905");
-    scrollThumb.setAttribute("opacity", "0.72");
+    scrollThumb.setAttribute("opacity", "0.62");
   }
 
   const scrollHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -839,7 +837,8 @@ function setupDetailPanel(svg) {
     const trackHeight = Number(scrollTrack.getAttribute("height"));
     const contentHeight = Math.max(1, contentBottom - 536.92);
     const viewportHeight = viewportBottom - 536.92;
-    const thumbHeight = Math.max(28, Math.min(trackHeight, trackHeight * viewportHeight / contentHeight));
+    const proportionalThumbHeight = trackHeight * viewportHeight / contentHeight;
+    const thumbHeight = Math.max(30, Math.min(96, trackHeight, proportionalThumbHeight));
     const thumbTravel = trackHeight - thumbHeight;
     const thumbY = trackY + (maxScroll ? detailPanelScrollOffset / maxScroll * thumbTravel : 0);
     scrollThumb.setAttribute("y", String(thumbY));
@@ -940,24 +939,26 @@ function updateDetails(svg) {
   };
   setText(detailSlots.title, entity.title);
   setText(detailSlots.year, selectedRangeLabel());
+  constrainTextWidth(detailSlots.title, 78);
+  constrainTextWidth(detailSlots.year, 270);
   let cursorY = 536.92;
   detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.mainLabel, "编制与沿革");
   cursorY += 25;
   detailSlots.main?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const mainLines = wrapText(detailSlots.main, mainText, 345, 18, Infinity);
+  const mainLines = wrapText(detailSlots.main, mainText, 28, 18, Infinity);
   cursorY += Math.max(1, mainLines) * 18 + 13;
   detailSlots.staffLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.staffLabel, "编制");
   cursorY += 25;
   detailSlots.staff?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const staffLines = wrapText(detailSlots.staff, staffText, 345, 18, Infinity);
+  const staffLines = wrapText(detailSlots.staff, staffText, 28, 18, Infinity);
   cursorY += Math.max(1, staffLines) * 18 + 13;
   detailSlots.children?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.children, "下级机构");
   cursorY += 25;
   detailSlots.childrenContent?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const childrenLines = wrapText(detailSlots.childrenContent, childText, 345, 18, Infinity);
+  const childrenLines = wrapText(detailSlots.childrenContent, childText, 28, 18, Infinity);
   cursorY += Math.max(1, childrenLines) * 18 + 10;
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY);
