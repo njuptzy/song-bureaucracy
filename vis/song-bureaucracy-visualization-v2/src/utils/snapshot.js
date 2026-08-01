@@ -1,12 +1,5 @@
 const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
-const ACTIVATION_WORDS = [
-  "始置", "初置", "新置", "创置", "设置", "设立", "建立", "成立", "开设", "创设",
-  "复置", "复设", "恢复", "复称", "复旧", "再置", "重置", "重新设置",
-  "犹存", "仍存", "尚存", "继续存在", "仍置", "仍设",
-];
-const NON_RESTORATION_WORDS = ["不复置", "不再置", "未复置", "不复设", "未复设"];
-const DIRECT_TERMINATION_WORDS = ["解散", "撤销", "裁撤", "废止", "终结", "名止", "消亡"];
-const FAILED_ACTIVATION_WORDS = ["未果", "未成", "未行", "未施行", "未实行", "收回诏书", "作罢"];
+import { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
 
 function effectiveYear(event) {
   if (!SNAPSHOT_TIME_TYPES.has(event?.timeType) || event?.yearStart == null) return null;
@@ -39,78 +32,6 @@ function compareEvents(a, b, eventById) {
     || (a.id - b.id);
 }
 
-function occurrences(text, word, predicate = () => true) {
-  const indexes = [];
-  let offset = 0;
-  while (offset < text.length) {
-    const index = text.indexOf(word, offset);
-    if (index < 0) break;
-    if (predicate(index)) indexes.push(index);
-    offset = index + word.length;
-  }
-  return indexes;
-}
-
-function classifyExistenceEffect(event, entity = {}) {
-  const text = (event?.event || "").replace(/\s+/g, "");
-  if (!text) return "preserve";
-  const transitions = [];
-  const add = (effect, index, priority = 0) => {
-    if (index >= 0) transitions.push({ effect, index, priority });
-  };
-
-  for (const word of NON_RESTORATION_WORDS) {
-    for (const index of occurrences(text, word)) add("deactivate", index, 2);
-  }
-  const negativeSpans = NON_RESTORATION_WORDS.flatMap((word) => (
-    occurrences(text, word).map((index) => [index, index + word.length])
-  ));
-  for (const word of ACTIVATION_WORDS) {
-    for (const index of occurrences(text, word, (position) => {
-      if (["不", "未"].includes(text[position - 1])) return false;
-      return !negativeSpans.some(([start, end]) => position >= start && position < end);
-    })) add("activate", index, 1);
-  }
-  for (const match of text.matchAll(/由[^，；。]*(?:改置|改名|改称|更名|分置|合并)[^，；。]*(?:而成|为)?/g)) {
-    add("activate", match.index ?? 0, 1);
-  }
-  for (const word of DIRECT_TERMINATION_WORDS) {
-    for (const index of occurrences(text, word)) add("deactivate", index, 1);
-  }
-  for (const word of FAILED_ACTIVATION_WORDS) {
-    for (const index of occurrences(text, word)) add("ignore", index, 3);
-  }
-
-  const title = (entity?.title || "").replace(/\s+/g, "");
-  const titleIndex = title ? text.indexOf(title) : -1;
-  const entityScoped = (index) => titleIndex >= 0 && titleIndex <= index;
-  for (const word of ["并入", "并归"]) {
-    for (const index of occurrences(text, word)) {
-      const prefix = text.slice(Math.max(0, index - 2), index);
-      if (prefix === "接收" || text.startsWith("由")) continue;
-      if (index === 0 || /[，；。]/.test(text[index - 1]) || entityScoped(index)) {
-        add("deactivate", index, 1);
-      }
-    }
-  }
-  for (const match of text.matchAll(/(?:^|[，；。]|又|旋|遂|寻|后|诏|省|一度)(罢|废)/g)) {
-    const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-    add("deactivate", index, 1);
-  }
-  for (const word of ["罢", "废"]) {
-    for (const index of occurrences(text, word)) {
-      if (entityScoped(index)) add("deactivate", index, 1);
-    }
-  }
-  if (!text.startsWith("由")) {
-    for (const match of text.matchAll(/(?:^|[，；。])(改为|改名(?:为)?|改称(?:为)?|改置为)/g)) {
-      const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-      add("deactivate", index, 1);
-    }
-  }
-  return transitions.sort((a, b) => a.index - b.index || a.priority - b.priority).at(-1)?.effect || "preserve";
-}
-
 function relationEffectiveYear(relation, eventById) {
   const endpointYears = [relation.subjectId, relation.objectId]
     .map((id) => eventById.get(id))
@@ -125,6 +46,25 @@ function relationStateKey(relation) {
   return `${relation.type}:${relation.subjectEntityId}:${relation.objectEntityId}`;
 }
 
+function relationPresenceEvidence(dataset, year, eventById) {
+  const byEntity = new Map();
+  const add = (entityId, evidenceYear, eventId) => {
+    if (entityId == null || evidenceYear == null || evidenceYear > year) return;
+    if (!byEntity.has(entityId)) byEntity.set(entityId, []);
+    byEntity.get(entityId).push({
+      effectiveYear: evidenceYear,
+      event: eventById.get(eventId) || null,
+    });
+  };
+  for (const relation of dataset.relations) {
+    if (!["上下级机构", "编制隶属"].includes(relation.type)) continue;
+    const evidenceYear = relationEffectiveYear(relation, eventById);
+    add(relation.subjectEntityId, evidenceYear, relation.subjectId);
+    add(relation.objectEntityId, evidenceYear, relation.objectId);
+  }
+  return byEntity;
+}
+
 export function buildYearSnapshot(dataset, year) {
   const entityById = new Map(dataset.entities.map((entity) => [entity.id, entity]));
   const eventById = new Map(dataset.events.map((event) => [event.id, event]));
@@ -134,15 +74,29 @@ export function buildYearSnapshot(dataset, year) {
     eventsByEntity.get(event.entityId).push(event);
   }
 
+  const presenceEvidenceByEntity = relationPresenceEvidence(dataset, year, eventById);
   const currentEventByEntity = new Map();
-  for (const [entityId, events] of eventsByEntity) {
-    const eligible = events
+  for (const [entityId, entity] of entityById) {
+    const eligible = (eventsByEntity.get(entityId) || [])
       .filter((event) => isDated(event) && effectiveYear(event) <= year)
-      .sort((a, b) => compareEvents(a, b, eventById));
+      .map((event) => ({ kind: "event", effectiveYear: effectiveYear(event), event }));
+    const relationEvidence = (presenceEvidenceByEntity.get(entityId) || [])
+      .map((evidence) => ({ kind: "relation", ...evidence }));
+    const evidenceTimeline = [...eligible, ...relationEvidence].sort((a, b) => (
+      a.effectiveYear - b.effectiveYear
+      || (a.kind === b.kind ? 0 : a.kind === "relation" ? -1 : 1)
+      || (a.kind === "event" && b.kind === "event" ? compareEvents(a.event, b.event, eventById) : 0)
+    ));
     let exists = null;
     let currentEvent = null;
-    for (const event of eligible) {
-      const effect = classifyExistenceEffect(event, entityById.get(entityId));
+    for (const evidence of evidenceTimeline) {
+      if (evidence.kind === "relation") {
+        exists = true;
+        if (!currentEvent && evidence.event) currentEvent = evidence.event;
+        continue;
+      }
+      const { event } = evidence;
+      const effect = classifyExistenceEffect(event, entity);
       if (effect === "activate") exists = true;
       else if (effect === "deactivate") exists = false;
       else if (effect === "ignore") {
@@ -151,9 +105,7 @@ export function buildYearSnapshot(dataset, year) {
       } else if (exists == null && event.timeType !== "bounded") exists = true;
       currentEvent = event;
     }
-    if (exists && currentEvent) {
-      currentEventByEntity.set(entityId, currentEvent);
-    }
+    if (exists) currentEventByEntity.set(entityId, currentEvent);
   }
 
   const entityIds = new Set(currentEventByEntity.keys());
@@ -173,12 +125,22 @@ export function buildYearSnapshot(dataset, year) {
   const relations = [...relationStates.values()].flatMap(({ effectiveYear, relations: items }) => (
     items.map((relation) => ({ ...relation, effectiveYear }))
   ));
+  const dedupedRelations = new Map();
+  for (const relation of relations) {
+    const key = relation.type === "上下级机构"
+      ? `${relation.type}:${relation.subjectEntityId}:${relation.objectEntityId}`
+      : relation.type === "编制隶属"
+        ? `${relation.type}:${relation.subjectEntityId}:${relation.objectEntityId}:${relation.staffQuota || ""}:${relation.staffType || ""}`
+        : `${relation.type}:${relation.id}`;
+    const current = dedupedRelations.get(key);
+    if (!current || relation.id > current.id) dedupedRelations.set(key, relation);
+  }
 
   return {
     year,
     currentEventByEntity,
     entityIds,
     entities: dataset.entities.filter((entity) => entityIds.has(entity.id)),
-    relations,
+    relations: [...dedupedRelations.values()],
   };
 }

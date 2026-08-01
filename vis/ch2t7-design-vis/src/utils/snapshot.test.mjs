@@ -105,6 +105,54 @@ test("罢内部官职但机构之名犹存时不误杀机构", () => {
   );
 });
 
+test("罢下属机构不能终止上级机构", () => {
+  const entity = { id: 1, title: "三司", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1080, "罢帐司勾院磨勘提举司"), entity),
+    "preserve",
+  );
+  assert.equal(
+    classifyExistenceEffect(timepoint(11, 1082, "罢三司，职事归户部"), entity),
+    "deactivate",
+  );
+});
+
+test("不复置内部官职不能终止所属机构", () => {
+  const entity = { id: 1, title: "太常寺", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1052, "不复置职事主簿"), entity),
+    "preserve",
+  );
+  assert.equal(
+    classifyExistenceEffect(timepoint(11, 1052, "此后不复置"), entity),
+    "deactivate",
+  );
+});
+
+test("实体名只是内部官职前缀时不能视为实体自身被罢", () => {
+  const entity = { id: 1, title: "太仆寺", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1120, "罢太仆寺主簿一员，复为一员"), entity),
+    "preserve",
+  );
+  assert.equal(
+    classifyExistenceEffect(timepoint(11, 1121, "罢太仆寺，职事并归兵部驾部"), entity),
+    "deactivate",
+  );
+});
+
+test("下属机构改名不终止上级，省略主语的自身改制才终止", () => {
+  const entity = { id: 1, title: "三司", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1022, "征欠司改为蠲纳司"), entity),
+    "preserve",
+  );
+  assert.equal(
+    classifyExistenceEffect(timepoint(11, 993, "改为总计司"), entity),
+    "deactivate",
+  );
+});
+
 test("接收并入对象不会被当成接收方自身终止", () => {
   const entity = { id: 1, title: "审官院", type: "机构" };
   assert.equal(
@@ -129,4 +177,41 @@ test("端点实体罢废后对应关系也退出快照", () => {
   ], hierarchyEdges);
   assert.equal(buildYearSnapshot(data, 1005).hierarchyEdges.length, 1);
   assert.equal(buildYearSnapshot(data, 1020).hierarchyEdges.length, 0);
+});
+
+test("有纪年的关系状态可证明无纪年上级在当年存在", () => {
+  const parent = { id: 1, title: "上级机构", type: "机构" };
+  const undatedParent = {
+    id: 10,
+    year_start: null,
+    year_end: null,
+    time_type: "undated",
+    event: "下级机构的上级",
+    prev_id: null,
+  };
+  const hierarchyEdges = [{
+    id: 30,
+    parent: 1,
+    child: 2,
+    periods: [],
+    states: [{ id: 30, subject_timepoint_id: 10, object_timepoint_id: 20 }],
+  }];
+  const snapshot = buildYearSnapshot(dataFor(parent, [undatedParent], hierarchyEdges), 1000);
+  assert.equal(snapshot.entityIds.has(1), true);
+  assert.equal(snapshot.hierarchyEdges.length, 1);
+});
+
+test("关系存在证据不能越过同年或更晚的明确罢废", () => {
+  const parent = { id: 1, title: "上级机构", type: "机构" };
+  const hierarchyEdges = [{
+    id: 30,
+    parent: 1,
+    child: 2,
+    periods: [],
+    states: [{ id: 30, subject_timepoint_id: 10, object_timepoint_id: 20 }],
+  }];
+  const data = dataFor(parent, [
+    timepoint(10, 1000, "罢"),
+  ], hierarchyEdges);
+  assert.equal(buildYearSnapshot(data, 1000).entityIds.has(1), false);
 });

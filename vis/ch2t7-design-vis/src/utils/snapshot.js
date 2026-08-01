@@ -1,12 +1,7 @@
 const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
-const ACTIVATION_WORDS = [
-  "始置", "初置", "新置", "创置", "设置", "设立", "建立", "成立", "开设", "创设",
-  "复置", "复设", "恢复", "复称", "复旧", "再置", "重置", "重新设置",
-  "犹存", "仍存", "尚存", "继续存在", "仍置", "仍设",
-];
-const NON_RESTORATION_WORDS = ["不复置", "不再置", "未复置", "不复设", "未复设"];
-const DIRECT_TERMINATION_WORDS = ["解散", "撤销", "裁撤", "废止", "终结", "名止", "消亡"];
-const FAILED_ACTIVATION_WORDS = ["未果", "未成", "未行", "未施行", "未实行", "收回诏书", "作罢"];
+import { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
+
+export { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
 
 function effectiveYear(timepoint) {
   if (!SNAPSHOT_TIME_TYPES.has(timepoint?.time_type) || timepoint?.year_start == null) return null;
@@ -41,100 +36,6 @@ function compareTimepoints(a, b, byId) {
     || (a.id - b.id);
 }
 
-function occurrences(text, word, predicate = () => true) {
-  const indexes = [];
-  let offset = 0;
-  while (offset < text.length) {
-    const index = text.indexOf(word, offset);
-    if (index < 0) break;
-    if (predicate(index)) indexes.push(index);
-    offset = index + word.length;
-  }
-  return indexes;
-}
-
-function lastTransition(transitions) {
-  return transitions.sort((a, b) => a.index - b.index || a.priority - b.priority).at(-1)?.effect || "preserve";
-}
-
-/**
- * 判断一条叙事性时间点是否真的改变实体存废状态。
- *
- * 普通记载只保持此前状态；只有明确设置/恢复或罢废/改置事件才改变状态。
- * 同一句中有多次变化时采用最后一次，例如“始置，旋罢”最终为停用，
- * “罢，后复置”最终为启用。
- */
-export function classifyExistenceEffect(timepoint, entity = {}) {
-  const event = (timepoint?.event || "").replace(/\s+/g, "");
-  if (!event) return "preserve";
-
-  const transitions = [];
-  const add = (effect, index, priority = 0) => {
-    if (index >= 0) transitions.push({ effect, index, priority });
-  };
-
-  for (const word of NON_RESTORATION_WORDS) {
-    for (const index of occurrences(event, word)) add("deactivate", index, 2);
-  }
-  const negativeSpans = NON_RESTORATION_WORDS.flatMap((word) => (
-    occurrences(event, word).map((index) => [index, index + word.length])
-  ));
-  for (const word of ACTIVATION_WORDS) {
-    for (const index of occurrences(event, word, (position) => {
-      if (["不", "未"].includes(event[position - 1])) return false;
-      return !negativeSpans.some(([start, end]) => position >= start && position < end);
-    })) add("activate", index, 1);
-  }
-
-  // “由甲改置/合并而成”描述当前实体的产生，不是当前实体的终结。
-  for (const match of event.matchAll(/由[^，；。]*(?:改置|改名|改称|更名|分置|合并)[^，；。]*(?:而成|为)?/g)) {
-    add("activate", match.index ?? 0, 1);
-  }
-
-  for (const word of DIRECT_TERMINATION_WORDS) {
-    for (const index of occurrences(event, word)) add("deactivate", index, 1);
-  }
-  for (const word of FAILED_ACTIVATION_WORDS) {
-    for (const index of occurrences(event, word)) add("ignore", index, 3);
-  }
-
-  const title = (entity?.title || "").replace(/\s+/g, "");
-  const titleIndex = title ? event.indexOf(title) : -1;
-  const entityScoped = (index) => titleIndex >= 0 && titleIndex <= index;
-
-  // “接收并入的某机构”是接收方的普通记载；只有直接并入/并归才终止当前实体。
-  for (const word of ["并入", "并归"]) {
-    for (const index of occurrences(event, word)) {
-      const prefix = event.slice(Math.max(0, index - 2), index);
-      if (prefix === "接收" || event.startsWith("由")) continue;
-      if (index === 0 || /[，；。]/.test(event[index - 1]) || entityScoped(index)) {
-        add("deactivate", index, 1);
-      }
-    }
-  }
-
-  // 裸“罢/废”很容易指向实体内部官职，只接受独立转折或明确点名当前实体的表达。
-  for (const match of event.matchAll(/(?:^|[，；。]|又|旋|遂|寻|后|诏|省|一度)(罢|废)/g)) {
-    const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-    add("deactivate", index, 1);
-  }
-  for (const word of ["罢", "废"]) {
-    for (const index of occurrences(event, word)) {
-      if (entityScoped(index)) add("deactivate", index, 1);
-    }
-  }
-
-  // “改为/改名为/改置为”终止来源实体；“由……改为”已在上面按新实体处理。
-  if (!event.startsWith("由")) {
-    for (const match of event.matchAll(/(?:^|[，；。])(改为|改名(?:为)?|改称(?:为)?|改置为)/g)) {
-      const index = (match.index ?? 0) + match[0].lastIndexOf(match[1]);
-      add("deactivate", index, 1);
-    }
-  }
-
-  return lastTransition(transitions);
-}
-
 function relationEffectiveYear(state, timepointById) {
   if (state.effective_year != null) return state.effective_year;
   const endpointYears = [state.subject_timepoint_id, state.object_timepoint_id]
@@ -142,6 +43,35 @@ function relationEffectiveYear(state, timepointById) {
     .filter(isDated)
     .map(effectiveYear);
   return endpointYears.length ? Math.max(...endpointYears) : null;
+}
+
+function relationPresenceEvidence(data, year, timepointById) {
+  const byEntity = new Map();
+  const add = (entityId, evidenceYear, timepointId) => {
+    if (entityId == null || evidenceYear == null || evidenceYear > year) return;
+    if (!byEntity.has(entityId)) byEntity.set(entityId, []);
+    byEntity.get(entityId).push({
+      effectiveYear: evidenceYear,
+      timepoint: timepointById.get(timepointId) || null,
+    });
+  };
+  for (const edge of [...(data.hierarchyEdges || []), ...(data.staffEdges || [])]) {
+    const subjectEntityId = edge.parent ?? edge.org;
+    const objectEntityId = edge.child ?? edge.official;
+    if (edge.states?.length) {
+      for (const state of edge.states) {
+        const evidenceYear = relationEffectiveYear(state, timepointById);
+        add(subjectEntityId, evidenceYear, state.subject_timepoint_id);
+        add(objectEntityId, evidenceYear, state.object_timepoint_id);
+      }
+    } else {
+      for (const period of edge.periods || []) {
+        add(subjectEntityId, period.start, null);
+        add(objectEntityId, period.start, null);
+      }
+    }
+  }
+  return byEntity;
 }
 
 function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge) {
@@ -193,14 +123,31 @@ export function buildYearSnapshot(data, year) {
     timepointsByEntity.set(entityId, normalized);
     normalized.forEach((timepoint) => timepointById.set(timepoint.id, timepoint));
   }
-  for (const [entityId, timepoints] of timepointsByEntity) {
-    const eligible = timepoints
+  const presenceEvidenceByEntity = relationPresenceEvidence(data, year, timepointById);
+  for (const [entityId, entity] of entityById) {
+    const eligible = (timepointsByEntity.get(entityId) || [])
       .filter((timepoint) => isDated(timepoint) && effectiveYear(timepoint) <= year)
-      .sort((a, b) => compareTimepoints(a, b, timepointById));
+      .map((timepoint) => ({ kind: "timepoint", effectiveYear: effectiveYear(timepoint), timepoint }));
+    const relationEvidence = (presenceEvidenceByEntity.get(entityId) || [])
+      .map((evidence) => ({ kind: "relation", ...evidence }));
+    const evidenceTimeline = [...eligible, ...relationEvidence].sort((a, b) => (
+      a.effectiveYear - b.effectiveYear
+      // 同年关系先证明“这一年存在”，自身的明确罢废事件随后覆盖它。
+      || (a.kind === b.kind ? 0 : a.kind === "relation" ? -1 : 1)
+      || (a.kind === "timepoint" && b.kind === "timepoint"
+        ? compareTimepoints(a.timepoint, b.timepoint, timepointById)
+        : 0)
+    ));
     let exists = null;
     let currentState = null;
-    for (const timepoint of eligible) {
-      const effect = classifyExistenceEffect(timepoint, entityById.get(entityId));
+    for (const evidence of evidenceTimeline) {
+      if (evidence.kind === "relation") {
+        exists = true;
+        if (!currentState && evidence.timepoint) currentState = evidence.timepoint;
+        continue;
+      }
+      const { timepoint } = evidence;
+      const effect = classifyExistenceEffect(timepoint, entity);
       if (effect === "activate") exists = true;
       else if (effect === "deactivate") exists = false;
       else if (effect === "ignore") {
@@ -212,7 +159,7 @@ export function buildYearSnapshot(data, year) {
       else if (exists == null && timepoint.time_type !== "bounded") exists = true;
       currentState = timepoint;
     }
-    if (exists && currentState) currentTimepointByEntity.set(entityId, currentState);
+    if (exists) currentTimepointByEntity.set(entityId, currentState);
   }
   const entityIds = new Set(currentTimepointByEntity.keys());
   const hierarchyEdges = selectRelationStates(
