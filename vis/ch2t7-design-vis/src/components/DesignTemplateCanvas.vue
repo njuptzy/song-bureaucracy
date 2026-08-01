@@ -17,10 +17,7 @@ const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
 const viewMode = ref("hierarchy");
-const selectedRange = ref([
-  props.data.meta?.yearMin ?? 960,
-  props.data.meta?.yearMax ?? 1279,
-]);
+const selectedRange = ref([1109, 1109]);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const svgCache = new Map();
@@ -33,12 +30,14 @@ let hierarchyPanY = 0;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
-const TIMELINE_X_MIN = 210;
-const TIMELINE_X_MAX = 1559;
+const TIMELINE_SCALE_END = YEAR_MAX + 1;
+const TIMELINE_X_MIN = 221.63;
+const TIMELINE_X_MAX = 1546.36;
 const yearScale = d3.scaleLinear()
-  .domain([YEAR_MIN, YEAR_MAX])
+  .domain([YEAR_MIN, TIMELINE_SCALE_END])
   .range([TIMELINE_X_MIN, TIMELINE_X_MAX])
   .clamp(true);
+const TIMELINE_YEAR_WIDTH = yearScale(YEAR_MIN + 1) - yearScale(YEAR_MIN);
 
 const DETAIL_PANEL_BOUNDS = {
   x: 81.77,
@@ -1079,11 +1078,29 @@ function bindTimelineRange(svg) {
   timelineLayer.classList.add("timeline-range-control");
   svg.appendChild(timelineLayer);
 
-  const handleStates = selectedRange.value.map((year, index) => ({ year, index }));
-  const handleGroups = handleStates.map((state) => {
+  const brush = d3.brushX()
+    .extent([[TIMELINE_X_MIN, 909.73], [TIMELINE_X_MAX, 1042]])
+    .handleSize(18);
+  const brushLayer = d3.select(timelineLayer)
+    .append("g")
+    .attr("class", "timeline-range-brush")
+    .call(brush);
+  brushLayer.select(".overlay")
+    .attr("fill", "transparent")
+    .attr("cursor", "crosshair");
+  brushLayer.select(".selection")
+    .attr("fill", "transparent")
+    .attr("stroke", "none")
+    .attr("cursor", "grab");
+  brushLayer.selectAll(".handle")
+    .attr("fill", "transparent")
+    .attr("stroke", "none")
+    .attr("cursor", "ew-resize");
+
+  const handleGroups = [0, 1].map((index) => {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.classList.add("timeline-range-handle");
-    group.style.cursor = "ew-resize";
+    group.setAttribute("pointer-events", "none");
 
     const guide = document.createElementNS("http://www.w3.org/2000/svg", "line");
     guide.setAttribute("y1", "909.73");
@@ -1101,49 +1118,79 @@ function bindTimelineRange(svg) {
     label.style.removeProperty("display");
     label.setAttribute("pointer-events", "none");
 
-    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    hitArea.setAttribute("x", "-10");
-    hitArea.setAttribute("y", "909.73");
-    hitArea.setAttribute("width", "20");
-    hitArea.setAttribute("height", "132");
-    hitArea.setAttribute("fill", "transparent");
-    hitArea.setAttribute("pointer-events", "all");
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    title.textContent = state.index === 0 ? "拖动选择起始年份" : "拖动选择结束年份";
-    hitArea.appendChild(title);
+    title.textContent = index === 0 ? "所选时段起始年份" : "所选时段结束年份";
 
-    group.append(guide, triangle, label, hitArea);
+    group.append(guide, triangle, label, title);
     timelineLayer.appendChild(group);
-    return { group, guide, triangle, label, hitArea, state };
+    return { group, guide, triangle, label, index };
   });
 
-  const renderHandle = ({ guide, triangle, label, hitArea, state }) => {
-    const x = yearScale(state.year);
-    guide.setAttribute("x1", String(x));
-    guide.setAttribute("x2", String(x));
-    triangle.setAttribute("transform", `translate(${x - 837.69} 0)`);
-    label.setAttribute("transform", `translate(${x + 7} 1035.22)`);
-    label.replaceChildren(document.createTextNode(`${state.year}年`));
-    hitArea.setAttribute("x", String(x - 10));
+  const renderRange = (range) => {
+    const [start, end] = range;
+    const years = [start, end];
+    for (const handle of handleGroups) {
+      const year = years[handle.index];
+      const x = yearScale(year);
+      const isDuplicate = handle.index === 1 && start === end;
+      handle.group.style.display = isDuplicate ? "none" : "";
+      handle.guide.setAttribute("x1", String(x));
+      handle.guide.setAttribute("x2", String(x));
+      handle.triangle.setAttribute("transform", `translate(${x - 837.69} 0)`);
+      handle.label.setAttribute("transform", `translate(${x + 7} 1035.22)`);
+      handle.label.replaceChildren(document.createTextNode(`${year}年`));
+    }
   };
-  handleGroups.forEach(renderHandle);
 
-  for (const handle of handleGroups) {
-    d3.select(handle.group).call(
-      d3.drag()
-        .on("start", (event) => event.sourceEvent?.stopPropagation())
-        .on("drag", (event) => {
-          const other = handleStates[handle.state.index === 0 ? 1 : 0].year;
-          const rawYear = Math.round(yearScale.invert(event.x));
-          handle.state.year = handle.state.index === 0
-            ? Math.max(YEAR_MIN, Math.min(other, rawYear))
-            : Math.min(YEAR_MAX, Math.max(other, rawYear));
-          selectedRange.value = handleStates.map((state) => state.year);
-          renderHandle(handle);
-        })
-        .on("end", () => renderTemplate())
-    );
-  }
+  const rangeFromSelection = (selection) => {
+    if (selection[1] - selection[0] <= TIMELINE_YEAR_WIDTH * 1.5) {
+      let year;
+      if (selection[0] <= TIMELINE_X_MIN + 0.1) year = YEAR_MIN;
+      else if (selection[1] >= TIMELINE_X_MAX - 0.1) year = YEAR_MAX;
+      else year = Math.round(yearScale.invert((selection[0] + selection[1]) / 2));
+      year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, year));
+      return [year, year];
+    }
+    let start = Math.round(yearScale.invert(selection[0]));
+    let end = Math.round(yearScale.invert(selection[1]));
+    start = Math.max(YEAR_MIN, Math.min(YEAR_MAX, start));
+    end = Math.max(start, Math.min(YEAR_MAX, end));
+    return [start, end];
+  };
+
+  const moveBrush = (range) => {
+    if (range[0] === range[1]) {
+      const center = yearScale(range[0]);
+      brushLayer.call(brush.move, [
+        Math.max(TIMELINE_X_MIN, center - TIMELINE_YEAR_WIDTH / 2),
+        Math.min(TIMELINE_X_MAX, center + TIMELINE_YEAR_WIDTH / 2),
+      ]);
+      return;
+    }
+    brushLayer.call(brush.move, [yearScale(range[0]), yearScale(range[1])]);
+  };
+
+  brush.on("brush", (event) => {
+    if (!event.sourceEvent || !event.selection) return;
+    renderRange(rangeFromSelection(event.selection));
+  });
+  brush.on("end", (event) => {
+    if (!event.sourceEvent) return;
+    let nextRange;
+    if (event.selection) {
+      nextRange = rangeFromSelection(event.selection);
+    } else {
+      const x = d3.pointer(event.sourceEvent, timelineLayer)[0];
+      const year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(x))));
+      nextRange = [year, year];
+    }
+    selectedRange.value = nextRange;
+    moveBrush(nextRange);
+    renderTemplate();
+  });
+
+  renderRange(selectedRange.value);
+  moveBrush(selectedRange.value);
 }
 
 function installDesignFonts() {
