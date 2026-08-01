@@ -236,7 +236,8 @@
             :selected-entity-id="selectedEntityId"
             :hovered-entity-id="hoveredHierarchyEntityId"
             :active-entities="activeEntities"
-            :range="selectedRange"
+            :range="timelineSelectionActive ? selectedRange : null"
+            :selection-active="timelineSelectionActive"
             @select-entity="onHierarchyEntity"
           />
 
@@ -381,6 +382,7 @@ import EventDetailPanel from "./components/EventDetailPanel.vue";
 import HierarchyView from "./components/HierarchyView.vue";
 import SongTimeline from "./components/SongTimeline.vue";
 import { buildEntityGraph, groupRelationsByType, relationDirectionLabel, relationViaClass } from "./utils/hierarchy";
+import { buildYearSnapshot } from "./utils/snapshot";
 
 const dataset = ref(null);
 const query = ref("");
@@ -521,14 +523,11 @@ onBeforeUnmount(() => {
   if (refreshTimer) window.clearInterval(refreshTimer);
 });
 
-const exactEvents = computed(() => {
-  if (!dataset.value) return [];
-  const [start, end] = selectedRange.value;
-  return dataset.value.events.filter((event) => {
-    if (event.timeType !== "exact" || event.yearStart == null) return false;
-    return event.yearStart >= start && event.yearStart <= end;
-  });
-});
+const currentSnapshot = computed(() => (
+  dataset.value && timelineSelectionActive.value
+    ? buildYearSnapshot(dataset.value, selectedRange.value[0])
+    : null
+));
 
 const researchScope = computed(() => {
   const entityIds = new Set();
@@ -564,9 +563,17 @@ const filteredResearchEvents = computed(() => {
     .filter((event) => eventFilter.value === "all" || event.eventType === eventFilter.value);
 });
 
+const snapshotEventIds = computed(() => new Set(
+  currentSnapshot.value ? [...currentSnapshot.value.currentEventByEntity.values()].map((event) => event.id) : []
+));
+
 const visibleEvents = computed(() => {
   return filteredResearchEvents.value
-    .filter((event) => eventOverlapsRange(event, selectedRange.value))
+    .filter((event) => (
+      timelineSelectionActive.value
+        ? snapshotEventIds.value.has(event.id)
+        : true
+    ))
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
 });
 
@@ -576,7 +583,7 @@ const rankedEvents = computed(() => {
   return filteredResearchEvents.value
     .map((event) => {
       const eventEnd = event.yearEnd ?? event.yearStart;
-      const inRange = eventOverlapsRange(event, selectedRange.value);
+      const inRange = timelineSelectionActive.value && snapshotEventIds.value.has(event.id);
       const isBounded = event.timeType === "bounded";
       const distance = isBounded
         ? Number.MAX_SAFE_INTEGER
@@ -630,11 +637,7 @@ const researchEntity = computed(() => {
 
 // 当前时间区间内有精确纪年记录的实体，用于层级树的活跃高亮
 const activeEntities = computed(() => {
-  const active = new Set();
-  for (const event of exactEvents.value) {
-    active.add(event.entityId);
-  }
-  return active;
+  return currentSnapshot.value?.entityIds || new Set();
 });
 
 const summaryItems = computed(() => {
@@ -643,7 +646,7 @@ const summaryItems = computed(() => {
     return [
       { value: dataset.value.entities.filter((item) => item.type === "机构").length, label: "机构" },
       { value: dataset.value.entities.filter((item) => item.type === "官职").length, label: "官职" },
-      { value: activeEntities.value.size, label: "当前区间活跃" },
+      { value: activeEntities.value.size, label: "年代快照实体" },
     ];
   }
   if (viewMode.value === "timeline") {
@@ -661,8 +664,9 @@ const summaryItems = computed(() => {
 });
 
 const rangeTitle = computed(() => {
+  if (!timelineSelectionActive.value) return "宋代历时全貌";
   const [start, end] = selectedRange.value;
-  return start === end ? `公元 ${start} 年` : `公元 ${start}—${end} 年`;
+  return start === end ? `公元 ${start} 年制度快照` : `公元 ${start}—${end} 年`;
 });
 
 const reignTitle = computed(() => {
@@ -754,14 +758,10 @@ const selectedEntity = computed(() => {
   return entityGraph.value.entityById.get(selectedEntityId.value) || null;
 });
 
-function periodIntersectsRange(start, end, range = selectedRange.value) {
-  if (start == null) return false;
-  const periodEnd = end ?? start;
-  return start <= range[1] && periodEnd >= range[0];
-}
-
 const currentEntityGraph = computed(() =>
-  dataset.value ? buildEntityGraph(dataset.value, selectedRange.value) : null
+  dataset.value
+    ? buildEntityGraph(dataset.value, timelineSelectionActive.value ? selectedRange.value[0] : null)
+    : null
 );
 
 const entityBreadcrumb = computed(() => {
@@ -776,14 +776,8 @@ const entityRelations = computed(() => {
   if (!selectedEntity.value || !dataset.value) return [];
   const id = selectedEntity.value.id;
   const list = [];
-  for (const relation of dataset.value.relations) {
-    if (
-      !relation.periods?.some((period) =>
-        periodIntersectsRange(period.start, period.end)
-      )
-    ) {
-      continue;
-    }
+  const relations = currentSnapshot.value?.relations || dataset.value.relations;
+  for (const relation of relations) {
     if (relation.subjectEntityId === id) {
       list.push({
         ...relation,
@@ -807,9 +801,12 @@ const groupedEntityRelations = computed(() => groupRelationsByType(entityRelatio
 
 const entityEvents = computed(() => {
   if (!selectedEntity.value || !dataset.value) return [];
+  if (currentSnapshot.value) {
+    const event = currentSnapshot.value.currentEventByEntity.get(selectedEntity.value.id);
+    return event ? [event] : [];
+  }
   return dataset.value.events
     .filter((event) => event.entityId === selectedEntity.value.id)
-    .filter((event) => periodIntersectsRange(event.yearStart, event.yearEnd))
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
 });
 
@@ -862,11 +859,9 @@ function closeTimelineEvent() {
 
 function rangeForEvent(event) {
   if (event?.yearStart == null || event.timeType === "bounded") return null;
-  const rawEnd = event.yearEnd ?? event.yearStart;
-  if (rawEnd < 960 || event.yearStart > 1279) return null;
-  const start = Math.max(960, Math.min(1279, event.yearStart));
-  const end = Math.max(start, Math.min(1279, rawEnd));
-  return [start, end];
+  if ((event.yearEnd ?? event.yearStart) < 960 || event.yearStart > 1279) return null;
+  const year = Math.max(960, Math.min(1279, event.yearStart));
+  return [year, year];
 }
 
 function eventOverlapsRange(event, range) {
@@ -876,10 +871,15 @@ function eventOverlapsRange(event, range) {
 }
 
 function setRange(range, { selectionActive = true } = {}) {
-  selectedRange.value = range;
+  const year = Math.max(960, Math.min(1279, range[range.length - 1]));
+  const nextRange = selectionActive ? [year, year] : range;
+  selectedRange.value = nextRange;
   timelineSelectionActive.value = selectionActive;
   const researchEvent = eventIndex.value.get(researchEventId.value);
-  if (researchEvent && !eventOverlapsRange(researchEvent, range)) {
+  const nextSnapshotEvent = dataset.value && selectionActive && researchEvent
+    ? buildYearSnapshot(dataset.value, year).currentEventByEntity.get(researchEvent.entityId)
+    : null;
+  if (researchEvent && selectionActive && nextSnapshotEvent?.id !== researchEvent.id) {
     researchEventId.value = null;
     if (centeredEvent.value?.id === researchEvent.id) closeCentered(false);
     timelineEvent.value = null;
@@ -894,13 +894,13 @@ function clearRangeSelection() {
 }
 
 function adjustRange(action) {
-  const [start, end] = selectedRange.value;
+  const year = selectedRange.value[0];
   if (action === "extend-left") {
-    setRange([Math.max(960, start - 1), end]);
+    setRange([Math.max(960, year - 1), Math.max(960, year - 1)]);
     return;
   }
   if (action === "extend-right") {
-    setRange([start, Math.min(1279, end + 1)]);
+    setRange([Math.min(1279, year + 1), Math.min(1279, year + 1)]);
   }
 }
 

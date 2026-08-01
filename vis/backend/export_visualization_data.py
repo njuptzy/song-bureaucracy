@@ -123,7 +123,8 @@ def build_payload(db_path: Path) -> dict:
             f"""
             SELECT
                 t.id, t.entity_id, e.title, e.type AS entity_type,
-                t.time, t.event, t.attr_category, t.attr_officer_type, t.attr_grade,
+                t.time, t.event, t.prev_id, t.succ_id,
+                t.attr_category, t.attr_officer_type, t.attr_grade,
                 {normalized_columns}
             FROM Timepoints t
             JOIN Entities e ON e.id = t.entity_id
@@ -170,6 +171,8 @@ def build_payload(db_path: Path) -> dict:
                 "entityType": row["entity_type"],
                 "rawTime": raw_time,
                 "event": row["event"],
+                "prevId": row["prev_id"],
+                "succId": row["succ_id"],
                 "eventType": classify_event(row["event"] or ""),
                 "category": row["attr_category"],
                 "officerType": row["attr_officer_type"],

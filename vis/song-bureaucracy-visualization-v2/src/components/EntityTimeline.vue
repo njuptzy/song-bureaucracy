@@ -277,6 +277,7 @@
 //   自动滚动到对应卡片并联动右侧详情，点击任意卡片即停；
 // - 无精确纪年的记录列在底部，同样可选中查看详情。
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { buildYearSnapshot } from "../utils/snapshot";
 
 const props = defineProps({
   dataset: { type: Object, required: true },
@@ -309,21 +310,17 @@ let playIndex = -1;
 
 const rangeLabel = computed(() => {
   if (!props.selectionActive || !props.range) return "未选择时段";
-  const [start, end] = props.range;
-  return start === end ? `${start}年` : `${start}—${end}年`;
+  return `${props.range[0]}年制度快照`;
 });
 
+const currentSnapshot = computed(() => (
+  props.selectionActive && props.range
+    ? buildYearSnapshot(props.dataset, props.range[0])
+    : null
+));
+
 function eventOverlapsRange(event) {
-  if (
-    !props.selectionActive ||
-    !props.range ||
-    event.timeType === "bounded" ||
-    event.yearStart == null
-  ) {
-    return false;
-  }
-  const [start, end] = props.range;
-  return event.yearStart <= end && (event.yearEnd ?? event.yearStart) >= start;
+  return currentSnapshot.value?.currentEventByEntity.get(event.entityId)?.id === event.id;
 }
 
 const rangeCountByEntity = computed(() => {
@@ -374,7 +371,7 @@ const rangeMatchedEvents = computed(() => entityEvents.value.filter(eventOverlap
 
 const comparisonContext = computed(() => {
   if (!entity.value) return { institution: null, staffRelations: [] };
-  const staffRelations = props.dataset.relations.filter(
+  const staffRelations = (currentSnapshot.value?.relations || props.dataset.relations).filter(
     (relation) => relation.type === "编制隶属"
   );
   let institutionId = null;

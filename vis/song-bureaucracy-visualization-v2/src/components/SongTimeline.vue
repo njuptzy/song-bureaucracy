@@ -359,21 +359,10 @@ function draw() {
 
   brush.on("end", (event) => {
     if (!event.sourceEvent) return; // 程序性移动不处理
-    const selection = event.selection;
-    let start;
-    let end;
-    if (selection) {
-      start = Math.floor(yearScale.invert(selection[0]));
-      end = Math.ceil(yearScale.invert(selection[1])) - 1;
-    } else {
-      // 单击：以点击位置为中心选中单年
-      const x = d3.pointer(event.sourceEvent, container.node())[0];
-      start = end = Math.round(yearScale.invert(x));
-    }
-    start = Math.max(FIRST_YEAR, Math.min(LAST_YEAR, start));
-    end = Math.max(start, Math.min(LAST_YEAR, end));
-    moveBrush([start, end]);
-    emit("change-range", [start, end]);
+    const x = d3.pointer(event.sourceEvent, container.node())[0];
+    const year = Math.max(FIRST_YEAR, Math.min(LAST_YEAR, Math.round(yearScale.invert(x))));
+    moveBrush([year, year]);
+    emit("change-range", [year, year]);
   });
 
   moveBrush(props.selectionActive ? props.range : null);

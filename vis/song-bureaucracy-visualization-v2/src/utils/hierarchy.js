@@ -5,10 +5,10 @@
 // 前后演变属于时间结构，不在此构建。
 // 关系的纪年依据是离散的：periods 里每段来自关系某一端时间点自身的纪年，
 // 不做两端合并（两端相隔很远时，合并跨度会编造出没有依据的连续期）。
-// 传入 range = [起, 止] 时按时间过滤层级边：
-// - 关系的任一依据段与区间相交，即视为该区间内有依据；
-// - 关系两端时间点都无纪年（periods 为空）时，仅当两端实体在该区间均有纪年活动才认为成立；
-//   完全没有时间依据的边在任何区间都不显示（实体仍可从有纪年的边挂出）。
+// 传入年份时构建“年末快照”：每个实体取该年以前最后一个有明确纪年的时间点，
+// 状态延续到下一时间点；罢废/合并后不显示，复置后重新显示。关系同样取截至该年最近一次归属。
+
+import { buildYearSnapshot } from "./snapshot";
 
 export const HIERARCHY_TYPES = ["上下级机构"];
 
@@ -75,26 +75,13 @@ function compareEntities(entityById) {
   };
 }
 
-function entityActiveInRange(entity, range) {
-  if (!entity || entity.yearMin == null) return false;
-  return entity.yearMin <= range[1] && (entity.yearMax ?? entity.yearMin) >= range[0];
-}
-
-function relationInRange(rel, entityById, range) {
-  if (rel.periods?.length) {
-    // 任一离散依据段与区间相交即视为有依据
-    return rel.periods.some((p) => p.start <= range[1] && p.end >= range[0]);
-  }
-  // 关系两端时间点都无纪年：仅当两端实体在该区间均有纪年活动时才成立
-  return (
-    entityActiveInRange(entityById.get(rel.subjectEntityId), range) &&
-    entityActiveInRange(entityById.get(rel.objectEntityId), range)
-  );
-}
-
-export function buildEntityGraph(dataset, range = null) {
+export function buildEntityGraph(dataset, yearOrRange = null) {
+  const snapshotYear = Array.isArray(yearOrRange) ? yearOrRange[0] : yearOrRange;
+  const snapshot = snapshotYear == null ? null : buildYearSnapshot(dataset, snapshotYear);
+  const sourceEntities = snapshot?.entities || dataset.entities;
+  const sourceRelations = snapshot?.relations || dataset.relations;
   const entityById = new Map();
-  for (const entity of dataset.entities) {
+  for (const entity of sourceEntities) {
     entityById.set(entity.id, entity);
   }
 
@@ -106,8 +93,7 @@ export function buildEntityGraph(dataset, range = null) {
   const collectivesOf = new Map(); // instanceId -> [collective relation item]
   const hierarchyTypeSet = new Set(HIERARCHY_TYPES);
 
-  for (const rel of dataset.relations) {
-    if (range && !relationInRange(rel, entityById, range)) continue;
+  for (const rel of sourceRelations) {
     const parent = rel.subjectEntityId;
     const child = rel.objectEntityId;
     if (parent === child || !entityById.has(parent) || !entityById.has(child)) continue;
@@ -189,7 +175,7 @@ export function buildEntityGraph(dataset, range = null) {
 
   const byActivity = compareEntities(entityById);
   const roots = [...childrenOf.keys()].filter((id) => !parentRelsOf.has(id)).sort(byActivity);
-  const isolated = dataset.entities
+  const isolated = sourceEntities
     .map((entity) => entity.id)
     .filter((id) => !parentRelsOf.has(id) && !childrenOf.has(id))
     .sort(byActivity);

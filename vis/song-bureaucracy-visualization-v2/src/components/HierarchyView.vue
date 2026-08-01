@@ -4,7 +4,7 @@
       <div class="toolbar-copy">
         <strong>{{ focusTitle || "官制层级结构" }}</strong>
         <span>
-          {{ treeDirectory.length }} 棵{{ structureScope === "current" ? "所选时段" : "历时" }}制度树
+          {{ treeDirectory.length }} 棵{{ snapshotScope ? "年代快照" : "历时" }}制度树
           · {{ directoryTotals.institutions }} 个机构
           · {{ directoryTotals.offices }} 个编制官职
         </span>
@@ -37,14 +37,16 @@
       <div class="scope-switch" aria-label="层级结构时间范围">
         <button
           type="button"
-          :class="{ active: structureScope === 'current' }"
+          :class="{ active: snapshotScope }"
+          :disabled="!selectionActive"
+          :title="selectionActive ? '显示当前年份的制度快照' : '请先在时间轴选择年份'"
           @click="structureScope = 'current'"
         >
-          所选时段
+          年代快照
         </button>
         <button
           type="button"
-          :class="{ active: structureScope === 'history' }"
+          :class="{ active: structureScope === 'history' || !selectionActive }"
           @click="structureScope = 'history'"
         >
           历时全貌
@@ -107,7 +109,7 @@
         <div class="list-scroll">
           <div class="tree-directory-head">
             <strong>制度树目录</strong>
-            <span>{{ structureScope === "current" ? "所选时段" : "历时全貌" }}</span>
+            <span>{{ snapshotScope ? "年代快照" : "历时全貌" }}</span>
           </div>
           <button
             v-for="tree in treeDirectory"
@@ -130,7 +132,7 @@
             <span class="tree-open-mark" aria-hidden="true">›</span>
           </button>
           <p v-if="!treeDirectory.length" class="tree-directory-empty">
-            所选时段没有具备上下级机构证据的制度树。
+            {{ snapshotScope ? "该年代快照" : "历时数据" }}没有具备上下级机构证据的制度树。
           </p>
           <p class="tree-directory-help">
             点击一棵树查看完整结构；查找具体机构或官职请使用上方搜索。
@@ -447,6 +449,7 @@ const props = defineProps({
   hoveredEntityId: { type: Number, default: null },
   activeEntities: { type: Set, default: () => new Set() },
   range: { type: Array, default: null },
+  selectionActive: { type: Boolean, default: true },
 });
 const emit = defineEmits(["select-entity"]);
 
@@ -490,9 +493,10 @@ const viewH = ref(560);
 const drag = reactive({ active: false, pointerId: null, x: 0, y: 0 });
 let resizeObserver;
 
-const graph = computed(() =>
-  buildEntityGraph(props.dataset, structureScope.value === "current" ? props.range : null)
-);
+const snapshotScope = computed(() => (
+  structureScope.value === "current" && props.selectionActive && Boolean(props.range)
+));
+const graph = computed(() => buildEntityGraph(props.dataset, snapshotScope.value ? props.range[0] : null));
 const relationById = computed(() => new Map(props.dataset.relations.map((relation) => [relation.id, relation])));
 
 const treeDirectory = computed(() =>
@@ -1332,7 +1336,15 @@ watch(
 
 // 自动重新居中的触发点：切换时间范围、所选时段/历时。
 // 重设中心与切换布局模式在各自函数内显式 fit；展开/收起/翻页走节点锚定，视口不动。
+function clearUnavailableFocus() {
+  if (focusId.value != null && !graph.value.entityById.has(focusId.value)) {
+    focusId.value = null;
+    emit("select-entity", null);
+  }
+}
+
 watch(structureScope, async () => {
+  clearUnavailableFocus();
   clearOtherParentCard();
   evidenceCard.value = null;
   childLimits.clear();
@@ -1341,8 +1353,9 @@ watch(structureScope, async () => {
 });
 
 watch(
-  () => props.range,
+  () => [props.range, props.selectionActive],
   async () => {
+    clearUnavailableFocus();
     clearOtherParentCard();
     await nextTick();
     resetViewport();
