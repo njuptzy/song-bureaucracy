@@ -72,9 +72,11 @@ function relationPresenceEvidence(dataset, year, eventById) {
   const add = (entityId, evidenceYear, eventId) => {
     if (entityId == null || evidenceYear == null || evidenceYear > year) return;
     if (!byEntity.has(entityId)) byEntity.set(entityId, []);
+    const event = eventById.get(eventId) || null;
     byEntity.get(entityId).push({
       effectiveYear: evidenceYear,
-      event: eventById.get(eventId) || null,
+      // 关系可以由另一端的宋代时间证明有效，但宋前端点不进入宋代当前事件。
+      event: isDated(event) ? event : null,
     });
   };
   for (const relation of dataset.relations) {

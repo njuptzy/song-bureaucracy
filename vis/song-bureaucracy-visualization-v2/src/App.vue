@@ -383,6 +383,7 @@ import HierarchyView from "./components/HierarchyView.vue";
 import SongTimeline from "./components/SongTimeline.vue";
 import { buildEntityGraph, groupRelationsByType, relationDirectionLabel, relationViaClass } from "./utils/hierarchy";
 import { buildYearSnapshot } from "./utils/snapshot";
+import { filterSongDataset } from "./utils/song_scope";
 
 const dataset = ref(null);
 const query = ref("");
@@ -425,6 +426,7 @@ const eventTypeLabels = {
 };
 
 function applyDataset(nextDataset) {
+  nextDataset = filterSongDataset(nextDataset);
   const entityIds = new Set(nextDataset.entities.map((item) => item.id));
   const eventsById = new Map(nextDataset.events.map((item) => [item.id, item]));
 

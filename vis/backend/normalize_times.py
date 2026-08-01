@@ -21,7 +21,7 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.2.0"
+NORMALIZATION_VERSION = "1.3.0"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
@@ -37,6 +37,55 @@ REFERENCE_SOURCES = {
 # Only the first and last Gregorian years are needed.  Month/day conversion to
 # the Gregorian calendar is intentionally out of scope.
 ERA_YEARS: dict[str, tuple[int, int]] = {
+    # 宋前辞典源流中实际出现、且年次可可靠换算的年号。
+    "太初": (-104, -101),
+    "元寿": (-2, -1),
+    "建武": (25, 56),
+    "延熹": (158, 167),
+    "建安": (196, 220),
+    "黄初": (220, 226),
+    "元康": (291, 299),
+    "北魏太和": (477, 499),
+    "唐太和": (827, 835),
+    "太和": (477, 499),
+    "南朝梁天监": (502, 519),
+    "开皇": (581, 600),
+    "大业": (605, 618),
+    "武德": (618, 626),
+    "贞观": (627, 649),
+    "永徽": (650, 655),
+    "显庆": (656, 661),
+    "龙朔": (661, 663),
+    "仪凤": (676, 679),
+    "永淳": (682, 683),
+    "光宅": (684, 684),
+    "垂拱": (685, 688),
+    "永昌": (689, 689),
+    "万岁通天": (696, 697),
+    "久视": (700, 700),
+    "长安": (701, 704),
+    "神龙": (705, 707),
+    "景龙": (707, 710),
+    "开元": (713, 741),
+    "天宝": (742, 756),
+    "至德": (756, 758),
+    "乾元": (758, 760),
+    "大历": (766, 779),
+    "建中": (780, 783),
+    "兴元": (784, 784),
+    "贞元": (785, 805),
+    "元和": (806, 820),
+    "大和": (827, 835),
+    "咸通": (860, 874),
+    "天复": (901, 904),
+    "天祐": (904, 907),
+    "开平": (907, 910),
+    "同光": (923, 926),
+    "天成": (926, 930),
+    "长兴": (930, 933),
+    "天福": (936, 944),
+    "开运": (944, 947),
+    "显德": (954, 960),
     "建隆": (960, 963),
     "乾德": (963, 968),
     "开宝": (968, 976),
@@ -100,7 +149,7 @@ ERA_PATTERN = re.compile(
     "|".join(re.escape(name) for name in sorted(ERA_YEARS, key=len, reverse=True))
 )
 NUMBER_CHARS = "元〇零一二三四五六七八九十廿卅两"
-YEAR_PATTERN = re.compile(rf"([{NUMBER_CHARS}]+)年")
+YEAR_PATTERN = re.compile(rf"([{NUMBER_CHARS}]+)[年载]")
 MONTH_PATTERN = re.compile(
     rf"(?P<leap>闰)?(?P<month>正|冬|腊|[{NUMBER_CHARS}]+)月"
 )
@@ -146,9 +195,84 @@ PRE_SONG_MARKERS = (
 )
 KNOWN_INVALID_TIMES = {"北宋东京", "南宋官品", "南宋宣庆二年"}
 
-# 可审计的宽时间表达。这里的 range 表示“史料只把事件约束在该区间内”，
-# 不是断言事件或制度在整个区间持续存在。帝王在位期按公元年粒度记录，
-# 即位/退位发生的边界年允许相邻区间重叠，避免伪造月日精度。
+# 模糊时期在截面计算中需要一个可用的公元年。这里记录的是“采用哪个
+# 边界作为计算锚点”，并不把原文升级为精确纪年；返回类型仍为 bounded。
+# 规则从具体到一般匹配，避免“北宋元丰改制后”先被“北宋”截获。
+TIME_ANCHOR_PATTERNS: tuple[tuple[re.Pattern[str], int, str], ...] = (
+    (re.compile(r"五代、宋"), 960, "跨五代、宋的时间按进入宋朝的960年锚定"),
+    (re.compile(r"元丰(?:改制|新制)前"), 960, "元丰改制前，按北宋起点锚定"),
+    (re.compile(r"元丰(?:改制|新制)(?:后|以后)?"), 1082, "元丰改制按元丰五年锚定"),
+    (re.compile(r"北宋末、?南宋初|南宋初|南宋中兴以来"), 1127,
+     "南宋初按南宋起点锚定"),
+    (re.compile(r"宋立国之初|北宋建国之初|宋初|北宋初|宋前期|北宋前期"), 960,
+     "宋初、宋前期按宋朝起点锚定"),
+    (re.compile(r"(?:北宋)?太祖朝"), 960, "太祖朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?太宗朝"), 976, "太宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?真宗朝"), 997, "真宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?仁宗朝"), 1022, "仁宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?英宗(?:朝|即位)"), 1063, "英宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?神宗朝"), 1067, "神宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?哲宗朝"), 1085, "哲宗朝按即位年锚定"),
+    (re.compile(r"(?:北宋)?徽宗(?:朝|即位)"), 1100, "徽宗朝按即位年锚定"),
+    (re.compile(r"(?:南宋)?高宗朝"), 1127, "高宗朝按即位年锚定"),
+    (re.compile(r"(?:南宋)?孝宗朝"), 1162, "孝宗朝按即位年锚定"),
+    (re.compile(r"(?:南宋)?理宗朝"), 1224, "理宗朝按即位年锚定"),
+)
+
+PRE_SONG_TIME_ANCHORS: tuple[tuple[re.Pattern[str], int, str], ...] = (
+    (re.compile(r"鲁襄公二十七年"), -546, "鲁襄公二十七年，公元前546年"),
+    (re.compile(r"战国秦武王二年"), -309, "秦武王二年，公元前309年"),
+    (re.compile(r"战国秦昭王"), -306, "秦昭襄王即位年，公元前306年"),
+    (re.compile(r"汉武帝时"), -141, "汉武帝即位年，公元前141年"),
+    (re.compile(r"西汉高后元年"), -187, "高后元年，公元前187年"),
+    (re.compile(r"西汉文帝时"), -180, "汉文帝即位年，公元前180年"),
+    (re.compile(r"西汉成帝时"), -33, "汉成帝即位年，公元前33年"),
+    (re.compile(r"西晋武帝时"), 266, "晋武帝即位年，公元266年"),
+    (re.compile(r"隋文帝六年"), 586, "隋文帝六年，公元586年"),
+    (re.compile(r"西魏废帝元年"), 552, "西魏废帝元年，公元552年"),
+    (re.compile(r"隋文帝时"), 581, "隋文帝开皇元年，公元581年"),
+    (re.compile(r"隋炀帝"), 604, "隋炀帝即位年，公元604年"),
+    (re.compile(r"唐高祖|唐初|唐代|唐朝|^唐$"), 618, "唐朝起点，公元618年"),
+    (re.compile(r"唐高宗(?:即位)?(?:之)?初"), 649, "唐高宗即位年，公元649年"),
+    (re.compile(r"唐玄宗朝"), 712, "唐玄宗即位年，公元712年"),
+    (re.compile(r"唐德宗"), 779, "唐德宗即位年，公元779年"),
+    (re.compile(r"唐宪宗"), 805, "唐宪宗即位年，公元805年"),
+    (re.compile(r"唐宣宗朝"), 846, "唐宣宗即位年，公元846年"),
+    (re.compile(r"唐昭宗"), 888, "唐昭宗即位年，公元888年"),
+    (re.compile(r"唐末"), 875, "唐末按乾符元年后时段锚定，公元875年"),
+    (re.compile(r"后梁末帝"), 913, "后梁末帝即位年，公元913年"),
+    (re.compile(r"西汉初|西汉"), -202, "西汉起点，公元前202年"),
+    (re.compile(r"西周初|西周|周代|^周$"), -1046, "西周起点，公元前1046年"),
+    (re.compile(r"两汉|汉代|汉朝"), -202, "汉朝起点，公元前202年"),
+    (re.compile(r"东汉初|东汉"), 25, "东汉起点，公元25年"),
+    (re.compile(r"春秋"), -770, "春秋时期起点，公元前770年"),
+    (re.compile(r"先秦|秦汉|秦代|^秦$"), -221, "秦朝起点，公元前221年"),
+    (re.compile(r"三国魏|曹魏|^魏$"), 220, "曹魏起点，公元220年"),
+    (re.compile(r"魏晋|晋代|晋朝|两晋|^晋$|西晋"), 266, "西晋起点，公元266年"),
+    (re.compile(r"东晋"), 317, "东晋起点，公元317年"),
+    (re.compile(r"北魏|后魏"), 386, "北魏起点，公元386年"),
+    (re.compile(r"西魏"), 535, "西魏起点，公元535年"),
+    (re.compile(r"北周"), 557, "北周起点，公元557年"),
+    (re.compile(r"隋唐|隋初|隋代|隋朝|^隋$"), 581, "隋朝起点，公元581年"),
+    (re.compile(r"南朝宋齐以后"), 502, "南朝齐结束后的边界，公元502年"),
+    (re.compile(r"南朝宋、北齐|南朝宋"), 420, "南朝宋起点，公元420年"),
+    (re.compile(r"南朝齐"), 479, "南朝齐起点，公元479年"),
+    (re.compile(r"南朝梁|梁武帝"), 502, "南朝梁起点，公元502年"),
+    (re.compile(r"南朝陈"), 557, "南朝陈起点，公元557年"),
+    (re.compile(r"北齐"), 550, "北齐起点，公元550年"),
+    (re.compile(r"唐、五代|汉至唐"), 618, "复合时期按最早朝代起点锚定"),
+    (re.compile(r"五代、宋|五代十国|五代藩镇|^五代$"), 907, "五代起点，公元907年"),
+    (re.compile(r"后梁"), 907, "后梁起点，公元907年"),
+    (re.compile(r"后唐"), 923, "后唐起点，公元923年"),
+    (re.compile(r"后晋"), 936, "后晋起点，公元936年"),
+    (re.compile(r"后汉"), 947, "后汉起点，公元947年"),
+    (re.compile(r"后蜀"), 934, "后蜀起点，公元934年"),
+    (re.compile(r"后周"), 951, "后周起点，公元951年"),
+    (re.compile(r"殷商"), -1600, "商代约始于公元前1600年"),
+)
+
+# 可审计的宽时间表达。区间仍用于报告原文能约束出的范围；normalize_time
+# 会按新规则选取起始边界作为数值锚点，而不是等到区间末年才让关系生效。
 NAMED_TIME_RANGES: dict[str, tuple[int, int, str]] = {
     # 朝代范围
     "两宋": (960, 1279, "两宋朝代范围"),
@@ -361,6 +485,17 @@ def make_year_range(
     )
 
 
+def make_time_anchor(year: int, note: str, *, pre_song: bool = False) -> Normalized:
+    """Return a numeric boundary while preserving that it is not an exact date."""
+    return Normalized(
+        year, year, None, 0, None, None, 0, None,
+        None, None, None, None,
+        make_sort_order(year, None, 0, None),
+        "pre_song" if pre_song else "bounded",
+        note,
+    )
+
+
 def invalid_era_year(raw: str) -> tuple[str, int] | None:
     """Return an explicitly written reign year when it exceeds that era."""
     for era_match in ERA_PATTERN.finditer(raw):
@@ -398,7 +533,8 @@ def normalize_time(raw: str) -> Normalized:
 
     named_range = NAMED_TIME_RANGES.get(raw)
     if named_range:
-        return make_year_range(*named_range, time_type="bounded")
+        start, _end, note = named_range
+        return make_time_anchor(start, f"{note}；按起始边界锚定")
 
     split = range_split(raw)
     if split:
@@ -424,7 +560,7 @@ def normalize_time(raw: str) -> Normalized:
             endpoint.month_text, endpoint.day_text,
             endpoint.month_text, endpoint.day_text,
             make_sort_order(endpoint.year, endpoint.month, endpoint.is_leap_month, endpoint.day),
-            "exact",
+            "pre_song" if endpoint.year < 960 else "exact",
         )
 
     invalid = invalid_era_year(raw)
@@ -436,22 +572,46 @@ def normalize_time(raw: str) -> Normalized:
             f"年号年次超出有效范围：{era}{era_year}年",
         )
 
-    era_match = ERA_PATTERN.search(raw)
-    if era_match:
-        era = era_match.group(0)
-        if any(word in raw for word in ("后", "前", "以后", "以前")):
-            return Normalized(None, None, None, 0, None, None, 0, None,
-                              None, None, None, None, None, "undated",
-                              f"包含相对时间词，保留原文：{era}")
-        start, end = ERA_YEARS[era]
-        return Normalized(start, end, None, 0, None, None, 0, None,
-                          None, None, None, None,
-                          make_sort_order(start, None, 0, None), "bounded",
-                          f"仅识别到年号范围：{era}")
+    bce_match = re.search(r"前\s*(\d{1,4})", raw)
+    if bce_match:
+        year = -int(bce_match.group(1))
+        return make_time_anchor(year, f"原文公元前年份：前{abs(year)}年", pre_song=True)
 
-    if any(marker in raw for marker in SONG_MARKERS):
-        return Normalized(None, None, None, 0, None, None, 0, None,
-                          None, None, None, None, None, "undated")
+    for pattern, year, note in TIME_ANCHOR_PATTERNS:
+        if pattern.search(raw):
+            return make_time_anchor(year, note)
+
+    era_matches = list(ERA_PATTERN.finditer(raw))
+    if era_matches:
+        era = era_matches[-1].group(0)
+        start, end = ERA_YEARS[era]
+        if "以前" in raw or re.search(rf"{re.escape(era)}前", raw):
+            anchor = 960 if any(marker in raw for marker in SONG_MARKERS) else start
+            note = f"{era}以前，按可用时间范围起点锚定"
+        elif "以后" in raw or re.search(rf"{re.escape(era)}后", raw):
+            anchor = end
+            note = f"{era}以后，按年号末年锚定"
+        else:
+            anchor = start
+            note = f"仅识别到年号或年号时期：{era}；按元年锚定"
+        return make_time_anchor(anchor, note, pre_song=anchor < 960)
+
+    if "北宋后期" in raw:
+        return make_time_anchor(1100, "北宋后期按徽宗即位年锚定")
+    if "南宋后期" in raw:
+        return make_time_anchor(1190, "南宋后期按绍熙元年锚定")
+    if "宋代后期" in raw:
+        return make_time_anchor(1127, "宋代后期按南宋起点锚定")
+    if "宋末" in raw:
+        return make_time_anchor(1275, "宋末按德祐元年锚定")
+    if "南宋" in raw:
+        return make_time_anchor(1127, "南宋模糊时间按南宋起点锚定")
+    if any(marker in raw for marker in SONG_MARKERS) or "宋立国" in raw:
+        return make_time_anchor(960, "宋代模糊时间按宋朝起点锚定")
+
+    for pattern, year, note in PRE_SONG_TIME_ANCHORS:
+        if pattern.search(raw):
+            return make_time_anchor(year, note, pre_song=True)
     if any(marker in raw for marker in PRE_SONG_MARKERS):
         return Normalized(None, None, None, 0, None, None, 0, None,
                           None, None, None, None, None, "pre_song")
@@ -532,6 +692,17 @@ def ensure_bounded_schema(conn: sqlite3.Connection) -> None:
     create_normalized_times_table(conn)
 
 
+def ensure_metadata_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS TimeNormalizationMetadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+
+
 def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
     conn = sqlite3.connect(output)
     try:
@@ -570,8 +741,9 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
             "source_database": str(source),
             "rule_summary": (
                 "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
-                "复合年号期及有明确上下文的相对时间为bounded，仅表示时间边界，"
-                "不表示全程持续；非法年号年次不退化为年号范围；"
+                "改制前后及模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
+                "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
+                "非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
             ),
             "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
@@ -597,6 +769,7 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
     try:
         conn.execute("BEGIN IMMEDIATE")
         ensure_bounded_schema(conn)
+        ensure_metadata_table(conn)
         rows = conn.execute(
             """
             SELECT
@@ -658,8 +831,9 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rule_summary": (
                 "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
-                "复合年号期及有明确上下文的相对时间为bounded，仅表示时间边界，"
-                "不表示全程持续；非法年号年次不退化为年号范围；"
+                "改制前后及模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
+                "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
+                "非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
             ),
             "reference_year_era_table": " | ".join(REFERENCE_SOURCES["year_era_table"]),
@@ -753,6 +927,19 @@ def validate(output: Path) -> None:
         ).fetchone()[0]
         if bad_months or bad_days:
             raise RuntimeError(f"非法月日: months={bad_months}, days={bad_days}")
+        missing_parseable_years = conn.execute(
+            """
+            SELECT COUNT(*) FROM NormalizedTimes
+            WHERE time_type != 'unresolved' AND year_start IS NULL
+            """
+        ).fetchone()[0]
+        if missing_parseable_years:
+            raise RuntimeError(f"仍有 {missing_parseable_years} 条可解析类型缺少年份")
+        undated = conn.execute(
+            "SELECT COUNT(*) FROM NormalizedTimes WHERE time_type = 'undated'"
+        ).fetchone()[0]
+        if undated:
+            raise RuntimeError(f"仍有 {undated} 条宋代时间未建立数值锚点")
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"数据库完整性检查失败: {integrity}")

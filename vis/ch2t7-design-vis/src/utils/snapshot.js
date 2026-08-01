@@ -71,9 +71,12 @@ function relationPresenceEvidence(data, year, timepointById) {
   const add = (entityId, evidenceYear, timepointId) => {
     if (entityId == null || evidenceYear == null || evidenceYear > year) return;
     if (!byEntity.has(entityId)) byEntity.set(entityId, []);
+    const timepoint = timepointById.get(timepointId) || null;
     byEntity.get(entityId).push({
       effectiveYear: evidenceYear,
-      timepoint: timepointById.get(timepointId) || null,
+      // 关系另一端的宋代纪年可以证明实体在场，但不能把宋前端点本身
+      // 当作宋代截面的当前事件展示。
+      timepoint: isDated(timepoint) ? timepoint : null,
     });
   };
   for (const edge of [...(data.hierarchyEdges || []), ...(data.staffEdges || [])]) {

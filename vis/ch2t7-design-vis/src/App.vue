@@ -6,6 +6,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import DesignTemplateCanvas from "./components/DesignTemplateCanvas.vue";
+import { filterSongData } from "./utils/song_scope";
 
 const data = ref(null);
 const dataVersion = ref("");
@@ -22,7 +23,7 @@ async function refreshData(force = false) {
   try {
     const { version } = await fetchJson("/api/version");
     if (!force && version === dataVersion.value) return;
-    data.value = await fetchJson("/api/data");
+    data.value = filterSongData(await fetchJson("/api/data"));
     dataVersion.value = version;
     loadError.value = "";
   } catch (reason) {

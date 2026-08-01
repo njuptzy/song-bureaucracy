@@ -36,6 +36,33 @@ test("罢废后的普通记载不会自动复活实体", () => {
   assert.equal(snapshot.entityIds.has(1), false);
 });
 
+test("已有数值年的宋前时间仍不进入宋代截面", () => {
+  const entity = { id: 1, title: "唐代机构", type: "机构" };
+  const preSong = {
+    ...timepoint(10, 618, "唐初设置"),
+    time_type: "pre_song",
+  };
+  assert.equal(buildYearSnapshot(dataFor(entity, [preSong]), 1080).entityIds.has(1), false);
+});
+
+test("关系另一端有宋代年份时也不展示宋前端点", () => {
+  const entity = { id: 1, title: "沿革机构", type: "机构" };
+  const preSong = {
+    ...timepoint(10, 618, "唐初设置"),
+    time_type: "pre_song",
+  };
+  const hierarchyEdges = [{
+    id: 30,
+    parent: 1,
+    child: 2,
+    periods: [],
+    states: [{ id: 30, subject_timepoint_id: 10, object_timepoint_id: 20 }],
+  }];
+  const snapshot = buildYearSnapshot(dataFor(entity, [preSong], hierarchyEdges), 1080);
+  assert.equal(snapshot.entityIds.has(1), true);
+  assert.equal(snapshot.currentTimepointByEntity.get(1), null);
+});
+
 test("前序模糊时间点上的关系证据不能越过后继废罢事件复活实体", () => {
   const entity = { id: 1, title: "编修所", type: "机构" };
   const hierarchyEdges = [{
