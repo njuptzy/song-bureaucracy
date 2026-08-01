@@ -74,22 +74,38 @@ function setText(element, text) {
   element.replaceChildren(document.createTextNode(text || "暂无资料"));
 }
 
-function wrapText(element, text, charsPerLine = 31, lineHeight = 24, maxLines = 7) {
+function wrapText(element, text, maxWidth = 345, lineHeight = 24, maxLines = 7) {
   if (!element) return 0;
   const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
-  const lines = [];
-  for (let i = 0; i < content.length && lines.length < maxLines; i += charsPerLine) {
-    let line = content.slice(i, i + charsPerLine);
-    if (i + charsPerLine < content.length && lines.length === maxLines - 1) line = `${line.slice(0, -1)}…`;
-    lines.push(line);
-  }
   element.replaceChildren();
-  for (const [index, line] of lines.entries()) {
+  const lines = [];
+  let currentLine = "";
+  let currentTspan = null;
+  const appendLine = (line) => {
     const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     tspan.setAttribute("x", "0");
-    tspan.setAttribute("y", String(index * lineHeight));
+    tspan.setAttribute("y", String(lines.length * lineHeight));
     tspan.textContent = line;
     element.appendChild(tspan);
+    lines.push(line);
+    return tspan;
+  };
+  for (const character of content) {
+    if (!currentTspan) currentTspan = appendLine("");
+    const candidate = `${currentLine}${character}`;
+    currentTspan.textContent = candidate;
+    if (currentLine && currentTspan.getComputedTextLength() > maxWidth) {
+      currentTspan.textContent = currentLine;
+      if (lines.length >= maxLines) {
+        currentTspan.textContent = `${currentLine.slice(0, -1)}…`;
+        return lines.length;
+      }
+      currentLine = character;
+      currentTspan = appendLine(character);
+    } else {
+      currentLine = candidate;
+      lines[lines.length - 1] = currentLine;
+    }
   }
   return lines.length;
 }
@@ -739,7 +755,7 @@ function setupDetailPanel(svg) {
   const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   clipRect.setAttribute("x", "88");
   clipRect.setAttribute("y", "524.81");
-  clipRect.setAttribute("width", "379");
+  clipRect.setAttribute("width", "371");
   clipRect.setAttribute("height", "352.41");
   clipPath.appendChild(clipRect);
   defs.appendChild(clipPath);
@@ -781,6 +797,24 @@ function setupDetailPanel(svg) {
       && Number(rect.getAttribute("height")) > 20
       && Number(rect.getAttribute("height")) < 200
   ));
+  if (scrollTrack) {
+    scrollTrack.removeAttribute("class");
+    scrollTrack.classList.add("detail-panel-scroll-track");
+    scrollTrack.setAttribute("x", "466.5");
+    scrollTrack.setAttribute("width", "1");
+    scrollTrack.setAttribute("rx", "0.5");
+    scrollTrack.setAttribute("fill", "#563905");
+    scrollTrack.setAttribute("opacity", "0.18");
+  }
+  if (scrollThumb) {
+    scrollThumb.removeAttribute("class");
+    scrollThumb.classList.add("detail-panel-scroll-thumb");
+    scrollThumb.setAttribute("x", "465.75");
+    scrollThumb.setAttribute("width", "2.5");
+    scrollThumb.setAttribute("rx", "1.25");
+    scrollThumb.setAttribute("fill", "#563905");
+    scrollThumb.setAttribute("opacity", "0.72");
+  }
 
   const scrollHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   scrollHitArea.classList.add("detail-panel-scroll-hit-area");
@@ -790,7 +824,7 @@ function setupDetailPanel(svg) {
   scrollHitArea.setAttribute("height", "352.41");
   scrollHitArea.setAttribute("fill", "transparent");
   scrollHitArea.setAttribute("pointer-events", "all");
-  scrollHitArea.style.cursor = "ns-resize";
+  scrollHitArea.style.cursor = "default";
   panelGroup.appendChild(scrollHitArea);
   if (scrollThumb) panelGroup.appendChild(scrollThumb);
 
@@ -805,11 +839,13 @@ function setupDetailPanel(svg) {
     const trackHeight = Number(scrollTrack.getAttribute("height"));
     const contentHeight = Math.max(1, contentBottom - 536.92);
     const viewportHeight = viewportBottom - 536.92;
-    const thumbHeight = Math.max(34, Math.min(trackHeight, trackHeight * viewportHeight / contentHeight));
+    const thumbHeight = Math.max(28, Math.min(trackHeight, trackHeight * viewportHeight / contentHeight));
     const thumbTravel = trackHeight - thumbHeight;
     const thumbY = trackY + (maxScroll ? detailPanelScrollOffset / maxScroll * thumbTravel : 0);
     scrollThumb.setAttribute("y", String(thumbY));
     scrollThumb.setAttribute("height", String(thumbHeight));
+    scrollTrack.style.display = maxScroll ? "" : "none";
+    scrollThumb.style.display = maxScroll ? "" : "none";
     scrollThumb.style.cursor = maxScroll ? "grab" : "default";
   };
   panelGroup.__updateDetailScroll = updateScroll;
@@ -909,19 +945,19 @@ function updateDetails(svg) {
   setText(detailSlots.mainLabel, "编制与沿革");
   cursorY += 25;
   detailSlots.main?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const mainLines = wrapText(detailSlots.main, mainText, 31, 18, Infinity);
+  const mainLines = wrapText(detailSlots.main, mainText, 345, 18, Infinity);
   cursorY += Math.max(1, mainLines) * 18 + 13;
   detailSlots.staffLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.staffLabel, "编制");
   cursorY += 25;
   detailSlots.staff?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const staffLines = wrapText(detailSlots.staff, staffText, 31, 18, Infinity);
+  const staffLines = wrapText(detailSlots.staff, staffText, 345, 18, Infinity);
   cursorY += Math.max(1, staffLines) * 18 + 13;
   detailSlots.children?.setAttribute("transform", `translate(100.33 ${cursorY})`);
   setText(detailSlots.children, "下级机构");
   cursorY += 25;
   detailSlots.childrenContent?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const childrenLines = wrapText(detailSlots.childrenContent, childText, 31, 18, Infinity);
+  const childrenLines = wrapText(detailSlots.childrenContent, childText, 345, 18, Infinity);
   cursorY += Math.max(1, childrenLines) * 18 + 10;
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY);
@@ -1154,7 +1190,11 @@ function bindTimelineRange(svg) {
   cancelHitArea.setAttribute("y", "1027");
   cancelHitArea.setAttribute("width", "82");
   cancelHitArea.setAttribute("height", "23");
-  cancelHitArea.setAttribute("fill", "transparent");
+  cancelHitArea.setAttribute("fill", "none");
+  cancelHitArea.setAttribute("pointer-events", "all");
+  cancelHitArea.setAttribute("stroke", "#563905");
+  cancelHitArea.setAttribute("stroke-width", "0.8");
+  cancelHitArea.setAttribute("stroke-opacity", "0.72");
   const cancelLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
   cancelLabel.setAttribute("class", "cls-39");
   cancelLabel.setAttribute("x", "135");
