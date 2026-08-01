@@ -1065,88 +1065,85 @@ function bindTemplateControls(svg) {
 }
 
 function bindTimelineRange(svg) {
+  const originalTriangle = [...svg.querySelectorAll("path")].find(
+    (path) => (path.getAttribute("d") || "").startsWith("M837.34,1027.81")
+  );
+  const originalYear = [...svg.querySelectorAll("text")].find(
+    (text) => normalizeText(text) === "1109年" && Math.abs((position(text)?.y ?? 0) - 1035.22) < 1
+  );
+  if (!originalTriangle || !originalYear) return;
+  originalTriangle.style.display = "none";
+  originalYear.style.display = "none";
+
   const timelineLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   timelineLayer.classList.add("timeline-range-control");
   svg.appendChild(timelineLayer);
 
-  const rangeText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  rangeText.setAttribute("x", "1595");
-  rangeText.setAttribute("y", "1008");
-  rangeText.setAttribute("fill", "#563905");
-  rangeText.setAttribute("font-size", "12");
-  rangeText.setAttribute("text-anchor", "start");
-  rangeText.style.letterSpacing = "0.5px";
-  timelineLayer.appendChild(rangeText);
+  const handleStates = selectedRange.value.map((year, index) => ({ year, index }));
+  const handleGroups = handleStates.map((state) => {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("timeline-range-handle");
+    group.style.cursor = "ew-resize";
 
-  const startText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  const endText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  for (const label of [startText, endText]) {
-    label.setAttribute("y", "1044");
-    label.setAttribute("fill", "#351704");
-    label.setAttribute("font-size", "11");
-    label.setAttribute("text-anchor", "middle");
+    const guide = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    guide.setAttribute("y1", "909.73");
+    guide.setAttribute("y2", "1024");
+    guide.setAttribute("stroke", "#351704");
+    guide.setAttribute("stroke-width", "0.81");
+    guide.setAttribute("stroke-dasharray", "2.1 2.1");
+    guide.setAttribute("pointer-events", "none");
+
+    const triangle = originalTriangle.cloneNode(true);
+    triangle.style.removeProperty("display");
+    triangle.setAttribute("pointer-events", "none");
+
+    const label = originalYear.cloneNode(true);
+    label.style.removeProperty("display");
     label.setAttribute("pointer-events", "none");
-    timelineLayer.appendChild(label);
-  }
 
-  const updateLabels = (selection, range = selectedRange.value) => {
-    const [x0, x1] = selection;
-    const [start, end] = range;
-    startText.setAttribute("x", String(x0));
-    endText.setAttribute("x", String(x1));
-    startText.textContent = `${start}年`;
-    endText.textContent = `${end}年`;
-    rangeText.textContent = start === end ? `${start}年` : `${start}—${end}年`;
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    hitArea.setAttribute("x", "-10");
+    hitArea.setAttribute("y", "909.73");
+    hitArea.setAttribute("width", "20");
+    hitArea.setAttribute("height", "132");
+    hitArea.setAttribute("fill", "transparent");
+    hitArea.setAttribute("pointer-events", "all");
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = index === 0 ? "拖动选择起始年份" : "拖动选择结束年份";
+    hitArea.appendChild(title);
+
+    group.append(guide, triangle, label, hitArea);
+    timelineLayer.appendChild(group);
+    return { group, guide, triangle, label, hitArea, state };
+  });
+
+  const renderHandle = ({ guide, triangle, label, hitArea, state }) => {
+    const x = yearScale(state.year);
+    guide.setAttribute("x1", String(x));
+    guide.setAttribute("x2", String(x));
+    triangle.setAttribute("transform", `translate(${x - 837.69} 0)`);
+    label.setAttribute("transform", `translate(${x + 7} 1035.22)`);
+    label.replaceChildren(document.createTextNode(`${state.year}年`));
+    hitArea.setAttribute("x", String(x - 10));
   };
+  handleGroups.forEach(renderHandle);
 
-  let installing = true;
-  const brush = d3.brushX()
-    .extent([[TIMELINE_X_MIN, 986], [TIMELINE_X_MAX, 1024]])
-    .handleSize(12)
-    .on("brush", (event) => {
-      if (!event.selection) return;
-      const nextRange = event.selection.map((x) => Math.round(yearScale.invert(x)));
-      updateLabels(event.selection, nextRange);
-    })
-    .on("end", (event) => {
-      if (installing) return;
-      if (!event.selection) {
-        selectedRange.value = [YEAR_MIN, YEAR_MAX];
-        renderTemplate();
-        return;
-      }
-      const nextStart = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(yearScale.invert(event.selection[0]))));
-      const nextEnd = Math.max(nextStart, Math.min(YEAR_MAX, Math.round(yearScale.invert(event.selection[1]))));
-      if (nextStart === selectedRange.value[0] && nextEnd === selectedRange.value[1]) {
-        updateLabels(event.selection, selectedRange.value);
-        return;
-      }
-      selectedRange.value = [nextStart, nextEnd];
-      renderTemplate();
-    });
-
-  const brushLayer = d3.select(timelineLayer)
-    .append("g")
-    .attr("class", "timeline-range-brush")
-    .call(brush);
-  brushLayer.select(".overlay")
-    .attr("cursor", "crosshair")
-    .append("title")
-    .text("拖拽选择时间范围；点击空白处恢复宋代全时段");
-  brushLayer.select(".selection")
-    .attr("fill", "#a5a68d")
-    .attr("fill-opacity", 0.3)
-    .attr("stroke", "#563905")
-    .attr("stroke-width", 1.2);
-  brushLayer.selectAll(".handle")
-    .attr("fill", "#f5f3ec")
-    .attr("stroke", "#563905")
-    .attr("stroke-width", 1.2);
-
-  const currentSelection = selectedRange.value.map((year) => yearScale(year));
-  brushLayer.call(brush.move, currentSelection);
-  updateLabels(currentSelection);
-  installing = false;
+  for (const handle of handleGroups) {
+    d3.select(handle.group).call(
+      d3.drag()
+        .on("start", (event) => event.sourceEvent?.stopPropagation())
+        .on("drag", (event) => {
+          const other = handleStates[handle.state.index === 0 ? 1 : 0].year;
+          const rawYear = Math.round(yearScale.invert(event.x));
+          handle.state.year = handle.state.index === 0
+            ? Math.max(YEAR_MIN, Math.min(other, rawYear))
+            : Math.min(YEAR_MAX, Math.max(other, rawYear));
+          selectedRange.value = handleStates.map((state) => state.year);
+          renderHandle(handle);
+        })
+        .on("end", () => renderTemplate())
+    );
+  }
 }
 
 function installDesignFonts() {
