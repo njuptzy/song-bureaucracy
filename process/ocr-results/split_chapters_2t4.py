@@ -2893,6 +2893,107 @@ def main():
         print("  [跨页断条] '监行在太平惠民和剂局/太医局熟药所'(p373-374)："
               "核原书将页末新词头及四组字段移回太医局熟药所，并取消空占位")
 
+        military_grain_manager = next(
+            e for e in all_entries
+            if e["name"] == "诸军粮料院"
+            and e.get("_catalog_name") == "干办行在诸军粮料院"
+        )
+        military_grain_manager_meta = all_meta[
+            all_entries.index(military_grain_manager)
+        ]
+        jiankang_grain_office = next(
+            e for e in all_entries if e["name"] == "分差建康府诸军粮料院"
+        )
+        assert jiankang_grain_office.get("_placeholder") is True
+        jiankang_marker = "设于建康府。"
+        assert jiankang_marker in military_grain_manager["text"]
+        manager_text, jiankang_text = military_grain_manager["text"].split(
+            jiankang_marker, 1
+        )
+        military_grain_manager["name"] = "干办行在诸军粮料院"
+        military_grain_manager["text"] = (
+            "差遣名。北宋诸军粮料院" + manager_text.rstrip()
+        )
+        military_grain_manager.pop("_catalog_name", None)
+        military_grain_manager_meta["name"] = "干办行在诸军粮料院"
+        military_grain_manager_meta["status"] = "ok"
+        military_grain_manager_meta.pop("catalog_name", None)
+        jiankang_grain_office["text"] = (
+            "监当局名。" + jiankang_marker + jiankang_text
+        )
+        jiankang_grain_office.pop("_placeholder", None)
+        jiankang_meta = all_meta[all_entries.index(jiankang_grain_office)]
+        jiankang_meta["status"] = "ok"
+        print("  [条目拆分] '干办行在诸军粮料院/分差建康府诸军粮料院'"
+              "(p375-376)：按原书独立词头拆回差遣官与建康监当局正文")
+
+        military_grain_office = next(
+            e for e in all_entries
+            if e["name"] == "诸军粮料院" and "职源与沿革" in e
+        )
+        combined_history = military_grain_office["职源与沿革"]
+        military_duty_marker = "职掌 "
+        assert military_duty_marker in combined_history
+        military_history, military_duty = combined_history.split(
+            military_duty_marker, 1
+        )
+        military_grain_office["职源与沿革"] = military_history.rstrip()
+        military_grain_office["职掌"] = military_duty
+        print("  [字段归位] '诸军粮料院'(p375)：将粘在职源与沿革末尾的"
+              "职掌拆回独立字段")
+
+        lizhou_grain_office = next(
+            e for e in all_entries
+            if e["name"] == "总领四川财赋军马钱粮所干办行在分差户部利州粮料院"
+        )
+        fish_pass_marker = "总领四川财赋军马钱粮所干办行名。"
+        assert fish_pass_marker in lizhou_grain_office["text"]
+        lizhou_text, fish_pass_text = lizhou_grain_office["text"].split(
+            fish_pass_marker, 1
+        )
+        fish_pass_title = (
+            "总领四川财赋军马钱粮所干办行在分差户部鱼关粮料院"
+        )
+        fish_pass_entry = {
+            "name": fish_pass_title,
+            "text": "监当局名。" + fish_pass_text,
+            "简称": lizhou_grain_office.pop("简称"),
+        }
+        lizhou_grain_office["text"] = lizhou_text.rstrip()
+        lizhou_i = all_entries.index(lizhou_grain_office)
+        lizhou_meta = all_meta[lizhou_i]
+        all_entries.insert(lizhou_i + 1, fish_pass_entry)
+        all_meta.insert(
+            lizhou_i + 1,
+            {
+                "name": fish_pass_title,
+                "page": "376",
+                "body_page": "376",
+                "h1": lizhou_meta["h1"],
+                "h2": lizhou_meta["h2"],
+                "h3": lizhou_meta["h3"],
+                "status": "ok",
+            },
+        )
+
+        bogus_military_alias_matches = [
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "诸军专司"
+            and e.get("_placeholder") is True
+            and str(m.get("page")) == "376"
+        ]
+        assert len(bogus_military_alias_matches) == 1
+        bogus_military_alias, bogus_military_alias_meta = (
+            bogus_military_alias_matches[0]
+        )
+        bogus_i = all_entries.index(bogus_military_alias)
+        assert all_meta[bogus_i] is bogus_military_alias_meta
+        del all_entries[bogus_i]
+        del all_meta[bogus_i]
+        print("  [条目拆分] '利州粮料院/鱼关粮料院'(p376)：按原书两个"
+              "独立词头拆开正文及简称；删除同页误列为主条的简称‘诸军专司’，"
+              "保持后续辞典ID稳定")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
