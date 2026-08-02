@@ -215,7 +215,11 @@ export function evolutionDeactivationYears(transitions, year) {
     if (seen.has(entityId)) return;
     seen.add(entityId);
     for (const transition of incomingByTarget.get(entityId) || []) {
-      if (transition.effectiveYear != null && transition.effectiveYear > anchorYear) continue;
+      // 只沿无纪年边回溯：它们本身无法决定旧名何时退出，需要借下游
+      // 有纪年的切换点补足。已有纪年的旧边已经在自己的年份直接生效，
+      // 若继续按当前 anchorYear 递归传播，会把 A→B→A 这类复归循环中的 A
+      // 在恢复当年再次误删（如三司分部后又重合为三司）。
+      if (transition.effectiveYear != null) continue;
       markDeactivated(transition.sourceEntityId, anchorYear);
       visitAncestors(transition.sourceEntityId, anchorYear, seen);
     }

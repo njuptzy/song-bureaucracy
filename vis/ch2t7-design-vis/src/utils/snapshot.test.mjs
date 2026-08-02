@@ -492,3 +492,32 @@ test("前序实体在演变后有更晚明确复置时可以恢复", () => {
   assert.equal(buildYearSnapshot(data, 1010).entityIds.has(1), false);
   assert.equal(buildYearSnapshot(data, 1020).entityIds.has(1), true);
 });
+
+test("有纪年演变形成复归循环时不会在恢复当年再次删除原实体", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "三司", type: "机构" },
+      { id: 2, title: "盐铁", type: "机构" },
+    ],
+    timepoints: {
+      1: [
+        timepoint(10, 960, "沿旧制设置"),
+        timepoint(11, 983, "分为盐铁等三部", { prev_id: 10 }),
+        timepoint(12, 1003, "三部重合为三司", { prev_id: 11 }),
+      ],
+      2: [
+        timepoint(20, 983, "三司分部时置"),
+        timepoint(21, 1003, "重合为三司", { prev_id: 20 }),
+      ],
+    },
+    hierarchyEdges: [],
+    staffEdges: [],
+    evolutionEdges: [
+      { source: 1, target: 2, states: [{ subject_timepoint_id: 11, object_timepoint_id: 20 }] },
+      { source: 2, target: 1, states: [{ subject_timepoint_id: 21, object_timepoint_id: 12 }] },
+    ],
+  };
+  assert.equal(buildYearSnapshot(data, 983).entityIds.has(1), false);
+  assert.equal(buildYearSnapshot(data, 1003).entityIds.has(1), true);
+  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), true);
+});
