@@ -126,6 +126,9 @@ EVENT_UPDATES = (
                 "提举太医局所罢，复称太医局；改隶太常寺、礼部",
                 "提举太医局所", "311", "元丰五年新制罢",
                 "原文明载提举太医局所于元丰五年罢，而太医局条同时记载元丰新制后的隶属；补明恢复太医局名称的激活语义。"),
+    EventUpdate(1037, "度支", "度支诸案定为八案", "仍置度支，为三司内部办事部；诸案定为八案",
+                "三司度支诸案", "134", "大中祥符七年后定为八案",
+                "原文明载大中祥符七年后仍有三司度支诸案；补明度支作为三司内部办事部继续存在。"),
 )
 
 
@@ -191,6 +194,12 @@ TERMINALS = (
                  "废罢；旧独立监管体制终止，所监军器库改隶卫尉寺",
                  "军器库", "333", "元丰新制隶卫尉寺",
                  "原文明载元丰新制后军器库改隶卫尉寺；都大提点所的唯一职能是监领军器库逐库事务，不能在所监诸库改隶后继续保留旧监管层。"),
+    TerminalSpec("度支", 1037, "北宋元丰五年", "废罢；元丰改制，三司度支诸案统罢",
+                 "三司度支诸案", "134", "元丰改制则统罢",
+                 "原文明载三司度支诸案在元丰改制时统罢；补建度支作为三司内部办事部的终点。"),
+    TerminalSpec("百官案", 999, "北宋元丰五年", "废罢；元丰改制，随三司度支诸案统罢",
+                 "三司度支诸案", "134", "元丰改制则统罢",
+                 "百官案是三司度支诸案之一；原文明载诸案于元丰改制时统罢，补建百官案终点。"),
 )
 
 
@@ -291,6 +300,14 @@ TRANSLATION_COURT_QUOTES = (
 )
 
 
+OFFICIALS_DESK_QUOTES = (
+    ("百官案", "135", "隶三司度支部。掌京朝官、幕职官俸钱及衣赐，祠祭所用礼物，及诸州驿站所需供给。"),
+    ("三司度支诸案", "134", "大中祥符七年后定为八案"),
+    ("三司度支诸案", "134", "元丰改制则统罢"),
+    ("药蜜库", "369", "监当局名。隶三司百官案"),
+)
+
+
 MEDICAL_NINE_QUOTES = (
     ("提举太医局所", "311", "即太医局设提举官领太医局后，改以“提举太医局所”为名"),
     ("提举太医局所", "311", "元丰五年新制罢"),
@@ -344,6 +361,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in TRANSLATION_COURT_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in OFFICIALS_DESK_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -424,6 +450,30 @@ def append_audit(
             """,
             (citation_id, source_entry, source_page),
         )
+
+
+def delete_target_audit(
+    connection: sqlite3.Connection, target_table: str, target_id: int
+) -> None:
+    citation_ids = [
+        int(row[0]) for row in connection.execute(
+            "SELECT id FROM Citations WHERE target_table=? AND target_id=?",
+            (target_table, target_id),
+        )
+    ]
+    for citation_id in citation_ids:
+        connection.execute(
+            "DELETE FROM BuildRecords WHERE target_table='Citations' AND target_id=?",
+            (citation_id,),
+        )
+    connection.execute(
+        "DELETE FROM Citations WHERE target_table=? AND target_id=?",
+        (target_table, target_id),
+    )
+    connection.execute(
+        "DELETE FROM BuildRecords WHERE target_table=? AND target_id=?",
+        (target_table, target_id),
+    )
 
 
 def repair_east_west_bazuo(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
@@ -740,6 +790,76 @@ def repair_translation_court_hierarchy(
     )
 
 
+def repair_officials_desk_merge(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    formal = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=515"
+    ).fetchone()
+    if formal != ("百官案", "机构"):
+        raise ValueError(f"正式百官案实体已漂移：{formal}")
+    _, formal_title = timepoint_entity(connection, 999)
+    if formal_title != "百官案":
+        raise ValueError(f"百官案正式时间点已漂移：999={formal_title}")
+
+    # 药蜜库原文中的“三司百官案”是带上级限定的称法，不是第二个机构。
+    # 把唯一有效的下级关系迁到正式词头百官案，保留药蜜库原始引文。
+    relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5587"
+    ).fetchone()
+    if relation is None or int(relation[1]) != 6556 or relation[2] != "上下级机构":
+        raise ValueError(f"百官案到药蜜库关系已漂移：{relation}")
+    if int(relation[0]) == 6555:
+        connection.execute("UPDATE Relationships SET subject_id=999 WHERE id=5587")
+        counts["officials_desk_relations_reparented"] += 1
+    elif int(relation[0]) == 999:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"百官案到药蜜库父端已漂移：{relation[0]}")
+    append_audit(
+        connection, "Relationships", 5587, "百官案", "135",
+        OFFICIALS_DESK_QUOTES[0][2],
+        "以正式词头百官案替代药蜜库条临时派生的三司百官案实体；药蜜库原关系迁到唯一百官案。",
+    )
+
+    # 直接“三司→三司百官案”是重复实体的补丁关系；正式结构已有
+    # “三司→度支→百官案”，因此连同其审计记录一并删除。
+    if connection.execute("SELECT 1 FROM Relationships WHERE id=6179").fetchone():
+        delete_target_audit(connection, "Relationships", 6179)
+        connection.execute("DELETE FROM Relationships WHERE id=6179")
+        counts["officials_desk_relations_deleted"] += 1
+    else:
+        counts["reused"] += 1
+
+    duplicate = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=3263"
+    ).fetchone()
+    if duplicate is not None:
+        if duplicate != ("三司百官案", "机构"):
+            raise ValueError(f"派生百官案实体已漂移：{duplicate}")
+        remaining = connection.execute(
+            """
+            SELECT COUNT(*) FROM Relationships
+            WHERE subject_id=6555 OR object_id=6555
+            """
+        ).fetchone()[0]
+        if remaining:
+            raise ValueError(f"三司百官案仍有{remaining}条未迁移关系")
+        delete_target_audit(connection, "Timepoints", 6555)
+        # NormalizedTimes 是可视化工作表并对 Timepoints 保持外键；删除正式
+        # 时间点时同步清除对应派生行，实时服务会按剩余时间点重建标准化数据。
+        connection.execute("DELETE FROM NormalizedTimes WHERE timepoint_id=6555")
+        connection.execute("DELETE FROM Timepoints WHERE id=6555")
+        delete_target_audit(connection, "Entities", 3263)
+        connection.execute("DELETE FROM Entities WHERE id=3263")
+        counts["officials_desk_timepoints_deleted"] += 1
+        counts["officials_desk_entities_deleted"] += 1
+    else:
+        if connection.execute("SELECT 1 FROM Timepoints WHERE id=6555").fetchone():
+            raise ValueError("三司百官案实体已删但时间点6555仍存在")
+        counts["reused"] += 1
+
+
 def repair_medical_nine_hierarchy(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
     renamed_parent = timepoint_entity(connection, 4725)
     restored_parent = timepoint_entity(connection, 4302)
@@ -863,6 +983,10 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
         "translation_court_relations_inserted": 0,
+        "officials_desk_relations_reparented": 0,
+        "officials_desk_relations_deleted": 0,
+        "officials_desk_timepoints_deleted": 0,
+        "officials_desk_entities_deleted": 0,
         "medical_nine_relations_reparented": 0,
         "medical_nine_relations_inserted": 0,
         "medical_nine_evolutions_inserted": 0,
@@ -980,6 +1104,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
+        repair_officials_desk_merge(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
         connection.commit()
     except Exception:
