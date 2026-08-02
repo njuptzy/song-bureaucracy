@@ -2994,6 +2994,22 @@ def main():
               "独立词头拆开正文及简称；删除同页误列为主条的简称‘诸军专司’，"
               "保持后续辞典ID稳定")
 
+        civilian_audit = next(e for e in all_entries if e["name"] == "诸司专勾司")
+        assert "提举诸司库\n务司" in civilian_audit["text"]
+        civilian_audit["text"] = civilian_audit["text"].replace(
+            "提举诸司库\n务司", "提举诸司库务司", 1
+        )
+
+        regional_grain_audit = next(
+            e for e in all_entries if e["name"] == "鄂州、建康、镇江分差粮审院"
+        )
+        assert regional_grain_audit["text"].startswith("分\n差鄂州")
+        regional_grain_audit["text"] = regional_grain_audit["text"].replace(
+            "分\n差鄂州", "分差鄂州", 1
+        )
+        print("  [版面换行] '诸司专勾司/鄂州、建康、镇江分差粮审院'"
+              "(p376-378)：核原书合并栏宽造成的词中换行‘库务司’与‘分差’")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
