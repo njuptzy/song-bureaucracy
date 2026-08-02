@@ -2865,6 +2865,14 @@ def main():
         print("  [OCR字误] '左藏库'(p366)：核原书将左藏南库拨隶户部日期"
               "由淳熙十年八月二十八日恢复为六月二十八日")
 
+        imperial_treasure = next(e for e in all_entries if e["name"] == "奉宸库")
+        imperial_treasure_meta = all_meta[all_entries.index(imperial_treasure)]
+        assert imperial_treasure_meta["page"] == "36"
+        assert imperial_treasure_meta.get("body_page") == "368"
+        imperial_treasure_meta["page"] = "368"
+        print("  [目录页码] '奉宸库'：核原书将目录漏识的 p36 "
+              "恢复为正文页 p368")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
