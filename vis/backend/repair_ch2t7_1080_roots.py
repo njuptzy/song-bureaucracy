@@ -300,6 +300,14 @@ WESTERN_POSTHOUSE_QUOTES = (
 )
 
 
+DUTING_POSTHOUSE_QUOTES = (
+    ("都亭驿", "349", "馆驿名。先后隶鸿胪寺、都大提举在京诸司库务所、礼部。"),
+    ("都亭驿", "349", "北宋太平兴国二年八月，改东京怀信驿（后周世宗置）为都亭驿"),
+    ("都大提举在京诸司库务司", "110",
+     "熙宁六年正月五日，又增市易务上下界、商税院、翰林图画院、杂买务杂卖场、诸宫观真仪法从库、南郊太庙家事库、开封府司检校库、都亭驿、怀远驿、三粮料院等分别由三司、都大提举市易司、开封府归隶本司"),
+)
+
+
 TRANSLATION_COURT_QUOTES = (
     ("传法院", "350", "官司名。隶鸿胪寺。"),
     ("传法院", "350", "北宋太平兴国七年六月于太平兴国寺建译经院。八年，赐院额名“传法”"),
@@ -380,6 +388,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in WESTERN_POSTHOUSE_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in DUTING_POSTHOUSE_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -838,6 +855,101 @@ def repair_western_posthouse_hierarchy(
         connection, "Relationships", relation_id, "都亭西驿", "350",
         WESTERN_POSTHOUSE_QUOTES[1][2],
         "原文明载都亭西驿大中祥符间始置；据此限定鸿胪寺隶属关系不早于该馆驿的始置阶段。",
+    )
+
+
+def repair_duting_posthouse_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 都亭驿先隶鸿胪寺，熙宁六年明确转隶都大提举在京诸司库务司。
+    # 把两段关系放回各自的真实时间，并使用正式词头的库务司实体。
+    early = connection.execute(
+        "SELECT time,event FROM Timepoints WHERE id=5915"
+    ).fetchone()
+    early_event = "隶鸿胪寺，接待辽国使者"
+    if early == ("北宋元丰新制", early_event):
+        connection.execute(
+            "UPDATE Timepoints SET time=?,quotation=? WHERE id=5915",
+            ("北宋太平兴国二年八月", DUTING_POSTHOUSE_QUOTES[0][2]),
+        )
+        connection.execute("DELETE FROM NormalizedTimes WHERE timepoint_id=5915")
+        counts["duting_posthouse_timepoints_updated"] += 1
+    elif early == ("北宋太平兴国二年八月", early_event):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"都亭驿早期鸿胪寺节点已漂移：{early}")
+    append_audit(
+        connection, "Timepoints", 5915, "都亭驿", "349",
+        DUTING_POSTHOUSE_QUOTES[0][2],
+        "原文按先后次序明载都亭驿先隶鸿胪寺；把该关系状态从误置的元丰新制移回北宋始置阶段。",
+    )
+    append_audit(
+        connection, "Timepoints", 5915, "都亭驿", "349",
+        DUTING_POSTHOUSE_QUOTES[1][2],
+        "原文明载太平兴国二年东京怀信驿改名都亭驿；以此限定鸿胪寺阶段不早于都亭驿名启用。",
+    )
+
+    early_relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5072"
+    ).fetchone()
+    if early_relation == (3987, 5915, "上下级机构"):
+        connection.execute("UPDATE Relationships SET subject_id=4002 WHERE id=5072")
+        counts["duting_posthouse_relations_reparented"] += 1
+    elif early_relation == (4002, 5915, "上下级机构"):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"鸿胪寺至都亭驿关系已漂移：{early_relation}")
+    append_audit(
+        connection, "Relationships", 5072, "都亭驿", "349",
+        DUTING_POSTHOUSE_QUOTES[0][2],
+        "原文直接明载都亭驿先隶鸿胪寺；父端改用鸿胪寺宋前期节点，不再误挂元丰新制。",
+    )
+    append_audit(
+        connection, "Relationships", 5072, "都亭驿", "349",
+        DUTING_POSTHOUSE_QUOTES[1][2],
+        "以太平兴国二年都亭驿名启用节点限定第一段隶属关系的开始。",
+    )
+
+    transfer_time = "北宋熙宁六年正月五日"
+    transfer_event = "改隶都大提举在京诸司库务司"
+    transfer = connection.execute(
+        "SELECT time,event FROM Timepoints WHERE id=5917"
+    ).fetchone()
+    if transfer == ("北宋（隶都大提举在京诸司库务所年月未载）", "改隶都大提举在京诸司库务所"):
+        connection.execute(
+            "UPDATE Timepoints SET time=?,event=?,attr_category=?,quotation=? WHERE id=5917",
+            (transfer_time, transfer_event, "都大提举在京诸司库务司属馆驿",
+             DUTING_POSTHOUSE_QUOTES[2][2]),
+        )
+        connection.execute("DELETE FROM NormalizedTimes WHERE timepoint_id=5917")
+        counts["duting_posthouse_timepoints_updated"] += 1
+    elif transfer == (transfer_time, transfer_event):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"都亭驿熙宁改隶节点已漂移：{transfer}")
+    append_audit(
+        connection, "Timepoints", 5917, "都大提举在京诸司库务司", "110",
+        DUTING_POSTHOUSE_QUOTES[2][2],
+        "原文明载熙宁六年正月五日都亭驿归隶本司；补足原先未载的确切改隶年月，并统一正式机构名。",
+    )
+
+    transfer_relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5073"
+    ).fetchone()
+    if transfer_relation == (5916, 5917, "上下级机构"):
+        connection.execute(
+            "UPDATE Relationships SET subject_id=462,quotation=? WHERE id=5073",
+            (DUTING_POSTHOUSE_QUOTES[2][2],),
+        )
+        counts["duting_posthouse_relations_reparented"] += 1
+    elif transfer_relation == (462, 5917, "上下级机构"):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"库务司至都亭驿关系已漂移：{transfer_relation}")
+    append_audit(
+        connection, "Relationships", 5073, "都大提举在京诸司库务司", "110",
+        DUTING_POSTHOUSE_QUOTES[2][2],
+        "原文明载熙宁六年都亭驿归隶；父端改用正式词头都大提举在京诸司库务司的同日节点。",
     )
 
 
@@ -1316,6 +1428,8 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
         "western_posthouse_relations_inserted": 0,
+        "duting_posthouse_timepoints_updated": 0,
+        "duting_posthouse_relations_reparented": 0,
         "translation_court_relations_inserted": 0,
         "jianlong_relations_reparented": 0,
         "jianlong_timepoints_deleted": 0,
@@ -1447,6 +1561,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
         repair_western_posthouse_hierarchy(connection, counts)
+        repair_duting_posthouse_hierarchy(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
         repair_jianlong_office_merge(connection, counts)
         repair_monk_registry_merge(connection, counts)

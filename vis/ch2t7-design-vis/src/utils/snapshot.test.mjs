@@ -521,3 +521,30 @@ test("有纪年演变形成复归循环时不会在恢复当年再次删除原�
   assert.equal(buildYearSnapshot(data, 1003).entityIds.has(1), true);
   assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), true);
 });
+
+test("改隶后的新上级罢废时不会自动回退到旧上级", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "旧上级", type: "机构" },
+      { id: 2, title: "新上级", type: "机构" },
+      { id: 3, title: "下级机构", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 1000, "始置")],
+      2: [
+        timepoint(20, 1010, "始置"),
+        timepoint(21, 1020, "废罢", { prev_id: 20 }),
+      ],
+      3: [timepoint(30, 1000, "始置")],
+    },
+    hierarchyEdges: [
+      { id: 40, parent: 1, child: 3, periods: [], states: [{ id: 40, subject_timepoint_id: 10, object_timepoint_id: 30 }] },
+      { id: 41, parent: 2, child: 3, periods: [], states: [{ id: 41, subject_timepoint_id: 20, object_timepoint_id: 30 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+  };
+  assert.equal(buildYearSnapshot(data, 1005).hierarchyEdges[0]?.parent, 1);
+  assert.equal(buildYearSnapshot(data, 1015).hierarchyEdges[0]?.parent, 2);
+  assert.equal(buildYearSnapshot(data, 1020).hierarchyEdges.length, 0);
+});

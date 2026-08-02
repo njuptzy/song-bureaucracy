@@ -223,7 +223,6 @@ export function buildYearSnapshot(dataset, year) {
   const entityIds = new Set(currentEventByEntity.keys());
   const relationStates = new Map();
   for (const relation of dataset.relations) {
-    if (!entityIds.has(relation.subjectEntityId) || !entityIds.has(relation.objectEntityId)) continue;
     const effectiveYear = relationEffectiveYear(relation, eventById);
     if (effectiveYear == null || effectiveYear > year) continue;
     const key = relationStateKey(relation);
@@ -236,6 +235,10 @@ export function buildYearSnapshot(dataset, year) {
   }
   const relations = [...relationStates.values()].flatMap(({ effectiveYear, relations: items }) => (
     items.map((relation) => ({ ...relation, effectiveYear }))
+  )).filter((relation) => (
+    // 与8050保持一致：先确定同一关系对象的最新状态，再检查端点存续。
+    // 后任上级罢废不构成自动复隶，不能重新显示已经被取代的旧关系。
+    entityIds.has(relation.subjectEntityId) && entityIds.has(relation.objectEntityId)
   ));
   const dedupedRelations = new Map();
   for (const relation of relations) {

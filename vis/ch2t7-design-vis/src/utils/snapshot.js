@@ -163,10 +163,6 @@ function subdivisionKeepsParent(timepoint, entity, parentTimepointIds, timepoint
 function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge) {
   const candidatesByKey = new Map();
   for (const edge of edges) {
-    const endpointsPresent = edge.parent != null
-      ? entityIds.has(edge.parent) && entityIds.has(edge.child)
-      : entityIds.has(edge.org) && entityIds.has(edge.official);
-    if (!endpointsPresent) continue;
     const fallbackYears = (edge.periods || []).map((period) => period.start).filter(Number.isFinite);
     const states = edge.states?.length
       ? edge.states
@@ -187,7 +183,13 @@ function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge)
     ...edge,
     id: state.id,
     effective_year: effectiveYear,
-  })));
+  }))).filter((edge) => (
+    // 先按关系对象选出当年最新状态，再检查端点是否仍存在。新上级退出后，
+    // 不能因此回退到已经被改隶取代的旧上级；只有新的复隶状态才能恢复旧关系。
+    edge.parent != null
+      ? entityIds.has(edge.parent) && entityIds.has(edge.child)
+      : entityIds.has(edge.org) && entityIds.has(edge.official)
+  ));
   const deduped = new Map();
   for (const edge of selected) {
     const key = edge.parent != null
