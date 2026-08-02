@@ -240,6 +240,14 @@ EVOLUTIONS = (
 )
 
 
+BAZUO_QUOTES = (
+    ("东、西八作司", "408", "官司名。先后隶三司、提举在京诸司库务司、将作监。"),
+    ("东、西八作司", "408", "宋初称八作司，置东八作使、西八作使。太平兴国二年分东、西八作司，景德四年六月并为东西八作司（含街道司）。天圣元年五月十六日复分为东八作司、西八作司"),
+    ("东、西八作司", "408", "南宋称八作司"),
+    ("将作监", "405", "神宗熙宁四年十一月一日，将作监始正名，始专领在京修造事"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -253,6 +261,15 @@ def validate_quotations(dictionary_path: Path) -> None:
                 raise ValueError(f"辞典词条不存在：{spec.source_entry} 第{spec.source_page}页")
             if not any(spec.quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{spec.source_entry} / {spec.quotation}")
+        for source_entry, source_page, quotation in BAZUO_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
     finally:
         dictionary.close()
 
@@ -318,6 +335,213 @@ def append_audit(
         )
 
 
+def repair_east_west_bazuo(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
+    formal_quote = BAZUO_QUOTES[0][2]
+    evolution_quote = BAZUO_QUOTES[1][2]
+    southern_quote = BAZUO_QUOTES[2][2]
+    jiangzuo_quote = BAZUO_QUOTES[3][2]
+
+    row = connection.execute("SELECT title,type FROM Entities WHERE id=3334").fetchone()
+    if row is None or row[1] != "机构" or row[0] not in {"八作司", "东、西八作司"}:
+        raise ValueError(f"八作司派生实体已漂移：{row}")
+    if row[0] == "八作司":
+        connection.execute("UPDATE Entities SET title='东、西八作司' WHERE id=3334")
+        counts["bazuo_entities_updated"] += 1
+    else:
+        counts["reused"] += 1
+    append_audit(
+        connection, "Entities", 3334, "东、西八作司", "408", formal_quote,
+        "以第408页正式词头校正第372页关系句临时派生的八作司实体；八作司保留为宋初及南宋阶段名称。",
+    )
+
+    def ensure_entity(title: str, decision: str) -> int:
+        existing = connection.execute(
+            "SELECT id FROM Entities WHERE title=? AND type='机构' ORDER BY id LIMIT 1", (title,)
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute("INSERT INTO Entities(title,type) VALUES (?,'机构')", (title,))
+            entity_id = int(cursor.lastrowid)
+            counts["bazuo_entities_inserted"] += 1
+        else:
+            entity_id = int(existing[0])
+            counts["reused"] += 1
+        append_audit(connection, "Entities", entity_id, "东、西八作司", "408",
+                     evolution_quote, decision)
+        return entity_id
+
+    def ensure_timepoint(
+        entity_id: int,
+        time: str,
+        event: str,
+        source_entry: str,
+        source_page: str,
+        quotation: str,
+        decision: str,
+        category: str = "京城营造机构",
+    ) -> int:
+        existing = connection.execute(
+            "SELECT id FROM Timepoints WHERE entity_id=? AND time=? AND event=? ORDER BY id LIMIT 1",
+            (entity_id, time, event),
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Timepoints(
+                    entity_id,time,event,prev_id,succ_id,attr_category,
+                    attr_officer_type,attr_grade,quotation
+                ) VALUES (?,?,?,NULL,NULL,?,'','',?)
+                """,
+                (entity_id, time, event, category, quotation),
+            )
+            timepoint_id = int(cursor.lastrowid)
+            counts["bazuo_timepoints_inserted"] += 1
+        else:
+            timepoint_id = int(existing[0])
+            counts["reused"] += 1
+        append_audit(connection, "Timepoints", timepoint_id, source_entry, source_page,
+                     quotation, decision)
+        return timepoint_id
+
+    def link_chain(timepoint_ids: list[int]) -> None:
+        for index, timepoint_id in enumerate(timepoint_ids):
+            previous_id = timepoint_ids[index - 1] if index else None
+            successor_id = timepoint_ids[index + 1] if index + 1 < len(timepoint_ids) else None
+            connection.execute(
+                "UPDATE Timepoints SET prev_id=?,succ_id=? WHERE id=?",
+                (previous_id, successor_id, timepoint_id),
+            )
+
+    def ensure_relation(
+        subject_id: int,
+        object_id: int,
+        quotation: str,
+        source_entry: str,
+        source_page: str,
+        decision: str,
+    ) -> int:
+        existing = connection.execute(
+            """
+            SELECT id FROM Relationships
+            WHERE subject_id=? AND object_id=? AND relation_type='上下级机构'
+            ORDER BY id LIMIT 1
+            """,
+            (subject_id, object_id),
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Relationships(
+                    subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                ) VALUES (?,?,'上下级机构',NULL,NULL,?)
+                """,
+                (subject_id, object_id, quotation),
+            )
+            relation_id = int(cursor.lastrowid)
+            counts["bazuo_relations_inserted"] += 1
+        else:
+            relation_id = int(existing[0])
+            counts["reused"] += 1
+        append_audit(connection, "Relationships", relation_id, source_entry, source_page,
+                     quotation, decision)
+        return relation_id
+
+    # 将第372页派生的单点纳入第408页正式沿革链。
+    existing_6703 = connection.execute(
+        "SELECT event,attr_category FROM Timepoints WHERE id=6703 AND entity_id=3334"
+    ).fetchone()
+    if existing_6703 is None or existing_6703[0] not in {
+        "统辖修造司", "大中祥符元年，统辖析出的修造司",
+    }:
+        raise ValueError(f"八作司派生时间点已漂移：{existing_6703}")
+    if existing_6703 != ("大中祥符元年，统辖析出的修造司", "京城营造机构"):
+        connection.execute(
+            """
+            UPDATE Timepoints
+            SET event='大中祥符元年，统辖析出的修造司', attr_category='京城营造机构'
+            WHERE id=6703
+            """
+        )
+        counts["bazuo_timepoints_updated"] += 1
+    else:
+        counts["reused"] += 1
+    append_audit(
+        connection, "Timepoints", 6703, "左右厢店宅务", "372",
+        "大中祥符元年修造司隶八作司",
+        "保留原关系证据，并将该派生节点并入东、西八作司正式沿革链。",
+    )
+
+    collective_points = [
+        ensure_timepoint(3334, "宋初", "称八作司，置东八作使、西八作使",
+                         "东、西八作司", "408", evolution_quote,
+                         "建立正式词条的宋初八作司阶段。"),
+        ensure_timepoint(3334, "北宋太平兴国二年", "分为东八作司、西八作司",
+                         "东、西八作司", "408", evolution_quote,
+                         "原文明载太平兴国二年分东、西二司。"),
+        ensure_timepoint(3334, "北宋（隶提举在京诸司库务司，具体年月未载）",
+                         "先后改隶提举在京诸司库务司",
+                         "东、西八作司", "408", formal_quote,
+                         "原文明载先后隶提举在京诸司库务司；具体改隶年月未载，关系以该上级1005年始置节点作为生效证据。"),
+        ensure_timepoint(3334, "北宋景德四年六月", "东、西二司合并为东西八作司，并含街道司",
+                         "东、西八作司", "408", evolution_quote,
+                         "原文明载景德四年六月合并为一司。"),
+        6703,
+        ensure_timepoint(3334, "北宋天圣元年五月十六日", "东西八作司复分为东八作司、西八作司",
+                         "东、西八作司", "408", evolution_quote,
+                         "原文明载天圣元年五月十六日复分东、西二司。"),
+        ensure_timepoint(3334, "北宋熙宁四年十一月一日",
+                         "改隶将作监；将作监始专领在京修造事",
+                         "将作监", "405", jiangzuo_quote,
+                         "第408页明载八作司先后隶将作监；第405页明确熙宁四年将作监始专领在京修造事，据此建立不晚于该年的改隶节点。"),
+        ensure_timepoint(3334, "南宋（未载具体年月）", "南宋称八作司",
+                         "东、西八作司", "408", southern_quote,
+                         "保留原文明载的南宋名称阶段。"),
+    ]
+    link_chain(collective_points)
+
+    east_id = ensure_entity("东八作司", "建立第408页明确分置的东司实例。")
+    west_id = ensure_entity("西八作司", "建立第408页明确分置的西司实例。")
+
+    child_points: dict[int, list[int]] = {}
+    for entity_id, title in ((east_id, "东八作司"), (west_id, "西八作司")):
+        child_points[entity_id] = [
+            ensure_timepoint(entity_id, "北宋太平兴国二年", f"从八作司分置{title}",
+                             "东、西八作司", "408", evolution_quote,
+                             f"原文明载太平兴国二年分置{title}。"),
+            ensure_timepoint(entity_id, "北宋景德四年六月", "废罢；东、西二司合并为东西八作司",
+                             "东、西八作司", "408", evolution_quote,
+                             "原文明载景德四年六月东、西二司合并。"),
+            ensure_timepoint(entity_id, "北宋天圣元年五月十六日", f"复置；东西八作司复分为{title}",
+                             "东、西八作司", "408", evolution_quote,
+                             f"原文明载天圣元年五月十六日复分并恢复{title}。"),
+        ]
+        link_chain(child_points[entity_id])
+
+    jiangzuo_tp = ensure_timepoint(
+        1999, "北宋熙宁四年十一月一日", "始正名，专领在京修造事",
+        "将作监", "405", jiangzuo_quote,
+        "补建将作监熙宁四年开始专领在京修造事的时间点，作为八作司改隶的上级端证据。",
+        "中央营造机构",
+    )
+
+    ensure_relation(788, collective_points[0], formal_quote, "东、西八作司", "408",
+                    "原文明载东、西八作司早期隶三司。")
+    ensure_relation(458, collective_points[2], formal_quote, "东、西八作司", "408",
+                    "原文明载继而隶提举在京诸司库务司；以上级景德二年始置节点限定关系不早于1005年。")
+    jiangzuo_relation = ensure_relation(
+        jiangzuo_tp, collective_points[6], formal_quote, "东、西八作司", "408",
+        "原文明载后隶将作监；以将作监熙宁四年专领在京修造事作为改隶生效节点。",
+    )
+    append_audit(
+        connection, "Relationships", jiangzuo_relation, "将作监", "405", jiangzuo_quote,
+        "将作监自熙宁四年始专领在京修造事，与东、西八作司掌京师缮修及后隶将作监的记载互证。",
+    )
+    for entity_id in (east_id, west_id):
+        ensure_relation(collective_points[1], child_points[entity_id][0], evolution_quote,
+                        "东、西八作司", "408", "建立太平兴国二年东、西分司的层级实例关系。")
+        ensure_relation(collective_points[5], child_points[entity_id][2], evolution_quote,
+                        "东、西八作司", "408", "建立天圣元年复分东、西二司的层级实例关系。")
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -327,6 +551,11 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "terminals_inserted": 0,
         "categories_updated": 0,
         "evolutions_inserted": 0,
+        "bazuo_entities_updated": 0,
+        "bazuo_entities_inserted": 0,
+        "bazuo_timepoints_updated": 0,
+        "bazuo_timepoints_inserted": 0,
+        "bazuo_relations_inserted": 0,
         "reused": 0,
     }
     try:
@@ -437,6 +666,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
                 counts["reused"] += 1
             append_audit(connection, "Relationships", relation_id, spec.source_entry,
                          spec.source_page, spec.quotation, spec.decision)
+        repair_east_west_bazuo(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()
