@@ -282,7 +282,11 @@ function renderTimepoint(tp, currentEntryId) {
   return `
     <div class="timepoint ${tp.is_placeholder ? "tp-placeholder" : ""} ${noCite ? "tp-warn" : ""}">
       <div class="tp-head">
-        <span class="tp-time">${escapeHtml(tp.time || "—")}</span>
+        <span class="tp-time">${escapeHtml(tp.time || "—")}${
+          tp.normalized_year_label
+            ? `<span class="tp-normalized-year">（${escapeHtml(tp.normalized_year_label)}）</span>`
+            : ""
+        }</span>
         <span class="tp-event">${escapeHtml(tp.event || "")}</span>
         <span class="tp-id">#${tp.id}</span>
         ${tp.is_placeholder ? `<span class="tag tag-red">占位残留</span>` : ""}

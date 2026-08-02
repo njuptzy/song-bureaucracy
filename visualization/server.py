@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import sqlite3
+import sys
 import threading
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,11 @@ from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+  sys.path.insert(0, str(ROOT))
+
+from vis.backend.normalize_times import normalize_time
+
 DEFAULT_ENTRY_DB = ROOT / "agent-v0612/records/v0614-v4-flash/song_bureaucracy_entries_v0614-v4-flash.db"
 DEFAULT_DICT_DB = ROOT / "data/database/song_bureaucracy_dictionary.db"
 DICT_TABLE = "chapter8t10"
@@ -42,6 +48,26 @@ ISSUE_LABELS = {
   "conflict_flagged": "标记为冲突的引用",
   "dangling": "悬空引用/关系",
 }
+
+
+def normalized_year_label(raw_time: Optional[str]) -> Optional[str]:
+  """把原始纪年转换为供标注界面追加显示的公元年份。"""
+  normalized = normalize_time(raw_time or "")
+  start = normalized.year_start
+  end = normalized.year_end
+  if start is None or end is None:
+    return None
+
+  def year_text(year: int) -> str:
+    return f"前{abs(year)}" if year < 0 else str(year)
+
+  if start == end:
+    label = f"{year_text(start)}年"
+  else:
+    label = f"{year_text(start)}—{year_text(end)}年"
+  if normalized.time_type == "bounded":
+    return f"约{label}"
+  return label
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +654,7 @@ class Model:
       tps.append(
         {
           **tp,
+          "normalized_year_label": normalized_year_label(tp["time"]),
           "is_placeholder": (tp["event"] or "").startswith(PLACEHOLDER_EVENT),
           "citations": [
             self._serialize_citation(c)

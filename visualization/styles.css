@@ -306,6 +306,7 @@ mark.hl.active { background: var(--hl-active); outline: 2px solid var(--accent);
 
 .tp-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .tp-time { font-weight: 700; color: var(--accent); }
+.tp-normalized-year { margin-left: 2px; color: var(--ink-soft); font-weight: 500; }
 .tp-event { font-weight: 600; }
 .tp-id { color: var(--ink-soft); font-size: 11px; font-family: var(--mono); }
 .tp-attrs { font-size: 13px; color: var(--ink-soft); margin: 2px 0; }
