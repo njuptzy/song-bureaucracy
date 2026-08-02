@@ -60,7 +60,19 @@ function stripDiscourseLead(text) {
   return result;
 }
 
-function verbTargetsEntity(clause, index, verb, title, { activation = false } = {}) {
+function implicitTerminationTargetsCurrent(before, after) {
+  // 时间点本身已经限定了叙述对象，以下词组只是终止动作的语气或制度背景，
+  // 不是另一个被罢对象。例如“元丰改制后罢置”“新官制下罢置”。
+  if (after && after !== "置") return false;
+  if (["正式", "明令", "实际", "再次", "至迟已"].includes(before)) return true;
+  if (/^(?:元丰)?改制(?:正名)?后$/.test(before)) return true;
+  if (/^(?:行)?新官制(?:下|后)$/.test(before)) return true;
+  // “随司天监罢置”表示当前官职或机构随其所属机构一并终止。
+  if (/^随.+$/.test(before)) return true;
+  return false;
+}
+
+function verbTargetsEntity(clause, index, verb, title, { activation = false, termination = false } = {}) {
   const before = stripDiscourseLead(clause.slice(0, index));
   const after = clause.slice(index + verb.length);
 
@@ -75,6 +87,7 @@ function verbTargetsEntity(clause, index, verb, title, { activation = false } = 
   if (!before && !after) return true;
   if (!before && /^(?:置|去|归|并归|并入|改|易|后|而)/.test(after)) return true;
   if (activation && !before && /^(?:于|在)/.test(after)) return true;
+  if (termination && implicitTerminationTargetsCurrent(before, after)) return true;
   return false;
 }
 
@@ -130,7 +143,7 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
 
     for (const verb of TERMINATION_VERBS) {
       for (const index of occurrences(clause, verb)) {
-        if (verbTargetsEntity(clause, index, verb, title)) {
+        if (verbTargetsEntity(clause, index, verb, title, { termination: true })) {
           addTransition(transitions, "deactivate", start + index, `当前实体终止：${verb}`, 2);
         }
       }

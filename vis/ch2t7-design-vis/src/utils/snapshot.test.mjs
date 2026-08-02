@@ -343,6 +343,19 @@ test("罢废和废罢复合词明确终止当前实体", () => {
   assert.equal(classifyExistenceEffect(timepoint(11, 1071, "罢废，职事归某寺"), entity), "deactivate");
 });
 
+test("制度背景和终止语气后的罢置仍以当前实体为省略主语", () => {
+  const entity = { id: 1, title: "提举司天监公事所", type: "机构" };
+  assert.equal(classifyExistenceEffect(timepoint(10, 1082, "元丰改制后罢置"), entity), "deactivate");
+  assert.equal(classifyExistenceEffect(timepoint(11, 1082, "新官制下罢置"), entity), "deactivate");
+  assert.equal(classifyExistenceEffect(timepoint(12, 1082, "正式罢置"), entity), "deactivate");
+  assert.equal(classifyExistenceEffect(timepoint(13, 1082, "随司天监罢置"), entity), "deactivate");
+});
+
+test("其他官职罢置不能误判为当前上级机构终止", () => {
+  const entity = { id: 1, title: "太常寺", type: "机构" };
+  assert.equal(classifyExistenceEffect(timepoint(10, 1129, "太常寺丞罢置"), entity), "preserve");
+});
+
 test("省略当前主语的合并和复分会终止来源实体", () => {
   const entity = { id: 1, title: "内剥马务", type: "机构" };
   assert.equal(
