@@ -40,6 +40,7 @@ class TerminalSpec:
     source_page: str
     quotation: str
     decision: str
+    evolution_target_timepoint_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -192,6 +193,11 @@ TERMINALS = (
     TerminalSpec("百官案", 999, "北宋元丰五年", "废罢；元丰改制，随三司度支诸案统罢",
                  "三司度支诸案", "134", "元丰改制则统罢",
                  "百官案是三司度支诸案之一；原文明载诸案于元丰改制时统罢，补建百官案终点。"),
+    TerminalSpec("中书门下", 159, "北宋元丰新制",
+                 "废罢；元丰新制分一中书为三省，旧中书门下体制终止",
+                 "三省", "170", "元丰新制，中书分权归三省，成为中央最高政务机构",
+                 "原文明载元丰新制将中书权力分归三省；补建旧中书门下体制终点，并以前后演变接续三省。",
+                 evolution_target_timepoint_id=1805),
 )
 
 
@@ -1830,6 +1836,32 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
                 )
             append_audit(connection, "Timepoints", terminal_id, spec.source_entry,
                          spec.source_page, spec.quotation, spec.decision)
+            if spec.evolution_target_timepoint_id is not None:
+                timepoint_entity(connection, spec.evolution_target_timepoint_id)
+                evolution = connection.execute(
+                    """
+                    SELECT id FROM Relationships
+                    WHERE subject_id=? AND object_id=? AND relation_type='前后演变'
+                    ORDER BY id LIMIT 1
+                    """,
+                    (terminal_id, spec.evolution_target_timepoint_id),
+                ).fetchone()
+                if evolution is None:
+                    cursor = connection.execute(
+                        """
+                        INSERT INTO Relationships(
+                            subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                        ) VALUES (?,?,'前后演变',NULL,NULL,?)
+                        """,
+                        (terminal_id, spec.evolution_target_timepoint_id, spec.quotation),
+                    )
+                    evolution_id = int(cursor.lastrowid)
+                    counts["evolutions_inserted"] += 1
+                else:
+                    evolution_id = int(evolution[0])
+                    counts["reused"] += 1
+                append_audit(connection, "Relationships", evolution_id, spec.source_entry,
+                             spec.source_page, spec.quotation, spec.decision)
 
         for spec in CATEGORIES:
             _, title = timepoint_entity(connection, spec.timepoint_id)
