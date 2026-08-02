@@ -116,6 +116,14 @@ test("由旧名复改称为当前实体会重新激活", () => {
   assert.equal(snapshot.entityIds.has(1), true);
 });
 
+test("分设机构重新合并仍为当前实体时会恢复", () => {
+  const entity = { id: 1, title: "崇文院", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1031, "内外院合并，仍为崇文院"), entity),
+    "activate",
+  );
+});
+
 test("新实体名称只含旧实体后缀时不能把旧实体激活", () => {
   const entity = { id: 1, title: "茶库", type: "机构" };
   assert.equal(
@@ -547,4 +555,33 @@ test("改隶后的新上级罢废时不会自动回退到旧上级", () => {
   assert.equal(buildYearSnapshot(data, 1005).hierarchyEdges[0]?.parent, 1);
   assert.equal(buildYearSnapshot(data, 1015).hierarchyEdges[0]?.parent, 2);
   assert.equal(buildYearSnapshot(data, 1020).hierarchyEdges.length, 0);
+});
+
+test("演变分出后以仍为当前实体复归时重新进入截面", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "崇文院", type: "机构" },
+      { id: 2, title: "崇文内院", type: "机构" },
+    ],
+    timepoints: {
+      1: [
+        timepoint(10, 978, "始以三馆为崇文院"),
+        timepoint(11, 1015, "火灾后分建崇文内院", { prev_id: 10 }),
+        timepoint(12, 1031, "内外院合并，仍为崇文院", { prev_id: 11 }),
+      ],
+      2: [
+        timepoint(20, 1015, "始置"),
+        timepoint(21, 1031, "并回崇文院", { prev_id: 20 }),
+      ],
+    },
+    hierarchyEdges: [],
+    staffEdges: [],
+    evolutionEdges: [
+      { source: 1, target: 2, states: [{ subject_timepoint_id: 11, object_timepoint_id: 20 }] },
+      { source: 2, target: 1, states: [{ subject_timepoint_id: 21, object_timepoint_id: 12 }] },
+    ],
+  };
+  assert.equal(buildYearSnapshot(data, 1020).entityIds.has(1), false);
+  assert.equal(buildYearSnapshot(data, 1031).entityIds.has(1), true);
+  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), true);
 });

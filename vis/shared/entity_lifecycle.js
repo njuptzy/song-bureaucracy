@@ -138,7 +138,7 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
 
     // “由甲改置为乙”“甲合并为乙”只有在结果明确是当前实体时，才证明当前实体产生。
     const resultMatch = clause.match(
-      /(?:复改称为|复改称|复改名为|复改名|改置为|改名为|改名|改称为|改称|更名为|更名|合并为|合置为|重合为)([^为]+)$/,
+      /(?:复改称为|复改称|复改名为|复改名|改置为|改名为|改名|改称为|改称|更名为|更名|合并为|合置为|重合为|仍为|依旧为)([^为]+)$/,
     );
     if (title && resultMatch?.[1] === title) {
       const index = clause.length - title.length;
