@@ -145,14 +145,6 @@ TERMINALS = (
     TerminalSpec("司天台", 3466, "北宋端拱元年九月", "废罢，改称司天监",
                  "司天监", "268", "宋初沿唐制，称司天台。太宗端拱元年九月，始见有司天监之称",
                  "原文将宋初司天台与端拱元年始见的司天监连续叙述；补建司天台终点。"),
-    TerminalSpec("提举在京诸司库务司", 5794, "北宋元丰元年十二月十九日",
-                 "废罢，随都大提举在京诸司库务司罢置",
-                 "都大提举在京诸司库务司", "110", "神宗元丰元年（1078）十二月十九日罢",
-                 "该实体是都大提举在京诸司库务司的省称异名；原文明载本司元丰元年罢，补建终点。"),
-    TerminalSpec("都大提举在京诸司库务所", 5916, "北宋元丰元年十二月十九日",
-                 "废罢，随都大提举在京诸司库务司罢置",
-                 "都大提举在京诸司库务司", "110", "神宗元丰元年（1078）十二月十九日罢",
-                 "该实体是都大提举在京诸司库务司的治所异称；原文明载本司元丰元年罢，补建终点。"),
     TerminalSpec("茶库", 6558, "北宋咸平六年", "废罢，二库合并为都茶库",
                  "都茶库", "369", "初分二库，咸平六年合为一库加“都”字",
                  "原文明载原来的两茶库于咸平六年合为都茶库；补建茶库终点。"),
@@ -362,6 +354,16 @@ MEDICAL_NINE_RELATIONS = (
 )
 
 
+TREASURY_OFFICE_ALIAS_QUOTES = (
+    ("都大提举在京诸司库务司", "110",
+     "②库务司、提举诸司库务司、提举库务司。"),
+    ("都大提举在京诸司库务司", "110",
+     "神宗元丰元年（1078）十二月十九日罢"),
+    ("诸军专勾司", "376", "官司名。先后隶提举诸司库务司、太府寺。"),
+    ("诸司专勾司", "376", "官司名。先后隶提举诸司库务司、太府寺。"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -457,6 +459,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in MEDICAL_NINE_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in TREASURY_OFFICE_ALIAS_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -1365,6 +1376,203 @@ def repair_officials_desk_merge(
         counts["reused"] += 1
 
 
+def repair_treasury_office_alias_merge(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """归并都大提举在京诸司库务司的三个派生简称实体。
+
+    辞典第110页明确把“提举诸司库务司”等列为正式词头的简称，并明确
+    正式机构在1078年罢。第376页又把1079年始置的两专勾司概括为“先后
+    隶提举诸司库务司、太府寺”，两条纪年不能同时构成1080年的有效父边。
+    保留该关系及冲突标记，但不能让简称实体复活；元丰新制后的太府寺关系
+    则改挂到1082年制度节点。
+    """
+    formal = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=227"
+    ).fetchone()
+    if formal != ("都大提举在京诸司库务司", "机构"):
+        raise ValueError(f"正式库务司实体已漂移：{formal}")
+    for timepoint_id, expected_title in (
+        (458, "都大提举在京诸司库务司"),
+        (462, "都大提举在京诸司库务司"),
+        (463, "都大提举在京诸司库务司"),
+        (3991, "太府寺"),
+        (6852, "诸军专勾司"),
+        (6864, "诸司专勾司"),
+    ):
+        _, title = timepoint_entity(connection, timepoint_id)
+        if title != expected_title:
+            raise ValueError(f"库务司归并端点已漂移：{timepoint_id}={title}")
+
+    alias_quote = TREASURY_OFFICE_ALIAS_QUOTES[0][2]
+    abolition_quote = TREASURY_OFFICE_ALIAS_QUOTES[1][2]
+
+    # 御辇院条使用的是正式词头的省称；迁回1005年正式机构始置节点。
+    row = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=4973"
+    ).fetchone()
+    if row is None or int(row[1]) != 5793 or row[2] != "上下级机构":
+        raise ValueError(f"御辇院早期关系已漂移：{row}")
+    if int(row[0]) == 5794:
+        connection.execute("UPDATE Relationships SET subject_id=458 WHERE id=4973")
+        counts["treasury_alias_relations_reparented"] += 1
+    elif int(row[0]) == 458:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"御辇院早期关系父端已漂移：{row[0]}")
+    append_audit(
+        connection, "Relationships", 4973, "都大提举在京诸司库务司", "110",
+        alias_quote,
+        "提举在京诸司库务司是都大提举在京诸司库务司的省称；御辇院早期关系迁到正式词头。",
+    )
+
+    # 原始“先隶提举司”关系保留，但统一到正式实体；双方确切纪年无重叠，
+    # 因而标为当前无法落实年份的文本冲突，不能在1080截面复活已罢机构。
+    unresolved_relations = (
+        (5836, 6855, 6856, 6852, "诸军专勾司", TREASURY_OFFICE_ALIAS_QUOTES[2][2]),
+        (5845, 6865, 6866, 6864, "诸司专勾司", TREASURY_OFFICE_ALIAS_QUOTES[3][2]),
+    )
+    conflict_note = (
+        "本条称先隶提举诸司库务司，但该称法在第110页明确是都大提举在京诸司库务司的简称；"
+        "正式机构1078年已罢，而本机构1079年始置，现有原文无法给出两者并存年份，故不用于1080截面。"
+    )
+    for relation_id, old_parent, old_child, new_child, child_title, relation_quote in unresolved_relations:
+        row = connection.execute(
+            "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=?",
+            (relation_id,),
+        ).fetchone()
+        if row is None or row[2] != "上下级机构":
+            raise ValueError(f"专勾司早期关系已漂移：{relation_id}={row}")
+        if (int(row[0]), int(row[1])) == (old_parent, old_child):
+            connection.execute(
+                "UPDATE Relationships SET subject_id=462,object_id=? WHERE id=?",
+                (new_child, relation_id),
+            )
+            counts["treasury_alias_relations_reparented"] += 1
+        elif (int(row[0]), int(row[1])) == (462, new_child):
+            counts["reused"] += 1
+        else:
+            raise ValueError(f"专勾司早期关系端点已漂移：{relation_id}={row}")
+        citation = f"《宋代官制辞典》第376页“{child_title}”条"
+        updated = connection.execute(
+            """
+            UPDATE Citations SET citation=?,conflict_flag=1,note=?
+            WHERE target_table='Relationships' AND target_id=? AND quotation=?
+            """,
+            (citation, conflict_note, relation_id, relation_quote),
+        ).rowcount
+        if not updated:
+            raise ValueError(f"专勾司早期关系缺少原始引文：{relation_id}")
+        append_audit(
+            connection, "Relationships", relation_id, child_title, "376",
+            relation_quote, conflict_note,
+        )
+        append_audit(
+            connection, "Relationships", relation_id, "都大提举在京诸司库务司", "110",
+            alias_quote, "原书明确提举诸司库务司是正式词头的简称，关系父端统一到正式实体。",
+        )
+        append_audit(
+            connection, "Relationships", relation_id, "都大提举在京诸司库务司", "110",
+            abolition_quote, "正式机构1078年已罢，早于专勾司1079年始置；该关系不得复活父实体。",
+        )
+
+    # 两个补丁关系曾强制用1079年子端点让简称父实体复活，删除并禁止层级
+    # 修复脚本再建；原始关系已在上面以正式实体和冲突证据保留。
+    for relation_id in (6181, 6182):
+        if connection.execute(
+            "SELECT 1 FROM Relationships WHERE id=?", (relation_id,)
+        ).fetchone():
+            delete_target_audit(connection, "Relationships", relation_id)
+            connection.execute("DELETE FROM Relationships WHERE id=?", (relation_id,))
+            counts["treasury_alias_relations_deleted"] += 1
+        else:
+            counts["reused"] += 1
+
+    # “后隶太府寺”落实到元丰新制节点，避免两个宽泛节点的先后次序无法判定。
+    later_relations = (
+        (5837, 6820, 6856, 6852, "诸军专勾司", TREASURY_OFFICE_ALIAS_QUOTES[2][2]),
+        (5846, 6666, 6866, 6864, "诸司专勾司", TREASURY_OFFICE_ALIAS_QUOTES[3][2]),
+    )
+    for relation_id, old_parent, old_child, new_child, child_title, relation_quote in later_relations:
+        row = connection.execute(
+            "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=?",
+            (relation_id,),
+        ).fetchone()
+        if row is None or row[2] != "上下级机构":
+            raise ValueError(f"太府寺专勾司关系已漂移：{relation_id}={row}")
+        if (int(row[0]), int(row[1])) == (old_parent, old_child):
+            connection.execute(
+                "UPDATE Relationships SET subject_id=3991,object_id=? WHERE id=?",
+                (new_child, relation_id),
+            )
+            counts["treasury_alias_relations_reparented"] += 1
+        elif (int(row[0]), int(row[1])) == (3991, new_child):
+            counts["reused"] += 1
+        else:
+            raise ValueError(f"太府寺专勾司关系端点已漂移：{relation_id}={row}")
+        decision = "原文顺序为先隶提举司、后隶太府寺；后段关系落实到元丰新制太府寺节点。"
+        citation = f"《宋代官制辞典》第376页“{child_title}”条"
+        updated = connection.execute(
+            """
+            UPDATE Citations SET citation=?,note=?
+            WHERE target_table='Relationships' AND target_id=? AND quotation=?
+            """,
+            (citation, decision, relation_id, relation_quote),
+        ).rowcount
+        if not updated:
+            raise ValueError(f"太府寺专勾司关系缺少原始引文：{relation_id}")
+        append_audit(
+            connection, "Relationships", relation_id, child_title, "376",
+            relation_quote, decision,
+        )
+
+    # 删除三个仅由简称或倒装称法派生的实体；所有有效关系已迁到正式词头。
+    aliases = (
+        (2890, "提举在京诸司库务司", (5794, 7305)),
+        (2961, "都大提举在京诸司库务所", (5916, 7306)),
+        (3434, "提举诸司库务司", (6855, 6865)),
+    )
+    for entity_id, title, timepoint_ids in aliases:
+        entity = connection.execute(
+            "SELECT title,type FROM Entities WHERE id=?", (entity_id,)
+        ).fetchone()
+        if entity is None:
+            if any(connection.execute(
+                "SELECT 1 FROM Timepoints WHERE id=?", (timepoint_id,)
+            ).fetchone() for timepoint_id in timepoint_ids):
+                raise ValueError(f"简称实体{title}已删但仍有时间点")
+            counts["reused"] += 1
+            continue
+        if entity != (title, "机构"):
+            raise ValueError(f"库务司简称实体已漂移：{entity_id}={entity}")
+        placeholders = ",".join("?" for _ in timepoint_ids)
+        remaining = connection.execute(
+            f"""
+            SELECT COUNT(*) FROM Relationships
+            WHERE subject_id IN ({placeholders}) OR object_id IN ({placeholders})
+            """,
+            (*timepoint_ids, *timepoint_ids),
+        ).fetchone()[0]
+        if remaining:
+            raise ValueError(f"简称实体{title}仍有{remaining}条未迁移关系")
+        # 这些时间点组成别名实体自己的 prev/succ 链；先在同一事务中断开
+        # 自引用，再逐点删除，保持外键检查始终开启。
+        connection.execute(
+            "UPDATE Timepoints SET prev_id=NULL,succ_id=NULL WHERE entity_id=?",
+            (entity_id,),
+        )
+        for timepoint_id in timepoint_ids:
+            delete_target_audit(connection, "Timepoints", timepoint_id)
+            connection.execute(
+                "DELETE FROM NormalizedTimes WHERE timepoint_id=?", (timepoint_id,)
+            )
+            connection.execute("DELETE FROM Timepoints WHERE id=?", (timepoint_id,))
+            counts["treasury_alias_timepoints_deleted"] += 1
+        delete_target_audit(connection, "Entities", entity_id)
+        connection.execute("DELETE FROM Entities WHERE id=?", (entity_id,))
+        counts["treasury_alias_entities_deleted"] += 1
+
+
 def repair_medical_nine_hierarchy(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
     renamed_parent = timepoint_entity(connection, 4725)
     restored_parent = timepoint_entity(connection, 4302)
@@ -1551,6 +1759,10 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "officials_desk_relations_deleted": 0,
         "officials_desk_timepoints_deleted": 0,
         "officials_desk_entities_deleted": 0,
+        "treasury_alias_relations_reparented": 0,
+        "treasury_alias_relations_deleted": 0,
+        "treasury_alias_timepoints_deleted": 0,
+        "treasury_alias_entities_deleted": 0,
         "medical_nine_relations_reparented": 0,
         "medical_nine_relations_inserted": 0,
         "medical_nine_evolutions_inserted": 0,
@@ -1675,6 +1887,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_jianlong_office_merge(connection, counts)
         repair_monk_registry_merge(connection, counts)
         repair_officials_desk_merge(connection, counts)
+        repair_treasury_office_alias_merge(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
         remove_partial_duty_transfer_evolution(connection, counts)
         connection.commit()

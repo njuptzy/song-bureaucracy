@@ -311,10 +311,10 @@ def entry447():
         history, "御前应奉机构", "建立御辇院宋前期节点。", "职源与沿革",
     )
     cite(w, "Timepoints", early, i, duty, "补充御辇院职掌。", "职掌")
-    supervisor_eid, supervisor = exact_state(
-        w, i, "提举在京诸司库务司", "机构", "宋前期",
-        "御辇院初隶机构之一", main, "京师库务提举机构",
-        "据御辇院初隶关系建立提举在京诸司库务司节点。",
+    # 原文所称“提举在京诸司库务司”是正式词头
+    # “都大提举在京诸司库务司”的省称，不另建简称实体。
+    supervisor = tp(
+        w, "都大提举在京诸司库务司", "机构", "北宋景德二年十月十五日"
     )
     relation(w, i, supervisor, early, "上下级机构", main,
              "御辇院初隶提举在京诸司库务司。")
@@ -362,7 +362,7 @@ def entry447():
         roster, "御前应奉机构", "建立绍兴十二年定额节点。", "编制",
     )
     alias_note(w, i, direct, aliases, "简称与别名")
-    touched.update((eid, middle_eid, supervisor_eid))
+    touched.update((eid, middle_eid))
     for title, event in (
         ("供御营", "御辇院所辖供御辇官营"),
         ("次供御营", "御辇院所辖次供御辇官营"),

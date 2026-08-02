@@ -176,11 +176,10 @@ def entry482():
     )
     relation(w, i, tp(w, "鸿胪寺", "机构", "北宋元丰新制"), yuanfeng,
              "上下级机构", main, "都亭驿先隶鸿胪寺。")
-    treasury_eid, treasury = exact_state(
-        w, i, "都大提举在京诸司库务所", "机构",
-        "北宋（隶都大提举在京诸司库务所年月未载）",
-        "曾统领都亭驿", main, "京师库务统领机构",
-        "据都亭驿隶属建立都大提举在京诸司库务所节点。",
+    # “都大提举在京诸司库务所”是正文对正式机构的异称；第110页正式
+    # 词头明确熙宁六年都亭驿归隶，复用该日正式节点，不另建简称实体。
+    treasury = tp(
+        w, "都大提举在京诸司库务司", "机构", "北宋熙宁六年正月五日"
     )
     _, treasury_stage = exact_state(
         w, i, "都亭驿", "机构", "北宋（隶都大提举在京诸司库务所年月未载）",
@@ -202,7 +201,7 @@ def entry482():
     cite(w, "Timepoints", south, i, duty, "补充南宋接待金使职能。", "职能")
     relation(w, i, ritual, south, "上下级机构", main, "都亭驿后隶礼部。")
     alias_note(w, i, south, aliases, "别称")
-    touched.update((eid, old_eid, treasury_eid, ritual_eid))
+    touched.update((eid, old_eid, ritual_eid))
     for title, officer, quota in (
         ("监都亭驿", "监官", 1), ("都亭驿专知官", "专知官", 1),
         ("都亭驿副知", "副知", 1), ("都亭驿手分", "手分", 1),

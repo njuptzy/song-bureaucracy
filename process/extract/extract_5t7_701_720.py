@@ -654,13 +654,36 @@ def entry719():
         )
         relation(w, i, source, combined, "前后演变", origin,
                  f"元丰二年{title}合并为诸军专勾司。", "职源与沿革")
-    for parent in ("提举诸司库务司", "太府寺"):
-        parent_child(
-            w, touched, i, parent, "诸军专勾司", "北宋（先后隶属）",
-            main, f"诸军专勾司先后隶{parent}。",
-            parent_event="先后统辖诸军专勾司",
-            child_event="先后隶提举诸司库务司、太府寺",
-        )
+    # “提举诸司库务司”是正式词头“都大提举在京诸司库务司”的简称，
+    # 不另建别名实体。正式机构1078年已罢，而诸军专勾司1079年始置，
+    # 所以原书“先隶提举司”的概括关系保留冲突标记，但不能复活父机构。
+    old_parent = node(
+        w, touched, i, "都大提举在京诸司库务司", "机构",
+        "北宋熙宁六年正月五日", "统辖在京诸司库务",
+        main, "在京库务管理机构", "复用正式词头的罢置前节点。",
+    )
+    conflict_note = (
+        "都大提举在京诸司库务司1078年已罢，早于诸军专勾司1079年始置；"
+        "原书未给出可落实到具体年份的重叠期。"
+    )
+    old_relation = w.relationship(
+        old_parent, combined, "上下级机构",
+        "以正式词头保存原书的先隶关系，但不据此延长已罢机构。", main,
+    )
+    cite(
+        w, "Relationships", old_relation, i, main,
+        "保存原书先隶关系及与确切纪年的冲突。",
+        note=conflict_note, conflict_flag=1,
+    )
+    later_parent = node(
+        w, touched, i, "太府寺", "机构", "北宋元丰新制",
+        "元丰新制后统辖诸军专勾司", main, "中央财赋机构",
+        "建立或复用太府寺元丰新制节点。",
+    )
+    relation(
+        w, i, later_parent, combined, "上下级机构", main,
+        "原书顺序为后隶太府寺；落实到元丰新制节点。",
+    )
     cite(w, "Timepoints", combined, i, duty,
          "补证诸军专勾司审核粮料券历职掌。", "职掌")
     office_staff(
