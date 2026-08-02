@@ -2873,6 +2873,26 @@ def main():
         print("  [目录页码] '奉宸库'：核原书将目录漏识的 p36 "
               "恢复为正文页 p368")
 
+        joint_supervisor = next(
+            e for e in all_entries if e["name"] == "监行在太平惠民和剂局"
+        )
+        prepared_medicine = next(
+            e for e in all_entries if e["name"] == "太医局熟药所"
+        )
+        assert prepared_medicine.get("_placeholder") is True
+        medicine_marker = "\n太医局熟药所 监当局名。"
+        assert joint_supervisor["text"].endswith(medicine_marker)
+        joint_supervisor["text"] = joint_supervisor["text"][:-len(medicine_marker)]
+        for key in ("职源与沿革", "职掌", "编制", "简称与别名"):
+            assert key in joint_supervisor
+            prepared_medicine[key] = joint_supervisor.pop(key)
+        prepared_medicine["text"] = "监当局名。"
+        prepared_medicine.pop("_placeholder", None)
+        prepared_medicine_meta = all_meta[all_entries.index(prepared_medicine)]
+        prepared_medicine_meta["status"] = "ok"
+        print("  [跨页断条] '监行在太平惠民和剂局/太医局熟药所'(p373-374)："
+              "核原书将页末新词头及四组字段移回太医局熟药所，并取消空占位")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
