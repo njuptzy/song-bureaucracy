@@ -300,6 +300,12 @@ TRANSLATION_COURT_QUOTES = (
 )
 
 
+JIANLONG_OFFICE_QUOTES = (
+    ("提点建隆观所", "357", "官司名。隶鸿胪寺。"),
+    ("鸿胪寺", "348", "资圣院及建隆观提点所，在京寺务司及提点所"),
+)
+
+
 OFFICIALS_DESK_QUOTES = (
     ("百官案", "135", "隶三司度支部。掌京朝官、幕职官俸钱及衣赐，祠祭所用礼物，及诸州驿站所需供给。"),
     ("三司度支诸案", "134", "大中祥符七年后定为八案"),
@@ -361,6 +367,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in TRANSLATION_COURT_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in JIANLONG_OFFICE_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -790,6 +805,67 @@ def repair_translation_court_hierarchy(
     )
 
 
+def repair_jianlong_office_merge(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    formal = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=3076"
+    ).fetchone()
+    if formal != ("提点建隆观所", "机构"):
+        raise ValueError(f"正式提点建隆观所实体已漂移：{formal}")
+    _, formal_title = timepoint_entity(connection, 6146)
+    if formal_title != "提点建隆观所":
+        raise ValueError(f"提点建隆观所正式时间点已漂移：6146={formal_title}")
+
+    # 鸿胪寺条中的“建隆观提点所”是倒装称法；第357页正式词头为
+    # “提点建隆观所”。元丰关系必须落到同一个正式实体，不能再造第二所。
+    relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5053"
+    ).fetchone()
+    if relation is None or int(relation[0]) != 3987 or relation[2] != "上下级机构":
+        raise ValueError(f"鸿胪寺至提点建隆观所关系已漂移：{relation}")
+    if int(relation[1]) == 5883:
+        connection.execute("UPDATE Relationships SET object_id=6146 WHERE id=5053")
+        counts["jianlong_relations_reparented"] += 1
+    elif int(relation[1]) == 6146:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"鸿胪寺至提点建隆观所子端已漂移：{relation[1]}")
+    append_audit(
+        connection, "Relationships", 5053, "提点建隆观所", "357",
+        JIANLONG_OFFICE_QUOTES[0][2],
+        "以第357页正式词头提点建隆观所承载鸿胪寺条所称建隆观提点所；两者是同一官司。",
+    )
+    append_audit(
+        connection, "Entities", 3076, "提点建隆观所", "357",
+        JIANLONG_OFFICE_QUOTES[0][2],
+        "保留正式词头提点建隆观所作为唯一实体，不另建倒装称法建隆观提点所。",
+    )
+
+    duplicate = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=2946"
+    ).fetchone()
+    if duplicate is not None:
+        if duplicate != ("建隆观提点所", "机构"):
+            raise ValueError(f"倒装提点所实体已漂移：{duplicate}")
+        remaining = connection.execute(
+            "SELECT COUNT(*) FROM Relationships WHERE subject_id=5883 OR object_id=5883"
+        ).fetchone()[0]
+        if remaining:
+            raise ValueError(f"建隆观提点所仍有{remaining}条未迁移关系")
+        delete_target_audit(connection, "Timepoints", 5883)
+        connection.execute("DELETE FROM NormalizedTimes WHERE timepoint_id=5883")
+        connection.execute("DELETE FROM Timepoints WHERE id=5883")
+        delete_target_audit(connection, "Entities", 2946)
+        connection.execute("DELETE FROM Entities WHERE id=2946")
+        counts["jianlong_timepoints_deleted"] += 1
+        counts["jianlong_entities_deleted"] += 1
+    else:
+        if connection.execute("SELECT 1 FROM Timepoints WHERE id=5883").fetchone():
+            raise ValueError("建隆观提点所实体已删但时间点5883仍存在")
+        counts["reused"] += 1
+
+
 def repair_officials_desk_merge(
     connection: sqlite3.Connection, counts: dict[str, int]
 ) -> None:
@@ -983,6 +1059,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
         "translation_court_relations_inserted": 0,
+        "jianlong_relations_reparented": 0,
+        "jianlong_timepoints_deleted": 0,
+        "jianlong_entities_deleted": 0,
         "officials_desk_relations_reparented": 0,
         "officials_desk_relations_deleted": 0,
         "officials_desk_timepoints_deleted": 0,
@@ -1104,6 +1183,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
+        repair_jianlong_office_merge(connection, counts)
         repair_officials_desk_merge(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
         connection.commit()
