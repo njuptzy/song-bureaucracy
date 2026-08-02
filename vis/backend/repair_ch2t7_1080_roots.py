@@ -308,6 +308,12 @@ DUTING_POSTHOUSE_QUOTES = (
 )
 
 
+TRIPARTITE_VOUCHER_QUOTES = (
+    ("三部凭由司", "138", "淳化二年三部凭由司合并为三司都凭由司"),
+    ("三司都凭由司", "138", "淳化二年(991)合三司三部凭由司为三司都凭由司"),
+)
+
+
 TRANSLATION_COURT_QUOTES = (
     ("传法院", "350", "官司名。隶鸿胪寺。"),
     ("传法院", "350", "北宋太平兴国七年六月于太平兴国寺建译经院。八年，赐院额名“传法”"),
@@ -397,6 +403,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in DUTING_POSTHOUSE_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in TRIPARTITE_VOUCHER_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -953,6 +968,97 @@ def repair_duting_posthouse_hierarchy(
     )
 
 
+def repair_tripartite_voucher_offices(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 总称“三部凭由司”已有淳化二年合并终点，但三个具体实例漏掉了同一
+    # 终点，因而被截面算法无限延续。按原文为三个实例补齐终点和后继边。
+    target_id, target_title = timepoint_entity(connection, 814)
+    if target_title != "三司都凭由司":
+        raise ValueError(f"三司都凭由司目标节点已漂移：814={target_title}")
+    terminal_time = "北宋淳化二年"
+    terminal_event = "废罢；三部凭由司合并为三司都凭由司"
+    quotation = TRIPARTITE_VOUCHER_QUOTES[0][2]
+    for entity_title, start_id in (
+        ("盐铁凭由司", 1171),
+        ("度支凭由司", 1172),
+        ("户部凭由司", 1173),
+    ):
+        entity_id, actual_title = timepoint_entity(connection, start_id)
+        if actual_title != entity_title:
+            raise ValueError(f"凭由司实例节点已漂移：{start_id}={actual_title}")
+        existing = connection.execute(
+            "SELECT id FROM Timepoints WHERE entity_id=? AND time=? AND event=? ORDER BY id LIMIT 1",
+            (entity_id, terminal_time, terminal_event),
+        ).fetchone()
+        if existing is None:
+            previous = connection.execute(
+                "SELECT succ_id,attr_category,attr_officer_type,attr_grade FROM Timepoints WHERE id=?",
+                (start_id,),
+            ).fetchone()
+            if previous[0] is not None:
+                raise ValueError(f"凭由司实例前序{start_id}已有后继{previous[0]}")
+            cursor = connection.execute(
+                """
+                INSERT INTO Timepoints(
+                    entity_id,time,event,prev_id,succ_id,
+                    attr_category,attr_officer_type,attr_grade,quotation
+                ) VALUES (?,?,?,?,NULL,?,?,?,?)
+                """,
+                (entity_id, terminal_time, terminal_event, start_id,
+                 previous[1], previous[2], previous[3], quotation),
+            )
+            terminal_id = int(cursor.lastrowid)
+            connection.execute(
+                "UPDATE Timepoints SET succ_id=? WHERE id=?",
+                (terminal_id, start_id),
+            )
+            counts["voucher_instance_terminals_inserted"] += 1
+        else:
+            terminal_id = int(existing[0])
+            counts["reused"] += 1
+            connection.execute(
+                "UPDATE Timepoints SET succ_id=? WHERE id=? AND succ_id IS NULL",
+                (terminal_id, start_id),
+            )
+        append_audit(
+            connection, "Timepoints", terminal_id, "三部凭由司", "138", quotation,
+            f"原文明载三部凭由司于淳化二年合并；{entity_title}作为三部实例同步终止。",
+        )
+
+        relation = connection.execute(
+            """
+            SELECT id FROM Relationships
+            WHERE subject_id=? AND object_id=814 AND relation_type='前后演变'
+            ORDER BY id LIMIT 1
+            """,
+            (terminal_id,),
+        ).fetchone()
+        if relation is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Relationships(
+                    subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                ) VALUES (?,814,'前后演变',NULL,NULL,?)
+                """,
+                (terminal_id, quotation),
+            )
+            relation_id = int(cursor.lastrowid)
+            counts["voucher_instance_evolutions_inserted"] += 1
+        else:
+            relation_id = int(relation[0])
+            counts["reused"] += 1
+        append_audit(
+            connection, "Relationships", relation_id, "三部凭由司", "138", quotation,
+            f"原文明载三部凭由司合并为三司都凭由司；补建{entity_title}至合并后机构的演变边。",
+        )
+        append_audit(
+            connection, "Relationships", relation_id, "三司都凭由司", "138",
+            TRIPARTITE_VOUCHER_QUOTES[1][2],
+            "三司都凭由司条复核淳化二年三部合并及后继正式词头。",
+        )
+
+
 def repair_translation_court_hierarchy(
     connection: sqlite3.Connection, counts: dict[str, int]
 ) -> None:
@@ -1430,6 +1536,8 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "western_posthouse_relations_inserted": 0,
         "duting_posthouse_timepoints_updated": 0,
         "duting_posthouse_relations_reparented": 0,
+        "voucher_instance_terminals_inserted": 0,
+        "voucher_instance_evolutions_inserted": 0,
         "translation_court_relations_inserted": 0,
         "jianlong_relations_reparented": 0,
         "jianlong_timepoints_deleted": 0,
@@ -1562,6 +1670,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_tongwenguan_hierarchy(connection, counts)
         repair_western_posthouse_hierarchy(connection, counts)
         repair_duting_posthouse_hierarchy(connection, counts)
+        repair_tripartite_voucher_offices(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
         repair_jianlong_office_merge(connection, counts)
         repair_monk_registry_merge(connection, counts)
