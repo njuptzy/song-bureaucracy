@@ -69,18 +69,18 @@ class NormalizeTimesTest(unittest.TestCase):
     def test_known_invalid(self):
         self.assertEqual(normalize_time("南宋宣庆二年").time_type, "unresolved")
 
-    def test_reign_and_composite_periods_anchor_to_start_year(self):
+    def test_reign_and_composite_periods_keep_full_bounds(self):
         expected = {
-            "北宋仁宗朝": 1022,
-            "北宋太祖、太宗朝": 960,
-            "北宋神宗朝": 1067,
-            "北宋徽宗朝": 1100,
-            "北宋熙丰间": 1068,
+            "北宋仁宗朝": (1022, 1063),
+            "北宋太祖、太宗朝": (960, 997),
+            "北宋神宗朝": (1067, 1085),
+            "北宋徽宗朝": (1100, 1125),
+            "北宋熙丰间": (1068, 1085),
         }
-        for raw, year in expected.items():
+        for raw, bounds in expected.items():
             with self.subTest(raw=raw):
                 item = normalize_time(raw)
-                self.assertEqual((item.year_start, item.year_end), (year, year))
+                self.assertEqual((item.year_start, item.year_end), bounds)
                 self.assertEqual(item.time_type, "bounded")
 
     def test_relative_periods_anchor_to_boundary_year(self):
@@ -105,8 +105,16 @@ class NormalizeTimesTest(unittest.TestCase):
 
     def test_era_period_is_bounded_not_continuous_range(self):
         item = normalize_time("南宋绍兴年间")
-        self.assertEqual((item.year_start, item.year_end), (1131, 1131))
+        self.assertEqual((item.year_start, item.year_end), (1131, 1162))
         self.assertEqual(item.time_type, "bounded")
+
+    def test_era_ending_and_reign_period_keep_both_boundaries(self):
+        item = normalize_time("北宋元丰末")
+        self.assertEqual((item.year_start, item.year_end), (1083, 1085))
+        self.assertEqual(item.time_type, "bounded")
+        reign = normalize_time("北宋神宗朝")
+        self.assertEqual((reign.year_start, reign.year_end), (1067, 1085))
+        self.assertEqual(reign.time_type, "bounded")
 
     def test_accession_year_is_exact(self):
         item = normalize_time("北宋英宗即位")

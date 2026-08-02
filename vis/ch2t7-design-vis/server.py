@@ -69,7 +69,7 @@ def _institution_category(attr_categories: list[str], source_catalogs: list[str]
         return "路级机构", "时间点类别"
     if any(marker in attrs for marker in ("军事", "军队", "禁军", "军号", "统兵")):
         return "军队机构", "时间点类别"
-    if any(marker in attrs for marker in ("内廷", "宫廷")):
+    if any(marker in attrs for marker in ("内廷", "宫廷", "宫中", "御前", "内侍", "内诸司")):
         return "内廷机构", "时间点类别"
 
     catalogs = " ".join(source_catalogs)
@@ -168,6 +168,12 @@ def build_payload() -> dict:
                 {"start": start, "end": end, "time_type": item.get("time_type", "")}
             )
         return periods
+
+    # 统称主体仍保留在数据中供检索和详情使用；前端仅在它没有明确
+    # 上下级机构边时，避免把它作为独立机构挂到虚拟分类根下。
+    collective_entity_ids = {
+        row["subj"] for row in entity_edges("统称与实例")
+    }
 
     # 上下级机构：映射回实体 id 对并去重（subject=上级 → object=下级）
     hierarchy_by_key = {}
@@ -302,12 +308,14 @@ def build_payload() -> dict:
         "timepoints": timepoints,
         "hierarchyEdges": hierarchy_edges,
         "staffEdges": staff_edges,
+        "collectiveEntityIds": sorted(collective_entity_ids),
         "citations": citations,
         "dictionary": dictionary_payload,
         "meta": {
             "entities": len(entities),
             "hierarchyEdges": len(hierarchy_edges),
             "staffEdges": len(staff_edges),
+            "collectiveEntities": len(collective_entity_ids),
             "dictionaryMatched": len(dictionary_payload),
             "categoryCounts": category_counts,
             "source": ENTRIES_DB.name,

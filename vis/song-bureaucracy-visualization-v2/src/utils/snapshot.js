@@ -1,5 +1,8 @@
 const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
-import { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
+import {
+  classifyEntityLifecycle,
+  classifyExistenceEffect,
+} from "../../../shared/entity_lifecycle.js";
 
 function effectiveYear(event) {
   if (!SNAPSHOT_TIME_TYPES.has(event?.timeType) || event?.yearStart == null) return null;
@@ -9,6 +12,31 @@ function effectiveYear(event) {
 
 function isDated(event) {
   return effectiveYear(event) != null;
+}
+
+function temporaryEvidenceIntervals(entity, events) {
+  if (!events.some((event) => String(event.category || "").includes("临时"))) return null;
+  const dated = events.filter(isDated).sort((a, b) => effectiveYear(a) - effectiveYear(b) || a.id - b.id);
+  const intervals = [];
+  let active = null;
+  for (const event of dated) {
+    const start = event.yearStart;
+    const end = event.yearEnd ?? start;
+    const effect = classifyExistenceEffect(event, entity);
+    if (effect === "activate") {
+      if (active) intervals.push(active);
+      active = { start, end };
+    } else if (effect === "deactivate") {
+      if (active) intervals.push({ ...active, end: Math.min(active.end, start - 1) });
+      active = null;
+    } else if (effect !== "ignore" && active) {
+      active.end = Math.max(active.end, end);
+    } else if (effect !== "ignore") {
+      intervals.push({ start, end });
+    }
+  }
+  if (active) intervals.push(active);
+  return intervals;
 }
 
 function chainDepth(event, eventById) {
@@ -67,6 +95,29 @@ function relationStateKey(relation) {
   return `${relation.type}:${relation.subjectEntityId}:${relation.objectEntityId}`;
 }
 
+function hierarchyParentEventIds(dataset, year, eventById) {
+  const result = new Set();
+  for (const relation of dataset.relations) {
+    if (relation.type !== "上下级机构") continue;
+    const relationYear = relationEffectiveYear(relation, eventById);
+    if (relationYear != null && relationYear <= year) result.add(relation.subjectId);
+  }
+  return result;
+}
+
+function subdivisionKeepsParent(event, entity, parentEventIds, eventById) {
+  const lifecycle = classifyEntityLifecycle(event.event, entity);
+  const deactivations = lifecycle.transitions.filter(({ effect }) => effect === "deactivate");
+  if (deactivations.length !== 1
+    || !/^当前实体(?:复分为|分为)其他实体$/.test(deactivations[0].reason)) return false;
+  for (const parentId of parentEventIds) {
+    const parentState = eventById.get(parentId);
+    if (!parentState || parentState.entityId !== event.entityId) continue;
+    if (parentId === event.id || compareKnownChainOrder(event, parentState, eventById) < 0) return true;
+  }
+  return false;
+}
+
 function relationPresenceEvidence(dataset, year, eventById) {
   const byEntity = new Map();
   const add = (entityId, evidenceYear, eventId) => {
@@ -98,6 +149,7 @@ export function buildYearSnapshot(dataset, year) {
   }
 
   const presenceEvidenceByEntity = relationPresenceEvidence(dataset, year, eventById);
+  const parentEventIds = hierarchyParentEventIds(dataset, year, eventById);
   const currentEventByEntity = new Map();
   for (const [entityId, entity] of entityById) {
     const eligible = (eventsByEntity.get(entityId) || [])
@@ -115,22 +167,32 @@ export function buildYearSnapshot(dataset, year) {
     ));
     let exists = null;
     let currentEvent = null;
+    let explicitlyDeactivated = false;
     for (const evidence of evidenceTimeline) {
       if (evidence.kind === "relation") {
-        exists = true;
+        if (!explicitlyDeactivated) exists = true;
         if (!currentEvent && evidence.event) currentEvent = evidence.event;
         continue;
       }
       const { event } = evidence;
       const effect = classifyExistenceEffect(event, entity);
-      if (effect === "activate") exists = true;
-      else if (effect === "deactivate") exists = false;
+      if (effect === "activate") {
+        exists = true;
+        explicitlyDeactivated = false;
+      }
+      else if (effect === "deactivate") {
+        exists = subdivisionKeepsParent(event, entity, parentEventIds, eventById);
+        explicitlyDeactivated = !exists;
+      }
       else if (effect === "ignore") {
         currentEvent = event;
         continue;
       } else if (exists == null && event.timeType !== "bounded") exists = true;
       currentEvent = event;
     }
+    const temporaryIntervals = temporaryEvidenceIntervals(entity, eventsByEntity.get(entityId) || []);
+    if (exists && temporaryIntervals
+      && !temporaryIntervals.some((interval) => interval.start <= year && year <= interval.end)) exists = false;
     if (exists) currentEventByEntity.set(entityId, currentEvent);
   }
 

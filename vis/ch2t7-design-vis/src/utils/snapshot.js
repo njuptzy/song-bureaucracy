@@ -18,6 +18,33 @@ function isDated(timepoint) {
   return effectiveYear(timepoint) != null;
 }
 
+function temporaryEvidenceIntervals(entity, timepoints) {
+  if (!timepoints.some((timepoint) => String(timepoint.attr_category || "").includes("临时"))) {
+    return null;
+  }
+  const dated = timepoints.filter(isDated).sort((a, b) => effectiveYear(a) - effectiveYear(b) || a.id - b.id);
+  const intervals = [];
+  let active = null;
+  for (const timepoint of dated) {
+    const start = timepoint.year_start;
+    const end = timepoint.year_end ?? start;
+    const effect = classifyExistenceEffect(timepoint, entity);
+    if (effect === "activate") {
+      if (active) intervals.push(active);
+      active = { start, end };
+    } else if (effect === "deactivate") {
+      if (active) intervals.push({ ...active, end: Math.min(active.end, start - 1) });
+      active = null;
+    } else if (effect !== "ignore" && active) {
+      active.end = Math.max(active.end, end);
+    } else if (effect !== "ignore") {
+      intervals.push({ start, end });
+    }
+  }
+  if (active) intervals.push(active);
+  return intervals;
+}
+
 function chainDepth(timepoint, byId) {
   let depth = 0;
   let current = timepoint;
@@ -114,12 +141,22 @@ function hierarchyParentTimepoints(data, year, timepointById) {
   return result;
 }
 
-function subdivisionKeepsParent(timepoint, entity, parentTimepointIds) {
-  if (!parentTimepointIds.has(timepoint.id)) return false;
+function subdivisionKeepsParent(timepoint, entity, parentTimepointIds, timepointById) {
   const lifecycle = classifyEntityLifecycle(timepoint.event, entity);
   const deactivations = lifecycle.transitions.filter(({ effect }) => effect === "deactivate");
-  return deactivations.length === 1
-    && /^当前实体(?:复分为|分为)其他实体$/.test(deactivations[0].reason);
+  if (deactivations.length !== 1
+    || !/^当前实体(?:复分为|分为)其他实体$/.test(deactivations[0].reason)) return false;
+  // 分设关系可能抽取在同一实体链的稍后节点（如“分三库”后下一节点详列四库）。
+  // 只要同一链上同年或后继节点仍作为上下级关系父端，就证明这是“下设”，
+  // 不是上级实体自身终止。
+  for (const parentId of parentTimepointIds) {
+    const parentState = timepointById.get(parentId);
+    if (!parentState || parentState.entity_id !== timepoint.entity_id) continue;
+    if (parentId === timepoint.id || compareKnownChainOrder(timepoint, parentState, timepointById) < 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge) {
@@ -192,19 +229,27 @@ export function buildYearSnapshot(data, year) {
     ));
     let exists = null;
     let currentState = null;
+    let explicitlyDeactivated = false;
     for (const evidence of evidenceTimeline) {
       if (evidence.kind === "relation") {
-        exists = true;
+        // 关系只能补足“尚无明确存废结论”的存在证据。实体已经由自身时间点
+        // 明确罢废后，旧关系或名义隶属不能把它重新复活；必须等实体自身出现
+        // “复置、重建”等激活时间点。
+        if (!explicitlyDeactivated) exists = true;
         if (!currentState && evidence.timepoint) currentState = evidence.timepoint;
         continue;
       }
       const { timepoint } = evidence;
       const effect = classifyExistenceEffect(timepoint, entity);
-      if (effect === "activate") exists = true;
+      if (effect === "activate") {
+        exists = true;
+        explicitlyDeactivated = false;
+      }
       else if (effect === "deactivate") {
         // “分为四库”既可能表示原机构拆分终止，也可能表示仍存的上级下设四库。
         // 同一时间点若确实是上下级关系的父端，结构化关系证明后者成立。
-        exists = subdivisionKeepsParent(timepoint, entity, hierarchyParentTimepointIds);
+        exists = subdivisionKeepsParent(timepoint, entity, hierarchyParentTimepointIds, timepointById);
+        explicitlyDeactivated = !exists;
       }
       else if (effect === "ignore") {
         currentState = timepoint;
@@ -215,6 +260,9 @@ export function buildYearSnapshot(data, year) {
       else if (exists == null && timepoint.time_type !== "bounded") exists = true;
       currentState = timepoint;
     }
+    const temporaryIntervals = temporaryEvidenceIntervals(entity, timepointsByEntity.get(entityId) || []);
+    if (exists && temporaryIntervals
+      && !temporaryIntervals.some((interval) => interval.start <= year && year <= interval.end)) exists = false;
     if (exists) currentTimepointByEntity.set(entityId, currentState);
   }
   const entityIds = new Set(currentTimepointByEntity.keys());

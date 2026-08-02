@@ -1,7 +1,7 @@
 const CLAUSE_SEPARATOR = /[，；。！？]/g;
 
 const ACTIVATION_VERBS = [
-  "重新设置", "继续存在", "始置", "初置", "新置", "创置", "设置", "设立", "建立", "成立",
+  "正式建置", "正式举职", "重新设置", "继续存在", "始置", "初置", "新置", "创置", "设置", "设立", "建立", "成立",
   "开设", "创设", "复置", "复设", "恢复", "复称", "复旧", "再置", "重置", "仍置", "仍设",
   "犹存", "仍存", "尚存",
 ];
@@ -9,7 +9,8 @@ const NEGATED_ACTIVATION_VERBS = ["不复置", "不再置", "未复置", "不复
 const TERMINATION_VERBS = ["废罢", "罢废", "解散", "撤销", "裁撤", "废止", "终结", "名止", "消亡", "罢", "废"];
 const FAILED_CHANGE_WORDS = ["未果", "未成", "未行", "未施行", "未实行", "收回诏书", "作罢"];
 const IMPLICIT_SOURCE_VERBS = [
-  "复分为", "分为", "并入", "并归", "改为", "改名为", "改名", "改称为", "改称", "改置为",
+  "复分为", "分为", "并入", "并归", "复改为", "复改名为", "复改名", "复改称为", "复改称",
+  "改为", "改名为", "改名", "改称为", "改称", "改置为",
 ];
 
 function splitClauses(text) {
@@ -119,11 +120,12 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
     }
 
     // “由甲改置为乙”“甲合并为乙”只有在结果明确是当前实体时，才证明当前实体产生。
-    if (title && (clause.endsWith(`为${title}`) || clause.endsWith(`成${title}`))) {
-      const index = Math.max(clause.lastIndexOf(`为${title}`), clause.lastIndexOf(`成${title}`));
-      if (/(?:由|改置|改名|改称|更名|合并|合置|重合)/.test(clause.slice(0, index))) {
-        addTransition(transitions, "activate", start + index, "当前实体是改制或合并结果", 2);
-      }
+    const resultMatch = clause.match(
+      /(?:复改称为|复改称|复改名为|复改名|改置为|改名为|改名|改称为|改称|更名为|更名|合并为|合置为|重合为)([^为]+)$/,
+    );
+    if (title && resultMatch?.[1] === title) {
+      const index = clause.length - title.length;
+      addTransition(transitions, "activate", start + index, "当前实体是改制或合并结果", 2);
     }
 
     for (const verb of TERMINATION_VERBS) {
@@ -136,14 +138,16 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
 
     // 当前实体作为省略的并列主语：“与外剥马务合为皮剥所”；或前半句先叙述
     // 当前实体的位置变化，后半句“并与……合并”。这种结构的被合并者就是当前实体。
-    if ((clause.startsWith("与") && /(?:合并|合为)/.test(clause))
+    if ((start === 0 && clause.startsWith("与") && /(?:合并|合为)/.test(clause))
       || /并与[^，；。]*(?:合并|合为)/.test(clause)) {
       const index = Math.max(clause.lastIndexOf("合并"), clause.lastIndexOf("合为"));
       addTransition(transitions, "deactivate", start + index, "当前实体与其他实体合并", 2);
     }
 
-    if (clause.includes("实体官署实废")) {
-      addTransition(transitions, "deactivate", start + clause.indexOf("实废"), "原文明确实体官署实废", 2);
+    for (const phrase of ["实体官署实废", "空存其名", "名存实废", "名具实废"]) {
+      if (clause.includes(phrase)) {
+        addTransition(transitions, "deactivate", start + clause.indexOf(phrase), `原文明确机构仅存空名：${phrase}`, 2);
+      }
     }
 
     // 这些动词的宾语是去向而不是被处置对象；仅在分句以动词起首、明确省略当前实体

@@ -496,6 +496,16 @@ def make_time_anchor(year: int, note: str, *, pre_song: bool = False) -> Normali
     )
 
 
+def make_bounded_range(start: int, end: int, note: str) -> Normalized:
+    """Return an uncertain period with both known historical boundaries."""
+    return Normalized(
+        start, end, None, 0, None, None, 0, None,
+        None, None, None, None,
+        make_sort_order(start, None, 0, None),
+        "pre_song" if end < 960 else "bounded", note,
+    )
+
+
 def make_undated(note: str) -> Normalized:
     """Return a Song-period statement that has no usable year boundary."""
     return Normalized(
@@ -566,7 +576,10 @@ def normalize_time(raw: str) -> Normalized:
 
     named_range = NAMED_TIME_RANGES.get(raw)
     if named_range:
-        start, _end, note = named_range
+        start, end, note = named_range
+        if (re.search(r"(?:朝|间|时期)$", raw)
+                and not re.search(r"(?:后|前|起|以来|以后|以前)$", raw)):
+            return make_bounded_range(start, end, note)
         return make_time_anchor(start, f"{note}；按起始边界锚定")
 
     split = range_split(raw)
@@ -624,6 +637,17 @@ def normalize_time(raw: str) -> Normalized:
         elif "以后" in raw or re.search(rf"{re.escape(era)}后", raw):
             anchor = end
             note = f"{era}以后，按年号末年锚定"
+        elif "初" in raw:
+            return make_bounded_range(start, min(start + 2, end), f"{era}初，约取年号前三年")
+        elif "末" in raw:
+            return make_bounded_range(max(start, end - 2), end, f"{era}末，约取年号后三年")
+        elif "中" in raw:
+            width = end - start + 1
+            middle_start = start + width // 3
+            middle_end = end - width // 3
+            return make_bounded_range(middle_start, middle_end, f"{era}中期，约取年号中段")
+        elif re.search(rf"{re.escape(era)}(?:年间|间|时期|朝)?$", raw):
+            return make_bounded_range(start, end, f"仅识别到年号或年号时期：{era}")
         else:
             anchor = start
             note = f"仅识别到年号或年号时期：{era}；按元年锚定"
