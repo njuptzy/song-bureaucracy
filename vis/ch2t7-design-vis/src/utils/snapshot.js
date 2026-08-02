@@ -1,5 +1,8 @@
 const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
-import { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
+import {
+  classifyEntityLifecycle,
+  classifyExistenceEffect,
+} from "../../../shared/entity_lifecycle.js";
 
 export { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
 
@@ -98,6 +101,27 @@ function relationPresenceEvidence(data, year, timepointById) {
   return byEntity;
 }
 
+function hierarchyParentTimepoints(data, year, timepointById) {
+  const result = new Set();
+  for (const edge of data.hierarchyEdges || []) {
+    for (const state of edge.states || []) {
+      const effectiveYear = relationEffectiveYear(state, timepointById);
+      if (effectiveYear != null && effectiveYear <= year) {
+        result.add(state.subject_timepoint_id);
+      }
+    }
+  }
+  return result;
+}
+
+function subdivisionKeepsParent(timepoint, entity, parentTimepointIds) {
+  if (!parentTimepointIds.has(timepoint.id)) return false;
+  const lifecycle = classifyEntityLifecycle(timepoint.event, entity);
+  const deactivations = lifecycle.transitions.filter(({ effect }) => effect === "deactivate");
+  return deactivations.length === 1
+    && /^当前实体(?:复分为|分为)其他实体$/.test(deactivations[0].reason);
+}
+
 function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge) {
   const candidatesByKey = new Map();
   for (const edge of edges) {
@@ -148,6 +172,7 @@ export function buildYearSnapshot(data, year) {
     normalized.forEach((timepoint) => timepointById.set(timepoint.id, timepoint));
   }
   const presenceEvidenceByEntity = relationPresenceEvidence(data, year, timepointById);
+  const hierarchyParentTimepointIds = hierarchyParentTimepoints(data, year, timepointById);
   for (const [entityId, entity] of entityById) {
     const eligible = (timepointsByEntity.get(entityId) || [])
       .filter((timepoint) => isDated(timepoint) && effectiveYear(timepoint) <= year)
@@ -176,7 +201,11 @@ export function buildYearSnapshot(data, year) {
       const { timepoint } = evidence;
       const effect = classifyExistenceEffect(timepoint, entity);
       if (effect === "activate") exists = true;
-      else if (effect === "deactivate") exists = false;
+      else if (effect === "deactivate") {
+        // “分为四库”既可能表示原机构拆分终止，也可能表示仍存的上级下设四库。
+        // 同一时间点若确实是上下级关系的父端，结构化关系证明后者成立。
+        exists = subdivisionKeepsParent(timepoint, entity, hierarchyParentTimepointIds);
+      }
       else if (effect === "ignore") {
         currentState = timepoint;
         continue;

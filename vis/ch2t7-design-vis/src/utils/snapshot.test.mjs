@@ -283,6 +283,23 @@ test("省略当前主语的合并和复分会终止来源实体", () => {
   );
 });
 
+test("分设下级时同一父端关系证明上级继续存在", () => {
+  const entity = { id: 1, title: "内藏库", type: "机构" };
+  const hierarchyEdges = [{
+    id: 30,
+    parent: 1,
+    child: 2,
+    periods: [],
+    states: [{ id: 30, subject_timepoint_id: 10, object_timepoint_id: 20 }],
+  }];
+  const snapshot = buildYearSnapshot(dataFor(entity, [
+    timepoint(10, 1015, "分为金银、珠玉香药、锦帛、钱四库"),
+  ], hierarchyEdges), 1080);
+  assert.equal(snapshot.entityIds.has(1), true);
+  assert.equal(snapshot.entityIds.has(2), true);
+  assert.equal(snapshot.hierarchyEdges.length, 1);
+});
+
 test("统一改称和避讳改为会终止旧实体", () => {
   const entity = { id: 1, title: "旧机构", type: "机构" };
   assert.equal(classifyExistenceEffect(timepoint(10, 1005, "统一改称监"), entity), "deactivate");
