@@ -397,12 +397,20 @@ def entry511():
         "佛教事务机构合称", "建立唐代左、右街僧录司节点。", "职源",
     )
     _, song = exact_state(
+        w, i, "左、右街僧录司", "机构", "宋代（左、右街僧录司）",
+        "宋代沿置，分左、右二录司，通管佛教教门公事",
+        main, "鸿胪寺属司合称", "建立宋代左、右街僧录司正式承载节点。",
+    )
+    cite(w, "Timepoints", song, i, duty, "补充佛教教门职掌。", "职掌")
+    relation(w, i, tp(w, "鸿胪寺", "机构", "宋前期"), song,
+             "上下级机构", main, "左、右街僧录司在宋代隶鸿胪寺。")
+    _, reform = exact_state(
         w, i, "左、右街僧录司", "机构", "北宋元丰新制",
         "隶鸿胪寺，通管佛教教门公事，掌僧尼帐籍及僧官补授",
         main, "鸿胪寺属司合称", "补足宋代隶属与职掌节点。",
     )
-    cite(w, "Timepoints", song, i, duty, "补充佛教教门职掌。", "职掌")
-    relation(w, i, tp(w, "鸿胪寺", "机构", "北宋元丰新制"), song,
+    cite(w, "Timepoints", reform, i, duty, "补充佛教教门职掌。", "职掌")
+    relation(w, i, tp(w, "鸿胪寺", "机构", "北宋元丰新制"), reform,
              "上下级机构", main, "左、右街僧录司隶鸿胪寺。")
     touched.add(eid)
     for title in ("左街僧录司", "右街僧录司"):
@@ -571,17 +579,18 @@ def entry518():
         "南宋地方仍见设置", history, "地方佛教事务机构",
         "建立南宋沿置节点。", "职源与沿革",
     )
-    bureau_eid, bureau = exact_state(
-        w, i, "僧录院", "机构", "宋代（地方僧正司）",
-        "管辖地方僧正司", roster, "佛教事务机构",
-        "据僧正司归属建立僧录院节点。", "编制",
-    )
+    bureau_eid = w.find_entity("左、右街僧录司", "机构")
+    assert bureau_eid is not None
+    bureau = w.find_timepoint(bureau_eid, "宋代（左、右街僧录司）")
+    assert bureau is not None
+    cite(w, "Timepoints", bureau, i, roster,
+         "僧正司条所称僧录院归并到正式词头左、右街僧录司。", "编制")
     relation(w, i, bureau, song, "上下级机构", roster,
-             "僧正司归僧录院管。", "编制")
+             "僧正司归正式中央僧录机构左、右街僧录司管。", "编制")
     alias_note(w, i, song, aliases, "简称")
     touched.update((eid, successor_eid, bureau_eid))
     for x in touched:
-        rechain(w, x, "整理僧正司、德士司及僧录院管辖时间链。")
+        rechain(w, x, "整理僧正司、德士司及左、右街僧录司管辖时间链。")
     w.commit()
 
 
