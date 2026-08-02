@@ -1196,6 +1196,52 @@ def repair_medical_nine_hierarchy(connection: sqlite3.Connection, counts: dict[s
     )
 
 
+def remove_partial_duty_transfer_evolution(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """删除把部分职事移交误抽成机构演变的关系。
+
+    元丰五年司农寺只是把此前兼领的京外新法职事交给户部右曹，随后仍以
+    司农寺之名掌仓场、园苑、酒曲等事务。二者不是前后相代的同一机构。
+    """
+    relation_id = 5233
+    row = connection.execute(
+        """
+        SELECT se.title, st.event, te.title, ot.event, r.relation_type
+        FROM Relationships r
+        JOIN Timepoints st ON st.id=r.subject_id
+        JOIN Entities se ON se.id=st.entity_id
+        JOIN Timepoints ot ON ot.id=r.object_id
+        JOIN Entities te ON te.id=ot.entity_id
+        WHERE r.id=?
+        """,
+        (relation_id,),
+    ).fetchone()
+    if row is None:
+        counts["reused"] += 1
+        return
+    expected = (
+        "司农寺",
+        "事权大增，兼为财务和新法政务机构，督领各路提举常平司及官属",
+        "户部右曹",
+        "接收司农寺旧有京外新法职事",
+        "前后演变",
+    )
+    if tuple(row) != expected:
+        raise ValueError(f"关系{relation_id}内容已漂移：{tuple(row)!r}")
+
+    connection.execute(
+        "DELETE FROM Citations WHERE target_table='Relationships' AND target_id=?",
+        (relation_id,),
+    )
+    connection.execute(
+        "DELETE FROM BuildRecords WHERE target_table='Relationships' AND target_id=?",
+        (relation_id,),
+    )
+    connection.execute("DELETE FROM Relationships WHERE id=?", (relation_id,))
+    counts["partial_duty_transfer_evolutions_deleted"] += 1
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -1228,6 +1274,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "medical_nine_relations_reparented": 0,
         "medical_nine_relations_inserted": 0,
         "medical_nine_evolutions_inserted": 0,
+        "partial_duty_transfer_evolutions_deleted": 0,
         "reused": 0,
     }
     try:
@@ -1346,6 +1393,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_monk_registry_merge(connection, counts)
         repair_officials_desk_merge(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
+        remove_partial_duty_transfer_evolution(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()
