@@ -368,6 +368,15 @@ PROFILES = {
             {"from": "知杂寮", "to": "知杂窠", "page": "385",
              "reason": "核对第五编 PDF p385，目录把国子监办事机构‘知杂窠’"
                        "误识为‘知杂寮’，正文独立标题明确作‘知杂窠’"},
+            {"from": "大学生", "to": "太学生", "page": "388",
+             "reason": "核对第五编 PDF p388，目录漏识‘太’字下点，"
+                       "正文独立词头及释文均明确作‘太学生’"},
+            {"from": "大学外舍生", "to": "太学外舍生", "page": "388",
+             "reason": "核对第五编 PDF p388，目录漏识‘太’字下点，"
+                       "正文独立词头明确作‘太学外舍生’"},
+            {"from": "大学内舍生", "to": "太学内舍生", "page": "388",
+             "reason": "核对第五编 PDF p388，目录漏识‘太’字下点，"
+                       "正文独立词头明确作‘太学内舍生’"},
         ],
     },
     "11t12": {
@@ -3101,6 +3110,34 @@ def main():
         print("  [字段与条目归位] '国子监博士/国子监正/国子监录/"
               "监国子监书库/国子学/学窠等'(p382-385)：拆回简称、职掌、"
               "编制字段，并将国子学末尾三窠正文恢复到独立正式词条")
+
+        for title, wrong in (
+            ("同管勾太学公事", "《李觀外集》"),
+            ("权管勾太学公事", "《李靓外集》"),
+        ):
+            entry = next(e for e in all_entries if e["name"] == title)
+            assert wrong in entry["text"]
+            entry["text"] = entry["text"].replace(wrong, "《李觏外集》", 1)
+
+        university_registrar = next(e for e in all_entries if e["name"] == "太学录")
+        combined_history = university_registrar["职源与沿革"]
+        assert "。职掌 " in combined_history
+        university_registrar["职源与沿革"], university_registrar["职掌"] = (
+            combined_history.split("。职掌 ", 1)
+        )
+        university_registrar["职源与沿革"] += "。"
+
+        university_lecturer = next(e for e in all_entries if e["name"] == "太学说书")
+        assert "后不复设《李觏外集》" in university_lecturer["text"]
+        university_lecturer["text"] = university_lecturer["text"].replace(
+            "后不复设《李觏外集》", "后不复设（《李觏外集》", 1
+        )
+        for title in ("太学生", "太学外舍生", "太学内舍生"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            assert entry.get("text") and entry.get("_placeholder") is not True
+        print("  [标题字段与字误归位] '同管勾太学公事/权管勾太学公事/"
+              "太学录/太学说书/太学生三舍'(p386-388)：恢复《李觏外集》、"
+              "拆回太学录职掌并按正式词头切开太学生、外舍生、内舍生")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
