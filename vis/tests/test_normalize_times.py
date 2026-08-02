@@ -42,9 +42,22 @@ class NormalizeTimesTest(unittest.TestCase):
 
     def test_undated_and_pre_song(self):
         song = normalize_time("宋代（未载具体年月）")
-        self.assertEqual((song.year_start, song.year_end), (960, 960))
-        self.assertEqual(song.time_type, "bounded")
+        self.assertEqual((song.year_start, song.year_end), (None, None))
+        self.assertEqual(song.time_type, "undated")
         self.assertEqual(normalize_time("魏文帝黄初三年").time_type, "pre_song")
+
+    def test_generic_song_period_does_not_anchor_to_960(self):
+        for raw in (
+            "宋代",
+            "两宋",
+            "宋代（未载具体年月）",
+            "宋代（左右厢店宅务）",
+            "宋代千户以上县",
+        ):
+            with self.subTest(raw=raw):
+                item = normalize_time(raw)
+                self.assertEqual((item.year_start, item.year_end), (None, None))
+                self.assertEqual(item.time_type, "undated")
 
     def test_known_invalid(self):
         self.assertEqual(normalize_time("南宋宣庆二年").time_type, "unresolved")
@@ -54,8 +67,6 @@ class NormalizeTimesTest(unittest.TestCase):
             "北宋": 960,
             "北宋（未载具体年月）": 960,
             "南宋时期": 1127,
-            "宋代（未载具体年月）": 960,
-            "两宋": 960,
         }
         for raw, year in expected.items():
             with self.subTest(raw=raw):

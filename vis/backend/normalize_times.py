@@ -21,7 +21,7 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.3.0"
+NORMALIZATION_VERSION = "1.4.0"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
@@ -271,8 +271,8 @@ PRE_SONG_TIME_ANCHORS: tuple[tuple[re.Pattern[str], int, str], ...] = (
     (re.compile(r"殷商"), -1600, "商代约始于公元前1600年"),
 )
 
-# 可审计的宽时间表达。区间仍用于报告原文能约束出的范围；normalize_time
-# 会按新规则选取起始边界作为数值锚点，而不是等到区间末年才让关系生效。
+# 可审计的宽时间表达。带明确历史边界的时期可选取起始边界作为数值锚点；
+# 单说“宋代/两宋”的表达会在 normalize_time 中先归为 undated。
 NAMED_TIME_RANGES: dict[str, tuple[int, int, str]] = {
     # 朝代范围
     "两宋": (960, 1279, "两宋朝代范围"),
@@ -496,6 +496,24 @@ def make_time_anchor(year: int, note: str, *, pre_song: bool = False) -> Normali
     )
 
 
+def make_undated(note: str) -> Normalized:
+    """Return a Song-period statement that has no usable year boundary."""
+    return Normalized(
+        None, None, None, 0, None, None, 0, None,
+        None, None, None, None,
+        None, "undated", note,
+    )
+
+
+def is_generic_song_period(raw: str) -> bool:
+    """Whether ``raw`` only says Song dynasty, without a temporal boundary."""
+    if not (raw.startswith("宋代") or raw.startswith("两宋")):
+        return False
+    if ERA_PATTERN.search(raw) or YEAR_PATTERN.search(raw):
+        return False
+    return not any(marker in raw for marker in ("初", "前期", "中期", "后期", "末", "改制", "新制"))
+
+
 def invalid_era_year(raw: str) -> tuple[str, int] | None:
     """Return an explicitly written reign year when it exceeds that era."""
     for era_match in ERA_PATTERN.finditer(raw):
@@ -530,6 +548,11 @@ def normalize_time(raw: str) -> Normalized:
             None, None, None, None,
             make_sort_order(year, None, 0, None), "exact", note,
         )
+
+    # “宋代”只限定朝代，不能证明事件发生于960年；只有“宋初”等明确
+    # 指向朝代起点的表达才进入下方 TIME_ANCHOR_PATTERNS。
+    if is_generic_song_period(raw):
+        return make_undated("仅知属于宋代，未载可用于年份截面的具体时间")
 
     named_range = NAMED_TIME_RANGES.get(raw)
     if named_range:
@@ -740,8 +763,9 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source_database": str(source),
             "rule_summary": (
-                "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
-                "改制前后及模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
+                "年号换算公元年；原文明示起止的时间为range；宋代、两宋等无边界"
+                "表达保留为undated；宋初、帝王在位期、改制前后及其他有边界的"
+                "模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
                 "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
                 "非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
@@ -830,8 +854,9 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
             "normalization_version": NORMALIZATION_VERSION,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rule_summary": (
-                "年号换算公元年；原文明示起止的时间为range；朝代、帝王在位期、"
-                "改制前后及模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
+                "年号换算公元年；原文明示起止的时间为range；宋代、两宋等无边界"
+                "表达保留为undated；宋初、帝王在位期、改制前后及其他有边界的"
+                "模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
                 "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
                 "非法年号年次不退化为年号范围；"
                 "农历月、闰月、日仅用于同年排序；原始 Timepoints.time 保持不变"
@@ -930,16 +955,12 @@ def validate(output: Path) -> None:
         missing_parseable_years = conn.execute(
             """
             SELECT COUNT(*) FROM NormalizedTimes
-            WHERE time_type != 'unresolved' AND year_start IS NULL
+            WHERE time_type NOT IN ('unresolved', 'undated', 'pre_song')
+              AND year_start IS NULL
             """
         ).fetchone()[0]
         if missing_parseable_years:
             raise RuntimeError(f"仍有 {missing_parseable_years} 条可解析类型缺少年份")
-        undated = conn.execute(
-            "SELECT COUNT(*) FROM NormalizedTimes WHERE time_type = 'undated'"
-        ).fetchone()[0]
-        if undated:
-            raise RuntimeError(f"仍有 {undated} 条宋代时间未建立数值锚点")
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"数据库完整性检查失败: {integrity}")

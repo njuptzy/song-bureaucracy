@@ -141,7 +141,8 @@ class LiveVisualizationDataTest(unittest.TestCase):
         payload = build_payload(self.db_path)
         relation = next(item for item in payload["relations"] if item["id"] == rel_id)
         bounded_event = next(item for item in payload["events"] if item["id"] == subject_id)
-        self.assertEqual(bounded_event["timeType"], "bounded")
+        self.assertEqual(bounded_event["timeType"], "undated")
+        self.assertIsNone(bounded_event["yearStart"])
         self.assertEqual(relation["periods"], [{"start": 978, "end": 978}])
 
     def test_cache_version_changes_after_database_commit(self):
