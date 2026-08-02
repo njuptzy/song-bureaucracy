@@ -2,6 +2,7 @@ const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
 import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
+  evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
 export { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
@@ -197,6 +198,21 @@ function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge)
   return [...deduped.values()];
 }
 
+function evolutionTransitions(data, timepointById) {
+  return (data.evolutionEdges || []).flatMap((edge) => {
+    const states = edge.states?.length ? edge.states : [{
+      subject_timepoint_id: null,
+      object_timepoint_id: null,
+      effective_year: (edge.periods || []).map((period) => period.start).find(Number.isFinite) ?? null,
+    }];
+    return states.map((state) => ({
+      sourceEntityId: edge.source,
+      targetEntityId: edge.target,
+      effectiveYear: relationEffectiveYear(state, timepointById),
+    }));
+  });
+}
+
 export function buildYearSnapshot(data, year) {
   const entityById = new Map((data.entities || []).map((entity) => [entity.id, entity]));
   const timepointById = new Map();
@@ -264,6 +280,19 @@ export function buildYearSnapshot(data, year) {
     if (exists && temporaryIntervals
       && !temporaryIntervals.some((interval) => interval.start <= year && year <= interval.end)) exists = false;
     if (exists) currentTimepointByEntity.set(entityId, currentState);
+  }
+
+  const evolutionDeactivations = evolutionDeactivationYears(
+    evolutionTransitions(data, timepointById), year,
+  );
+  for (const [entityId, deactivationYear] of evolutionDeactivations) {
+    const restoredLater = (timepointsByEntity.get(entityId) || []).some((timepoint) => (
+      isDated(timepoint)
+      && effectiveYear(timepoint) > deactivationYear
+      && effectiveYear(timepoint) <= year
+      && classifyExistenceEffect(timepoint, entityById.get(entityId)) === "activate"
+    ));
+    if (!restoredLater) currentTimepointByEntity.delete(entityId);
   }
   const entityIds = new Set(currentTimepointByEntity.keys());
   const hierarchyEdges = selectRelationStates(

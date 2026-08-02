@@ -2,6 +2,7 @@ const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
 import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
+  evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
 function effectiveYear(event) {
@@ -139,6 +140,16 @@ function relationPresenceEvidence(dataset, year, eventById) {
   return byEntity;
 }
 
+function evolutionTransitions(dataset, eventById) {
+  return dataset.relations
+    .filter((relation) => relation.type === "前后演变")
+    .map((relation) => ({
+      sourceEntityId: relation.subjectEntityId,
+      targetEntityId: relation.objectEntityId,
+      effectiveYear: relationEffectiveYear(relation, eventById),
+    }));
+}
+
 export function buildYearSnapshot(dataset, year) {
   const entityById = new Map(dataset.entities.map((entity) => [entity.id, entity]));
   const eventById = new Map(dataset.events.map((event) => [event.id, event]));
@@ -194,6 +205,19 @@ export function buildYearSnapshot(dataset, year) {
     if (exists && temporaryIntervals
       && !temporaryIntervals.some((interval) => interval.start <= year && year <= interval.end)) exists = false;
     if (exists) currentEventByEntity.set(entityId, currentEvent);
+  }
+
+  const evolutionDeactivations = evolutionDeactivationYears(
+    evolutionTransitions(dataset, eventById), year,
+  );
+  for (const [entityId, deactivationYear] of evolutionDeactivations) {
+    const restoredLater = (eventsByEntity.get(entityId) || []).some((event) => (
+      isDated(event)
+      && effectiveYear(event) > deactivationYear
+      && effectiveYear(event) <= year
+      && classifyExistenceEffect(event, entityById.get(entityId)) === "activate"
+    ));
+    if (!restoredLater) currentEventByEntity.delete(entityId);
   }
 
   const entityIds = new Set(currentEventByEntity.keys());

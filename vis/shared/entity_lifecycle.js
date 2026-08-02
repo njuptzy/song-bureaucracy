@@ -183,3 +183,44 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
 export function classifyExistenceEffect(timepoint, entity = {}) {
   return classifyEntityLifecycle(timepoint?.event, entity).effect;
 }
+
+/**
+ * “前后演变”表示同一制度对象的版本切换。只要某个有纪年的后继已经生效，
+ * 它的来源实体以及沿无纪年演变边可追溯到的更早名称都必须退出年度截面。
+ *
+ * transitions: [{ sourceEntityId, targetEntityId, effectiveYear }]
+ * effectiveYear 为 null 的边本身不猜测切换年份，但可在下游有确定年份时
+ * 作为谱系连接使用。例如“病坊（年月未载）→安乐坊→1104安济坊”。
+ */
+export function evolutionDeactivationYears(transitions, year) {
+  const incomingByTarget = new Map();
+  for (const transition of transitions || []) {
+    if (transition?.sourceEntityId == null || transition?.targetEntityId == null) continue;
+    if (!incomingByTarget.has(transition.targetEntityId)) {
+      incomingByTarget.set(transition.targetEntityId, []);
+    }
+    incomingByTarget.get(transition.targetEntityId).push(transition);
+  }
+
+  const deactivated = new Map();
+  const markDeactivated = (entityId, anchorYear) => {
+    const previous = deactivated.get(entityId);
+    if (previous == null || anchorYear > previous) deactivated.set(entityId, anchorYear);
+  };
+  const visitAncestors = (entityId, anchorYear, seen) => {
+    if (seen.has(entityId)) return;
+    seen.add(entityId);
+    for (const transition of incomingByTarget.get(entityId) || []) {
+      if (transition.effectiveYear != null && transition.effectiveYear > anchorYear) continue;
+      markDeactivated(transition.sourceEntityId, anchorYear);
+      visitAncestors(transition.sourceEntityId, anchorYear, seen);
+    }
+  };
+
+  for (const transition of transitions || []) {
+    if (transition.effectiveYear == null || transition.effectiveYear > year) continue;
+    markDeactivated(transition.sourceEntityId, transition.effectiveYear);
+    visitAncestors(transition.sourceEntityId, transition.effectiveYear, new Set());
+  }
+  return deactivated;
+}

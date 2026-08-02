@@ -228,6 +228,26 @@ def build_payload() -> dict:
                 existing.append(period)
     staff_edges = list(staff_by_key.values())
 
+    # 前后演变：供年度截面执行同一机构不同名称的互斥切换。
+    # 与上下级边不同，这些边不参与层级树，只携带端点时间证据。
+    evolution_edges = []
+    for r in entity_edges("前后演变"):
+        evolution_edges.append(
+            {
+                "id": r["rid"],
+                "source": r["subj"],
+                "target": r["obj"],
+                "periods": periods_for(r),
+                "states": [
+                    {
+                        "id": r["rid"],
+                        "subject_timepoint_id": r["subject_id"],
+                        "object_timepoint_id": r["object_id"],
+                    }
+                ],
+            }
+        )
+
     citations = {}
     for r in entries.execute(
         "SELECT target_table, target_id, citation, quotation, note, conflict_flag"
@@ -308,6 +328,7 @@ def build_payload() -> dict:
         "timepoints": timepoints,
         "hierarchyEdges": hierarchy_edges,
         "staffEdges": staff_edges,
+        "evolutionEdges": evolution_edges,
         "collectiveEntityIds": sorted(collective_entity_ids),
         "citations": citations,
         "dictionary": dictionary_payload,
@@ -315,6 +336,7 @@ def build_payload() -> dict:
             "entities": len(entities),
             "hierarchyEdges": len(hierarchy_edges),
             "staffEdges": len(staff_edges),
+            "evolutionEdges": len(evolution_edges),
             "collectiveEntities": len(collective_entity_ids),
             "dictionaryMatched": len(dictionary_payload),
             "categoryCounts": category_counts,

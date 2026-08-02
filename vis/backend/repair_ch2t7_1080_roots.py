@@ -119,6 +119,9 @@ EVENT_UPDATES = (
                 "见有御书院，善书祗应人一人供职",
                 "国子书博士", "383", "非品官，临时设置，以授御书院善书祗应人",
                 "原文中的临时设置对象是国子书博士官，不是御书院；修正事件主语，避免把官职的临时性误记成机构存废。"),
+    EventUpdate(6722, "安乐坊", "赐名安济坊", "废罢；赐名安济坊",
+                "病坊", "373", "崇宁三年又赐名安济坊",
+                "原文明载安乐坊于崇宁三年赐名安济坊；规范旧名称终止语义。"),
 )
 
 
@@ -227,6 +230,30 @@ CATEGORIES = (
     CategorySpec(7291, "太学馆", "临时科举试机构", "太学生", "388",
                  "国子监临时开太学馆",
                  "原文明载太学馆仅在礼部科举试期间临时开设，省试后即解散；按临时机构的离散证据期参与年度截面。"),
+    CategorySpec(6719, "病坊", "州府医疗救济机构", "病坊", "373",
+                 "杭州知州苏轼，集公款二千贯，捐家私黄金五十两，在杭创办病坊",
+                 "原文明载病坊由杭州知州在杭州创办，归为州府地方机构，不按太府寺目录归入中央。"),
+    CategorySpec(6720, "病坊", "州府医疗救济机构", "病坊", "373",
+                 "杭州知州苏轼，集公款二千贯，捐家私黄金五十两，在杭创办病坊",
+                 "病坊改名节点沿用杭州州府医疗救济机构分类。"),
+    CategorySpec(6721, "安乐坊", "州府医疗救济机构", "病坊", "373",
+                 "杭州知州苏轼，集公款二千贯，捐家私黄金五十两，在杭创办病坊",
+                 "安乐坊是杭州病坊的后继名称，归为州府医疗救济机构。"),
+    CategorySpec(6722, "安乐坊", "州府医疗救济机构", "病坊", "373",
+                 "崇宁三年又赐名安济坊",
+                 "安乐坊赐名终点沿用杭州州府医疗救济机构分类。"),
+    CategorySpec(6723, "安济坊", "州府医疗救济机构", "病坊", "373",
+                 "崇宁三年又赐名安济坊",
+                 "安济坊由杭州安乐坊赐名而来，归为州府医疗救济机构。"),
+    CategorySpec(6725, "安济坊", "州府医疗救济机构", "病坊", "373",
+                 "杭州知州苏轼，集公款二千贯，捐家私黄金五十两，在杭创办病坊",
+                 "安济坊后续演变节点沿用杭州州府医疗救济机构分类。"),
+    CategorySpec(6724, "居养院", "州府医疗救济机构", "病坊", "373",
+                 "崇宁三年又赐名安济坊，并置居养院",
+                 "居养院与杭州安济坊同条同时设置，归为州府医疗救济机构。"),
+    CategorySpec(6726, "养济院", "州府医疗救济机构", "养济院", "373",
+                 "南宋绍兴十三年，于京师临安府置养济院",
+                 "原文明载养济院置于临安府，归为州府医疗救济机构。"),
 )
 
 
@@ -542,6 +569,41 @@ def repair_east_west_bazuo(connection: sqlite3.Connection, counts: dict[str, int
                         "东、西八作司", "408", "建立天圣元年复分东、西二司的层级实例关系。")
 
 
+def repair_charity_evolution_chain(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
+    quotation = (
+        "北宋元祐四年十二月，杭州知州苏轼，集公款二千贯，捐家私黄金五十两，"
+        "在杭创办病坊，以收养无助的得疫病人，后扩大为救济城内外老疾贫乏难以生存者。"
+        "初由僧人义务主持。后改名安乐坊。崇宁三年又赐名安济坊，并置居养院"
+    )
+    rows = connection.execute(
+        "SELECT id,entity_id,prev_id,succ_id FROM Timepoints WHERE id IN (6719,6720) ORDER BY id"
+    ).fetchall()
+    if len(rows) != 2 or [row[1] for row in rows] != [3346, 3346]:
+        raise ValueError(f"病坊时间链节点已漂移：{rows}")
+    desired = {
+        6719: (None, 6720),
+        6720: (6719, None),
+    }
+    for timepoint_id, _, prev_id, succ_id in rows:
+        expected_prev, expected_succ = desired[timepoint_id]
+        if (prev_id, succ_id) == (expected_prev, expected_succ):
+            counts["reused"] += 1
+        elif (prev_id, succ_id) in {(6720, None), (None, 6719)}:
+            connection.execute(
+                "UPDATE Timepoints SET prev_id=?,succ_id=? WHERE id=?",
+                (expected_prev, expected_succ, timepoint_id),
+            )
+            counts["charity_chain_links_updated"] += 1
+        else:
+            raise ValueError(
+                f"病坊时间链指针已漂移：{timepoint_id} prev={prev_id} succ={succ_id}"
+            )
+        append_audit(
+            connection, "Timepoints", timepoint_id, "病坊", "373", quotation,
+            "修正病坊创办至改名安乐坊的链向；创办节点在前，改名节点在后。",
+        )
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -556,6 +618,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "bazuo_timepoints_updated": 0,
         "bazuo_timepoints_inserted": 0,
         "bazuo_relations_inserted": 0,
+        "charity_chain_links_updated": 0,
         "reused": 0,
     }
     try:
@@ -667,6 +730,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
             append_audit(connection, "Relationships", relation_id, spec.source_entry,
                          spec.source_page, spec.quotation, spec.decision)
         repair_east_west_bazuo(connection, counts)
+        repair_charity_evolution_chain(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()

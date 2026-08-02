@@ -24,6 +24,7 @@ function dataFor(entity, timepoints, hierarchyEdges = []) {
     },
     hierarchyEdges,
     staffEdges: [],
+    evolutionEdges: [],
   };
 }
 
@@ -432,4 +433,43 @@ test("空存其名的机构不显示，正式建置后恢复", () => {
   const entity = { id: 1, title: "尚食局", type: "机构" };
   assert.equal(classifyExistenceEffect(timepoint(10, 960, "空存其名，职事归御厨"), entity), "deactivate");
   assert.equal(classifyExistenceEffect(timepoint(11, 1103, "正式建置，供御膳羞"), entity), "activate");
+});
+
+test("有纪年后继生效后前序名称沿演变链全部退出", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "病坊", type: "机构" },
+      { id: 2, title: "安乐坊", type: "机构" },
+      { id: 3, title: "安济坊", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 1089, "始置")],
+      2: [{ id: 20, year_start: null, year_end: null, time_type: "undated", event: "由病坊改名", prev_id: null }],
+      3: [timepoint(30, 1104, "由安乐坊赐名")],
+    },
+    hierarchyEdges: [],
+    staffEdges: [],
+    evolutionEdges: [
+      { source: 1, target: 2, states: [{ subject_timepoint_id: 11, object_timepoint_id: 20 }] },
+      { source: 2, target: 3, states: [{ subject_timepoint_id: 21, object_timepoint_id: 30 }] },
+    ],
+  };
+  assert.deepEqual([...buildYearSnapshot(data, 1089).entityIds], [1]);
+  assert.deepEqual([...buildYearSnapshot(data, 1104).entityIds], [3]);
+});
+
+test("前序实体在演变后有更晚明确复置时可以恢复", () => {
+  const data = dataFor({ id: 1, title: "旧名机构", type: "机构" }, [
+    timepoint(10, 1000, "始置"),
+    timepoint(11, 1020, "复置"),
+  ]);
+  data.entities.push({ id: 3, title: "后继机构", type: "机构" });
+  data.timepoints[3] = [timepoint(30, 1010, "改置后成立")];
+  data.evolutionEdges = [{
+    source: 1,
+    target: 3,
+    states: [{ subject_timepoint_id: 10, object_timepoint_id: 30 }],
+  }];
+  assert.equal(buildYearSnapshot(data, 1010).entityIds.has(1), false);
+  assert.equal(buildYearSnapshot(data, 1020).entityIds.has(1), true);
 });
