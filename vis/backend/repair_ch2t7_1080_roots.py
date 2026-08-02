@@ -275,6 +275,12 @@ BAZUO_QUOTES = (
 )
 
 
+TONGWENGUAN_QUOTES = (
+    ("同文馆", "352", "馆驿名。隶鸿胪寺。"),
+    ("同文馆", "352", "北宋熙宁中创置"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -289,6 +295,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(spec.quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{spec.source_entry} / {spec.quotation}")
         for source_entry, source_page, quotation in BAZUO_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in TONGWENGUAN_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -604,6 +619,41 @@ def repair_charity_evolution_chain(connection: sqlite3.Connection, counts: dict[
         )
 
 
+def repair_tongwenguan_hierarchy(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
+    # 鸿胪寺宋前期节点 → 同文馆熙宁中创置节点。关系的实际生效年由两端
+    # 时间共同决定，因此不会把同文馆提前到创置之前。
+    subject = timepoint_entity(connection, 4002)
+    target = timepoint_entity(connection, 5985)
+    if subject[1] != "鸿胪寺" or target[1] != "同文馆":
+        raise ValueError(f"同文馆上下级端点已漂移：{subject} -> {target}")
+    existing = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=4002 AND object_id=5985 AND relation_type='上下级机构'
+        ORDER BY id LIMIT 1
+        """
+    ).fetchone()
+    quotation = TONGWENGUAN_QUOTES[0][2]
+    if existing is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (4002,5985,'上下级机构',NULL,NULL,?)
+            """,
+            (quotation,),
+        )
+        relation_id = int(cursor.lastrowid)
+        counts["tongwenguan_relations_inserted"] += 1
+    else:
+        relation_id = int(existing[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", relation_id, "同文馆", "352", quotation,
+        "原文直接明载同文馆隶鸿胪寺；以同文馆熙宁中创置节点限定北宋前期关系的开始。",
+    )
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -619,6 +669,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "bazuo_timepoints_inserted": 0,
         "bazuo_relations_inserted": 0,
         "charity_chain_links_updated": 0,
+        "tongwenguan_relations_inserted": 0,
         "reused": 0,
     }
     try:
@@ -731,6 +782,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
                          spec.source_page, spec.quotation, spec.decision)
         repair_east_west_bazuo(connection, counts)
         repair_charity_evolution_chain(connection, counts)
+        repair_tongwenguan_hierarchy(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()

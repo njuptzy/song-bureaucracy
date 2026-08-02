@@ -96,6 +96,17 @@ test("明确复置会重新激活此前罢废的实体", () => {
   assert.equal(snapshot.entityIds.has(1), true);
 });
 
+test("复置行在机构会恢复原机构", () => {
+  const entity = { id: 1, title: "同文馆", type: "机构" };
+  const data = dataFor(entity, [
+    timepoint(10, 1074, "创置"),
+    timepoint(11, 1129, "罢废"),
+    timepoint(12, 1133, "复置行在同文馆"),
+  ]);
+  assert.equal(buildYearSnapshot(data, 1129).entityIds.has(1), false);
+  assert.equal(buildYearSnapshot(data, 1133).entityIds.has(1), true);
+});
+
 test("由旧名复改称为当前实体会重新激活", () => {
   const entity = { id: 1, title: "国子监", type: "机构" };
   const snapshot = buildYearSnapshot(dataFor(entity, [
@@ -342,6 +353,14 @@ test("罢废和废罢复合词明确终止当前实体", () => {
   const entity = { id: 1, title: "某司", type: "机构" };
   assert.equal(classifyExistenceEffect(timepoint(10, 1058, "废罢，归其他机构兼领"), entity), "deactivate");
   assert.equal(classifyExistenceEffect(timepoint(11, 1071, "罢废，职事归某寺"), entity), "deactivate");
+});
+
+test("复置若干日后又罢以最后的终止动作生效", () => {
+  const entity = { id: 1, title: "鸿胪寺", type: "机构" };
+  assert.equal(
+    classifyExistenceEffect(timepoint(10, 1155, "复置十七日后又罢，此后不再置司"), entity),
+    "deactivate",
+  );
 });
 
 test("制度背景和终止语气后的罢置仍以当前实体为省略主语", () => {

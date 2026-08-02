@@ -65,6 +65,7 @@ function implicitTerminationTargetsCurrent(before, after) {
   // 不是另一个被罢对象。例如“元丰改制后罢置”“新官制下罢置”。
   if (after && after !== "置") return false;
   if (["正式", "明令", "实际", "再次", "至迟已"].includes(before)) return true;
+  if (!after && /后又$/.test(before)) return true;
   if (/^(?:元丰)?改制(?:正名)?后$/.test(before)) return true;
   if (/^(?:行)?新官制(?:下|后)$/.test(before)) return true;
   // “随司天监罢置”表示当前官职或机构随其所属机构一并终止。
@@ -87,6 +88,9 @@ function verbTargetsEntity(clause, index, verb, title, { activation = false, ter
   if (!before && !after) return true;
   if (!before && /^(?:置|去|归|并归|并入|改|易|后|而)/.test(after)) return true;
   if (activation && !before && /^(?:于|在)/.test(after)) return true;
+  // “复置行在同文馆”等写法中，“行在”是地点限定，后面的完整实体名
+  // 仍是复置对象；不能因地点前缀而漏掉恢复语义。
+  if (activation && title && after === `行在${title}`) return true;
   if (termination && implicitTerminationTargetsCurrent(before, after)) return true;
   return false;
 }
