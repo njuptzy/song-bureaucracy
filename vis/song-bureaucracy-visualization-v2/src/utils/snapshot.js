@@ -225,7 +225,17 @@ export function buildYearSnapshot(dataset, year) {
   for (const relation of dataset.relations) {
     const effectiveYear = relationEffectiveYear(relation, eventById);
     if (effectiveYear == null || effectiveYear > year) continue;
-    const key = relationStateKey(relation);
+    const childEvent = relation.type === "上下级机构"
+      ? String(eventById.get(relation.objectId)?.event || "")
+      : "";
+    // 仅有“附属机构”措辞的关系是叠加层级；它不等于“改隶”，因此
+    // 不能取代同一机构已有的基本上级。
+    const additiveHierarchy = relation.type === "上下级机构"
+      && childEvent.includes("附属机构")
+      && !/(?:改隶|转隶|改归)/.test(childEvent);
+    const key = additiveHierarchy
+      ? `${relationStateKey(relation)}:additive:${relation.subjectEntityId}`
+      : relationStateKey(relation);
     const current = relationStates.get(key);
     if (!current || effectiveYear > current.effectiveYear) {
       relationStates.set(key, { effectiveYear, relations: [relation] });

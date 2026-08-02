@@ -557,6 +557,41 @@ test("改隶后的新上级罢废时不会自动回退到旧上级", () => {
   assert.equal(buildYearSnapshot(data, 1020).hierarchyEdges.length, 0);
 });
 
+test("附属机构关系叠加于基本隶属且随临时上级退出", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "基本上级", type: "机构" },
+      { id: 2, title: "临时提举司", type: "机构" },
+      { id: 3, title: "催驱司", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 1000, "始置")],
+      2: [
+        timepoint(20, 1010, "始置"),
+        timepoint(21, 1020, "废罢", { prev_id: 20 }),
+      ],
+      3: [
+        timepoint(30, 1000, "隶基本上级"),
+        timepoint(31, 1010, "提举司附属机构", { prev_id: 30 }),
+      ],
+    },
+    hierarchyEdges: [
+      { id: 40, parent: 1, child: 3, periods: [], states: [{ id: 40, subject_timepoint_id: 10, object_timepoint_id: 30 }] },
+      { id: 41, parent: 2, child: 3, periods: [], states: [{ id: 41, subject_timepoint_id: 20, object_timepoint_id: 31 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+  };
+  assert.deepEqual(
+    buildYearSnapshot(data, 1015).hierarchyEdges.map((edge) => edge.parent).sort(),
+    [1, 2],
+  );
+  assert.deepEqual(
+    buildYearSnapshot(data, 1020).hierarchyEdges.map((edge) => edge.parent),
+    [1],
+  );
+});
+
 test("演变分出后以仍为当前实体复归时重新进入截面", () => {
   const data = {
     entities: [

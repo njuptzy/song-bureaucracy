@@ -170,7 +170,17 @@ function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge)
     for (const state of states) {
       const effectiveYear = relationEffectiveYear(state, timepointById);
       if (effectiveYear == null || effectiveYear > year) continue;
-      const key = keyForEdge(edge);
+      const childEvent = edge.parent != null
+        ? String(timepointById.get(state.object_timepoint_id)?.event || "")
+        : "";
+      // “附属机构”只说明新增一层附属或临时统领；没有“改隶、转隶”等
+      // 替代性措辞时，不应覆盖已有的基本隶属关系。
+      const additiveHierarchy = edge.parent != null
+        && childEvent.includes("附属机构")
+        && !/(?:改隶|转隶|改归)/.test(childEvent);
+      const key = additiveHierarchy
+        ? `${keyForEdge(edge)}:additive:${edge.parent}`
+        : keyForEdge(edge);
       const current = candidatesByKey.get(key);
       if (!current || effectiveYear > current.effectiveYear) {
         candidatesByKey.set(key, { effectiveYear, items: [{ edge, state }] });
