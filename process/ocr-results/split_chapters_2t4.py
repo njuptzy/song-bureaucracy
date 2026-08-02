@@ -3010,6 +3010,30 @@ def main():
         print("  [版面换行] '诸司专勾司/鄂州、建康、镇江分差粮审院'"
               "(p376-378)：核原书合并栏宽造成的词中换行‘库务司’与‘分差’")
 
+        manage_imperial_school = next(
+            e for e in all_entries if e["name"] == "管勾国子监公事"
+        )
+        school_alias_marker = "简称 "
+        assert school_alias_marker in manage_imperial_school["text"]
+        school_text, school_aliases = manage_imperial_school["text"].split(
+            school_alias_marker, 1
+        )
+        manage_imperial_school["text"] = school_text.rstrip()
+        manage_imperial_school["简称"] = school_aliases
+
+        joint_manage_imperial_school = next(
+            e for e in all_entries if e["name"] == "同管勾国子监公事"
+        )
+        assert "北宋前期\n国子监" in joint_manage_imperial_school["text"]
+        assert "领监事者，\n称管勾" in joint_manage_imperial_school["text"]
+        joint_manage_imperial_school["text"] = (
+            joint_manage_imperial_school["text"]
+            .replace("北宋前期\n国子监", "北宋前期国子监", 1)
+            .replace("领监事者，\n称管勾", "领监事者，称管勾", 1)
+        )
+        print("  [字段与换行归位] '管勾国子监公事/同管勾国子监公事'"
+              "(p381)：将正文末尾简称拆回独立字段，并合并段内版面换行")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
