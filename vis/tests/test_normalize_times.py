@@ -53,6 +53,13 @@ class NormalizeTimesTest(unittest.TestCase):
             "宋代（未载具体年月）",
             "宋代（左右厢店宅务）",
             "宋代千户以上县",
+            "北宋",
+            "北宋时期",
+            "北宋（未载具体年月）",
+            "北宋（司天监时期）",
+            "南宋",
+            "南宋时期",
+            "南宋（太府寺八案制）",
         ):
             with self.subTest(raw=raw):
                 item = normalize_time(raw)
@@ -61,18 +68,6 @@ class NormalizeTimesTest(unittest.TestCase):
 
     def test_known_invalid(self):
         self.assertEqual(normalize_time("南宋宣庆二年").time_type, "unresolved")
-
-    def test_dynasty_periods_anchor_to_start_year(self):
-        expected = {
-            "北宋": 960,
-            "北宋（未载具体年月）": 960,
-            "南宋时期": 1127,
-        }
-        for raw, year in expected.items():
-            with self.subTest(raw=raw):
-                item = normalize_time(raw)
-                self.assertEqual((item.year_start, item.year_end), (year, year))
-                self.assertEqual(item.time_type, "bounded")
 
     def test_reign_and_composite_periods_anchor_to_start_year(self):
         expected = {
@@ -154,7 +149,7 @@ class NormalizeTimesTest(unittest.TestCase):
 
     def test_institution_name_does_not_collide_with_pre_song_era(self):
         item = normalize_time("北宋（司天监时期）")
-        self.assertEqual((item.year_start, item.time_type), (960, "bounded"))
+        self.assertEqual((item.year_start, item.time_type), (None, "undated"))
         self.assertEqual(normalize_time("南朝梁天监七年").year_start, 508)
 
     def test_only_genuinely_unparseable_values_lack_year(self):

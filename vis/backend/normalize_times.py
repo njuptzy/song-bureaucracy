@@ -21,7 +21,7 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.4.0"
+NORMALIZATION_VERSION = "1.5.0"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
@@ -507,11 +507,21 @@ def make_undated(note: str) -> Normalized:
 
 def is_generic_song_period(raw: str) -> bool:
     """Whether ``raw`` only says Song dynasty, without a temporal boundary."""
-    if not (raw.startswith("宋代") or raw.startswith("两宋")):
+    if not raw.startswith(("宋代", "两宋", "北宋", "南宋")):
+        return False
+    generic_named_periods = {
+        "两宋", "北宋", "北宋时期", "北宋（未载具体年月）",
+        "南宋", "南宋时", "南宋时期", "南宋（未载具体年月）",
+        "南宋临安府（未载具体年月）", "宋代", "宋代千户以上县",
+        "宋代逐县置一员", "宋代（县分十等）", "宋代（未载具体年月）",
+    }
+    if raw in NAMED_TIME_RANGES and raw not in generic_named_periods:
         return False
     if ERA_PATTERN.search(raw) or YEAR_PATTERN.search(raw):
         return False
-    return not any(marker in raw for marker in ("初", "前期", "中期", "后期", "末", "改制", "新制"))
+    return not any(marker in raw for marker in (
+        "初", "前期", "中期", "后期", "末", "改制", "新制", "朝", "即位",
+    ))
 
 
 def invalid_era_year(raw: str) -> tuple[str, int] | None:
@@ -549,8 +559,8 @@ def normalize_time(raw: str) -> Normalized:
             make_sort_order(year, None, 0, None), "exact", note,
         )
 
-    # “宋代”只限定朝代，不能证明事件发生于960年；只有“宋初”等明确
-    # 指向朝代起点的表达才进入下方 TIME_ANCHOR_PATTERNS。
+    # 裸写“宋代/北宋/南宋”只限定朝代，不能证明事件发生于朝代起点；
+    # 只有“宋初/南宋初”等明确指向边界的表达才进入下方锚点规则。
     if is_generic_song_period(raw):
         return make_undated("仅知属于宋代，未载可用于年份截面的具体时间")
 
@@ -763,7 +773,7 @@ def write_normalized_times(output: Path, source: Path) -> dict[str, int]:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source_database": str(source),
             "rule_summary": (
-                "年号换算公元年；原文明示起止的时间为range；宋代、两宋等无边界"
+                "年号换算公元年；原文明示起止的时间为range；宋代、两宋、北宋、南宋等无边界"
                 "表达保留为undated；宋初、帝王在位期、改制前后及其他有边界的"
                 "模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
                 "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
@@ -854,7 +864,7 @@ def refresh_normalized_times(output: Path) -> tuple[dict[str, int], dict[tuple[s
             "normalization_version": NORMALIZATION_VERSION,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "rule_summary": (
-                "年号换算公元年；原文明示起止的时间为range；宋代、两宋等无边界"
+                "年号换算公元年；原文明示起止的时间为range；宋代、两宋、北宋、南宋等无边界"
                 "表达保留为undated；宋初、帝王在位期、改制前后及其他有边界的"
                 "模糊阶段词取可审计的起始或事件边界年作为bounded锚点；"
                 "宋前年号与朝代源流保留为pre_song但同时写入数值年；"
