@@ -294,6 +294,12 @@ TONGWENGUAN_QUOTES = (
 )
 
 
+WESTERN_POSTHOUSE_QUOTES = (
+    ("都亭西驿", "350", "馆驿。先后隶鸿胪寺、礼部。"),
+    ("都亭西驿", "350", "北宋大中祥符间置"),
+)
+
+
 TRANSLATION_COURT_QUOTES = (
     ("传法院", "350", "官司名。隶鸿胪寺。"),
     ("传法院", "350", "北宋太平兴国七年六月于太平兴国寺建译经院。八年，赐院额名“传法”"),
@@ -365,6 +371,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in TONGWENGUAN_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in WESTERN_POSTHOUSE_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -781,6 +796,48 @@ def repair_tongwenguan_hierarchy(connection: sqlite3.Connection, counts: dict[st
     append_audit(
         connection, "Relationships", relation_id, "同文馆", "352", quotation,
         "原文直接明载同文馆隶鸿胪寺；以同文馆熙宁中创置节点限定北宋前期关系的开始。",
+    )
+
+
+def repair_western_posthouse_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 都亭西驿条明载先后隶鸿胪寺、礼部，并另载大中祥符间始置。以始置
+    # 节点承载第一阶段隶属；元丰新制的既有关系继续作为后续制度状态。
+    subject = timepoint_entity(connection, 4002)
+    target = timepoint_entity(connection, 5929)
+    if subject[1] != "鸿胪寺" or target[1] != "都亭西驿":
+        raise ValueError(f"都亭西驿上下级端点已漂移：{subject} -> {target}")
+    existing = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=4002 AND object_id=5929 AND relation_type='上下级机构'
+        ORDER BY id LIMIT 1
+        """
+    ).fetchone()
+    quotation = WESTERN_POSTHOUSE_QUOTES[0][2]
+    if existing is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (4002,5929,'上下级机构',NULL,NULL,?)
+            """,
+            (quotation,),
+        )
+        relation_id = int(cursor.lastrowid)
+        counts["western_posthouse_relations_inserted"] += 1
+    else:
+        relation_id = int(existing[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", relation_id, "都亭西驿", "350", quotation,
+        "原文直接明载都亭西驿先隶鸿胪寺、后隶礼部；以大中祥符间始置节点承载第一阶段隶属。",
+    )
+    append_audit(
+        connection, "Relationships", relation_id, "都亭西驿", "350",
+        WESTERN_POSTHOUSE_QUOTES[1][2],
+        "原文明载都亭西驿大中祥符间始置；据此限定鸿胪寺隶属关系不早于该馆驿的始置阶段。",
     )
 
 
@@ -1258,6 +1315,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "bazuo_relations_inserted": 0,
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
+        "western_posthouse_relations_inserted": 0,
         "translation_court_relations_inserted": 0,
         "jianlong_relations_reparented": 0,
         "jianlong_timepoints_deleted": 0,
@@ -1388,6 +1446,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_east_west_bazuo(connection, counts)
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
+        repair_western_posthouse_hierarchy(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
         repair_jianlong_office_merge(connection, counts)
         repair_monk_registry_merge(connection, counts)
