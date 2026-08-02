@@ -359,6 +359,15 @@ PROFILES = {
             {"from": "左、右天厥使", "to": "左、右天厩使", "page": "342",
              "reason": "第五编 p342 目录把差遣名‘左、右天厩使’的‘厩’"
                        "误识为‘厥’，正文独立标题及简称均明确作‘天厩使’"},
+            {"from": "学寮", "to": "学窠", "page": "385",
+             "reason": "核对第五编 PDF p385，目录把国子监办事机构‘学窠’"
+                       "误识为‘学寮’，正文独立标题明确作‘学窠’"},
+            {"from": "厨库寮", "to": "厨库窠", "page": "385",
+             "reason": "核对第五编 PDF p385，目录把国子监办事机构‘厨库窠’"
+                       "误识为‘厨库寮’，正文独立标题明确作‘厨库窠’"},
+            {"from": "知杂寮", "to": "知杂窠", "page": "385",
+             "reason": "核对第五编 PDF p385，目录把国子监办事机构‘知杂窠’"
+                       "误识为‘知杂寮’，正文独立标题明确作‘知杂窠’"},
         ],
     },
     "11t12": {
@@ -3033,6 +3042,65 @@ def main():
         )
         print("  [字段与换行归位] '管勾国子监公事/同管勾国子监公事'"
               "(p381)：将正文末尾简称拆回独立字段，并合并段内版面换行")
+
+        for title in ("国子监博士", "国子监正"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            combined = entry["编制"]
+            assert "\n简称 " in combined
+            entry["编制"], entry["简称"] = combined.split("\n简称 ", 1)
+
+        registrar = next(e for e in all_entries if e["name"] == "国子监录")
+        combined_history = registrar["职源与沿革"]
+        assert "。职掌 " in combined_history
+        registrar["职源与沿革"], registrar["职掌"] = combined_history.split(
+            "。职掌 ", 1
+        )
+        registrar["职源与沿革"] += "。"
+
+        library_supervisor = next(
+            e for e in all_entries if e["name"] == "监国子监书库"
+        )
+        combined_rank = library_supervisor["品位"]
+        assert "）。编制 " in combined_rank
+        library_supervisor["品位"], library_supervisor["编制"] = (
+            combined_rank.split("。编制 ", 1)
+        )
+        library_supervisor["品位"] += "。"
+
+        imperial_school = next(e for e in all_entries if e["name"] == "国子学")
+        combined_roster = imperial_school["编制"]
+        assert "。简称 " in combined_roster
+        roster, aliases_and_offices = combined_roster.split("。简称 ", 1)
+        imperial_school["编制"] = roster + "。"
+        office_markers = ("学窠 ", "厨库窠 ", "知杂窠 ")
+        if all(marker in aliases_and_offices for marker in office_markers):
+            aliases, school_tail = aliases_and_offices.split(office_markers[0], 1)
+            school_text, kitchen_tail = school_tail.split(office_markers[1], 1)
+            kitchen_text, general_text = kitchen_tail.split(office_markers[2], 1)
+            imperial_school["简称"] = aliases.rstrip()
+            recovered = {
+                "学窠": school_text.rstrip(),
+                "厨库窠": kitchen_text.rstrip(),
+                "知杂窠": general_text.strip(),
+            }
+            for title, text in recovered.items():
+                target = next(e for e in all_entries if e["name"] == title)
+                assert target.get("_placeholder") is True
+                target["text"] = text
+                target.pop("_placeholder", None)
+                meta = all_meta[all_entries.index(target)]
+                meta["status"] = "ok"
+        else:
+            # 目录词头纠正为“窠”后，切分器通常会直接识别三个正文标题；
+            # 此时国子学字段只需拆回简称，不再重复搬运已独立的正文。
+            assert not any(marker in aliases_and_offices for marker in office_markers)
+            imperial_school["简称"] = aliases_and_offices.rstrip()
+            for title in ("学窠", "厨库窠", "知杂窠"):
+                target = next(e for e in all_entries if e["name"] == title)
+                assert target.get("text") and target.get("_placeholder") is not True
+        print("  [字段与条目归位] '国子监博士/国子监正/国子监录/"
+              "监国子监书库/国子学/学窠等'(p382-385)：拆回简称、职掌、"
+              "编制字段，并将国子学末尾三窠正文恢复到独立正式词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
