@@ -285,6 +285,12 @@ TONGWENGUAN_QUOTES = (
 )
 
 
+TRANSLATION_COURT_QUOTES = (
+    ("传法院", "350", "官司名。隶鸿胪寺。"),
+    ("传法院", "350", "北宋太平兴国七年六月于太平兴国寺建译经院。八年，赐院额名“传法”"),
+)
+
+
 MEDICAL_NINE_QUOTES = (
     ("提举太医局所", "311", "即太医局设提举官领太医局后，改以“提举太医局所”为名"),
     ("提举太医局所", "311", "元丰五年新制罢"),
@@ -329,6 +335,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in TONGWENGUAN_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in TRANSLATION_COURT_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -688,6 +703,43 @@ def repair_tongwenguan_hierarchy(connection: sqlite3.Connection, counts: dict[st
     )
 
 
+def repair_translation_court_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 传法院条未把隶属限定在元丰新制后；以太平兴国八年改名节点作为
+    # 子端，使鸿胪寺隶属从“传法院”这一名称正式启用时生效。
+    subject = timepoint_entity(connection, 4002)
+    target = timepoint_entity(connection, 5956)
+    if subject[1] != "鸿胪寺" or target[1] != "传法院":
+        raise ValueError(f"传法院上下级端点已漂移：{subject} -> {target}")
+    existing = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=4002 AND object_id=5956 AND relation_type='上下级机构'
+        ORDER BY id LIMIT 1
+        """
+    ).fetchone()
+    quotation = TRANSLATION_COURT_QUOTES[0][2]
+    if existing is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (4002,5956,'上下级机构',NULL,NULL,?)
+            """,
+            (quotation,),
+        )
+        relation_id = int(cursor.lastrowid)
+        counts["translation_court_relations_inserted"] += 1
+    else:
+        relation_id = int(existing[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", relation_id, "传法院", "350", quotation,
+        "原文直接明载传法院隶鸿胪寺；以太平兴国八年赐额改称传法院的节点限定关系开始。",
+    )
+
+
 def repair_medical_nine_hierarchy(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
     renamed_parent = timepoint_entity(connection, 4725)
     restored_parent = timepoint_entity(connection, 4302)
@@ -810,6 +862,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "bazuo_relations_inserted": 0,
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
+        "translation_court_relations_inserted": 0,
         "medical_nine_relations_reparented": 0,
         "medical_nine_relations_inserted": 0,
         "medical_nine_evolutions_inserted": 0,
@@ -926,6 +979,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_east_west_bazuo(connection, counts)
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
+        repair_translation_court_hierarchy(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
         connection.commit()
     except Exception:
