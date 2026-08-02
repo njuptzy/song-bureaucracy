@@ -122,6 +122,10 @@ EVENT_UPDATES = (
     EventUpdate(6722, "安乐坊", "赐名安济坊", "废罢；赐名安济坊",
                 "病坊", "373", "崇宁三年又赐名安济坊",
                 "原文明载安乐坊于崇宁三年赐名安济坊；规范旧名称终止语义。"),
+    EventUpdate(4302, "太医局", "改隶太常寺、礼部",
+                "提举太医局所罢，复称太医局；改隶太常寺、礼部",
+                "提举太医局所", "311", "元丰五年新制罢",
+                "原文明载提举太医局所于元丰五年罢，而太医局条同时记载元丰新制后的隶属；补明恢复太医局名称的激活语义。"),
 )
 
 
@@ -281,6 +285,27 @@ TONGWENGUAN_QUOTES = (
 )
 
 
+MEDICAL_NINE_QUOTES = (
+    ("提举太医局所", "311", "即太医局设提举官领太医局后，改以“提举太医局所”为名"),
+    ("提举太医局所", "311", "元丰五年新制罢"),
+    ("太医局", "310", "元丰新制改隶太常寺、礼部"),
+    ("太医局", "310", "医学生分九科：大方脉、风科、小方脉、眼科、疮肿兼伤折科、产科、口齿兼咽喉科、针灸科、金镞兼书禁科"),
+)
+
+
+MEDICAL_NINE_RELATIONS = (
+    (3943, 4706, "大方脉科"),
+    (3946, 4708, "风科"),
+    (3949, 4710, "小方脉科"),
+    (3952, 4712, "产科"),
+    (3955, 4714, "口齿兼咽喉科"),
+    (3958, 4716, "疮肿兼伤折科"),
+    (3961, 4718, "眼科"),
+    (3964, 4720, "针灸科"),
+    (3967, 4722, "金镞兼书禁科"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -304,6 +329,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in TONGWENGUAN_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in MEDICAL_NINE_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -654,6 +688,112 @@ def repair_tongwenguan_hierarchy(connection: sqlite3.Connection, counts: dict[st
     )
 
 
+def repair_medical_nine_hierarchy(connection: sqlite3.Connection, counts: dict[str, int]) -> None:
+    renamed_parent = timepoint_entity(connection, 4725)
+    restored_parent = timepoint_entity(connection, 4302)
+    renamed_terminal = timepoint_entity(connection, 4726)
+    if renamed_parent[1] != "提举太医局所" or renamed_terminal[1] != "提举太医局所":
+        raise ValueError(f"提举太医局所时间点已漂移：{renamed_parent} / {renamed_terminal}")
+    if restored_parent[1] != "太医局":
+        raise ValueError(f"太医局元丰节点已漂移：{restored_parent}")
+
+    rename_quote = MEDICAL_NINE_QUOTES[0][2]
+    reform_quote = MEDICAL_NINE_QUOTES[2][2]
+    nine_quote = MEDICAL_NINE_QUOTES[3][2]
+
+    # 原有九条熙宁九年关系误接到已经退出的旧名“太医局”。关系事实不变，
+    # 只把父端换成当时正在使用的正式名称“提举太医局所”。
+    for relation_id, child_timepoint_id, child_title in MEDICAL_NINE_RELATIONS:
+        child = timepoint_entity(connection, child_timepoint_id)
+        if child[1] != child_title:
+            raise ValueError(f"太医局医学科端点已漂移：{child_timepoint_id}={child}")
+        row = connection.execute(
+            "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=?",
+            (relation_id,),
+        ).fetchone()
+        if row is None or int(row[1]) != child_timepoint_id or row[2] != "上下级机构":
+            raise ValueError(f"太医局医学科关系已漂移：{relation_id}={row}")
+        if int(row[0]) == 4643:
+            connection.execute(
+                "UPDATE Relationships SET subject_id=4725 WHERE id=?", (relation_id,)
+            )
+            counts["medical_nine_relations_reparented"] += 1
+        elif int(row[0]) == 4725:
+            counts["reused"] += 1
+        else:
+            raise ValueError(f"太医局医学科父端已漂移：{relation_id} subject={row[0]}")
+        append_audit(
+            connection, "Relationships", relation_id, "提举太医局所", "311", rename_quote,
+            f"熙宁八年至元丰五年太医局改以提举太医局所为名；{child_title}在熙宁九年应隶当时名称，而非已退出的太医局旧名。",
+        )
+
+        # 元丰五年提举太医局所罢，太医局复称并改隶；为同一组九科建立
+        # 新制度状态，使关系在1082年从现名父端继续，而不是永久停在旧名。
+        existing = connection.execute(
+            """
+            SELECT id FROM Relationships
+            WHERE subject_id=4302 AND object_id=? AND relation_type='上下级机构'
+            ORDER BY id LIMIT 1
+            """,
+            (child_timepoint_id,),
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Relationships(
+                    subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                ) VALUES (4302,?,'上下级机构',NULL,NULL,?)
+                """,
+                (child_timepoint_id, nine_quote),
+            )
+            restored_relation_id = int(cursor.lastrowid)
+            counts["medical_nine_relations_inserted"] += 1
+        else:
+            restored_relation_id = int(existing[0])
+            counts["reused"] += 1
+        append_audit(
+            connection, "Relationships", restored_relation_id, "太医局", "310", nine_quote,
+            f"太医局条明载医学生九科包含{child_title}；以元丰改制后的太医局节点记录复称后的继续隶属。",
+        )
+        append_audit(
+            connection, "Relationships", restored_relation_id, "太医局", "310", reform_quote,
+            "元丰新制后太医局恢复现名并改隶太常寺、礼部；本关系状态从该制度节点生效。",
+        )
+
+    # 补齐改名机构的返回边；目标节点事件已明确“复称太医局”，年度截面据此
+    # 在元丰五年结束提举太医局所并恢复太医局，保证同年只保留一个现名。
+    existing = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=4726 AND object_id=4302 AND relation_type='前后演变'
+        ORDER BY id LIMIT 1
+        """
+    ).fetchone()
+    if existing is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (4726,4302,'前后演变',NULL,NULL,?)
+            """,
+            (MEDICAL_NINE_QUOTES[1][2],),
+        )
+        evolution_id = int(cursor.lastrowid)
+        counts["medical_nine_evolutions_inserted"] += 1
+    else:
+        evolution_id = int(existing[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", evolution_id, "提举太医局所", "311",
+        MEDICAL_NINE_QUOTES[1][2],
+        "提举太医局所元丰五年罢，制度对象恢复使用太医局名；补建改名机构返回太医局的演变边。",
+    )
+    append_audit(
+        connection, "Timepoints", 4302, "太医局", "310", reform_quote,
+        "太医局条明载元丰新制后的现名与隶属，支持提举太医局所罢后复称太医局。",
+    )
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -670,6 +810,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "bazuo_relations_inserted": 0,
         "charity_chain_links_updated": 0,
         "tongwenguan_relations_inserted": 0,
+        "medical_nine_relations_reparented": 0,
+        "medical_nine_relations_inserted": 0,
+        "medical_nine_evolutions_inserted": 0,
         "reused": 0,
     }
     try:
@@ -783,6 +926,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_east_west_bazuo(connection, counts)
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
+        repair_medical_nine_hierarchy(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()
