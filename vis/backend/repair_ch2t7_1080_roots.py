@@ -77,6 +77,17 @@ EVENT_UPDATES = (
     EventUpdate(6979, "国子监", "由国子学复改称", "由国子学复改称国子监",
                 "国子监", "380", "淳化五年三月二十四日复改称国子监",
                 "原文明确国子学复改为国子监；补足结果实体名，使国子监正确重新激活。"),
+    EventUpdate(7168, "国子学", "与国子监分离，作为独立官学",
+                "重新设置；脱离监学合一体制，成为国子监所辖独立官学",
+                "国子学", "385", "庆历四年四月二十一日,太学单独建学后,国子学成为国子监所辖诸学之一",
+                "原文明载庆历四年后国子学由监学合一状态分出，并成为国子监所辖诸学之一；补明重新设置语义。"),
+    EventUpdate(7169, "太学", "内置国子学", "始置太学；内置国子学",
+                "太学", "386", "北宋仁宗庆历四年四月二十一日始立太学于锡庆院",
+                "原文明载庆历四年始立太学；补足父实体的始置语义，不能只记录其内置国子学。"),
+    EventUpdate(7289, "太学", "始置太学说书，后不复设",
+                "设置太学说书这一临时差遣",
+                "太学说书", "388", "北宋嘉祐三年七月始除人。赴太学供职，职掌详究太学制度。后不复设",
+                "原文‘后不复设’的主语是太学说书差遣，不是太学；明确父端事件主语，避免误判太学本体终止。"),
     EventUpdate(6700, "都大店宅务兼修造司", "修造司改隶八作司",
                 "废罢；修造司析出并隶八作司，复为都大店宅务",
                 "左右厢店宅务", "372", "大中祥符元年修造司隶八作司",
@@ -370,6 +381,15 @@ TREASURY_OFFICE_ALIAS_QUOTES = (
 )
 
 
+GUOZIJIAN_STUDENT_QUOTES = (
+    ("国子学", "385", "北宋初，国子学与国子监合二为一。两名通用。"),
+    ("国子学", "385", "①国子学生宋初为七十人(《宋史·选举志》3)。"),
+    ("国子监", "380", "端拱二年二月，改国子监为国子学"),
+    ("国子监", "380", "淳化五年三月二十四日复改称国子监"),
+    ("国子学", "385", "并收命官、清要官亲戚以及随做官的父兄叔伯在京的亲属(所谓随行亲生员)等为国子生、或国子听读生"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -482,6 +502,15 @@ def validate_quotations(dictionary_path: Path) -> None:
                 raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in GUOZIJIAN_STUDENT_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
     finally:
         dictionary.close()
 
@@ -568,6 +597,153 @@ def delete_target_audit(
     connection.execute(
         "DELETE FROM BuildRecords WHERE target_table=? AND target_id=?",
         (target_table, target_id),
+    )
+
+
+def remove_guozijian_pre_1044_school_edges(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 第385—386页给出精确分界：宋初国子学与国子监合二为一，并无
+    # 独立的上下级；北宋太学则到庆历四年四月二十一日才始立。两条
+    # “宋前期”宽泛关系会把国子学、太学提前到1044年前，精确关系
+    # 6067、6095已经承接庆历四年后的真实层级，因此删除宽泛重复边。
+    obsolete = (
+        (5977, 6985, 6992, "国子学"),
+        (5978, 6985, 6993, "太学"),
+    )
+    for relation_id, subject_id, object_id, child_title in obsolete:
+        row = connection.execute(
+            "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=?",
+            (relation_id,),
+        ).fetchone()
+        if row is None:
+            counts["reused"] += 1
+            continue
+        if (int(row[0]), int(row[1]), str(row[2])) != (
+            subject_id, object_id, "上下级机构"
+        ):
+            raise ValueError(f"国子监宋前期{child_title}关系已漂移：{relation_id}={row}")
+        delete_target_audit(connection, "Relationships", relation_id)
+        connection.execute("DELETE FROM Relationships WHERE id=?", (relation_id,))
+        counts["guozijian_school_relations_deleted"] += 1
+
+
+def repair_guozijian_student_affiliation(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    # 宋初监、学合一，只能按当时正在使用的正式名称承载国子生：
+    # 960—988为国子监，989—993改称国子学，994年复称国子监。
+    # 庆历四年监、学分离后，国子生改归独立国子学；原书未说明
+    # 宋初七十人额度一直沿用到元丰二年，因此1044年状态不写员额。
+    expected_endpoints = {
+        6975: "国子监",
+        6977: "国子学",
+        6979: "国子监",
+        7168: "国子学",
+        7172: "国子生",
+    }
+    for timepoint_id, expected_title in expected_endpoints.items():
+        _, title = timepoint_entity(connection, timepoint_id)
+        if title != expected_title:
+            raise ValueError(
+                f"国子生分期关系端点已漂移：{timepoint_id}={title}，预期{expected_title}"
+            )
+
+    original = connection.execute(
+        """
+        SELECT subject_id,object_id,relation_type,staff_quota,staff_type
+        FROM Relationships WHERE id=6070
+        """
+    ).fetchone()
+    if original is None:
+        raise ValueError("国子生宋初编制关系6070不存在")
+    if (
+        int(original[1]), str(original[2]), str(original[3]), str(original[4])
+    ) != (7172, "编制隶属", "70", "学生"):
+        raise ValueError(f"国子生宋初编制关系6070已漂移：{original}")
+    if int(original[0]) == 7166:
+        connection.execute("UPDATE Relationships SET subject_id=6975 WHERE id=6070")
+        counts["guozijian_student_relations_rebound"] += 1
+    elif int(original[0]) == 6975:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"国子生宋初编制关系6070父端已漂移：{original[0]}")
+    append_audit(
+        connection, "Relationships", 6070, *GUOZIJIAN_STUDENT_QUOTES[0],
+        "宋初国子监与国子学是同一机构；960—988年以当时正式名称国子监承载国子生关系，避免把另一名称同时激活为独立实体。",
+    )
+    append_audit(
+        connection, "Relationships", 6070, *GUOZIJIAN_STUDENT_QUOTES[1],
+        "原文明载宋初国子学生七十人；保留该段员额，不外推到庆历四年监学分离以后。",
+    )
+
+    quota_quote = GUOZIJIAN_STUDENT_QUOTES[1][2]
+    student_quote = GUOZIJIAN_STUDENT_QUOTES[4][2]
+
+    def ensure_state(
+        subject_id: int,
+        staff_quota: str | None,
+        quotation: str,
+        evidence: tuple[tuple[str, str, str, str], ...],
+    ) -> int:
+        existing = connection.execute(
+            """
+            SELECT id,staff_quota,staff_type,quotation FROM Relationships
+            WHERE subject_id=? AND object_id=7172 AND relation_type='编制隶属'
+            ORDER BY id LIMIT 1
+            """,
+            (subject_id,),
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Relationships(
+                    subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                ) VALUES (?,7172,'编制隶属',?,'学生',?)
+                """,
+                (subject_id, staff_quota, quotation),
+            )
+            relation_id = int(cursor.lastrowid)
+            counts["guozijian_student_relations_inserted"] += 1
+        else:
+            relation_id = int(existing[0])
+            actual_quota = None if existing[1] is None else str(existing[1])
+            if actual_quota != staff_quota or str(existing[2]) != "学生":
+                raise ValueError(
+                    f"国子生分期关系已漂移：{relation_id} quota={existing[1]} type={existing[2]}"
+                )
+            counts["reused"] += 1
+        for source_entry, source_page, source_quote, decision in evidence:
+            append_audit(
+                connection, "Relationships", relation_id,
+                source_entry, source_page, source_quote, decision,
+            )
+        return relation_id
+
+    ensure_state(
+        6977, "70", quota_quote,
+        (
+            (*GUOZIJIAN_STUDENT_QUOTES[2],
+             "端拱二年监学合一机构改称国子学；989—993年由当前名称国子学承载国子生关系。"),
+            (*GUOZIJIAN_STUDENT_QUOTES[1],
+             "原文明载宋初国子学生七十人；改名没有另载员额变化。"),
+        ),
+    )
+    ensure_state(
+        6979, "70", quota_quote,
+        (
+            (*GUOZIJIAN_STUDENT_QUOTES[3],
+             "淳化五年监学合一机构复称国子监；994年起恢复由国子监承载国子生关系。"),
+            (*GUOZIJIAN_STUDENT_QUOTES[1],
+             "原文明载宋初国子学生七十人；复名没有另载员额变化。"),
+        ),
+    )
+    ensure_state(
+        7168, None, student_quote,
+        (
+            (*GUOZIJIAN_STUDENT_QUOTES[4],
+             "庆历四年监学分离后，原文明载独立国子学招收国子生；建立无推测员额的分期关系。"),
+        ),
     )
 
 
@@ -1773,6 +1949,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "medical_nine_relations_inserted": 0,
         "medical_nine_evolutions_inserted": 0,
         "partial_duty_transfer_evolutions_deleted": 0,
+        "guozijian_school_relations_deleted": 0,
+        "guozijian_student_relations_rebound": 0,
+        "guozijian_student_relations_inserted": 0,
         "reused": 0,
     }
     try:
@@ -1909,6 +2088,8 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
                 counts["reused"] += 1
             append_audit(connection, "Relationships", relation_id, spec.source_entry,
                          spec.source_page, spec.quotation, spec.decision)
+        remove_guozijian_pre_1044_school_edges(connection, counts)
+        repair_guozijian_student_affiliation(connection, counts)
         repair_east_west_bazuo(connection, counts)
         repair_charity_evolution_chain(connection, counts)
         repair_tongwenguan_hierarchy(connection, counts)
