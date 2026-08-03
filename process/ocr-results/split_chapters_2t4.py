@@ -3709,8 +3709,19 @@ def main():
         })
         sacrifice_inspector_meta["name"] = "监祭使"
         sacrifice_inspector_meta["status"] = "ok"
+
+        miscellaneous_case = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "杂事案" and str(m.get("page")) == "424"
+        )
+        wrong_censorate = "御事台杂事案"
+        assert wrong_censorate in miscellaneous_case["text"]
+        miscellaneous_case["text"] = miscellaneous_case["text"].replace(
+            wrong_censorate, "御史台杂事案", 1
+        )
         print("  [条目字段与OCR归位] p422-424：从六察司编制拆回吏察，从左巡使"
-              "简称拆回监祭使，并补正推直官、御史台检法官引文标点")
+              "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
+              "杂事案机构名")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):

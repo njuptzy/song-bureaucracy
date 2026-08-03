@@ -238,6 +238,9 @@ class Model:
   def _index_dictionary(self) -> None:
     self.entry_by_id = {row["id"]: row for row in self.dict_entries}
     self.entry_by_title_page: dict[tuple[str, str], dict[str, Any]] = {}
+    self.entries_by_title_page: dict[
+      tuple[str, str], list[dict[str, Any]]
+    ] = defaultdict(list)
     self.entries_by_title: dict[str, list[dict[str, Any]]] = defaultdict(list)
     self.entries_by_page: dict[str, list[dict[str, Any]]] = defaultdict(list)
     self.entry_norm_text: dict[int, tuple[str, list[int]]] = {}
@@ -257,6 +260,7 @@ class Model:
       title = (row["title"] or "").strip()
       page = str(row["page"]).strip()
       self.entry_by_title_page.setdefault((title, page), row)
+      self.entries_by_title_page[(title, page)].append(row)
       self.entries_by_title[title].append(row)
       self.entries_by_page[page].append(row)
       self.entry_norm_text[row["id"]] = normalize_with_map(row["text"] or "")
@@ -281,8 +285,20 @@ class Model:
         info["parsed"] = {"page": page, "title": title}
         entry = None
         if title:
-          entry = self.entry_by_title_page.get((title, page))
-          if entry is None:
+          exact_candidates = self.entries_by_title_page.get((title, page), [])
+          if len(exact_candidates) == 1:
+            entry = exact_candidates[0]
+          elif len(exact_candidates) > 1:
+            hits = []
+            for cand in exact_candidates:
+              match = self._match_in_entry(cand["id"], cite["quotation"])
+              if match:
+                hits.append((cand, match))
+            exact_hits = [hit for hit in hits if hit[1]["status"] == "exact"]
+            best_hits = exact_hits or hits
+            if len(best_hits) == 1:
+              entry, info["match"] = best_hits[0]
+          else:
             candidates = self.entries_by_title.get(title, [])
             entry = candidates[0] if len(candidates) == 1 else None
         if entry is None:
