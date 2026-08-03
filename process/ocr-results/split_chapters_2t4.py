@@ -3374,6 +3374,84 @@ def main():
         print("  [字段与OCR标点归位] p406-407：拆回将作监少监简称与别名，"
               "补回将作监主簿《晋书》引文括号")
 
+        timber_office = next(
+            e for e in all_entries if e["name"] == "京西河洛抽税竹木务"
+        )
+        combined_history = timber_office["职源"]
+        duty_marker = "职掌 "
+        assert duty_marker in combined_history
+        history, duty = combined_history.split(duty_marker, 1)
+        timber_office["职源"] = history.rstrip()
+        timber_office["职掌"] = duty.strip()
+
+        timber_executor, timber_executor_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "勾当京西竹木公务事"
+        )
+        assert timber_executor.get("_placeholder") is True
+        embedded_title = "勾当京西竹木务公事 差遣名。"
+        embedded_aliases = timber_office["简称"]
+        assert embedded_title in embedded_aliases
+        timber_aliases, executor_text = embedded_aliases.split(embedded_title, 1)
+        aliases_marker = "勾当竹木务。《长编》"
+        assert aliases_marker in executor_text
+        executor_text, executor_aliases = executor_text.split(aliases_marker, 1)
+        timber_office["简称"] = timber_aliases.rstrip()
+        timber_executor.clear()
+        timber_executor.update({
+            "name": "勾当京西竹木务公事",
+            "text": "差遣名。" + executor_text.rstrip(),
+            "简称": aliases_marker + executor_aliases.strip(),
+        })
+        timber_executor_meta["name"] = "勾当京西竹木务公事"
+        timber_executor_meta["status"] = "ok"
+
+        bamboo_mat_yard = next(
+            e for e in all_entries if e["name"] == "京东抽税竹箔场"
+        )
+        assert bamboo_mat_yard["text"].startswith("职官名。")
+        bamboo_mat_yard["text"] = bamboo_mat_yard["text"].replace(
+            "职官名。", "职局名。", 1
+        )
+
+        kilns = next(e for e in all_entries if e["name"] == "东、西窑务")
+        history_marker = "职源与沿革 "
+        assert history_marker in kilns["text"]
+        kilns_text, kilns_history = kilns["text"].split(history_marker, 1)
+        kilns["text"] = kilns_text.rstrip()
+        kilns["职源与沿革"] = kilns_history.strip()
+
+        wheat_bran_yard, wheat_bran_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "麦娟场"
+        )
+        assert "娟麸(破碎麦杆)" in wheat_bran_yard["text"]
+        wheat_bran_yard["name"] = "麦䴸场"
+        wheat_bran_yard["text"] = wheat_bran_yard["text"].replace(
+            "娟麸(破碎麦杆)", "麦䴸（破碎麦杆）", 1
+        )
+        wheat_bran_meta["name"] = "麦䴸场"
+
+        water_bureau = next(e for e in all_entries if e["name"] == "都水监")
+        missing_parenthesis = "置局号“外都水监丞司”《长编》"
+        assert missing_parenthesis in water_bureau["编制"]
+        water_bureau["编制"] = water_bureau["编制"].replace(
+            missing_parenthesis,
+            "置局号“外都水监丞司”（《长编》",
+            1,
+        )
+
+        water_judge = next(e for e in all_entries if e["name"] == "判都水监事")
+        combined_rank = water_judge["品位"]
+        roster_marker = "编制 "
+        assert roster_marker in combined_rank
+        rank, roster = combined_rank.split(roster_marker, 1)
+        water_judge["品位"] = rank.rstrip()
+        water_judge["编制"] = roster.strip()
+        print("  [跨条与字段归位] p408-410：恢复勾当京西竹木务公事，"
+              "拆回竹木务职掌、窑务职源、判都水监事编制，校正竹箔场类别、"
+              "麦䴸场词头及都水监引文括号")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
