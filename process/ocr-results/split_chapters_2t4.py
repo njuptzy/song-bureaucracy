@@ -3811,11 +3811,35 @@ def main():
         right_prison_hall["text"] = right_prison_hall["text"].replace(
             "大理寺右治狱丹\n官著名。", "官署名。", 1
         )
+
+        right_push_grade = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "大理寺右推职级" and str(m.get("page")) == "434"
+        )
+        clerk_marker = "胥长 公吏名。"
+        assert clerk_marker in right_push_grade["简称"]
+        grade_alias, clerk_body = right_push_grade["简称"].split(
+            clerk_marker, 1
+        )
+        right_push_grade["简称"] = grade_alias.rstrip()
+        chief_clerk, chief_clerk_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "脊长" and str(m.get("page")) == "434"
+        )
+        assert chief_clerk.get("_placeholder") is True
+        chief_clerk.clear()
+        chief_clerk.update({
+            "name": "胥长",
+            "text": "公吏名。" + clerk_body.strip(),
+        })
+        chief_clerk_meta["name"] = "胥长"
+        chief_clerk_meta["status"] = "ok"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
               "恢复大理寺正式词头；合并大理寺正跨页续文，并补回"
-              "大理寺右治狱丞缺失的句首，恢复大理寺右治狱厅‘官署名’")
+              "大理寺右治狱丞缺失的句首，恢复大理寺右治狱厅‘官署名’；"
+              "从右推职级简称拆回胥长正式词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
