@@ -395,6 +395,17 @@ GUOZIJIAN_STUDENT_QUOTES = (
 )
 
 
+WENSIYUAN_QUOTES = (
+    ("文思院", "399", "监当局名。北宋隶少府监。南宋归隶工部。"),
+    ("文思院", "399", "北宋太平兴国三年置文思院"),
+    ("少府监", "397", "所隶官属五:文思院、绫锦院、染院、裁造院、文绣院等"),
+    ("文思院", "399", "南宋沿置，绍兴三年，少府监并入文思院"),
+    ("尚书省工部", "253",
+     "绍兴三年，少府监并入工部；五年，增立御前军器案。御前军器所、文思院隶工部"),
+    ("少府监", "397", "南宋建炎三年四月十三日罢，并归工部"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -508,6 +519,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in GUOZIJIAN_STUDENT_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in WENSIYUAN_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -1912,6 +1932,222 @@ def remove_partial_duty_transfer_evolution(
     counts["partial_duty_transfer_evolutions_deleted"] += 1
 
 
+def repair_wensiyuan_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """补齐文思院始置及北宋、南宋三段隶属状态。"""
+    expected_entities = {
+        3274: "文思院",
+        1998: "少府监",
+        1185: "工部",
+    }
+    for entity_id, title in expected_entities.items():
+        row = connection.execute(
+            "SELECT title,type FROM Entities WHERE id=?", (entity_id,)
+        ).fetchone()
+        if row != (title, "机构"):
+            raise ValueError(f"文思院修复实体已漂移：{entity_id}={row}，预期{title}")
+
+    existing_anchor = connection.execute(
+        "SELECT entity_id,time,event,attr_category FROM Timepoints WHERE id=6569"
+    ).fetchone()
+    expected_anchor = (
+        3274,
+        "北宋熙宁三年十二月十一日",
+        "接收在京斗秤务",
+        "中央制造机构",
+    )
+    if existing_anchor != expected_anchor:
+        raise ValueError(f"文思院既有时间点6569已漂移：{existing_anchor}")
+
+    parent_terminal = connection.execute(
+        "SELECT time,event FROM Timepoints WHERE id=6935"
+    ).fetchone()
+    old_parent_terminal = (
+        "南宋建炎三年四月十四日",
+        "建炎三年罢置，未列入南宋三监",
+    )
+    new_parent_terminal = (
+        "南宋建炎三年四月十三日",
+        "废罢；建炎三年罢少府监，并归工部",
+    )
+    if parent_terminal == old_parent_terminal:
+        connection.execute(
+            "UPDATE Timepoints SET time=?,event=?,quotation=? WHERE id=6935",
+            (*new_parent_terminal, WENSIYUAN_QUOTES[5][2]),
+        )
+        connection.execute("DELETE FROM NormalizedTimes WHERE timepoint_id=6935")
+        counts["wensiyuan_parent_terminals_updated"] += 1
+    elif parent_terminal == new_parent_terminal:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"少府监南宋终点6935已漂移：{parent_terminal}")
+    append_audit(
+        connection, "Timepoints", 6935,
+        "少府监", "397", WENSIYUAN_QUOTES[5][2],
+        "少府监本条明载建炎三年四月十三日罢并归工部；纠正原十四日误写，并明确当前实体终止，防止旧隶属关系在南宋复活。",
+    )
+
+    known_specs = (
+        (
+            "北宋太平兴国三年",
+            "始置文思院；隶少府监",
+            WENSIYUAN_QUOTES[1][2],
+            "文思院",
+            "399",
+            "原文明载太平兴国三年始置文思院，并在词头定义中明载北宋隶少府监；补建实体起点。",
+        ),
+        (
+            "北宋元丰新制",
+            "元丰新制，仍列为少府监所隶官属",
+            WENSIYUAN_QUOTES[2][2],
+            "少府监",
+            "397",
+            "少府监条在元丰新制所隶五官属中明确列出文思院；补建改制后的连续状态。",
+        ),
+        (
+            "南宋绍兴三年",
+            "南宋沿置；少府监并入文思院，文思院归隶工部",
+            WENSIYUAN_QUOTES[3][2],
+            "文思院",
+            "399",
+            "文思院条明载南宋沿置、绍兴三年少府监并入文思院，并在词头定义中明载南宋归隶工部；补建南宋状态。",
+        ),
+    )
+
+    existing_rows = connection.execute(
+        "SELECT id,time,event FROM Timepoints WHERE entity_id=3274 ORDER BY id"
+    ).fetchall()
+    allowed_states = {
+        (6569, expected_anchor[1], expected_anchor[2]),
+        *((row[0], row[1], row[2]) for row in existing_rows if (row[1], row[2]) in {
+            (time, event) for time, event, *_ in known_specs
+        }),
+    }
+    unexpected = [row for row in existing_rows if tuple(row) not in allowed_states]
+    if unexpected:
+        raise ValueError(f"文思院出现未纳入修复的时间点：{unexpected}")
+
+    timepoint_ids: list[int] = []
+    for time, event, quotation, source_entry, source_page, decision in known_specs:
+        row = connection.execute(
+            """
+            SELECT id FROM Timepoints
+            WHERE entity_id=3274 AND time=? AND event=?
+            ORDER BY id LIMIT 1
+            """,
+            (time, event),
+        ).fetchone()
+        if row is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Timepoints(
+                    entity_id,time,event,prev_id,succ_id,
+                    attr_category,attr_officer_type,attr_grade,quotation
+                )
+                SELECT 3274,?,?,NULL,NULL,
+                       attr_category,attr_officer_type,attr_grade,?
+                FROM Timepoints WHERE id=6569
+                """,
+                (time, event, quotation),
+            )
+            timepoint_id = int(cursor.lastrowid)
+            counts["wensiyuan_timepoints_inserted"] += 1
+        else:
+            timepoint_id = int(row[0])
+            counts["reused"] += 1
+        timepoint_ids.append(timepoint_id)
+        append_audit(
+            connection, "Timepoints", timepoint_id,
+            source_entry, source_page, quotation, decision,
+        )
+
+    ordered_ids = [timepoint_ids[0], 6569, timepoint_ids[1], timepoint_ids[2]]
+    for index, timepoint_id in enumerate(ordered_ids):
+        prev_id = ordered_ids[index - 1] if index else None
+        succ_id = ordered_ids[index + 1] if index + 1 < len(ordered_ids) else None
+        connection.execute(
+            "UPDATE Timepoints SET prev_id=?,succ_id=? WHERE id=?",
+            (prev_id, succ_id, timepoint_id),
+        )
+    append_audit(
+        connection, "Timepoints", 6569,
+        "文思院", "399", WENSIYUAN_QUOTES[1][2],
+        "把既有熙宁三年节点接入太平兴国三年始置至元丰新制、南宋绍兴三年的完整时间链。",
+    )
+
+    relationship_specs = (
+        (
+            4008,
+            timepoint_ids[0],
+            WENSIYUAN_QUOTES[0][2],
+            (
+                (*WENSIYUAN_QUOTES[0],
+                 "文思院词头直接明载北宋隶少府监；以太平兴国三年始置节点限定关系开始。"),
+                (*WENSIYUAN_QUOTES[1],
+                 "原文明载太平兴国三年始置文思院；北宋少府监关系不得早于该年。"),
+            ),
+        ),
+        (
+            3993,
+            timepoint_ids[1],
+            WENSIYUAN_QUOTES[2][2],
+            (
+                (*WENSIYUAN_QUOTES[2],
+                 "少府监条明确把文思院列为元丰新制所隶官属；建立改制后的关系状态。"),
+                (*WENSIYUAN_QUOTES[0],
+                 "文思院词头直接明载北宋隶少府监；元丰新制仍属于北宋阶段。"),
+            ),
+        ),
+        (
+            3196,
+            timepoint_ids[2],
+            WENSIYUAN_QUOTES[0][2],
+            (
+                (*WENSIYUAN_QUOTES[0],
+                 "文思院词头直接明载南宋归隶工部；建立南宋关系。"),
+                (*WENSIYUAN_QUOTES[3],
+                 "文思院条明载绍兴三年少府监并入文思院；以该明确纪年承载南宋关系状态。"),
+                (*WENSIYUAN_QUOTES[4],
+                 "工部条在绍兴三年制度节点明载少府监并入工部，并明确文思院隶工部；关系不提前到无确切年月的南宋初。"),
+            ),
+        ),
+    )
+
+    for subject_id, object_id, quotation, evidence in relationship_specs:
+        subject = timepoint_entity(connection, subject_id)
+        target = timepoint_entity(connection, object_id)
+        if target[1] != "文思院" or subject[1] not in {"少府监", "工部"}:
+            raise ValueError(f"文思院关系端点已漂移：{subject} -> {target}")
+        row = connection.execute(
+            """
+            SELECT id FROM Relationships
+            WHERE subject_id=? AND object_id=? AND relation_type='上下级机构'
+            ORDER BY id LIMIT 1
+            """,
+            (subject_id, object_id),
+        ).fetchone()
+        if row is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO Relationships(
+                    subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+                ) VALUES (?,?,'上下级机构',NULL,NULL,?)
+                """,
+                (subject_id, object_id, quotation),
+            )
+            relation_id = int(cursor.lastrowid)
+            counts["wensiyuan_relations_inserted"] += 1
+        else:
+            relation_id = int(row[0])
+            counts["reused"] += 1
+        for source_entry, source_page, source_quote, decision in evidence:
+            append_audit(
+                connection, "Relationships", relation_id,
+                source_entry, source_page, source_quote, decision,
+            )
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -1957,6 +2193,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "guozijian_school_relations_deleted": 0,
         "guozijian_student_relations_rebound": 0,
         "guozijian_student_relations_inserted": 0,
+        "wensiyuan_timepoints_inserted": 0,
+        "wensiyuan_relations_inserted": 0,
+        "wensiyuan_parent_terminals_updated": 0,
         "reused": 0,
     }
     try:
@@ -2108,6 +2347,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_treasury_office_alias_merge(connection, counts)
         repair_medical_nine_hierarchy(connection, counts)
         remove_partial_duty_transfer_evolution(connection, counts)
+        repair_wensiyuan_hierarchy(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()
