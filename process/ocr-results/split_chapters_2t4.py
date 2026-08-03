@@ -3452,6 +3452,61 @@ def main():
               "拆回竹木务职掌、窑务职源、判都水监事编制，校正竹箔场类别、"
               "麦䴸场词头及都水监引文括号")
 
+        outside_office = next(
+            e for e in all_entries if e["name"] == "外都水监丞司"
+            and e.get("_not_in_catalog") is not True
+        )
+        outside_deputy, outside_deputy_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "外都水监丞" and str(m.get("page")) == "412"
+        )
+        assert outside_deputy.get("_placeholder") is True
+        embedded_title = "外都水监丞 都水监丞轮差在外治理黄河者"
+        combined_aliases = outside_office["简称"]
+        assert embedded_title in combined_aliases
+        office_aliases, deputy_body = combined_aliases.split(embedded_title, 1)
+        deputy_body = "都水监丞轮差在外治理黄河者" + deputy_body
+        deputy_alias_marker = "①外监丞。"
+        assert deputy_alias_marker in deputy_body
+        deputy_text, deputy_aliases = deputy_body.split(deputy_alias_marker, 1)
+        outside_office["简称"] = office_aliases.rstrip()
+        outside_deputy.clear()
+        outside_deputy.update({
+            "name": "外都水监丞",
+            "text": deputy_text.rstrip(),
+            "简称与别名": deputy_alias_marker + deputy_aliases.strip(),
+        })
+        outside_deputy_meta["status"] = "ok"
+
+        for formal_title, continuation_text in (
+            (
+                "管勾外都水监丞司公事",
+                "属官，或置二员，资浅者带“同”字。干办本司所管地分治河公事，位在外监丞之下。",
+            ),
+            (
+                "勾当外都水监丞司公事",
+                "属员。职掌与管勾外都水监丞公事同。\n"
+                "资序稍次于管勾官(《宋会要·方域》14之23)。",
+            ),
+        ):
+            formal = next(e for e in all_entries if e["name"] == formal_title)
+            continuation, continuation_meta = next(
+                (e, m) for e, m in zip(all_entries, all_meta)
+                if e["name"] == "外都水监丞司"
+                and e.get("text") == continuation_text
+                and m.get("status") == "not_in_catalog"
+            )
+            assert continuation.get("_not_in_catalog") is True
+            formal["text"] = formal["text"].rstrip() + continuation["text"]
+            continuation.clear()
+            continuation.update({
+                "name": "外都水监丞司", "text": "", "_placeholder": True,
+            })
+            continuation_meta["status"] = "placeholder"
+        print("  [跨条与续文归位] p411-413：从外都水监丞司简称字段拆回"
+              "外都水监丞正式词条，并将两处外都水监丞司伪条续文分别并回"
+              "管勾、勾当差遣词条，原伪条位保留为空占位")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
