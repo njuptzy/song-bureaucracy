@@ -257,6 +257,11 @@ export function buildYearSnapshot(dataset, year) {
         childId: relation.objectEntityId,
       })),
     entityIds,
+    new Set(
+      dataset.relations
+        .filter((relation) => relation.type === "上下级机构")
+        .map((relation) => relation.objectEntityId),
+    ),
   );
   for (const entityId of detachedEntityIds) {
     entityIds.delete(entityId);

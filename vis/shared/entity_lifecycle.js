@@ -189,11 +189,12 @@ export function classifyExistenceEffect(timepoint, entity = {}) {
 }
 
 /**
- * 下级机构最近一次已生效的隶属若只指向已退出的上级，它处于层级断档，
+ * 数据库中曾有上级记录的机构，在所选年份没有可见上级时处于层级断档，
  * 不能因此被提升为虚拟中央根节点。递归处理可避免其下级继续冒充根节点。
- * assignments 必须已经按年份筛成各下级的最新关系状态。
+ * assignments 必须已经按年份筛成各下级的最新关系状态；historicalChildIds
+ * 则包含数据库全部历史上下级关系中的下级实体。
  */
-export function detachedHierarchyEntityIds(assignments, activeEntityIds) {
+export function detachedHierarchyEntityIds(assignments, activeEntityIds, historicalChildIds = null) {
   const visible = new Set(activeEntityIds || []);
   const parentsByChild = new Map();
   for (const assignment of assignments || []) {
@@ -202,6 +203,9 @@ export function detachedHierarchyEntityIds(assignments, activeEntityIds) {
     if (parentId == null || childId == null || parentId === childId) continue;
     if (!parentsByChild.has(childId)) parentsByChild.set(childId, new Set());
     parentsByChild.get(childId).add(parentId);
+  }
+  for (const childId of historicalChildIds || []) {
+    if (childId != null && !parentsByChild.has(childId)) parentsByChild.set(childId, new Set());
   }
 
   const hidden = new Set();

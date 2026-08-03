@@ -325,6 +325,7 @@ export function buildYearSnapshot(data, year) {
   const detachedEntityIds = detachedHierarchyEntityIds(
     latestHierarchyStates.map((edge) => ({ parentId: edge.parent, childId: edge.child })),
     entityIds,
+    new Set((data.hierarchyEdges || []).map((edge) => edge.child)),
   );
   for (const entityId of detachedEntityIds) {
     entityIds.delete(entityId);

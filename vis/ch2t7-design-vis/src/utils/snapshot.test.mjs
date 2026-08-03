@@ -622,6 +622,34 @@ test("新上级关系生效后，层级断档机构自动恢复显示", () => {
   assert.equal(restored.hierarchyEdges[0]?.parent, 3);
 });
 
+test("存在未来上级关系的机构在关系生效前不提升为中央根节点", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "中央机构", type: "机构" },
+      { id: 2, title: "待归属机构", type: "机构" },
+      { id: 3, title: "未来上级", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 1000, "始置")],
+      2: [timepoint(20, 1000, "始置")],
+      3: [timepoint(30, 1020, "始置")],
+    },
+    hierarchyEdges: [
+      { id: 40, parent: 3, child: 2, periods: [], states: [{ id: 40, subject_timepoint_id: 30, object_timepoint_id: 20 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+  };
+  const beforeAffiliation = buildYearSnapshot(data, 1015);
+  assert.equal(beforeAffiliation.entityIds.has(1), true);
+  assert.equal(beforeAffiliation.entityIds.has(2), false);
+  assert.equal(beforeAffiliation.entityIds.has(3), false);
+
+  const affiliated = buildYearSnapshot(data, 1020);
+  assert.equal(affiliated.entityIds.has(2), true);
+  assert.equal(affiliated.hierarchyEdges[0]?.parent, 3);
+});
+
 test("附属机构关系叠加于基本隶属且随临时上级退出", () => {
   const data = {
     entities: [
