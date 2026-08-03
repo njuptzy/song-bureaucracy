@@ -3230,6 +3230,18 @@ def main():
         print("  [OCR引书名] '斋长'(p396)：核原书将不存在的"
               "《宋会要·选举志》恢复为《宋史·选举志》")
 
+        court_supply_clerk = next(
+            e for e in all_entries if e["name"] == "少府监主簿"
+        )
+        combined_duty = court_supply_clerk["职掌"]
+        rank_marker = "。品位 "
+        assert rank_marker in combined_duty
+        duty, rank = combined_duty.split(rank_marker, 1)
+        court_supply_clerk["职掌"] = duty + "。"
+        court_supply_clerk["品位"] = rank.strip()
+        print("  [字段归位] '少府监主簿'(p398-399)：核原书将跨页粘在"
+              "职掌末尾的品位拆回独立字段")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
