@@ -19,6 +19,13 @@ test("8050只向界面保留宋代时间点及有宋代证据的关系", () => {
       periods: [],
     }],
     staffEdges: [],
+    collectiveInstanceEdges: [{
+      id: 42,
+      collective: 1,
+      instance: 2,
+      states: [{ subject_timepoint_id: 10, object_timepoint_id: 20 }],
+      periods: [],
+    }],
     evolutionEdges: [
       {
         id: 40,
@@ -39,6 +46,7 @@ test("8050只向界面保留宋代时间点及有宋代证据的关系", () => {
   assert.deepEqual(data.entities.map((entity) => entity.id), [1, 2]);
   assert.equal(data.timepoints[1].length, 0);
   assert.equal(data.hierarchyEdges.length, 1);
+  assert.equal(data.collectiveInstanceEdges.length, 1);
   assert.deepEqual(data.evolutionEdges.map((edge) => edge.id), [41]);
   assert.equal(data.evolutionEdges[0].states.length, 1);
 });

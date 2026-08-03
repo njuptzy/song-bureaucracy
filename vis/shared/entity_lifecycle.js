@@ -224,6 +224,47 @@ export function detachedHierarchyEntityIds(assignments, activeEntityIds, histori
 }
 
 /**
+ * 统称本身若有历史上级，它的实例也不能绕过该关系成为虚拟中央根节点。
+ * 递归展开可覆盖“统称的实例仍是另一个统称”的嵌套结构。
+ */
+export function expandHistoricalHierarchyChildIds(directChildIds, memberships) {
+  const result = new Set(directChildIds || []);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const membership of memberships || []) {
+      if (!result.has(membership?.collectiveEntityId)
+        || result.has(membership?.instanceEntityId)) continue;
+      result.add(membership.instanceEntityId);
+      changed = true;
+    }
+  }
+  return result;
+}
+
+/**
+ * 统称发生明确的前后演变时，旧统称下已生效的实例名称也同步退出。
+ * 新实例是否进入截面仍由新实例自己的时间点决定，不在这里猜测一一对应关系。
+ */
+export function expandCollectiveInstanceTransitions(transitions, memberships) {
+  const expanded = [...(transitions || [])];
+  for (const transition of transitions || []) {
+    if (transition?.effectiveYear == null) continue;
+    for (const membership of memberships || []) {
+      if (membership?.collectiveEntityId !== transition.sourceEntityId) continue;
+      if (membership.effectiveYear != null
+        && membership.effectiveYear > transition.effectiveYear) continue;
+      expanded.push({
+        sourceEntityId: membership.instanceEntityId,
+        targetEntityId: transition.targetEntityId,
+        effectiveYear: transition.effectiveYear,
+      });
+    }
+  }
+  return expanded;
+}
+
+/**
  * “前后演变”表示同一制度对象的版本切换。只要某个有纪年的后继已经生效，
  * 它的来源实体以及沿无纪年演变边可追溯到的更早名称都必须退出年度截面。
  *

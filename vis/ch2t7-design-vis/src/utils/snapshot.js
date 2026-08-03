@@ -3,6 +3,8 @@ import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
   detachedHierarchyEntityIds,
+  expandCollectiveInstanceTransitions,
+  expandHistoricalHierarchyChildIds,
   evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
@@ -217,8 +219,23 @@ function selectRelationStates(
   return [...deduped.values()];
 }
 
-function evolutionTransitions(data, timepointById) {
-  return (data.evolutionEdges || []).flatMap((edge) => {
+function collectiveMemberships(data, timepointById) {
+  return (data.collectiveInstanceEdges || []).flatMap((edge) => {
+    const states = edge.states?.length ? edge.states : [{
+      subject_timepoint_id: null,
+      object_timepoint_id: null,
+      effective_year: (edge.periods || []).map((period) => period.start).find(Number.isFinite) ?? null,
+    }];
+    return states.map((state) => ({
+      collectiveEntityId: edge.collective,
+      instanceEntityId: edge.instance,
+      effectiveYear: relationEffectiveYear(state, timepointById),
+    }));
+  });
+}
+
+function evolutionTransitions(data, timepointById, memberships) {
+  const transitions = (data.evolutionEdges || []).flatMap((edge) => {
     const states = edge.states?.length ? edge.states : [{
       subject_timepoint_id: null,
       object_timepoint_id: null,
@@ -230,6 +247,7 @@ function evolutionTransitions(data, timepointById) {
       effectiveYear: relationEffectiveYear(state, timepointById),
     }));
   });
+  return expandCollectiveInstanceTransitions(transitions, memberships);
 }
 
 export function buildYearSnapshot(data, year) {
@@ -301,8 +319,9 @@ export function buildYearSnapshot(data, year) {
     if (exists) currentTimepointByEntity.set(entityId, currentState);
   }
 
+  const memberships = collectiveMemberships(data, timepointById);
   const evolutionDeactivations = evolutionDeactivationYears(
-    evolutionTransitions(data, timepointById), year,
+    evolutionTransitions(data, timepointById, memberships), year,
   );
   for (const [entityId, deactivationYear] of evolutionDeactivations) {
     const restoredLater = (timepointsByEntity.get(entityId) || []).some((timepoint) => (
@@ -325,7 +344,10 @@ export function buildYearSnapshot(data, year) {
   const detachedEntityIds = detachedHierarchyEntityIds(
     latestHierarchyStates.map((edge) => ({ parentId: edge.parent, childId: edge.child })),
     entityIds,
-    new Set((data.hierarchyEdges || []).map((edge) => edge.child)),
+    expandHistoricalHierarchyChildIds(
+      new Set((data.hierarchyEdges || []).map((edge) => edge.child)),
+      memberships,
+    ),
   );
   for (const entityId of detachedEntityIds) {
     entityIds.delete(entityId);

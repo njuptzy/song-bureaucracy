@@ -29,6 +29,10 @@ export function filterSongData(data) {
   const hierarchyEdges = filterEdges(data.hierarchyEdges, (edge) => [edge.parent, edge.child]);
   const staffEdges = filterEdges(data.staffEdges, (edge) => [edge.org, edge.official]);
   const evolutionEdges = filterEdges(data.evolutionEdges, (edge) => [edge.source, edge.target]);
+  const collectiveInstanceEdges = filterEdges(
+    data.collectiveInstanceEdges,
+    (edge) => [edge.collective, edge.instance],
+  );
 
   return {
     ...data,
@@ -37,5 +41,6 @@ export function filterSongData(data) {
     hierarchyEdges,
     staffEdges,
     evolutionEdges,
+    collectiveInstanceEdges,
   };
 }

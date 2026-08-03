@@ -25,6 +25,7 @@ function dataFor(entity, timepoints, hierarchyEdges = []) {
     hierarchyEdges,
     staffEdges: [],
     evolutionEdges: [],
+    collectiveInstanceEdges: [],
   };
 }
 
@@ -712,4 +713,62 @@ test("演变分出后以仍为当前实体复归时重新进入截面", () => {
   assert.equal(buildYearSnapshot(data, 1020).entityIds.has(1), false);
   assert.equal(buildYearSnapshot(data, 1031).entityIds.has(1), true);
   assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), true);
+});
+
+test("统称改名时旧实例同步退出而新实例按自身时间点进入", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "南、北作坊", type: "机构" },
+      { id: 2, title: "北作坊", type: "机构" },
+      { id: 3, title: "东、西作坊", type: "机构" },
+      { id: 4, title: "西作坊", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 976, "由作坊分为南作坊、北作坊"), timepoint(11, 1070, "改称东、西作坊", { prev_id: 10 })],
+      2: [timepoint(20, 976, "由作坊分置")],
+      3: [timepoint(30, 1070, "由南、北作坊改称")],
+      4: [timepoint(40, 1070, "东、西作坊所指实例")],
+    },
+    hierarchyEdges: [],
+    staffEdges: [],
+    evolutionEdges: [
+      { source: 1, target: 3, states: [{ subject_timepoint_id: 11, object_timepoint_id: 30 }] },
+    ],
+    collectiveInstanceEdges: [
+      { collective: 1, instance: 2, states: [{ subject_timepoint_id: 10, object_timepoint_id: 20 }] },
+      { collective: 3, instance: 4, states: [{ subject_timepoint_id: 30, object_timepoint_id: 40 }] },
+    ],
+  };
+  assert.equal(buildYearSnapshot(data, 1069).entityIds.has(2), true);
+  const renamed = buildYearSnapshot(data, 1070);
+  assert.equal(renamed.entityIds.has(2), false);
+  assert.equal(renamed.entityIds.has(4), true);
+});
+
+test("实例继承统称的历史上级记录，只由有真实层级边的统称代表显示", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "军器监", type: "机构" },
+      { id: 2, title: "东、西作坊", type: "机构" },
+      { id: 3, title: "西作坊", type: "机构" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 1082, "元丰新制")],
+      2: [timepoint(20, 1070, "始称"), timepoint(21, 1082, "隶军器监", { prev_id: 20 })],
+      3: [timepoint(30, 1070, "东、西作坊所指实例")],
+    },
+    hierarchyEdges: [
+      { id: 40, parent: 1, child: 2, states: [{ subject_timepoint_id: 10, object_timepoint_id: 21 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+    collectiveInstanceEdges: [
+      { collective: 2, instance: 3, states: [{ subject_timepoint_id: 20, object_timepoint_id: 30 }] },
+    ],
+  };
+  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(3), false);
+  const affiliated = buildYearSnapshot(data, 1082);
+  assert.equal(affiliated.entityIds.has(2), true);
+  assert.equal(affiliated.entityIds.has(3), false);
+  assert.equal(affiliated.hierarchyEdges[0]?.child, 2);
 });

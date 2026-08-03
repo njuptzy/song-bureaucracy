@@ -3,6 +3,8 @@ import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
   detachedHierarchyEntityIds,
+  expandCollectiveInstanceTransitions,
+  expandHistoricalHierarchyChildIds,
   evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
@@ -141,14 +143,25 @@ function relationPresenceEvidence(dataset, year, eventById) {
   return byEntity;
 }
 
-function evolutionTransitions(dataset, eventById) {
+function collectiveMemberships(dataset, eventById) {
   return dataset.relations
+    .filter((relation) => relation.type === "统称与实例")
+    .map((relation) => ({
+      collectiveEntityId: relation.subjectEntityId,
+      instanceEntityId: relation.objectEntityId,
+      effectiveYear: relationEffectiveYear(relation, eventById),
+    }));
+}
+
+function evolutionTransitions(dataset, eventById, memberships) {
+  const transitions = dataset.relations
     .filter((relation) => relation.type === "前后演变")
     .map((relation) => ({
       sourceEntityId: relation.subjectEntityId,
       targetEntityId: relation.objectEntityId,
       effectiveYear: relationEffectiveYear(relation, eventById),
     }));
+  return expandCollectiveInstanceTransitions(transitions, memberships);
 }
 
 function latestRelationStates(dataset, year, eventById) {
@@ -234,8 +247,9 @@ export function buildYearSnapshot(dataset, year) {
     if (exists) currentEventByEntity.set(entityId, currentEvent);
   }
 
+  const memberships = collectiveMemberships(dataset, eventById);
   const evolutionDeactivations = evolutionDeactivationYears(
-    evolutionTransitions(dataset, eventById), year,
+    evolutionTransitions(dataset, eventById, memberships), year,
   );
   for (const [entityId, deactivationYear] of evolutionDeactivations) {
     const restoredLater = (eventsByEntity.get(entityId) || []).some((event) => (
@@ -257,10 +271,13 @@ export function buildYearSnapshot(dataset, year) {
         childId: relation.objectEntityId,
       })),
     entityIds,
-    new Set(
-      dataset.relations
-        .filter((relation) => relation.type === "上下级机构")
-        .map((relation) => relation.objectEntityId),
+    expandHistoricalHierarchyChildIds(
+      new Set(
+        dataset.relations
+          .filter((relation) => relation.type === "上下级机构")
+          .map((relation) => relation.objectEntityId),
+      ),
+      memberships,
     ),
   );
   for (const entityId of detachedEntityIds) {

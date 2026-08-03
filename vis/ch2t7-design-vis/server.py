@@ -171,9 +171,24 @@ def build_payload() -> dict:
 
     # 统称主体仍保留在数据中供检索和详情使用；前端仅在它没有明确
     # 上下级机构边时，避免把它作为独立机构挂到虚拟分类根下。
-    collective_entity_ids = {
-        row["subj"] for row in entity_edges("统称与实例")
-    }
+    collective_rows = entity_edges("统称与实例")
+    collective_entity_ids = {row["subj"] for row in collective_rows}
+    collective_instance_edges = [
+        {
+            "id": row["rid"],
+            "collective": row["subj"],
+            "instance": row["obj"],
+            "periods": periods_for(row),
+            "states": [
+                {
+                    "id": row["rid"],
+                    "subject_timepoint_id": row["subject_id"],
+                    "object_timepoint_id": row["object_id"],
+                }
+            ],
+        }
+        for row in collective_rows
+    ]
 
     # 上下级机构：映射回实体 id 对并去重（subject=上级 → object=下级）
     hierarchy_by_key = {}
@@ -330,6 +345,7 @@ def build_payload() -> dict:
         "staffEdges": staff_edges,
         "evolutionEdges": evolution_edges,
         "collectiveEntityIds": sorted(collective_entity_ids),
+        "collectiveInstanceEdges": collective_instance_edges,
         "citations": citations,
         "dictionary": dictionary_payload,
         "meta": {
@@ -338,6 +354,7 @@ def build_payload() -> dict:
             "staffEdges": len(staff_edges),
             "evolutionEdges": len(evolution_edges),
             "collectiveEntities": len(collective_entity_ids),
+            "collectiveInstanceEdges": len(collective_instance_edges),
             "dictionaryMatched": len(dictionary_payload),
             "categoryCounts": category_counts,
             "source": ENTRIES_DB.name,
