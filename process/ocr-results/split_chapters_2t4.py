@@ -3355,6 +3355,25 @@ def main():
         print("  [字段与独立词条归位] p403-404：拆回军器监主簿、"
               "南北作坊编制，并从东、西作坊简称中恢复五十一作词条")
 
+        works_deputy = next(e for e in all_entries if e["name"] == "将作监少监")
+        combined_roster = works_deputy["编制"]
+        aliases_marker = "\n简称与别名 "
+        assert aliases_marker in combined_roster
+        roster, aliases = combined_roster.split(aliases_marker, 1)
+        works_deputy["编制"] = roster.rstrip()
+        works_deputy["简称与别名"] = aliases.strip()
+
+        works_clerk = next(e for e in all_entries if e["name"] == "将作监主簿")
+        missing_parentheses = "西晋将作大匠下置主簿《晋书·职官志》。"
+        assert missing_parentheses in works_clerk["职源与沿革"]
+        works_clerk["职源与沿革"] = works_clerk["职源与沿革"].replace(
+            missing_parentheses,
+            "西晋将作大匠下置主簿（《晋书·职官志》）。",
+            1,
+        )
+        print("  [字段与OCR标点归位] p406-407：拆回将作监少监简称与别名，"
+              "补回将作监主簿《晋书》引文括号")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
