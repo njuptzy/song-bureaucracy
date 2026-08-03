@@ -3914,6 +3914,35 @@ def main():
         })
         three_commands_meta["name"] = "三衙"
         three_commands_meta["status"] = "ok"
+
+        paired_palace_classes = (
+            (
+                "内殿直左第一、第二班",
+                "内殿直右第一、第二班",
+                "内殿直左第一、第二班 内殿直右第一、第二班",
+            ),
+            (
+                "散员左第一、第二班",
+                "散员右第一、第二班",
+                "散员左第一、第二班 散员右第一、第二班",
+            ),
+            (
+                "散指挥左第一、第二班",
+                "散指挥右第一、第二班",
+                "散指挥左第一、第二班 散指挥右第一、第二班",
+            ),
+        )
+        for first_title, second_title, full_title in paired_palace_classes:
+            paired, paired_meta = next(
+                (e, m) for e, m in zip(all_entries, all_meta)
+                if e["name"] == first_title
+                and str(m.get("page")) == second_title
+            )
+            assert paired["text"].startswith(second_title + " ")
+            paired["name"] = full_title
+            paired["text"] = paired["text"][len(second_title):].lstrip()
+            paired_meta["name"] = full_title
+            paired_meta["page"] = "441"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -3921,7 +3950,8 @@ def main():
               "大理寺右治狱丞缺失的句首，恢复大理寺右治狱厅‘官署名’；"
               "从右推职级简称拆回胥长正式词条；拆出判刑部事职掌，"
               "从法直官官品拆回刑部参见条，从纠察司别名拆回纠察官，"
-              "并从两司三衙正文拆回三衙正式词条")
+              "从两司三衙正文拆回三衙正式词条；恢复三组殿前诸班"
+              "左右合并词头及第441页页码")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
