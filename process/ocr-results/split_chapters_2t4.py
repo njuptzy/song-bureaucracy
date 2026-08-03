@@ -3316,6 +3316,45 @@ def main():
               "合并专知官续文、校正四提辖引书名，拆回西染院编制及"
               "被勾当染院公事吞入的裁造院正式词条")
 
+        armament_clerk = next(e for e in all_entries if e["name"] == "军器监主簿")
+        combined_rank = armament_clerk["品位"]
+        roster_marker = "\n编制 "
+        assert roster_marker in combined_rank
+        rank, roster = combined_rank.split(roster_marker, 1)
+        armament_clerk["品位"] = rank.rstrip()
+        armament_clerk["编制"] = roster.strip()
+
+        north_south_workshops = next(
+            e for e in all_entries if e["name"] == "南、北作坊"
+        )
+        combined_duty = north_south_workshops["职掌"]
+        assert roster_marker in combined_duty
+        duty, roster = combined_duty.split(roster_marker, 1)
+        north_south_workshops["职掌"] = duty.rstrip()
+        north_south_workshops["编制"] = roster.strip()
+
+        east_west_workshops = next(
+            e for e in all_entries if e["name"] == "东、西作坊"
+        )
+        fifty_one_workshops, fifty_one_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "东、西作坊五十一作"
+        )
+        assert fifty_one_workshops.get("_placeholder") is True
+        embedded_marker = "军器及军用什物分五十一作"
+        aliases = east_west_workshops["简称"]
+        assert embedded_marker in aliases
+        aliases, workshop_text = aliases.split(embedded_marker, 1)
+        east_west_workshops["简称"] = aliases.rstrip()
+        fifty_one_workshops.clear()
+        fifty_one_workshops.update({
+            "name": "东、西作坊五十一作",
+            "text": "东、西作坊制造" + embedded_marker + workshop_text,
+        })
+        fifty_one_meta["status"] = "ok"
+        print("  [字段与独立词条归位] p403-404：拆回军器监主簿、"
+              "南北作坊编制，并从东、西作坊简称中恢复五十一作词条")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
