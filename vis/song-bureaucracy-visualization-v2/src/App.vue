@@ -387,7 +387,7 @@ import { filterSongDataset } from "./utils/song_scope";
 
 const dataset = ref(null);
 const query = ref("");
-const selectedRange = ref([1132, 1132]);
+const selectedRange = ref([1080, 1080]);
 const timelineSelectionActive = ref(true);
 const centeredEvent = ref(null);
 const detailOpen = ref(false);
