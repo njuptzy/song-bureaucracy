@@ -3943,6 +3943,74 @@ def main():
             paired["text"] = paired["text"][len(second_title):].lstrip()
             paired_meta["name"] = full_title
             paired_meta["page"] = "441"
+
+        golden_spear = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "金枪左、右班" and str(m.get("page")) == "442"
+        )
+        scattered_guard_marker = "散直左第一、第二班 散直右第一、第二班 "
+        assert scattered_guard_marker in golden_spear["text"]
+        golden_text, scattered_guard_text = golden_spear["text"].split(
+            scattered_guard_marker, 1
+        )
+        golden_spear["text"] = golden_text.rstrip()
+        scattered_guard, scattered_guard_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "散直左第一、第二班散直右第一、第二班"
+            and str(m.get("page")) == "442"
+        )
+        assert scattered_guard.get("_placeholder") is True
+        scattered_guard.clear()
+        scattered_guard.update({
+            "name": "散直左第一、第二班 散直右第一、第二班",
+            "text": scattered_guard_text.strip(),
+        })
+        scattered_guard_meta["name"] = "散直左第一、第二班 散直右第一、第二班"
+        scattered_guard_meta["status"] = "ok"
+
+        palace_attendant_class = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "殿侍班" and str(m.get("page")) == "443"
+        )
+        attendant_marker = "祗应 诸班非在朝应奉殿侍"
+        assert attendant_marker in palace_attendant_class["text"]
+        class_text, attendant_and_rank = palace_attendant_class["text"].split(
+            attendant_marker, 1
+        )
+        lower_rank_marker = "下班祗应 武阶名。"
+        assert lower_rank_marker in attendant_and_rank
+        attendant_text, lower_rank_text = attendant_and_rank.split(
+            lower_rank_marker, 1
+        )
+        palace_attendant_class["text"] = class_text.rstrip()
+
+        attendant, attendant_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "抵应" and str(m.get("page")) == "443"
+        )
+        assert attendant.get("_placeholder") is True
+        attendant.clear()
+        attendant.update({
+            "name": "祗应",
+            "text": "诸班非在朝应奉殿侍" + attendant_text.strip(),
+        })
+        attendant_meta["name"] = "祗应"
+        attendant_meta["status"] = "ok"
+
+        lower_rank, lower_rank_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "下班祇应" and str(m.get("page")) == "443"
+        )
+        assert lower_rank.get("_placeholder") is True
+        lower_rank.clear()
+        lower_rank.update({
+            "name": "下班祗应",
+            "text": (
+                "武阶名。" + lower_rank_text.strip()
+            ).replace("《改武选官名诏》。", "《改武选官名诏》）。"),
+        })
+        lower_rank_meta["name"] = "下班祗应"
+        lower_rank_meta["status"] = "ok"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -3951,7 +4019,8 @@ def main():
               "从右推职级简称拆回胥长正式词条；拆出判刑部事职掌，"
               "从法直官官品拆回刑部参见条，从纠察司别名拆回纠察官，"
               "从两司三衙正文拆回三衙正式词条；恢复三组殿前诸班"
-              "左右合并词头及第441页页码")
+              "左右合并词头及第441页页码；从金枪班拆回散直左右班，"
+              "从殿侍班拆回祗应与下班祗应并校正词头字形")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
