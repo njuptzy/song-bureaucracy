@@ -23,6 +23,15 @@ function isDated(timepoint) {
 }
 
 function temporaryEvidenceIntervals(entity, timepoints) {
+  const singleEvidence = timepoints.some((timepoint) => (
+    String(timepoint.attr_category || "").includes("单次存在证据")
+  ));
+  if (singleEvidence) {
+    return timepoints.filter(isDated).map((timepoint) => ({
+      start: timepoint.year_start,
+      end: timepoint.year_end ?? timepoint.year_start,
+    }));
+  }
   if (!timepoints.some((timepoint) => String(timepoint.attr_category || "").includes("临时"))) {
     return null;
   }

@@ -358,6 +358,16 @@ test("临时机构多次开设之间的空档不被连成连续存在期", () =>
   assert.equal(buildYearSnapshot(data, 1082).entityIds.has(1), true);
 });
 
+test("单次存在证据只证明机构在记载年份存在，不作为持续创建时间", () => {
+  const entity = { id: 1, title: "接收机构", type: "机构" };
+  const data = dataFor(entity, [
+    timepoint(10, 1071, "接收某院职事", { attr_category: "办事机构；单次存在证据" }),
+  ]);
+  assert.equal(buildYearSnapshot(data, 1070).entityIds.has(1), false);
+  assert.equal(buildYearSnapshot(data, 1071).entityIds.has(1), true);
+  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), false);
+});
+
 test("罢废和废罢复合词明确终止当前实体", () => {
   const entity = { id: 1, title: "某司", type: "机构" };
   assert.equal(classifyExistenceEffect(timepoint(10, 1058, "废罢，归其他机构兼领"), entity), "deactivate");

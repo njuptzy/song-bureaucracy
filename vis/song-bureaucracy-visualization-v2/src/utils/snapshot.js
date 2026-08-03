@@ -19,6 +19,15 @@ function isDated(event) {
 }
 
 function temporaryEvidenceIntervals(entity, events) {
+  const singleEvidence = events.some((event) => (
+    String(event.category || "").includes("单次存在证据")
+  ));
+  if (singleEvidence) {
+    return events.filter(isDated).map((event) => ({
+      start: event.yearStart,
+      end: event.yearEnd ?? event.yearStart,
+    }));
+  }
   if (!events.some((event) => String(event.category || "").includes("临时"))) return null;
   const dated = events.filter(isDated).sort((a, b) => effectiveYear(a) - effectiveYear(b) || a.id - b.id);
   const intervals = [];
