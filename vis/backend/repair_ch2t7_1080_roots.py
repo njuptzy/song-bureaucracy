@@ -322,6 +322,15 @@ DUTING_POSTHOUSE_QUOTES = (
 )
 
 
+HUAIYUAN_POSTHOUSE_QUOTES = (
+    ("怀远驿", "350", "馆驿。先后隶鸿胪寺、礼部。"),
+    ("怀远驿", "350", "北宋景德三年十二月十三日始置"),
+    ("都大提举在京诸司库务司", "110",
+     "熙宁六年正月五日，又增市易务上下界、商税院、翰林图画院、杂买务杂卖场、诸宫观真仪法从库、南郊太庙家事库、开封府司检校库、都亭驿、怀远驿、三粮料院等分别由三司、都大提举市易司、开封府归隶本司"),
+    ("都大提举在京诸司库务司", "110", "神宗元丰元年（1078）十二月十九日罢"),
+)
+
+
 TRIPARTITE_VOUCHER_QUOTES = (
     ("三部凭由司", "138", "淳化二年三部凭由司合并为三司都凭由司"),
     ("三司都凭由司", "138", "淳化二年(991)合三司三部凭由司为三司都凭由司"),
@@ -462,6 +471,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in DUTING_POSTHOUSE_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in HUAIYUAN_POSTHOUSE_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -1207,6 +1225,182 @@ def repair_duting_posthouse_hierarchy(
         connection, "Relationships", 5073, "都大提举在京诸司库务司", "110",
         DUTING_POSTHOUSE_QUOTES[2][2],
         "原文明载熙宁六年都亭驿归隶；父端改用正式词头都大提举在京诸司库务司的同日节点。",
+    )
+
+
+def repair_huaiyuan_posthouse_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """补齐怀远驿1006年起与1073年改隶两段关系，不填补1078—1081年空档。"""
+    expected_entities = {
+        227: "都大提举在京诸司库务司",
+        1994: "鸿胪寺",
+        2938: "怀远驿",
+    }
+    for entity_id, title in expected_entities.items():
+        row = connection.execute(
+            "SELECT title,type FROM Entities WHERE id=?", (entity_id,)
+        ).fetchone()
+        if row != (title, "机构"):
+            raise ValueError(f"怀远驿修复实体已漂移：{entity_id}={row}，预期{title}")
+
+    start_old = (
+        "北宋景德三年十二月十三日",
+        "始置，接待交州、占城、龟兹、大食、于阗等西南蕃国使者",
+        "馆驿",
+    )
+    start_new = (
+        "北宋景德三年十二月十三日",
+        "始置；先隶鸿胪寺，接待交州、占城、龟兹、大食、于阗等西南蕃国使者",
+        "鸿胪寺属馆驿",
+    )
+    start = connection.execute(
+        "SELECT time,event,attr_category FROM Timepoints WHERE id=5933"
+    ).fetchone()
+    if start == start_old:
+        connection.execute(
+            "UPDATE Timepoints SET event=?,attr_category=? WHERE id=5933",
+            (start_new[1], start_new[2]),
+        )
+        counts["huaiyuan_timepoints_updated"] += 1
+    elif start == start_new:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"怀远驿景德三年节点5933已漂移：{start}")
+    append_audit(
+        connection, "Timepoints", 5933, "怀远驿", "350",
+        HUAIYUAN_POSTHOUSE_QUOTES[0][2],
+        "原文按先后次序明载怀远驿先隶鸿胪寺；在始置节点明确第一段隶属状态。",
+    )
+    append_audit(
+        connection, "Timepoints", 5933, "怀远驿", "350",
+        HUAIYUAN_POSTHOUSE_QUOTES[1][2],
+        "原文明载景德三年十二月十三日始置；据此限定鸿胪寺关系不早于怀远驿始置。",
+    )
+
+    transfer_time = "北宋熙宁六年正月五日"
+    transfer_event = "改隶都大提举在京诸司库务司"
+    transfer = connection.execute(
+        """
+        SELECT id FROM Timepoints
+        WHERE entity_id=2938 AND time=? AND event=?
+        ORDER BY id LIMIT 1
+        """,
+        (transfer_time, transfer_event),
+    ).fetchone()
+    if transfer is None:
+        start_link = connection.execute(
+            "SELECT succ_id FROM Timepoints WHERE id=5933"
+        ).fetchone()
+        next_link = connection.execute(
+            "SELECT prev_id FROM Timepoints WHERE id=5875"
+        ).fetchone()
+        if start_link != (5875,) or next_link != (5933,):
+            raise ValueError(
+                f"怀远驿1073年插入位置已漂移：5933.succ={start_link}，5875.prev={next_link}"
+            )
+        cursor = connection.execute(
+            """
+            INSERT INTO Timepoints(
+                entity_id,time,event,prev_id,succ_id,
+                attr_category,attr_officer_type,attr_grade,quotation
+            )
+            SELECT 2938,?,?,5933,5875,?,?,?,?
+            FROM Timepoints WHERE id=5933
+            """,
+            (
+                transfer_time, transfer_event,
+                "都大提举在京诸司库务司属馆驿", None, None,
+                HUAIYUAN_POSTHOUSE_QUOTES[2][2],
+            ),
+        )
+        transfer_id = int(cursor.lastrowid)
+        connection.execute("UPDATE Timepoints SET succ_id=? WHERE id=5933", (transfer_id,))
+        connection.execute("UPDATE Timepoints SET prev_id=? WHERE id=5875", (transfer_id,))
+        counts["huaiyuan_timepoints_inserted"] += 1
+    else:
+        transfer_id = int(transfer[0])
+        links = connection.execute(
+            "SELECT prev_id,succ_id,attr_category FROM Timepoints WHERE id=?",
+            (transfer_id,),
+        ).fetchone()
+        expected_links = (5933, 5875, "都大提举在京诸司库务司属馆驿")
+        if links != expected_links:
+            raise ValueError(f"怀远驿熙宁六年节点{transfer_id}已漂移：{links}")
+        if connection.execute("SELECT succ_id FROM Timepoints WHERE id=5933").fetchone() != (transfer_id,):
+            raise ValueError(f"怀远驿始置节点未连接熙宁改隶节点{transfer_id}")
+        if connection.execute("SELECT prev_id FROM Timepoints WHERE id=5875").fetchone() != (transfer_id,):
+            raise ValueError(f"怀远驿元丰节点未承接熙宁改隶节点{transfer_id}")
+        counts["reused"] += 1
+    append_audit(
+        connection, "Timepoints", transfer_id, "都大提举在京诸司库务司", "110",
+        HUAIYUAN_POSTHOUSE_QUOTES[2][2],
+        "原文明载熙宁六年正月五日怀远驿归隶本司；补建确切改隶节点。",
+    )
+
+    early_relation = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=4002 AND object_id=5933 AND relation_type='上下级机构'
+        ORDER BY id LIMIT 1
+        """
+    ).fetchone()
+    if early_relation is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (4002,5933,'上下级机构',NULL,NULL,?)
+            """,
+            (HUAIYUAN_POSTHOUSE_QUOTES[0][2],),
+        )
+        early_relation_id = int(cursor.lastrowid)
+        counts["huaiyuan_relations_inserted"] += 1
+    else:
+        early_relation_id = int(early_relation[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", early_relation_id, "怀远驿", "350",
+        HUAIYUAN_POSTHOUSE_QUOTES[0][2],
+        "原文直接明载怀远驿先隶鸿胪寺；以景德三年始置节点承载第一段关系。",
+    )
+    append_audit(
+        connection, "Relationships", early_relation_id, "怀远驿", "350",
+        HUAIYUAN_POSTHOUSE_QUOTES[1][2],
+        "以怀远驿始置纪年限定第一段关系的生效时间。",
+    )
+
+    transfer_relation = connection.execute(
+        """
+        SELECT id FROM Relationships
+        WHERE subject_id=462 AND object_id=? AND relation_type='上下级机构'
+        ORDER BY id LIMIT 1
+        """,
+        (transfer_id,),
+    ).fetchone()
+    if transfer_relation is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Relationships(
+                subject_id,object_id,relation_type,staff_quota,staff_type,quotation
+            ) VALUES (462,?,'上下级机构',NULL,NULL,?)
+            """,
+            (transfer_id, HUAIYUAN_POSTHOUSE_QUOTES[2][2]),
+        )
+        transfer_relation_id = int(cursor.lastrowid)
+        counts["huaiyuan_relations_inserted"] += 1
+    else:
+        transfer_relation_id = int(transfer_relation[0])
+        counts["reused"] += 1
+    append_audit(
+        connection, "Relationships", transfer_relation_id,
+        "都大提举在京诸司库务司", "110", HUAIYUAN_POSTHOUSE_QUOTES[2][2],
+        "原文明载熙宁六年怀远驿归隶本司；父子两端均使用同日节点。",
+    )
+    append_audit(
+        connection, "Relationships", transfer_relation_id,
+        "都大提举在京诸司库务司", "110", HUAIYUAN_POSTHOUSE_QUOTES[3][2],
+        "原书同时明确该上级在元丰元年被罢；此关系不能越过1078年继续用于1080截面。",
     )
 
 
@@ -2480,6 +2674,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "western_posthouse_relations_inserted": 0,
         "duting_posthouse_timepoints_updated": 0,
         "duting_posthouse_relations_reparented": 0,
+        "huaiyuan_timepoints_updated": 0,
+        "huaiyuan_timepoints_inserted": 0,
+        "huaiyuan_relations_inserted": 0,
         "voucher_instance_terminals_inserted": 0,
         "voucher_instance_evolutions_inserted": 0,
         "translation_court_relations_inserted": 0,
@@ -2658,6 +2855,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_tongwenguan_hierarchy(connection, counts)
         repair_western_posthouse_hierarchy(connection, counts)
         repair_duting_posthouse_hierarchy(connection, counts)
+        repair_huaiyuan_posthouse_hierarchy(connection, counts)
         repair_tripartite_voucher_offices(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
         repair_jianlong_office_merge(connection, counts)
