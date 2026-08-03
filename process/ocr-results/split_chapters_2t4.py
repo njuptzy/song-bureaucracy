@@ -3719,9 +3719,53 @@ def main():
         miscellaneous_case["text"] = miscellaneous_case["text"].replace(
             wrong_censorate, "御史台杂事案", 1
         )
-        print("  [条目字段与OCR归位] p422-424：从六察司编制拆回吏察，从左巡使"
+
+        west_censorate_manager = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "管勾西京留守司御史台公事"
+            and str(m.get("page")) == "425"
+        )
+        assert west_censorate_manager["text"].startswith("差\n遣名。")
+        west_censorate_manager["text"] = west_censorate_manager["text"].replace(
+            "差\n遣名。", "差遣名。", 1
+        )
+
+        nanjing_censorate_judge = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "判南京留守司御史台"
+            and str(m.get("page")) == "426"
+        )
+        missing_left_parenthesis = "“管勾”《宋会要·职官》17之38、39）"
+        assert missing_left_parenthesis in nanjing_censorate_judge["text"]
+        nanjing_censorate_judge["text"] = nanjing_censorate_judge["text"].replace(
+            missing_left_parenthesis,
+            "“管勾”（《宋会要·职官》17之38、39）",
+            1,
+        )
+
+        beijing_censorate_manager = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "管勾北京留守司御史台公事"
+            and str(m.get("page")) == "426"
+        )
+        assert beijing_censorate_manager["text"] == "差 遣名。"
+        beijing_censorate_manager["text"] = "差遣名。"
+
+        dali_temple, dali_temple_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "大理寺官" and str(m.get("page")) == "427"
+        )
+        assert dali_temple["text"] == "司名。"
+        dali_temple["name"] = "大理寺"
+        dali_temple["text"] = "官司名。"
+        dali_temple.pop("_catalog_name", None)
+        dali_temple_meta["name"] = "大理寺"
+        dali_temple_meta["status"] = "ok"
+        dali_temple_meta.pop("catalog_name", None)
+        print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
-              "杂事案机构名")
+              "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
+              "并恢复大理寺正式词头")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
