@@ -3598,6 +3598,46 @@ def main():
               "简称字段拆回两个都大提举差遣及河埽司，移回河埽司编制，"
               "并将粘连的御史台官恢复为正式词头御史台")
 
+        censor_zhiza = next(
+            e for e in all_entries
+            if e["name"] == "侍御史知杂事"
+        )
+        duty_marker = "职掌 宋前期御史台副长官"
+        combined_origin = censor_zhiza["职源与沿革"]
+        assert duty_marker in combined_origin
+        origin, duty = combined_origin.split(duty_marker, 1)
+        censor_zhiza["职源与沿革"] = origin.rstrip()
+        censor_zhiza["职掌"] = "宋前期御史台副长官" + duty.strip()
+
+        censor = next(
+            e for e in all_entries
+            if e["name"] == "监察御史"
+        )
+        quota_marker = "编制 元丰新制定为六人"
+        combined_rank = censor["品位"]
+        assert quota_marker in combined_rank
+        rank, quota = combined_rank.split(quota_marker, 1)
+        censor["品位"] = rank.rstrip()
+        censor["编制"] = "元丰新制定为六人" + quota.strip()
+
+        censor_trainee = next(
+            e for e in all_entries
+            if e["name"] == "监察御史里行"
+        )
+        assert not censor_trainee.get("text")
+        censor_trainee["text"] = "差遣名。隶御史台察院。"
+
+        chengzhi = next(
+            e for e in all_entries
+            if e["name"] == "察院都承旨"
+        )
+        chengzhi["text"] = (
+            "吏名。隶御史台察院。总管本院行遣公事"
+            "（《宋朝事实类苑》卷25《察院一司四房》）。"
+        )
+        print("  [字段与漏文归位] p418-421：拆出侍御史知杂事职掌、监察御史"
+              "编制，补回监察御史里行正文及察院都承旨引文末尾")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
