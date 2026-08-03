@@ -406,6 +406,21 @@ WENSIYUAN_QUOTES = (
 )
 
 
+HOUSEHOLD_TAX_QUOTES = (
+    ("两税案", "135", "隶三司户部。掌夏税、秋税的收纳。"),
+    ("两税案", "135",
+     "户税案。《宋史·职官志》2《户部分掌五案》：“一曰户税案。”《分纪》卷13《三司》：“户部五案，以判官三员分领，曰两税。”"),
+    ("三司二十四案", "134", "咸平四年（1001），并夏税案、秋税案为户税案"),
+    ("三部", "128",
+     "淳化五年十二月至咸平六年六月（994—1003），在此二十年间，三部分治，盐铁、度支、户部自立为主司"),
+    ("三部", "128",
+     "咸平六年六月至元丰五年五月（1003—1082），盐铁、度支、户部三部为三司的分部，均不置使"),
+    ("三司", "125", "元丰五年五月行新官制，罢三司归户部"),
+    ("三司户部诸案", "135",
+     "户部所领吏人办事机构。大中祥符七年以后定为五案：两税案、曲案"),
+)
+
+
 def validate_quotations(dictionary_path: Path) -> None:
     dictionary = sqlite3.connect(dictionary_path)
     try:
@@ -528,6 +543,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in WENSIYUAN_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in HOUSEHOLD_TAX_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -2148,6 +2172,295 @@ def repair_wensiyuan_hierarchy(
             )
 
 
+def repair_household_tax_alias_and_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """归并户税案别称，并恢复三司户部在1003—1082年的分部状态。"""
+    formal = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=539"
+    ).fetchone()
+    parent = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=409"
+    ).fetchone()
+    if formal != ("两税案", "机构") or parent != ("户部", "机构"):
+        raise ValueError(f"户税案修复正式实体已漂移：两税案={formal}，户部={parent}")
+
+    alias_timepoint = connection.execute(
+        "SELECT entity_id,time,event FROM Timepoints WHERE id=1012"
+    ).fetchone()
+    alias_old = (528, "北宋咸平四年", "由夏税案 秋税案合并而成")
+    alias_new = (
+        539,
+        "北宋咸平四年",
+        "始置两税案；由夏税案、秋税案合并，别称户税案",
+    )
+    if alias_timepoint == alias_old:
+        connection.execute(
+            "UPDATE Timepoints SET entity_id=?,event=?,quotation=? WHERE id=1012",
+            (539, alias_new[2], HOUSEHOLD_TAX_QUOTES[2][2]),
+        )
+        counts["household_tax_timepoints_reparented"] += 1
+    elif alias_timepoint == alias_new:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"户税案咸平四年节点1012已漂移：{alias_timepoint}")
+    append_audit(
+        connection, "Timepoints", 1012,
+        "三司二十四案", "134", HOUSEHOLD_TAX_QUOTES[2][2],
+        "原文明载夏税案、秋税案在咸平四年合并为户税案；户税案是正式词头两税案的别称，把该早期节点迁入两税案时间线。",
+    )
+    append_audit(
+        connection, "Timepoints", 1012,
+        "两税案", "135", HOUSEHOLD_TAX_QUOTES[1][2],
+        "两税案条把户税案列为别称；同一机构只保留正式词头两税案。",
+    )
+    append_audit(
+        connection, "Entities", 539,
+        "两税案", "135", HOUSEHOLD_TAX_QUOTES[1][2],
+        "保留正式词头两税案作为唯一实体，户税案只作为原书别称和引文文字保存。",
+    )
+
+    duplicate = connection.execute(
+        "SELECT title,type FROM Entities WHERE id=528"
+    ).fetchone()
+    if duplicate is not None:
+        if duplicate != ("户税案", "机构"):
+            raise ValueError(f"户税案别称实体已漂移：{duplicate}")
+        remaining = connection.execute(
+            "SELECT COUNT(*) FROM Timepoints WHERE entity_id=528"
+        ).fetchone()[0]
+        if remaining:
+            raise ValueError(f"户税案别称实体仍有{remaining}个未迁移时间点")
+        delete_target_audit(connection, "Entities", 528)
+        connection.execute("DELETE FROM Entities WHERE id=528")
+        counts["household_tax_entities_deleted"] += 1
+    else:
+        counts["reused"] += 1
+
+    # 淳化四年的首次合并确实终止三部主司，保留户部→三司演变；次年
+    # 总计司再分三部时必须明确恢复户部。咸平六年第二次合并后，原书
+    # 直接说明户部继续作为三司分部，故不能再用前后演变永久删除户部。
+    restore = connection.execute(
+        "SELECT time,event FROM Timepoints WHERE id=804"
+    ).fetchone()
+    restore_old = ("北宋淳化五年十二月二十四日", "由总计司再分置")
+    restore_new = (
+        "北宋淳化五年十二月二十四日",
+        "重新设置户部；由总计司再分三部，户部自立为主司",
+    )
+    if restore == restore_old:
+        connection.execute(
+            "UPDATE Timepoints SET event=?,quotation=? WHERE id=804",
+            (restore_new[1], HOUSEHOLD_TAX_QUOTES[3][2]),
+        )
+        counts["household_tax_parent_events_updated"] += 1
+    elif restore == restore_new:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"三司户部淳化五年节点804已漂移：{restore}")
+    append_audit(
+        connection, "Timepoints", 804,
+        "三部", "128", HOUSEHOLD_TAX_QUOTES[3][2],
+        "原文明载淳化五年十二月以后户部重新自立为主司；补明恢复语义，使首次合并后的户部在994年重新进入截面。",
+    )
+
+    subordinate = connection.execute(
+        "SELECT time,event FROM Timepoints WHERE id=805"
+    ).fetchone()
+    subordinate_old = ("北宋咸平六年", "重合为三司")
+    subordinate_new = (
+        "北宋咸平六年",
+        "结束独立主司状态；仍为三司分部，均不置使",
+    )
+    if subordinate == subordinate_old:
+        connection.execute(
+            "UPDATE Timepoints SET event=?,quotation=? WHERE id=805",
+            (subordinate_new[1], HOUSEHOLD_TAX_QUOTES[4][2]),
+        )
+        counts["household_tax_parent_events_updated"] += 1
+    elif subordinate == subordinate_new:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"三司户部咸平六年节点805已漂移：{subordinate}")
+    append_audit(
+        connection, "Timepoints", 805,
+        "三部", "128", HOUSEHOLD_TAX_QUOTES[4][2],
+        "原文明载咸平六年至元丰五年户部仍为三司分部；结束的是独立主司状态，不是户部实体。",
+    )
+
+    obsolete_relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=627"
+    ).fetchone()
+    if obsolete_relation is not None:
+        if tuple(obsolete_relation) != (805, 792, "前后演变"):
+            raise ValueError(f"户部咸平六年演变关系627已漂移：{obsolete_relation}")
+        delete_target_audit(connection, "Relationships", 627)
+        connection.execute("DELETE FROM Relationships WHERE id=627")
+        counts["household_tax_relations_deleted"] += 1
+    else:
+        counts["reused"] += 1
+
+    # 三司户部在元丰五年随三司旧制终止；尚书省户部是已分离的正式
+    # 实体，并已有三司→尚书省户部演变关系，不在这里重复造边。
+    parent_terminal_time = "北宋元丰五年五月"
+    parent_terminal_event = (
+        "废罢；元丰新制罢三司，三司户部分部终止，职事归尚书省户部"
+    )
+    row = connection.execute(
+        """
+        SELECT id FROM Timepoints
+        WHERE entity_id=409 AND time=? AND event=?
+        ORDER BY id LIMIT 1
+        """,
+        (parent_terminal_time, parent_terminal_event),
+    ).fetchone()
+    if row is None:
+        previous = connection.execute(
+            "SELECT succ_id,attr_category,attr_officer_type,attr_grade FROM Timepoints WHERE id=1041"
+        ).fetchone()
+        if previous is None or previous[0] is not None:
+            raise ValueError(f"三司户部末节点1041已漂移：{previous}")
+        cursor = connection.execute(
+            """
+            INSERT INTO Timepoints(
+                entity_id,time,event,prev_id,succ_id,
+                attr_category,attr_officer_type,attr_grade,quotation
+            ) VALUES (409,?,?,1041,NULL,?,?,?,?)
+            """,
+            (
+                parent_terminal_time, parent_terminal_event,
+                previous[1], previous[2], previous[3], HOUSEHOLD_TAX_QUOTES[5][2],
+            ),
+        )
+        parent_terminal_id = int(cursor.lastrowid)
+        connection.execute(
+            "UPDATE Timepoints SET succ_id=? WHERE id=1041", (parent_terminal_id,)
+        )
+        counts["household_tax_terminals_inserted"] += 1
+    else:
+        parent_terminal_id = int(row[0])
+        counts["reused"] += 1
+        connection.execute(
+            "UPDATE Timepoints SET succ_id=? WHERE id=1041 AND succ_id IS NULL",
+            (parent_terminal_id,),
+        )
+    append_audit(
+        connection, "Timepoints", parent_terminal_id,
+        "三司", "125", HOUSEHOLD_TAX_QUOTES[5][2],
+        "原文明载元丰五年五月罢三司归尚书省户部；三司系统的户部分部在该节点终止。",
+    )
+    append_audit(
+        connection, "Timepoints", parent_terminal_id,
+        "三部", "128", HOUSEHOLD_TAX_QUOTES[4][2],
+        "三部条把三司分部阶段明确限定到元丰五年五月；补建三司户部终点。",
+    )
+
+    formal_state = connection.execute(
+        "SELECT entity_id,time,event FROM Timepoints WHERE id=1042"
+    ).fetchone()
+    if formal_state != (539, "北宋大中祥符七年以后", "列入户部五案"):
+        raise ValueError(f"两税案大中祥符七年节点1042已漂移：{formal_state}")
+
+    tax_terminal_time = "北宋元丰五年五月"
+    tax_terminal_event = "废罢；元丰新制罢三司，两税案随三司户部旧制终止"
+    row = connection.execute(
+        """
+        SELECT id FROM Timepoints
+        WHERE entity_id=539 AND time=? AND event=?
+        ORDER BY id LIMIT 1
+        """,
+        (tax_terminal_time, tax_terminal_event),
+    ).fetchone()
+    if row is None:
+        cursor = connection.execute(
+            """
+            INSERT INTO Timepoints(
+                entity_id,time,event,prev_id,succ_id,
+                attr_category,attr_officer_type,attr_grade,quotation
+            )
+            SELECT 539,?,?,1042,NULL,
+                   attr_category,attr_officer_type,attr_grade,?
+            FROM Timepoints WHERE id=1042
+            """,
+            (tax_terminal_time, tax_terminal_event, HOUSEHOLD_TAX_QUOTES[5][2]),
+        )
+        tax_terminal_id = int(cursor.lastrowid)
+        counts["household_tax_terminals_inserted"] += 1
+    else:
+        tax_terminal_id = int(row[0])
+        counts["reused"] += 1
+
+    ordered_tax_ids = [1012, 1042, tax_terminal_id]
+    allowed_tax_ids = set(ordered_tax_ids)
+    unexpected_tax_ids = [
+        int(item[0]) for item in connection.execute(
+            "SELECT id FROM Timepoints WHERE entity_id=539 ORDER BY id"
+        ) if int(item[0]) not in allowed_tax_ids
+    ]
+    if unexpected_tax_ids:
+        raise ValueError(f"两税案出现未纳入修复的时间点：{unexpected_tax_ids}")
+    for index, timepoint_id in enumerate(ordered_tax_ids):
+        prev_id = ordered_tax_ids[index - 1] if index else None
+        succ_id = ordered_tax_ids[index + 1] if index + 1 < len(ordered_tax_ids) else None
+        connection.execute(
+            "UPDATE Timepoints SET prev_id=?,succ_id=? WHERE id=?",
+            (prev_id, succ_id, timepoint_id),
+        )
+    append_audit(
+        connection, "Timepoints", 1042,
+        "三司户部诸案", "135", HOUSEHOLD_TAX_QUOTES[6][2],
+        "把大中祥符七年列入户部五案节点接在咸平四年合并节点之后，形成两税案唯一时间链。",
+    )
+    append_audit(
+        connection, "Timepoints", tax_terminal_id,
+        "三司", "125", HOUSEHOLD_TAX_QUOTES[5][2],
+        "两税案是三司户部所领五案之一；元丰五年罢三司时随旧三司户部制度终止。",
+    )
+
+    early_tax_relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5440"
+    ).fetchone()
+    if early_tax_relation == (1041, 1012, "上下级机构"):
+        connection.execute(
+            "UPDATE Relationships SET subject_id=804 WHERE id=5440"
+        )
+        counts["household_tax_relations_reparented"] += 1
+    elif early_tax_relation == (804, 1012, "上下级机构"):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"两税案咸平四年早期隶属关系5440已漂移：{early_tax_relation}")
+    append_audit(
+        connection, "Relationships", 5440,
+        "三司二十四案", "134", HOUSEHOLD_TAX_QUOTES[2][2],
+        "夏税案、秋税案在咸平四年合并时即属当时的户部；父端改用淳化五年复置并延续到咸平六年的户部状态，使关系从1001年生效。",
+    )
+
+    expected_relations = (
+        (812, 1013, 1012),
+        (813, 1014, 1012),
+        (5440, 804, 1012),
+        (854, 1041, 1042),
+    )
+    for relation_id, subject_id, object_id in expected_relations:
+        relation = connection.execute(
+            "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=?",
+            (relation_id,),
+        ).fetchone()
+        expected_type = "前后演变" if relation_id in {812, 813} else "上下级机构"
+        if relation != (subject_id, object_id, expected_type):
+            raise ValueError(f"两税案关系{relation_id}已漂移：{relation}")
+        append_audit(
+            connection, "Relationships", relation_id,
+            "两税案", "135", HOUSEHOLD_TAX_QUOTES[1][2],
+            "户税案是两税案别称；关系端点1012已迁入正式词头两税案，保留原有分期关系。",
+        )
+    append_audit(
+        connection, "Relationships", 854,
+        "两税案", "135", HOUSEHOLD_TAX_QUOTES[0][2],
+        "原文直接明载两税案隶三司户部；大中祥符七年后的正式词头关系保持不变。",
+    )
+
+
 def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> dict[str, int]:
     validate_quotations(dictionary_path)
     connection = sqlite3.connect(db_path)
@@ -2196,6 +2509,12 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "wensiyuan_timepoints_inserted": 0,
         "wensiyuan_relations_inserted": 0,
         "wensiyuan_parent_terminals_updated": 0,
+        "household_tax_entities_deleted": 0,
+        "household_tax_timepoints_reparented": 0,
+        "household_tax_parent_events_updated": 0,
+        "household_tax_relations_deleted": 0,
+        "household_tax_relations_reparented": 0,
+        "household_tax_terminals_inserted": 0,
         "reused": 0,
     }
     try:
@@ -2348,6 +2667,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_medical_nine_hierarchy(connection, counts)
         remove_partial_duty_transfer_evolution(connection, counts)
         repair_wensiyuan_hierarchy(connection, counts)
+        repair_household_tax_alias_and_hierarchy(connection, counts)
         connection.commit()
     except Exception:
         connection.rollback()
