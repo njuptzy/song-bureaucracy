@@ -3132,12 +3132,18 @@ def main():
         university_lecturer["text"] = university_lecturer["text"].replace(
             "后不复设《李觏外集》", "后不复设（《李觏外集》", 1
         )
+        biyong_director = next(e for e in all_entries if e["name"] == "辟雍直学")
+        assert "四年八年十二日罢" in biyong_director["text"]
+        biyong_director["text"] = biyong_director["text"].replace(
+            "四年八年十二日罢", "四年八月十二日罢", 1
+        )
         for title in ("太学生", "太学外舍生", "太学内舍生"):
             entry = next(e for e in all_entries if e["name"] == title)
             assert entry.get("text") and entry.get("_placeholder") is not True
         print("  [标题字段与字误归位] '同管勾太学公事/权管勾太学公事/"
-              "太学录/太学说书/太学生三舍'(p386-388)：恢复《李觏外集》、"
-              "拆回太学录职掌并按正式词头切开太学生、外舍生、内舍生")
+              "太学录/太学说书/太学生三舍/辟雍直学'(p386-390)："
+              "恢复《李觏外集》、拆回太学录职掌、按正式词头切开太学生、"
+              "外舍生、内舍生，并校正大观四年八月十二日")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
