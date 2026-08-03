@@ -3638,6 +3638,80 @@ def main():
         print("  [字段与漏文归位] p418-421：拆出侍御史知杂事职掌、监察御史"
               "编制，补回监察御史里行正文及察院都承旨引文末尾")
 
+        six_inspections = next(
+            e for e in all_entries if e["name"] == "御史台六察司"
+        )
+        personnel_inspection, personnel_inspection_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "更察"
+        )
+        assert personnel_inspection.get("_placeholder") is True
+        personnel_marker = "吏察 六察司所属察案"
+        combined_roster = six_inspections["编制"]
+        assert personnel_marker in combined_roster
+        roster, personnel_text = combined_roster.split(personnel_marker, 1)
+        six_inspections["编制"] = roster.rstrip()
+        personnel_inspection.clear()
+        personnel_inspection.update({
+            "name": "吏察",
+            "text": "六察司所属察案" + personnel_text.strip(),
+        })
+        personnel_inspection_meta["name"] = "吏察"
+        personnel_inspection_meta["status"] = "ok"
+
+        direct_examiner = next(e for e in all_entries if e["name"] == "推直官")
+        direct_examiner["text"] = (
+            "差遣名。隶御史台。唐朝始置（《事物纪原》卷5《检法》）。"
+            "宋初置，元丰改制罢。为御史台狱审讯官，所谓“纠按谳狱之任”"
+            "（《长编》卷51癸酉、《宋史·职官志》4《御史台》）。"
+        )
+
+        legal_examiner = next(
+            e for e in all_entries if e["name"] == "御史台检法官"
+        )
+        broken_rank = (
+            "从八品(《宋会要·职官志》17之3)。位在御史台主簿之上"
+            "(《宋会要·职官志》8《绍兴以后合班之制》。"
+        )
+        assert legal_examiner["品位"] == broken_rank
+        legal_examiner["品位"] = (
+            "从八品（《宋会要·职官志》17之3）。位在御史台主簿之上"
+            "（《宋会要·职官志》8《绍兴以后合班之制》）。"
+        )
+
+        left_patrol = next(e for e in all_entries if e["name"] == "左巡使")
+        sacrifice_inspector, sacrifice_inspector_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "监察使"
+        )
+        assert sacrifice_inspector.get("_placeholder") is True
+        sacrifice_marker = "监祭使 临时差遣名。隶御史台。"
+        combined_aliases = left_patrol["简称"]
+        assert sacrifice_marker in combined_aliases
+        left_aliases, sacrifice_body = combined_aliases.split(sacrifice_marker, 1)
+        sacrifice_alias_marker = "监祭。《宋会要·礼》14之7"
+        assert sacrifice_alias_marker in sacrifice_body
+        sacrifice_origin, sacrifice_aliases = sacrifice_body.split(
+            sacrifice_alias_marker, 1
+        )
+        left_patrol["简称"] = left_aliases.rstrip()
+        sacrifice_origin = sacrifice_origin.strip().replace(
+            "受誓戎及致斋", "受誓戒及致斋"
+        ).replace(
+            "《宋会要·职官志》4《御史台》", "《宋史·职官志》4《御史台》"
+        )
+        sacrifice_inspector.clear()
+        sacrifice_inspector.update({
+            "name": "监祭使",
+            "text": "临时差遣名。隶御史台。",
+            "职源与沿革": sacrifice_origin,
+            "简称": sacrifice_alias_marker + sacrifice_aliases.strip(),
+        })
+        sacrifice_inspector_meta["name"] = "监祭使"
+        sacrifice_inspector_meta["status"] = "ok"
+        print("  [条目字段与OCR归位] p422-424：从六察司编制拆回吏察，从左巡使"
+              "简称拆回监祭使，并补正推直官、御史台检法官引文标点")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
