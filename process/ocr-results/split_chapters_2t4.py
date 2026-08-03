@@ -3834,12 +3834,94 @@ def main():
         })
         chief_clerk_meta["name"] = "胥长"
         chief_clerk_meta["status"] = "ok"
+
+        judge_ministry = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "判尚书省刑部事" and str(m.get("page")) == "436"
+        )
+        duty_marker = "职掌 宋前期领刑部事"
+        combined_origin = judge_ministry["职源"]
+        assert duty_marker in combined_origin
+        origin, duty = combined_origin.split(duty_marker, 1)
+        judge_ministry["职源"] = origin.rstrip()
+        judge_ministry["职掌"] = "宋前期领刑部事" + duty.strip()
+
+        legal_assistant = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "刑部法直官" and str(m.get("page")) == "436"
+        )
+        ministry_marker = "刑部 参“尚书六部门”条。"
+        combined_rank = legal_assistant["官品"]
+        assert ministry_marker in combined_rank
+        rank, ministry_text = combined_rank.split(ministry_marker, 1)
+        legal_assistant["官品"] = rank.rstrip()
+        ministry, ministry_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "刑部" and str(m.get("page")) == "437"
+        )
+        assert ministry.get("_placeholder") is True
+        ministry.clear()
+        ministry.update({
+            "name": "刑部",
+            "text": "参“尚书六部门”条。" + ministry_text.strip(),
+        })
+        ministry_meta["status"] = "ok"
+
+        prison_office = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "纠察在京刑狱司" and str(m.get("page")) == "437"
+        )
+        prison_post_marker = "纠察在京刑狱北宋前期差遣官名。"
+        combined_aliases = prison_office["简称与别名"]
+        assert prison_post_marker in combined_aliases
+        office_aliases, post_text = combined_aliases.split(prison_post_marker, 1)
+        prison_office["简称与别名"] = office_aliases.rstrip()
+        prison_post, prison_post_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "纠察在京刑狱" and str(m.get("page")) == "437"
+        )
+        assert prison_post.get("_placeholder") is True
+        prison_post.clear()
+        prison_post.update({
+            "name": "纠察在京刑狱",
+            "text": "北宋前期差遣官名。" + post_text.strip(),
+            "职源": prison_office.pop("职源"),
+            "官品": prison_office.pop("官品"),
+            "简称": prison_office.pop("简称"),
+        })
+        prison_post_meta["status"] = "ok"
+
+        two_commands = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "两司三衙" and str(m.get("page")) == "438"
+        )
+        three_commands_marker = "三衙 宋中央禁军最高指挥机构"
+        assert three_commands_marker in two_commands["text"]
+        two_text, three_text = two_commands["text"].split(
+            three_commands_marker, 1
+        )
+        two_commands["text"] = two_text.rstrip()
+        three_commands, three_commands_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "三衢" and str(m.get("page")) == "438"
+        )
+        assert three_commands.get("_placeholder") is True
+        three_commands.clear()
+        three_commands.update({
+            "name": "三衙",
+            "text": "宋中央禁军最高指挥机构" + three_text.strip(),
+            "别称": two_commands.pop("别称"),
+        })
+        three_commands_meta["name"] = "三衙"
+        three_commands_meta["status"] = "ok"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
               "恢复大理寺正式词头；合并大理寺正跨页续文，并补回"
               "大理寺右治狱丞缺失的句首，恢复大理寺右治狱厅‘官署名’；"
-              "从右推职级简称拆回胥长正式词条")
+              "从右推职级简称拆回胥长正式词条；拆出判刑部事职掌，"
+              "从法直官官品拆回刑部参见条，从纠察司别名拆回纠察官，"
+              "并从两司三衙正文拆回三衙正式词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
