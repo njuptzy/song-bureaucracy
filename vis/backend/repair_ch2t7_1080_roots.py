@@ -331,6 +331,16 @@ HUAIYUAN_POSTHOUSE_QUOTES = (
 )
 
 
+CHARCOAL_YARD_QUOTES = (
+    ("炭场", "364",
+     "监当局名。先后隶都大提举在京诸司库务司、司农寺。掌储备木炭，以供在京百司之用"),
+    ("都大提举在京诸司库务司", "110",
+     "（天圣）八年六月，提举诸司库务马季良言：‘京茶库、东西窑务、抽税竹木箔场、三炭场、牛羊司栈圈、供庖务、三水磨，旧不系提举，欲乞依诸司例，拨属提举司点检。’从之。"),
+    ("都大提举在京诸司库务司", "110", "神宗元丰元年（1078）十二月十九日罢"),
+    ("司农寺", "358", "元丰五年行新制"),
+)
+
+
 TRIPARTITE_VOUCHER_QUOTES = (
     ("三部凭由司", "138", "淳化二年三部凭由司合并为三司都凭由司"),
     ("三司都凭由司", "138", "淳化二年(991)合三司三部凭由司为三司都凭由司"),
@@ -480,6 +490,15 @@ def validate_quotations(dictionary_path: Path) -> None:
             if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
                 raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
         for source_entry, source_page, quotation in HUAIYUAN_POSTHOUSE_QUOTES:
+            rows = dictionary.execute(
+                "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
+                (source_entry, source_page),
+            ).fetchall()
+            if not rows:
+                raise ValueError(f"辞典词条不存在：{source_entry} 第{source_page}页")
+            if not any(quotation in f"{text or ''} {fields or ''}" for text, fields in rows):
+                raise ValueError(f"引文不是辞典原文子串：{source_entry} / {quotation}")
+        for source_entry, source_page, quotation in CHARCOAL_YARD_QUOTES:
             rows = dictionary.execute(
                 "SELECT text, fields FROM chapter2t7 WHERE title=? AND page=?",
                 (source_entry, source_page),
@@ -1404,6 +1423,143 @@ def repair_huaiyuan_posthouse_hierarchy(
     )
 
 
+def repair_charcoal_yard_hierarchy(
+    connection: sqlite3.Connection, counts: dict[str, int]
+) -> None:
+    """把炭场拨隶都大提举司的模糊关系精确到天圣八年六月。"""
+    expected_entities = {
+        227: "都大提举在京诸司库务司",
+        1996: "司农寺",
+        3098: "炭场",
+    }
+    for entity_id, title in expected_entities.items():
+        row = connection.execute(
+            "SELECT title,type FROM Entities WHERE id=?", (entity_id,)
+        ).fetchone()
+        if row != (title, "机构"):
+            raise ValueError(f"炭场修复实体已漂移：{entity_id}={row}，预期{title}")
+
+    early_old = (
+        "北宋（元丰改制前）",
+        "隶都大提举在京诸司库务司，储备木炭，供在京百司使用",
+        "在京库务监当局",
+    )
+    early_new = (
+        "北宋（元丰改制前）",
+        "元丰改制前已置，储备木炭，供在京百司使用；始置与原上级年月未载",
+        "在京库务监当局",
+    )
+    early = connection.execute(
+        "SELECT time,event,attr_category FROM Timepoints WHERE id=6346"
+    ).fetchone()
+    if early == early_old:
+        connection.execute(
+            "UPDATE Timepoints SET event=?,quotation=? WHERE id=6346",
+            (early_new[1], CHARCOAL_YARD_QUOTES[0][2]),
+        )
+        counts["charcoal_yard_timepoints_updated"] += 1
+    elif early == early_new:
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"炭场元丰改制前节点6346已漂移：{early}")
+    append_audit(
+        connection, "Timepoints", 6346, "炭场", "364", CHARCOAL_YARD_QUOTES[0][2],
+        "原文只概括炭场先后隶属，未载始置和最初上级年月；移除该模糊节点中被提前的都大提举司关系语义。",
+    )
+
+    transfer_time = "北宋天圣八年六月"
+    transfer_event = "三炭场拨隶都大提举在京诸司库务司"
+    transfer = connection.execute(
+        """
+        SELECT id FROM Timepoints
+        WHERE entity_id=3098 AND time=? AND event=?
+        ORDER BY id LIMIT 1
+        """,
+        (transfer_time, transfer_event),
+    ).fetchone()
+    if transfer is None:
+        early_link = connection.execute(
+            "SELECT succ_id FROM Timepoints WHERE id=6346"
+        ).fetchone()
+        reform_link = connection.execute(
+            "SELECT prev_id FROM Timepoints WHERE id=6182"
+        ).fetchone()
+        if early_link != (6182,) or reform_link != (6346,):
+            raise ValueError(
+                f"炭场1030年插入位置已漂移：6346.succ={early_link}，6182.prev={reform_link}"
+            )
+        cursor = connection.execute(
+            """
+            INSERT INTO Timepoints(
+                entity_id,time,event,prev_id,succ_id,
+                attr_category,attr_officer_type,attr_grade,quotation
+            ) VALUES (3098,?,?,6346,6182,?,NULL,NULL,?)
+            """,
+            (
+                transfer_time, transfer_event,
+                "都大提举在京诸司库务司属炭场", CHARCOAL_YARD_QUOTES[1][2],
+            ),
+        )
+        transfer_id = int(cursor.lastrowid)
+        connection.execute("UPDATE Timepoints SET succ_id=? WHERE id=6346", (transfer_id,))
+        connection.execute("UPDATE Timepoints SET prev_id=? WHERE id=6182", (transfer_id,))
+        counts["charcoal_yard_timepoints_inserted"] += 1
+    else:
+        transfer_id = int(transfer[0])
+        state = connection.execute(
+            "SELECT prev_id,succ_id,attr_category FROM Timepoints WHERE id=?",
+            (transfer_id,),
+        ).fetchone()
+        expected_state = (6346, 6182, "都大提举在京诸司库务司属炭场")
+        if state != expected_state:
+            raise ValueError(f"炭场天圣八年节点{transfer_id}已漂移：{state}")
+        if connection.execute("SELECT succ_id FROM Timepoints WHERE id=6346").fetchone() != (transfer_id,):
+            raise ValueError(f"炭场早期节点未连接天圣八年节点{transfer_id}")
+        if connection.execute("SELECT prev_id FROM Timepoints WHERE id=6182").fetchone() != (transfer_id,):
+            raise ValueError(f"炭场元丰节点未承接天圣八年节点{transfer_id}")
+        counts["reused"] += 1
+    append_audit(
+        connection, "Timepoints", transfer_id,
+        "都大提举在京诸司库务司", "110", CHARCOAL_YARD_QUOTES[1][2],
+        "原文明载天圣八年六月三炭场此前不系提举司、奏准后拨属；三炭场是正式词头炭场的数量称呼，不另建实体。",
+    )
+
+    relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5386"
+    ).fetchone()
+    if relation == (5315, 6346, "上下级机构"):
+        connection.execute(
+            "UPDATE Relationships SET subject_id=458,object_id=?,quotation=? WHERE id=5386",
+            (transfer_id, CHARCOAL_YARD_QUOTES[1][2]),
+        )
+        counts["charcoal_yard_relations_reparented"] += 1
+    elif relation == (458, transfer_id, "上下级机构"):
+        counts["reused"] += 1
+    else:
+        raise ValueError(f"都大提举司至炭场关系5386已漂移：{relation}")
+    append_audit(
+        connection, "Relationships", 5386,
+        "都大提举在京诸司库务司", "110", CHARCOAL_YARD_QUOTES[1][2],
+        "按天圣八年六月的明确原文重设关系两端，使炭场从1030年起隶都大提举司，不再从模糊宋前期提前生效。",
+    )
+    append_audit(
+        connection, "Relationships", 5386,
+        "都大提举在京诸司库务司", "110", CHARCOAL_YARD_QUOTES[2][2],
+        "原文明载都大提举司1078年被罢；该关系不能继续用于1080截面。",
+    )
+
+    reform_relation = connection.execute(
+        "SELECT subject_id,object_id,relation_type FROM Relationships WHERE id=5258"
+    ).fetchone()
+    if reform_relation != (3990, 6182, "上下级机构"):
+        raise ValueError(f"司农寺至炭场关系5258已漂移：{reform_relation}")
+    append_audit(
+        connection, "Relationships", 5258,
+        "司农寺", "358", CHARCOAL_YARD_QUOTES[3][2],
+        "司农寺条把炭场列在元丰五年新制后的所属机构中；保持1082年起的关系，不提前填补1078—1081年空档。",
+    )
+
+
 def repair_tripartite_voucher_offices(
     connection: sqlite3.Connection, counts: dict[str, int]
 ) -> None:
@@ -2166,6 +2322,34 @@ def repair_wensiyuan_hierarchy(
         if row != (title, "机构"):
             raise ValueError(f"文思院修复实体已漂移：{entity_id}={row}，预期{title}")
 
+    # 后续逐条提取已在旧修复节点之间补入唐代源流、两界、礼物局等更完整
+    # 时间点，并保留了三段核心隶属。此时由新提取链负责文思院，不再用
+    # 旧的四节点模板覆盖它。
+    richer_timeline = connection.execute(
+        "SELECT 1 FROM Timepoints WHERE entity_id=3274 AND id>7485 LIMIT 1"
+    ).fetchone()
+    if richer_timeline is not None:
+        core_relations = connection.execute(
+            """
+            SELECT es.id,eo.id,r.relation_type
+            FROM Relationships r
+            JOIN Timepoints ts ON ts.id=r.subject_id
+            JOIN Entities es ON es.id=ts.entity_id
+            JOIN Timepoints tob ON tob.id=r.object_id
+            JOIN Entities eo ON eo.id=tob.entity_id
+            WHERE r.id IN (6211,6212,6213)
+            ORDER BY r.id
+            """
+        ).fetchall()
+        if core_relations != [
+            (1998, 3274, "上下级机构"),
+            (1998, 3274, "上下级机构"),
+            (1185, 3274, "上下级机构"),
+        ]:
+            raise ValueError(f"文思院新提取链核心关系已漂移：{core_relations}")
+        counts["reused"] += 1
+        return
+
     existing_anchor = connection.execute(
         "SELECT entity_id,time,event,attr_category FROM Timepoints WHERE id=6569"
     ).fetchone()
@@ -2677,6 +2861,9 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         "huaiyuan_timepoints_updated": 0,
         "huaiyuan_timepoints_inserted": 0,
         "huaiyuan_relations_inserted": 0,
+        "charcoal_yard_timepoints_updated": 0,
+        "charcoal_yard_timepoints_inserted": 0,
+        "charcoal_yard_relations_reparented": 0,
         "voucher_instance_terminals_inserted": 0,
         "voucher_instance_evolutions_inserted": 0,
         "translation_court_relations_inserted": 0,
@@ -2856,6 +3043,7 @@ def apply_repairs(db_path: Path, dictionary_path: Path = DEFAULT_DICTIONARY) -> 
         repair_western_posthouse_hierarchy(connection, counts)
         repair_duting_posthouse_hierarchy(connection, counts)
         repair_huaiyuan_posthouse_hierarchy(connection, counts)
+        repair_charcoal_yard_hierarchy(connection, counts)
         repair_tripartite_voucher_offices(connection, counts)
         repair_translation_court_hierarchy(connection, counts)
         repair_jianlong_office_merge(connection, counts)
