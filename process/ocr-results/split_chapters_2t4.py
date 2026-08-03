@@ -3242,6 +3242,80 @@ def main():
         print("  [字段归位] '少府监主簿'(p398-399)：核原书将跨页粘在"
               "职掌末尾的品位拆回独立字段")
 
+        literary_thought_storekeeper, _ = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "库子" and str(m.get("page")) == "400"
+        )
+        assert "文恩院" in literary_thought_storekeeper["text"]
+        literary_thought_storekeeper["text"] = (
+            literary_thought_storekeeper["text"].replace("文恩院", "文思院", 1)
+        )
+
+        literary_thought_superintendents = [
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "专知官" and str(m.get("page")) == "400"
+        ]
+        assert len(literary_thought_superintendents) == 2
+        superintendent = next(
+            e for e, m in literary_thought_superintendents
+            if m.get("status") != "not_in_catalog"
+        )
+        continuation, continuation_meta = next(
+            (e, m) for e, m in literary_thought_superintendents
+            if m.get("status") == "not_in_catalog"
+        )
+        assert continuation.get("_not_in_catalog") is True
+        superintendent["text"] = (
+            superintendent["text"].rstrip() + continuation["text"]
+        )
+        superintendent["简称"] = continuation["简称"]
+        continuation.clear()
+        continuation.update({"name": "专知官", "text": "", "_placeholder": True})
+        continuation_meta["status"] = "placeholder"
+        continuation_meta.pop("not_in_catalog", None)
+
+        four_supervisors = next(e for e in all_entries if e["name"] == "四提辖")
+        wrong_history = "《宋会要·职官志》2"
+        assert wrong_history in four_supervisors["text"]
+        four_supervisors["text"] = four_supervisors["text"].replace(
+            wrong_history, "《宋史·职官志》2", 1
+        )
+
+        western_dyehouse = next(e for e in all_entries if e["name"] == "西染院")
+        combined_duty = western_dyehouse["职掌"]
+        roster_marker = "\n编制 "
+        assert roster_marker in combined_duty
+        duty, roster = combined_duty.split(roster_marker, 1)
+        western_dyehouse["职掌"] = duty.rstrip()
+        western_dyehouse["编制"] = roster.strip()
+
+        dyehouse_executor = next(
+            e for e in all_entries if e["name"] == "勾当染院公事"
+        )
+        tailoring_office, tailoring_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "栽造院" and str(m.get("page")) == "401"
+        )
+        assert tailoring_office.get("_placeholder") is True
+        embedded_marker = "裁造院 监当局名。"
+        assert embedded_marker in dyehouse_executor["text"]
+        executor_text, tailoring_text = dyehouse_executor["text"].split(
+            embedded_marker, 1
+        )
+        dyehouse_executor["text"] = executor_text.rstrip()
+        tailoring_office.clear()
+        tailoring_office.update({
+            "name": "裁造院",
+            "text": "监当局名。" + tailoring_text,
+        })
+        for key in ("职源", "职掌", "编制", "别称"):
+            tailoring_office[key] = dyehouse_executor.pop(key)
+        tailoring_meta["name"] = "裁造院"
+        tailoring_meta["status"] = "ok"
+        print("  [跨栏续文与字段归位] p400-401：恢复库子中的文思院、"
+              "合并专知官续文、校正四提辖引书名，拆回西染院编制及"
+              "被勾当染院公事吞入的裁造院正式词条")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
