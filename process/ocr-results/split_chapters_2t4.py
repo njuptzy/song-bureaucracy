@@ -3762,10 +3762,49 @@ def main():
         dali_temple_meta["name"] = "大理寺"
         dali_temple_meta["status"] = "ok"
         dali_temple_meta.pop("catalog_name", None)
+
+        dali_justices = [
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "大理寺正" and str(m.get("page")) == "429"
+        ]
+        assert len(dali_justices) == 2
+        dali_justice, dali_justice_meta = next(
+            (e, m) for e, m in dali_justices
+            if m.get("status") == "not_in_catalog"
+        )
+        dali_justice_continuation, continuation_meta = next(
+            (e, m) for e, m in dali_justices
+            if m.get("status") != "not_in_catalog"
+        )
+        assert dali_justice_continuation["text"].startswith("隶左断刑")
+        dali_justice["text"] = (
+            dali_justice["text"].rstrip() + dali_justice_continuation["text"]
+        )
+        dali_justice.pop("_not_in_catalog", None)
+        dali_justice_meta["status"] = "ok"
+        dali_justice_meta.pop("not_in_catalog", None)
+        dali_justice_continuation.clear()
+        dali_justice_continuation.update(
+            {"name": "大理寺正", "text": "", "_placeholder": True}
+        )
+        continuation_meta["status"] = "placeholder"
+        continuation_meta.pop("not_in_catalog", None)
+
+        right_prison_deputy = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "大理寺右治狱丞" and str(m.get("page")) == "430"
+        )
+        assert right_prison_deputy["text"].startswith(
+            "者，即专掌审讯大理狱囚犯职务的寺丞。"
+        )
+        right_prison_deputy["text"] = (
+            "大理寺丞分隶右治狱" + right_prison_deputy["text"]
+        )
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
-              "并恢复大理寺正式词头")
+              "恢复大理寺正式词头；合并大理寺正跨页续文，并补回"
+              "大理寺右治狱丞缺失的句首")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
