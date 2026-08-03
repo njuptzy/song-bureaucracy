@@ -2,6 +2,7 @@ const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
 import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
+  detachedHierarchyEntityIds,
   evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
@@ -150,6 +151,32 @@ function evolutionTransitions(dataset, eventById) {
     }));
 }
 
+function latestRelationStates(dataset, year, eventById) {
+  const relationStates = new Map();
+  for (const relation of dataset.relations) {
+    const effectiveYear = relationEffectiveYear(relation, eventById);
+    if (effectiveYear == null || effectiveYear > year) continue;
+    const childEvent = relation.type === "上下级机构"
+      ? String(eventById.get(relation.objectId)?.event || "")
+      : "";
+    const additiveHierarchy = relation.type === "上下级机构"
+      && childEvent.includes("附属机构")
+      && !/(?:改隶|转隶|改归)/.test(childEvent);
+    const key = additiveHierarchy
+      ? `${relationStateKey(relation)}:additive:${relation.subjectEntityId}`
+      : relationStateKey(relation);
+    const current = relationStates.get(key);
+    if (!current || effectiveYear > current.effectiveYear) {
+      relationStates.set(key, { effectiveYear, relations: [relation] });
+    } else if (effectiveYear === current.effectiveYear) {
+      current.relations.push(relation);
+    }
+  }
+  return [...relationStates.values()].flatMap(({ effectiveYear, relations }) => (
+    relations.map((relation) => ({ ...relation, effectiveYear }))
+  ));
+}
+
 export function buildYearSnapshot(dataset, year) {
   const entityById = new Map(dataset.entities.map((entity) => [entity.id, entity]));
   const eventById = new Map(dataset.events.map((event) => [event.id, event]));
@@ -221,33 +248,23 @@ export function buildYearSnapshot(dataset, year) {
   }
 
   const entityIds = new Set(currentEventByEntity.keys());
-  const relationStates = new Map();
-  for (const relation of dataset.relations) {
-    const effectiveYear = relationEffectiveYear(relation, eventById);
-    if (effectiveYear == null || effectiveYear > year) continue;
-    const childEvent = relation.type === "上下级机构"
-      ? String(eventById.get(relation.objectId)?.event || "")
-      : "";
-    // 仅有“附属机构”措辞的关系是叠加层级；它不等于“改隶”，因此
-    // 不能取代同一机构已有的基本上级。
-    const additiveHierarchy = relation.type === "上下级机构"
-      && childEvent.includes("附属机构")
-      && !/(?:改隶|转隶|改归)/.test(childEvent);
-    const key = additiveHierarchy
-      ? `${relationStateKey(relation)}:additive:${relation.subjectEntityId}`
-      : relationStateKey(relation);
-    const current = relationStates.get(key);
-    if (!current || effectiveYear > current.effectiveYear) {
-      relationStates.set(key, { effectiveYear, relations: [relation] });
-    } else if (effectiveYear === current.effectiveYear) {
-      current.relations.push(relation);
-    }
+  const latestRelations = latestRelationStates(dataset, year, eventById);
+  const detachedEntityIds = detachedHierarchyEntityIds(
+    latestRelations
+      .filter((relation) => relation.type === "上下级机构")
+      .map((relation) => ({
+        parentId: relation.subjectEntityId,
+        childId: relation.objectEntityId,
+      })),
+    entityIds,
+  );
+  for (const entityId of detachedEntityIds) {
+    entityIds.delete(entityId);
+    currentEventByEntity.delete(entityId);
   }
-  const relations = [...relationStates.values()].flatMap(({ effectiveYear, relations: items }) => (
-    items.map((relation) => ({ ...relation, effectiveYear }))
-  )).filter((relation) => (
+  const relations = latestRelations.filter((relation) => (
     // 与8050保持一致：先确定同一关系对象的最新状态，再检查端点存续。
-    // 后任上级罢废不构成自动复隶，不能重新显示已经被取代的旧关系。
+    // 后任上级罢废不构成自动复隶；断档下级也不会升格为虚拟中央根节点。
     entityIds.has(relation.subjectEntityId) && entityIds.has(relation.objectEntityId)
   ));
   const dedupedRelations = new Map();

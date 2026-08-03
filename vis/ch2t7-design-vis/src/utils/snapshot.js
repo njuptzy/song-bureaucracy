@@ -2,6 +2,7 @@ const SNAPSHOT_TIME_TYPES = new Set(["exact", "range", "bounded"]);
 import {
   classifyEntityLifecycle,
   classifyExistenceEffect,
+  detachedHierarchyEntityIds,
   evolutionDeactivationYears,
 } from "../../../shared/entity_lifecycle.js";
 
@@ -160,7 +161,10 @@ function subdivisionKeepsParent(timepoint, entity, parentTimepointIds, timepoint
   return false;
 }
 
-function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge) {
+function selectRelationStates(
+  edges, year, entityIds, timepointById, keyForEdge,
+  { includeInactiveEndpoints = false } = {},
+) {
   const candidatesByKey = new Map();
   for (const edge of edges) {
     const fallbackYears = (edge.periods || []).map((period) => period.start).filter(Number.isFinite);
@@ -189,16 +193,19 @@ function selectRelationStates(edges, year, entityIds, timepointById, keyForEdge)
       }
     }
   }
-  const selected = [...candidatesByKey.values()].flatMap(({ effectiveYear, items }) => items.map(({ edge, state }) => ({
+  const candidates = [...candidatesByKey.values()].flatMap(({ effectiveYear, items }) => items.map(({ edge, state }) => ({
     ...edge,
     id: state.id,
     effective_year: effectiveYear,
-  }))).filter((edge) => (
+  })));
+  const selected = candidates.filter((edge) => (
+    includeInactiveEndpoints
+      ? true
     // 先按关系对象选出当年最新状态，再检查端点是否仍存在。新上级退出后，
     // 不能因此回退到已经被改隶取代的旧上级；只有新的复隶状态才能恢复旧关系。
-    edge.parent != null
-      ? entityIds.has(edge.parent) && entityIds.has(edge.child)
-      : entityIds.has(edge.org) && entityIds.has(edge.official)
+      : edge.parent != null
+        ? entityIds.has(edge.parent) && entityIds.has(edge.child)
+        : entityIds.has(edge.org) && entityIds.has(edge.official)
   ));
   const deduped = new Map();
   for (const edge of selected) {
@@ -307,6 +314,22 @@ export function buildYearSnapshot(data, year) {
     if (!restoredLater) currentTimepointByEntity.delete(entityId);
   }
   const entityIds = new Set(currentTimepointByEntity.keys());
+  const latestHierarchyStates = selectRelationStates(
+    data.hierarchyEdges || [],
+    year,
+    entityIds,
+    timepointById,
+    (edge) => `hierarchy:${edge.child}`,
+    { includeInactiveEndpoints: true },
+  );
+  const detachedEntityIds = detachedHierarchyEntityIds(
+    latestHierarchyStates.map((edge) => ({ parentId: edge.parent, childId: edge.child })),
+    entityIds,
+  );
+  for (const entityId of detachedEntityIds) {
+    entityIds.delete(entityId);
+    currentTimepointByEntity.delete(entityId);
+  }
   const hierarchyEdges = selectRelationStates(
     data.hierarchyEdges || [],
     year,

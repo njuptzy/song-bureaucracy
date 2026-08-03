@@ -189,6 +189,37 @@ export function classifyExistenceEffect(timepoint, entity = {}) {
 }
 
 /**
+ * 下级机构最近一次已生效的隶属若只指向已退出的上级，它处于层级断档，
+ * 不能因此被提升为虚拟中央根节点。递归处理可避免其下级继续冒充根节点。
+ * assignments 必须已经按年份筛成各下级的最新关系状态。
+ */
+export function detachedHierarchyEntityIds(assignments, activeEntityIds) {
+  const visible = new Set(activeEntityIds || []);
+  const parentsByChild = new Map();
+  for (const assignment of assignments || []) {
+    const parentId = assignment?.parentId;
+    const childId = assignment?.childId;
+    if (parentId == null || childId == null || parentId === childId) continue;
+    if (!parentsByChild.has(childId)) parentsByChild.set(childId, new Set());
+    parentsByChild.get(childId).add(parentId);
+  }
+
+  const hidden = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [childId, parentIds] of parentsByChild) {
+      if (!visible.has(childId)) continue;
+      if ([...parentIds].some((parentId) => visible.has(parentId))) continue;
+      visible.delete(childId);
+      hidden.add(childId);
+      changed = true;
+    }
+  }
+  return hidden;
+}
+
+/**
  * “前后演变”表示同一制度对象的版本切换。只要某个有纪年的后继已经生效，
  * 它的来源实体以及沿无纪年演变边可追溯到的更早名称都必须退出年度截面。
  *

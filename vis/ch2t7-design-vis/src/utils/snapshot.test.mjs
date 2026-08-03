@@ -530,7 +530,7 @@ test("有纪年演变形成复归循环时不会在恢复当年再次删除原�
   assert.equal(buildYearSnapshot(data, 1080).entityIds.has(1), true);
 });
 
-test("改隶后的新上级罢废时不会自动回退到旧上级", () => {
+test("改隶后的新上级罢废时不会自动回退到旧上级，断档下级暂不显示", () => {
   const data = {
     entities: [
       { id: 1, title: "旧上级", type: "机构" },
@@ -554,7 +554,72 @@ test("改隶后的新上级罢废时不会自动回退到旧上级", () => {
   };
   assert.equal(buildYearSnapshot(data, 1005).hierarchyEdges[0]?.parent, 1);
   assert.equal(buildYearSnapshot(data, 1015).hierarchyEdges[0]?.parent, 2);
-  assert.equal(buildYearSnapshot(data, 1020).hierarchyEdges.length, 0);
+  const detached = buildYearSnapshot(data, 1020);
+  assert.equal(detached.hierarchyEdges.length, 0);
+  assert.equal(detached.entityIds.has(3), false);
+  assert.equal(detached.entityIds.has(1), true);
+});
+
+test("层级断档会递归隐藏依附机构，但不影响从未有上级的中央机构", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "临时上级", type: "机构" },
+      { id: 2, title: "断档下级", type: "机构" },
+      { id: 3, title: "下下级", type: "机构" },
+      { id: 4, title: "独立中央机构", type: "机构" },
+    ],
+    timepoints: {
+      1: [
+        timepoint(10, 1000, "始置"),
+        timepoint(11, 1010, "废罢", { prev_id: 10 }),
+      ],
+      2: [timepoint(20, 1000, "始置")],
+      3: [timepoint(30, 1000, "始置")],
+      4: [timepoint(40, 1000, "始置")],
+    },
+    hierarchyEdges: [
+      { id: 50, parent: 1, child: 2, periods: [], states: [{ id: 50, subject_timepoint_id: 10, object_timepoint_id: 20 }] },
+      { id: 51, parent: 2, child: 3, periods: [], states: [{ id: 51, subject_timepoint_id: 20, object_timepoint_id: 30 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+  };
+  const snapshot = buildYearSnapshot(data, 1010);
+  assert.equal(snapshot.entityIds.has(1), false);
+  assert.equal(snapshot.entityIds.has(2), false);
+  assert.equal(snapshot.entityIds.has(3), false);
+  assert.equal(snapshot.entityIds.has(4), true);
+});
+
+test("新上级关系生效后，层级断档机构自动恢复显示", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "旧上级", type: "机构" },
+      { id: 2, title: "下级机构", type: "机构" },
+      { id: 3, title: "新上级", type: "机构" },
+    ],
+    timepoints: {
+      1: [
+        timepoint(10, 1000, "始置"),
+        timepoint(11, 1010, "废罢", { prev_id: 10 }),
+      ],
+      2: [
+        timepoint(20, 1000, "始置"),
+        timepoint(21, 1020, "改隶新上级", { prev_id: 20 }),
+      ],
+      3: [timepoint(30, 1020, "始置")],
+    },
+    hierarchyEdges: [
+      { id: 40, parent: 1, child: 2, periods: [], states: [{ id: 40, subject_timepoint_id: 10, object_timepoint_id: 20 }] },
+      { id: 41, parent: 3, child: 2, periods: [], states: [{ id: 41, subject_timepoint_id: 30, object_timepoint_id: 21 }] },
+    ],
+    staffEdges: [],
+    evolutionEdges: [],
+  };
+  assert.equal(buildYearSnapshot(data, 1015).entityIds.has(2), false);
+  const restored = buildYearSnapshot(data, 1020);
+  assert.equal(restored.entityIds.has(2), true);
+  assert.equal(restored.hierarchyEdges[0]?.parent, 3);
 });
 
 test("附属机构关系叠加于基本隶属且随临时上级退出", () => {
