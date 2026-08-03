@@ -3507,6 +3507,97 @@ def main():
               "外都水监丞正式词条，并将两处外都水监丞司伪条续文分别并回"
               "管勾、勾当差遣词条，原伪条位保留为空占位")
 
+        guide_luo_office = next(
+            e for e in all_entries if e["name"] == "都大提举导洛通汴司"
+        )
+        guide_luo_post, guide_luo_post_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "都大提举导洛通汴" and str(m.get("page")) == "414"
+        )
+        assert guide_luo_post.get("_placeholder") is True
+        guide_luo_marker = "都大提举导洛通汴 差遣名。"
+        assert guide_luo_marker in guide_luo_office["简称"]
+        guide_luo_aliases, guide_luo_post_text = guide_luo_office["简称"].split(
+            guide_luo_marker, 1
+        )
+        guide_luo_office["简称"] = guide_luo_aliases.rstrip()
+        guide_luo_post.clear()
+        guide_luo_post.update({
+            "name": "都大提举导洛通汴",
+            "text": "差遣名。" + guide_luo_post_text.strip(),
+        })
+        guide_luo_post_meta["status"] = "ok"
+
+        bian_bank_office = next(
+            e for e in all_entries if e["name"] == "都大提举汴河堤岸司"
+        )
+        bian_bank_post, bian_bank_post_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "都大提举汴河堤岸" and str(m.get("page")) == "415"
+        )
+        sweep_office, sweep_office_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "河埠司" and str(m.get("page")) == "415"
+        )
+        assert bian_bank_post.get("_placeholder") is True
+        assert sweep_office.get("_placeholder") is True
+        bian_bank_marker = "都大提举汴河堤岸 差遣名。"
+        sweep_office_marker = "河埽司 官司名。"
+        combined_aliases = bian_bank_office["简称"]
+        assert bian_bank_marker in combined_aliases
+        office_aliases, embedded_entries = combined_aliases.split(
+            bian_bank_marker, 1
+        )
+        assert sweep_office_marker in embedded_entries
+        post_body, sweep_office_text = embedded_entries.split(
+            sweep_office_marker, 1
+        )
+        post_alias_marker = "都提举汴河堤岸、提举汴河堤岸。"
+        assert post_alias_marker in post_body
+        post_text, post_aliases = post_body.split(post_alias_marker, 1)
+        bian_bank_office["简称"] = office_aliases.rstrip()
+        bian_bank_post.clear()
+        bian_bank_post.update({
+            "name": "都大提举汴河堤岸",
+            "text": "差遣名。" + post_text.rstrip(),
+            "简称": post_alias_marker + post_aliases.strip(),
+        })
+        bian_bank_post_meta["status"] = "ok"
+        sweep_office.clear()
+        sweep_office.update({
+            "name": "河埽司",
+            "text": "官司名。" + sweep_office_text.strip(),
+            "编制": bian_bank_office.pop("编制"),
+        })
+        sweep_origin_marker = "北宋太宗淳化间沿黄河已有河埽之建置"
+        combined_origin = bian_bank_office["职源"]
+        assert sweep_origin_marker in combined_origin
+        bank_origin, sweep_origin = combined_origin.split(sweep_origin_marker, 1)
+        bian_bank_office["职源"] = bank_origin.rstrip()
+        sweep_office["职源"] = sweep_origin_marker + sweep_origin.strip()
+        sweep_duty_marker = "掌监本司公事，即备埽料"
+        combined_duty = bian_bank_office["职掌"]
+        assert sweep_duty_marker in combined_duty
+        bank_duty, sweep_duty = combined_duty.split(sweep_duty_marker, 1)
+        bian_bank_office["职掌"] = bank_duty.rstrip()
+        sweep_office["职掌"] = sweep_duty_marker + sweep_duty.strip()
+        sweep_office_meta["name"] = "河埽司"
+        sweep_office_meta["status"] = "ok"
+
+        censorate, censorate_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御史台官" and str(m.get("page")) == "416"
+        )
+        assert censorate["text"].startswith("司名。")
+        censorate["name"] = "御史台"
+        censorate["text"] = "官" + censorate["text"]
+        censorate.pop("_catalog_name", None)
+        censorate_meta["name"] = "御史台"
+        censorate_meta["status"] = "ok"
+        print("  [跨条与正式词头归位] p414-416：从导洛通汴司、汴河堤岸司"
+              "简称字段拆回两个都大提举差遣及河埽司，移回河埽司编制，"
+              "并将粘连的御史台官恢复为正式词头御史台")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
