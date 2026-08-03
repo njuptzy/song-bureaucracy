@@ -3189,6 +3189,36 @@ def main():
               "外舍生、内舍生与律学，拆回武学别称及律学教授品位编制，"
               "并校正大观四年八月十二日等 OCR 字误")
 
+        clan_school_doctor = next(
+            e for e in all_entries if e["name"] == "宗子学博士"
+        )
+        combined_duty = clan_school_doctor["职掌"]
+        rank_marker = "\n品位 "
+        assert rank_marker in combined_duty
+        duty_text, rank_text = combined_duty.split(rank_marker, 1)
+        clan_school_doctor["职掌"] = duty_text.rstrip()
+        clan_school_doctor["品位"] = rank_text
+
+        clan_school_instructor = next(
+            e for e in all_entries if e["name"] == "宗子学谕"
+        )
+        combined_rank = clan_school_instructor["品位"]
+        roster_marker = "编制 "
+        assert roster_marker in combined_rank
+        rank_text, roster_text = combined_rank.split(roster_marker, 1)
+        clan_school_instructor["品位"] = rank_text.rstrip()
+        clan_school_instructor["编制"] = roster_text
+        wrong_alias = "今宫学改为宗库，教授转为博、谕。"
+        assert wrong_alias in clan_school_instructor["简称"]
+        clan_school_instructor["简称"] = clan_school_instructor["简称"].replace(
+            wrong_alias,
+            "今宫学改为宗庠，教授转为博、谕。",
+            1,
+        )
+        print("  [字段与OCR字误归位] '宗子学博士/宗子学谕'(p395)："
+              "按原书拆回博士品位、学谕编制字段，并将简称引文中的"
+              "‘宗库’恢复为‘宗庠’")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
