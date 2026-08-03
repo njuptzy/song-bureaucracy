@@ -3219,6 +3219,17 @@ def main():
               "按原书拆回博士品位、学谕编制字段，并将简称引文中的"
               "‘宗库’恢复为‘宗庠’")
 
+        school_prefect = next(e for e in all_entries if e["name"] == "斋长")
+        wrong_source = "《宋会要·选举志》3"
+        assert wrong_source in school_prefect["text"]
+        school_prefect["text"] = school_prefect["text"].replace(
+            wrong_source,
+            "《宋史·选举志》3",
+            1,
+        )
+        print("  [OCR引书名] '斋长'(p396)：核原书将不存在的"
+              "《宋会要·选举志》恢复为《宋史·选举志》")
+
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
         canonical = rename.get("canonical")
