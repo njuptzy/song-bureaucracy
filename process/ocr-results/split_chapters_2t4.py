@@ -3137,13 +3137,57 @@ def main():
         biyong_director["text"] = biyong_director["text"].replace(
             "四年八年十二日罢", "四年八月十二日罢", 1
         )
+
+        martial_school = next(e for e in all_entries if e["name"] == "武学")
+        combined_roster = martial_school["编制"]
+        assert "。别称 右学。" in combined_roster
+        martial_school["编制"], martial_school["别称"] = combined_roster.split(
+            "。别称 ", 1
+        )
+        martial_school["编制"] += "。"
+
+        martial_adviser = next(e for e in all_entries if e["name"] == "武学谕")
+        assert martial_adviser["编制"].startswith("·北宋时")
+        martial_adviser["编制"] = martial_adviser["编制"].lstrip("·")
+
+        martial_student = next(e for e in all_entries if e["name"] == "武学生")
+        assert "仍复熙丰法《宋会要" in martial_student["text"]
+        martial_student["text"] = martial_student["text"].replace(
+            "仍复熙丰法《宋会要", "仍复熙丰法（《宋会要", 1
+        )
+
+        law_assistant = next(e for e in all_entries if e["name"] == "律学助教")
+        law_school = next(e for e in all_entries if e["name"] == "律学")
+        assert law_assistant["text"].endswith("律学 官学名。隶国子监。")
+        assert law_school.get("_placeholder") is True
+        law_assistant["text"] = law_assistant["text"].removesuffix(
+            "律学 官学名。隶国子监。"
+        ).rstrip()
+        law_school["text"] = "官学名。隶国子监。"
+        law_school.pop("_placeholder", None)
+        law_school.pop("__status__", None)
+        law_school_meta = all_meta[all_entries.index(law_school)]
+        law_school_meta["status"] = "ok"
+        for key in ("职源与沿革", "职能", "编制"):
+            assert key in law_assistant and key not in law_school
+            law_school[key] = law_assistant.pop(key)
+
+        law_professor = next(e for e in all_entries if e["name"] == "律学教授")
+        combined_duty = law_professor["职掌"]
+        assert "。品位 " in combined_duty and "。编制 " in combined_duty
+        duty, rank_roster = combined_duty.split("。品位 ", 1)
+        rank, roster = rank_roster.split("。编制 ", 1)
+        law_professor["职掌"] = duty + "。"
+        law_professor["品位"] = rank + "。"
+        law_professor["编制"] = roster
         for title in ("太学生", "太学外舍生", "太学内舍生"):
             entry = next(e for e in all_entries if e["name"] == title)
             assert entry.get("text") and entry.get("_placeholder") is not True
         print("  [标题字段与字误归位] '同管勾太学公事/权管勾太学公事/"
-              "太学录/太学说书/太学生三舍/辟雍直学'(p386-390)："
+              "太学录/太学说书/太学生三舍/辟雍直学/武学/律学'(p386-393)："
               "恢复《李觏外集》、拆回太学录职掌、按正式词头切开太学生、"
-              "外舍生、内舍生，并校正大观四年八月十二日")
+              "外舍生、内舍生与律学，拆回武学别称及律学教授品位编制，"
+              "并校正大观四年八月十二日等 OCR 字误")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
