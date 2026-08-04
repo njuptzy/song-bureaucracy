@@ -4077,6 +4077,93 @@ def main():
         assert duty.endswith(duplicate_duty)
         pengri["职掌"] = duty[:-len(duplicate_duty)].rstrip()
         pengri["编制"] = roster.strip()
+
+        tianwu = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "天武左、右厢" and str(m.get("page")) == "446"
+        )
+        duty_marker = "职掌 守京师"
+        assert duty_marker in tianwu["职源与沿革"]
+        origin, duty = tianwu["职源与沿革"].split(duty_marker, 1)
+        tianwu["职源与沿革"] = origin.rstrip()
+        tianwu["职掌"] = "守京师" + duty.strip()
+
+        combined_commander = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军司马步军都虞候"
+            and str(m.get("page")) == "448"
+        )
+        quota_marker = "。编制 一人"
+        assert quota_marker in combined_commander["品位"]
+        rank, quota = combined_commander["品位"].split(quota_marker, 1)
+        combined_commander["品位"] = rank + "。"
+        combined_commander["编制"] = "一人" + quota.strip()
+
+        cavalry_deputy = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军马军司副都指挥使"
+            and str(m.get("page")) == "449"
+        )
+        rank_marker = "\n品位 "
+        assert rank_marker in cavalry_deputy["职掌"]
+        duty, rank = cavalry_deputy["职掌"].split(rank_marker, 1)
+        cavalry_deputy["职掌"] = duty.rstrip()
+        cavalry_deputy["品位"] = rank.strip()
+        aliases_marker = "\n简称与别名 "
+        assert aliases_marker in cavalry_deputy["编制"]
+        quota, aliases = cavalry_deputy["编制"].split(aliases_marker, 1)
+        cavalry_deputy["编制"] = quota.rstrip()
+        cavalry_deputy["简称与别名"] = aliases.strip()
+
+        cavalry_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军马军司都虞候"
+            and str(m.get("page")) == "450"
+        )
+        assert not cavalry_guard.get("text")
+        cavalry_guard["text"] = "军职名。"
+
+        foot_commands = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "殿前司步军诸指挥" and str(m.get("page")) == "446"
+        )
+        assert foot_commands["text"] == "禁军编制之一,隶\n殿前司。"
+        foot_commands["text"] = "禁军编制之一,隶殿前司。"
+
+        broad_tianwu = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "宽衣天武指挥" and str(m.get("page")) == "446"
+        )
+        assert broad_tianwu["text"] == "禁军步兵编制名,隶殿前\n司天武左、右厢。"
+        broad_tianwu["text"] = "禁军步兵编制名,隶殿前司天武左、右厢。"
+
+        assert combined_commander["text"] == "军\n职名。"
+        combined_commander["text"] = "军职名。"
+
+        cavalry_commander = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军马军司都指挥使"
+            and str(m.get("page")) == "449"
+        )
+        assert cavalry_commander["text"] == "军职 名。三衙长官之一。"
+        cavalry_commander["text"] = "军职名。三衙长官之一。"
+
+        assert "侍卫局" in next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军司马步军都指挥使"
+            and str(m.get("page")) == "448"
+        )["职源与沿革"]
+        combined_chief = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军司马步军都指挥使"
+            and str(m.get("page")) == "448"
+        )
+        combined_chief["职源与沿革"] = combined_chief["职源与沿革"].replace(
+            "侍卫局", "侍卫司"
+        )
+
+        assert "\n" in cavalry_deputy["品位"]
+        cavalry_deputy["品位"] = cavalry_deputy["品位"].replace("\n", "")
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4088,7 +4175,9 @@ def main():
               "左右合并词头及第441页页码；从金枪班拆回散直左右班，"
               "从殿侍班拆回祗应与下班祗应并校正词头字形；恢复御龙"
               "左右直、御龙骨朵子左右直词头，校正御龙弩直简称，并拆回"
-              "捧日左右厢编制字段")
+              "捧日左右厢编制字段；拆回天武左右厢职掌、侍卫马步军都虞候"
+              "编制及马军副都指挥使品位与别名，补回马军都虞候正文，"
+              "并合并四处版面断行、校正侍卫司OCR字误")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
