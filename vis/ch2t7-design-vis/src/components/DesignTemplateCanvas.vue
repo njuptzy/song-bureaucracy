@@ -18,7 +18,7 @@ const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
 const viewMode = ref("hierarchy");
-const selectedRange = ref([1109, 1109]);
+const selectedRange = ref([1080, 1080]);
 const timelineSelectionActive = ref(true);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
@@ -49,6 +49,7 @@ const DETAIL_PANEL_BOUNDS = {
 };
 
 const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
+const collectiveEntityIds = new Set(props.data.collectiveEntityIds || []);
 const titleMap = new Map();
 for (const entity of props.data.entities) {
   if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
@@ -170,11 +171,14 @@ function entityCategory(entity) {
 }
 
 function hierarchyRootEntities(category) {
-  const childIds = new Set(
-    hierarchyEdgesForView().map((edge) => edge.child)
+  const hierarchyEdges = hierarchyEdgesForView();
+  const childIds = new Set(hierarchyEdges.map((edge) => edge.child));
+  const hierarchyEntityIds = new Set(
+    hierarchyEdges.flatMap((edge) => [edge.parent, edge.child])
   );
   return props.data.entities.filter(
     (entity) => entity.type === "机构"
+      && !(collectiveEntityIds.has(entity.id) && !hierarchyEntityIds.has(entity.id))
       && entityCategory(entity) === category
       && entityActive(entity.id)
       && !childIds.has(entity.id)
