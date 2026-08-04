@@ -536,6 +536,11 @@ const INLINE_TITLE_POLYGON_BOUNDS = {
   width: 33.22,
   height: 126.85,
 };
+const INLINE_DETAIL_COLUMN_EDGES = [
+  614.19, 633.3, 650.92, 668.55, 686.17, 703.79, 721.41, 740.72,
+];
+const INLINE_DETAIL_COLUMN_TOP = 161.01;
+const INLINE_DETAIL_COLUMN_HEIGHT = 127.4;
 
 function displayStaffFor(entityId) {
   const byOfficial = new Map();
@@ -643,20 +648,37 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     ? entityMap.get(geometry.staff[geometry.selectedIndex].official)
     : null;
   const values = selectedOfficial ? inlineDetailValues(selectedOfficial) : null;
+  let detailDirectoryGroup = null;
 
-  for (const field of INLINE_DETAIL_FIELDS) {
+  for (const [fieldIndex, field] of INLINE_DETAIL_FIELDS.entries()) {
     const label = [...card.querySelectorAll("text.cls-67")]
       .find((element) => normalizeText(element) === field.label.replace(/\s+/g, ""));
     if (!label) continue;
+    detailDirectoryGroup ||= label.parentElement;
     const active = inlineDetailField.value === field.key;
-    label.style.cursor = "pointer";
-    label.style.pointerEvents = "all";
+    label.style.pointerEvents = "none";
     label.style.fontWeight = active ? "700" : "400";
     label.style.fill = active ? "#866d6d" : "#351704";
+
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    hitArea.classList.add("inline-detail-directory-entry");
+    hitArea.dataset.detailField = field.key;
+    hitArea.setAttribute("x", String(INLINE_DETAIL_COLUMN_EDGES[fieldIndex]));
+    hitArea.setAttribute("y", String(INLINE_DETAIL_COLUMN_TOP));
+    hitArea.setAttribute(
+      "width",
+      String(INLINE_DETAIL_COLUMN_EDGES[fieldIndex + 1] - INLINE_DETAIL_COLUMN_EDGES[fieldIndex])
+    );
+    hitArea.setAttribute("height", String(INLINE_DETAIL_COLUMN_HEIGHT));
+    hitArea.setAttribute("fill", active ? "#866d6d" : "transparent");
+    hitArea.setAttribute("fill-opacity", active ? "0.08" : "0");
+    hitArea.setAttribute("pointer-events", "all");
+    hitArea.style.cursor = "pointer";
     const jumpTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     jumpTitle.textContent = `跳转到左侧详情的${field.label.replace("：", "")}段落`;
-    label.appendChild(jumpTitle);
-    d3.select(label).on("click.inline-detail-field", (event) => {
+    hitArea.appendChild(jumpTitle);
+
+    const jumpToSection = (event) => {
       event.preventDefault();
       event.stopPropagation();
       const detailEntity = selectedOfficial || entity;
@@ -669,7 +691,18 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       inlineDetailField.value = field.key;
       pendingDetailSectionKey = field.key;
       renderTemplate();
-    });
+    };
+    d3.select(hitArea)
+      .on("mouseenter.inline-detail-field", () => {
+        hitArea.setAttribute("fill", "#866d6d");
+        hitArea.setAttribute("fill-opacity", active ? "0.13" : "0.08");
+      })
+      .on("mouseleave.inline-detail-field", () => {
+        hitArea.setAttribute("fill", active ? "#866d6d" : "transparent");
+        hitArea.setAttribute("fill-opacity", active ? "0.08" : "0");
+      })
+      .on("click.inline-detail-field", jumpToSection);
+    detailDirectoryGroup?.appendChild(hitArea);
   }
 
   geometry.staff.forEach((edge, index) => {
