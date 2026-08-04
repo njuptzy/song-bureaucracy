@@ -143,14 +143,26 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   const displayTitle = fullTitle.length > maxGlyphs
     ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
     : fullTitle;
-  setText(label, displayTitle);
+  label.replaceChildren();
+  label.removeAttribute("transform");
   label.removeAttribute("text-anchor");
   label.removeAttribute("dominant-baseline");
-  // 所有官职名使用同一顶部基线；长名称只缩小字号，不再按字数改变起点。
+  label.style.writingMode = "horizontal-tb";
+  label.style.textOrientation = "mixed";
+  label.setAttribute("text-anchor", "middle");
+  // 不使用浏览器竖排流：每个字独立放在本格中心，避免标题串到相邻书脊。
   const bodyHeight = height - 29;
   const fontSize = Math.min(9.2, bodyHeight / Math.max(1, displayTitle.length));
   label.style.fontSize = `${fontSize}px`;
-  label.setAttribute("transform", `translate(${x + width / 2} ${y + 7})`);
+  const centerX = x + width / 2;
+  const top = y + 7;
+  [...displayTitle].forEach((character, index) => {
+    const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    tspan.setAttribute("x", String(centerX));
+    tspan.setAttribute("y", String(top + fontSize * (index + 0.82)));
+    tspan.textContent = character;
+    label.appendChild(tspan);
+  });
 }
 
 function fitQuotaLabel(quota, person, edge, rect) {
@@ -162,14 +174,20 @@ function fitQuotaLabel(quota, person, edge, rect) {
   if (![x, y, width, height].every(Number.isFinite)) return;
   const text = edge.staff_quota ? `（${edge.staff_quota}）` : "未载";
   setText(quota, text);
+  quota.removeAttribute("transform");
+  quota.style.writingMode = "horizontal-tb";
   quota.setAttribute("text-anchor", "middle");
-  quota.setAttribute("dominant-baseline", "central");
+  quota.removeAttribute("dominant-baseline");
   quota.style.fontSize = `${Math.min(5.01, 16 / Math.max(2, text.length))}px`;
-  quota.setAttribute("transform", `translate(${x + width / 2} ${y + height - 8.5})`);
+  quota.setAttribute("x", String(x + width / 2));
+  quota.setAttribute("y", String(y + height - 7));
   if (person) {
     person.style.display = edge.staff_quota ? "" : "none";
+    person.removeAttribute("transform");
+    person.style.writingMode = "horizontal-tb";
     person.setAttribute("text-anchor", "middle");
-    person.setAttribute("transform", `translate(${x + width / 2} ${y + height - 2.8})`);
+    person.setAttribute("x", String(x + width / 2));
+    person.setAttribute("y", String(y + height - 1.5));
   }
 }
 
