@@ -4123,6 +4123,42 @@ def main():
         assert not cavalry_guard.get("text")
         cavalry_guard["text"] = "军职名。"
 
+        dragon_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "龙卫左、右厢" and str(m.get("page")) == "451"
+        )
+        assert dragon_guard.get("简称", "").startswith("与旧名 ")
+        dragon_guard["简称与旧名"] = dragon_guard.pop("简称")[len("与旧名 "):]
+
+        divine_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "神卫左、右厢" and str(m.get("page")) == "452"
+        )
+        assert divine_guard.get("简称", "").startswith("与旧名 ")
+        divine_guard["简称与旧名"] = divine_guard.pop("简称")[len("与旧名 "):]
+
+        foot_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "侍卫亲军步军司都虞候"
+            and str(m.get("page")) == "452"
+        )
+        assert not foot_guard.get("text")
+        foot_guard["text"] = "军职名。"
+        foot_rank_marker = "。品位 从五品。"
+        assert foot_rank_marker in foot_guard["职掌"]
+        foot_duty, foot_rank = foot_guard["职掌"].split(foot_rank_marker, 1)
+        foot_guard["职掌"] = foot_duty + "。"
+        foot_guard["品位"] = "从五品。" + foot_rank
+
+        foot_tiger = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "步军司虎翼军" and str(m.get("page")) == "453"
+        )
+        assert "侍卫 亲军步军司" in foot_tiger["text"]
+        foot_tiger["text"] = foot_tiger["text"].replace(
+            "侍卫 亲军步军司", "侍卫亲军步军司"
+        )
+
         foot_commands = next(
             e for e, m in zip(all_entries, all_meta)
             if e["name"] == "殿前司步军诸指挥" and str(m.get("page")) == "446"
@@ -4177,7 +4213,9 @@ def main():
               "左右直、御龙骨朵子左右直词头，校正御龙弩直简称，并拆回"
               "捧日左右厢编制字段；拆回天武左右厢职掌、侍卫马步军都虞候"
               "编制及马军副都指挥使品位与别名，补回马军都虞候正文，"
-              "并合并四处版面断行、校正侍卫司OCR字误")
+              "并合并四处版面断行、校正侍卫司OCR字误；恢复龙卫左右厢"
+              "和神卫左右厢‘简称与旧名’字段，补回步军司都虞候正文并拆出品位，"
+              "合并步军司虎翼军机构名中的版面空格")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
