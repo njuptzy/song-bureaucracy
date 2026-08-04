@@ -4482,6 +4482,94 @@ def main():
         gate_records["text"] = gate_records["text"].replace(
             wrong_source, "《宋会要·职官》34之8", 1
         )
+
+        associate_gate = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "同知阁门事" and str(m.get("page")) == "466"
+        )
+        assert "同兼容省、四方馆事" in associate_gate["text"]
+        associate_gate["text"] = associate_gate["text"].replace(
+            "同兼容省、四方馆事", "同兼客省、四方馆事", 1
+        )
+
+        gate_deputies = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "东、西上阁门副使"
+            and str(m.get("page")) == "465"
+        )
+        assert gate_deputies["简称"].startswith("阎门副使。")
+        gate_deputies["简称"] = gate_deputies["简称"].replace(
+            "阎门副使。", "阁门副使。", 1
+        )
+
+        gate_envoys = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "东、西上阁门使"
+            and str(m.get("page")) == "465"
+        )
+        assert gate_envoys["职源与沿革"].startswith("阎门使始置")
+        gate_envoys["职源与沿革"] = gate_envoys["职源与沿革"].replace(
+            "阎门使始置", "阁门使始置", 1
+        )
+
+        gate_bureaus = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "东、西上阁门司"
+            and str(m.get("page")) == "464"
+        )
+        gate_bureaus_tail, gate_bureaus_tail_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "阁门官" and str(m.get("page")) == "465"
+            and e.get("_not_in_catalog") is True
+        )
+        assert gate_bureaus_tail["text"].startswith("多安插外戚、勋贵")
+        assert gate_bureaus["编制"].endswith("（东六员、西二员）。")
+        gate_bureaus["编制"] += gate_bureaus_tail["text"]
+        gate_bureaus["简称"] = gate_bureaus_tail["简称"]
+        gate_bureaus_tail.clear()
+        gate_bureaus_tail.update({
+            "name": "阁门官",
+            "text": "",
+            "_placeholder": True,
+        })
+        gate_bureaus_tail_meta["status"] = "placeholder"
+
+        gate_envoy_group, gate_envoy_group_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "阎门使副" and str(m.get("page")) == "465"
+        )
+        false_gate_envoy, false_gate_envoy_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "阁门使" and str(m.get("page")) == "465"
+            and e.get("_from_surname") is True
+        )
+        assert gate_envoy_group.get("_placeholder") is True
+        assert false_gate_envoy["text"].startswith("副 东、西上阁门使")
+        gate_envoy_group.clear()
+        gate_envoy_group.update({
+            "name": "阁门使副",
+            "text": false_gate_envoy["text"].replace("副 ", "", 1),
+        })
+        gate_envoy_group_meta["name"] = "阁门使副"
+        gate_envoy_group_meta["status"] = "ok"
+        false_gate_envoy.clear()
+        false_gate_envoy.update({
+            "name": "阁门使",
+            "text": "",
+            "_placeholder": True,
+        })
+        false_gate_envoy_meta["status"] = "placeholder"
+
+        four_directions = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "四方馆" and str(m.get("page")) == "468"
+        )
+        swallowed_duty = "。职掌 "
+        assert swallowed_duty in four_directions["职源与沿革"]
+        four_directions["职源与沿革"], four_directions["职掌"] = (
+            four_directions["职源与沿革"].split(swallowed_duty, 1)
+        )
+        four_directions["职源与沿革"] += "。"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4504,7 +4592,9 @@ def main():
               "职源字段，并统一恢复‘行宫禁卫所’字形；按p459-462原页拆回"
               "御前忠佐军头引见司职源、干办差遣及马军副都军头正式词条；"
               "按p462-468补回步军副都军头正文，并修正祗候、禁军断字、"
-              "军头引见司机构断行及阁门相关误识")
+              "军头引见司机构断行及阁门相关误识；按p464-469恢复阁门使副"
+              "正式词条，合并东、西上阁门司编制续文，修正阁门字形与"
+              "同兼客省，并从四方馆职源中拆回职掌字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
