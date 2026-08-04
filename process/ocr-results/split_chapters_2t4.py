@@ -4244,6 +4244,73 @@ def main():
 
         assert "\n" in cavalry_deputy["品位"]
         cavalry_deputy["品位"] = cavalry_deputy["品位"].replace("\n", "")
+
+        scout = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "逻卒" and str(m.get("page")) == "458"
+        )
+        scout_alias_marker = "别称 察子。"
+        assert scout["text"].startswith("月发给缗钱")
+        assert scout_alias_marker in scout["text"]
+        scout_text, scout_alias = scout["text"].split(
+            scout_alias_marker, 1
+        )
+        scout["text"] = (
+            "皇城司探事司亲事官，‘于京城伺察’，每"
+            + scout_text
+        ).rstrip()
+        scout["别称"] = "察子。" + scout_alias.strip()
+
+        swift_runner = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "快行" and str(m.get("page")) == "459"
+        )
+        prison_cleaner, prison_cleaner_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "司圜" and str(m.get("page")) == "459"
+        )
+        cleaner_marker = "司置 禁军卒，隶皇城司。"
+        assert cleaner_marker in swift_runner["text"]
+        assert prison_cleaner.get("_placeholder") is True
+        runner_text, cleaner_text = swift_runner["text"].split(
+            cleaner_marker, 1
+        )
+        swift_runner["text"] = runner_text.rstrip()
+        prison_cleaner.clear()
+        prison_cleaner.update({
+            "name": "司圜",
+            "text": "禁军卒，隶皇城司。" + cleaner_text.strip(),
+        })
+        prison_cleaner_meta["status"] = "ok"
+
+        ice_office = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "冰井务" and str(m.get("page")) == "459"
+        )
+        ice_origin_marker = "\n职源 "
+        assert ice_origin_marker in ice_office["text"]
+        ice_text, ice_origin = ice_office["text"].split(
+            ice_origin_marker, 1
+        )
+        ice_office["text"] = ice_text.rstrip()
+        ice_office["职源"] = ice_origin.strip()
+
+        palace_office = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "皇城司" and str(m.get("page")) == "457"
+        )
+        mobile_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "行宫禁卫所" and str(m.get("page")) == "459"
+        )
+        assert "行官禁卫所" in palace_office["职源与沿革"]
+        assert "行官禁卫所" in mobile_guard["text"]
+        palace_office["职源与沿革"] = palace_office["职源与沿革"].replace(
+            "行官禁卫所", "行宫禁卫所"
+        )
+        mobile_guard["text"] = mobile_guard["text"].replace(
+            "行官禁卫所", "行宫禁卫所"
+        )
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4261,7 +4328,9 @@ def main():
               "和神卫左右厢‘简称与旧名’字段，补回步军司都虞候正文并拆出品位，"
               "合并步军司虎翼军机构名中的版面空格；从军都虞候正文拆回简称，"
               "并删除‘都’条引书名后的OCR赘括号；从主管某司公事中拆回"
-              "南宋‘军’正式词条，取消其空占位")
+              "南宋‘军’正式词条，取消其空占位；按p458-459原页补回逻卒"
+              "句首并拆出别称‘察子’，从快行拆回司圜正式词条，拆回冰井务"
+              "职源字段，并统一恢复‘行宫禁卫所’字形")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
