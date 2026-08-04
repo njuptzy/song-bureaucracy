@@ -4632,6 +4632,30 @@ def main():
             "_placeholder": True,
         })
         false_associate_gate_meta["status"] = "placeholder"
+
+        merit_guard = next(e for e in all_entries if e["name"] == "勋卫府郎、中郎")
+        wrong_merit_roster = "励卫府郎十员、中郎十员"
+        assert wrong_merit_roster in merit_guard["编制"]
+        merit_guard["编制"] = merit_guard["编制"].replace(
+            wrong_merit_roster, "勋卫府郎十员、中郎十员", 1
+        )
+
+        wing_guard = next(e for e in all_entries if e["name"] == "翊卫府郎、中郎")
+        assert wing_guard["简称"].startswith("端卫官、翊卫。")
+        wing_guard["简称"] = wing_guard["简称"].replace(
+            "端卫官、翊卫。", "翊卫官、翊卫。", 1
+        )
+
+        right_divine_general_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "左、右神武军将军" and str(meta.get("page")) == "47"
+        ]
+        assert len(right_divine_general_matches) == 1
+        _, right_divine_general_meta = right_divine_general_matches[0]
+        right_divine_general_meta["page"] = "474"
+        print("  [OCR字误与页码归位] p472-474：恢复‘勋卫府郎十员’、"
+              "‘翊卫官’及左、右神武军将军页码474")
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"

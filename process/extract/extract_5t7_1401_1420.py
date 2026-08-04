@@ -765,6 +765,24 @@ def entry1418():
         "建立三卫府崇宁五年罢置节点。", "职源与沿革", update_event=True,
     )
     cite(w, "Timepoints", ended, i, origin, "保存三卫府罢置日期。", "职源与沿革")
+    for child_title in ("亲卫府", "勋卫府", "翊卫府"):
+        node(
+            w, touched, i, child_title, "机构", "北宋崇宁五年正月三十日",
+            "随三卫府罢置", origin, "下级府署",
+            f"三卫府罢置时同步终结{child_title}。", "职源与沿革",
+            update_event=True,
+        )
+    for post_title in (
+        "三卫中郎", "三卫博士", "三卫主簿",
+        "亲卫郎", "亲卫中郎", "勋卫郎", "勋卫中郎", "翊卫郎", "翊卫中郎",
+        "三卫府令史", "三卫府书令史", "三卫府贴书", "三卫府守阙贴书",
+    ):
+        node(
+            w, touched, i, post_title, "官职", "北宋崇宁五年正月三十日",
+            "随三卫府罢置", origin, "三卫府罢置所及官吏",
+            f"三卫府罢置时同步终结{post_title}。", "职源与沿革",
+            update_event=True,
+        )
     finish(w, touched, "整理三卫府唐制来源、宋代始罢、三级机构、完整官吏编制及长官改名。")
 
 
