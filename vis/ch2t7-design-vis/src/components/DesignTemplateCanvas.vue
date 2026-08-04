@@ -28,6 +28,7 @@ const inlineDetailOfficialId = ref(null);
 const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
+let pendingDetailSectionKey = null;
 let hierarchyClickTimer = null;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
@@ -647,14 +648,26 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     const label = [...card.querySelectorAll("text.cls-67")]
       .find((element) => normalizeText(element) === field.label.replace(/\s+/g, ""));
     if (!label) continue;
-    const active = Boolean(selectedOfficial) && inlineDetailField.value === field.key;
-    label.style.cursor = selectedOfficial ? "pointer" : "default";
+    const active = inlineDetailField.value === field.key;
+    label.style.cursor = "pointer";
+    label.style.pointerEvents = "all";
     label.style.fontWeight = active ? "700" : "400";
     label.style.fill = active ? "#866d6d" : "#351704";
+    const jumpTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    jumpTitle.textContent = `跳转到左侧详情的${field.label.replace("：", "")}段落`;
+    label.appendChild(jumpTitle);
     d3.select(label).on("click.inline-detail-field", (event) => {
+      event.preventDefault();
       event.stopPropagation();
-      if (!selectedOfficial) return;
+      const detailEntity = selectedOfficial || entity;
+      selectedId.value = detailEntity.id;
+      if (detailEntity.type === "机构") {
+        selectedCategory.value = entityCategory(detailEntity);
+      } else {
+        selectedCategory.value = entityCategory(entity);
+      }
       inlineDetailField.value = field.key;
+      pendingDetailSectionKey = field.key;
       renderTemplate();
     });
   }
@@ -1444,21 +1457,9 @@ function updateDetails(svg) {
     if (!label || !content) continue;
     label.setAttribute("transform", `translate(100.33 ${cursorY})`);
     setText(label, field.label);
-    label.style.cursor = "pointer";
+    label.style.cursor = "default";
     label.style.fill = inlineDetailField.value === field.key ? "#866d6d" : "#351704";
-    const labelTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    labelTitle.textContent = `打开${entity.title}的${field.label.replace("：", "")}书页`;
-    label.appendChild(labelTitle);
-    d3.select(label).on("click.detail-field-link", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const focus = graphFocusEntity();
-      if (!focus) return;
-      expandedDetailId.value = focus.id;
-      inlineDetailOfficialId.value = entity.type === "官职" ? entity.id : null;
-      inlineDetailField.value = field.key;
-      renderTemplate();
-    });
+    d3.select(label).on("click.detail-field-link", null);
     cursorY += 25;
     content.setAttribute("transform", `translate(101.29 ${cursorY})`);
     let lines;
@@ -1483,7 +1484,18 @@ function updateDetails(svg) {
   cursorY += 2;
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY);
-  svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
+  const updateScroll = svg.querySelector(".detail-panel-group")?.__updateDetailScroll;
+  if (pendingDetailSectionKey) {
+    const target = svg.querySelector(
+      `[data-detail-section-label='${pendingDetailSectionKey}']`
+    );
+    const targetY = position(target)?.y;
+    if (Number.isFinite(targetY)) {
+      detailPanelScrollOffset = Math.max(0, targetY - 536.92);
+    }
+    pendingDetailSectionKey = null;
+  }
+  updateScroll?.();
 
   // 第一画板顶部浮动卡：仍使用原有框、竖排槽位和官职条，只替换内容。
   if (viewMode.value === "hierarchy") {
