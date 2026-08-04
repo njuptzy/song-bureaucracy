@@ -4570,6 +4570,68 @@ def main():
             four_directions["职源与沿革"].split(swallowed_duty, 1)
         )
         four_directions["职源与沿革"] += "。"
+
+        know_gate_combined, know_gate_combined_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "知𬮤门事兼客省、四方馆事"
+            and str(m.get("page")) == "469"
+        )
+        false_know_gate, false_know_gate_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "知阁门事" and str(m.get("page")) == "469"
+            and e.get("_not_in_catalog") is True
+        )
+        assert know_gate_combined.get("_placeholder") is True
+        assert false_know_gate["text"].startswith("兼容省、四方馆事 职事官名。")
+        know_gate_text = false_know_gate["text"].replace(
+            "兼容省、四方馆事 职事官名。", "职事官名。", 1
+        ).replace("兼容省", "兼客省")
+        know_gate_combined.clear()
+        know_gate_combined.update({
+            "name": "知阁门事兼客省、四方馆事",
+            "text": know_gate_text,
+        })
+        know_gate_combined_meta["name"] = "知阁门事兼客省、四方馆事"
+        know_gate_combined_meta["status"] = "ok"
+        false_know_gate.clear()
+        false_know_gate.update({
+            "name": "知阁门事",
+            "text": "",
+            "_placeholder": True,
+        })
+        false_know_gate_meta["status"] = "placeholder"
+
+        associate_gate_combined, associate_gate_combined_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "同知𬮤门事同兼客省、四方馆事"
+            and str(m.get("page")) == "469"
+        )
+        false_associate_gate, false_associate_gate_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "同知阁门事" and str(m.get("page")) == "469"
+            and e.get("_not_in_catalog") is True
+        )
+        assert associate_gate_combined.get("_placeholder") is True
+        assert false_associate_gate["text"].startswith(
+            "同兼容省、四方馆事职事官名。"
+        )
+        associate_gate_text = false_associate_gate["text"].replace(
+            "同兼容省、四方馆事职事官名。", "职事官名。", 1
+        ).replace("兼容省", "兼客省")
+        associate_gate_combined.clear()
+        associate_gate_combined.update({
+            "name": "同知阁门事同兼客省、四方馆事",
+            "text": associate_gate_text,
+        })
+        associate_gate_combined_meta["name"] = "同知阁门事同兼客省、四方馆事"
+        associate_gate_combined_meta["status"] = "ok"
+        false_associate_gate.clear()
+        false_associate_gate.update({
+            "name": "同知阁门事",
+            "text": "",
+            "_placeholder": True,
+        })
+        false_associate_gate_meta["status"] = "placeholder"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4594,7 +4656,9 @@ def main():
               "按p462-468补回步军副都军头正文，并修正祗候、禁军断字、"
               "军头引见司机构断行及阁门相关误识；按p464-469恢复阁门使副"
               "正式词条，合并东、西上阁门司编制续文，修正阁门字形与"
-              "同兼客省，并从四方馆职源中拆回职掌字段")
+              "同兼客省，并从四方馆职源中拆回职掌字段；按p469恢复知阁门"
+              "事兼客省、四方馆事及同知阁门事同兼客省、四方馆事两个"
+              "长词头，将误拆续文归回正文")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):

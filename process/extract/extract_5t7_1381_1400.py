@@ -821,7 +821,8 @@ def entry1400():
         w, touched, i, F[i]["title"], "拱卫大夫",
         "北宋政和二年九月二十五日", origin,
         "政和二年四方馆使武阶易为拱卫大夫。", "职源与沿革",
-        source_event="武阶易为拱卫大夫", target_event="承接四方馆使武阶",
+        source_event="辞典两条分别记武阶易为拱卫大夫、拱辰大夫",
+        target_event="承接四方馆使武阶",
     )
     finish(w, touched, "整理四方馆使始置、馆长隶属、职能品位员额、横行五使实例和政和改阶。")
 
