@@ -4656,6 +4656,40 @@ def main():
         right_divine_general_meta["page"] = "474"
         print("  [OCR字误与页码归位] p472-474：恢复‘勋卫府郎十员’、"
               "‘翊卫官’及左、右神武军将军页码474")
+
+        six_commanders_matches = [
+            (entry, meta)
+            for entry, meta in zip(all_entries, all_meta)
+            if entry["name"] == "六统军" and str(meta.get("page")) == "47"
+        ]
+        assert len(six_commanders_matches) == 1
+        _, six_commanders_meta = six_commanders_matches[0]
+        six_commanders_meta["page"] = "474"
+
+        swift_guard_general = next(
+            e for e in all_entries if e["name"] == "左、右骁卫上将军"
+        )
+        wrong_swift_roster = "不定员(《合璧后集》卷 52《左、右金吾二将军》。"
+        assert wrong_swift_roster in swift_guard_general["编制"]
+        swift_guard_general["编制"] = swift_guard_general["编制"].replace(
+            wrong_swift_roster,
+            "不定员(《合璧后集》卷52《左、右金吾二将军》)。",
+            1,
+        )
+
+        military_guard_general = next(
+            e for e in all_entries if e["name"] == "左、右武卫上将军"
+        )
+        wrong_military_rank = "从三品《《宋史·职官志》8《官品》）。"
+        assert wrong_military_rank in military_guard_general["品位"]
+        military_guard_general["品位"] = military_guard_general["品位"].replace(
+            wrong_military_rank,
+            "从三品(《宋史·职官志》8《官品》)。",
+            1,
+        )
+        print("  [OCR符号与页码归位] p474-477：恢复六统军页码474，补齐"
+              "左、右骁卫上将军编制引文闭合符号，并删除左、右武卫"
+              "上将军品位的赘余书名号")
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
