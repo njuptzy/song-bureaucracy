@@ -131,6 +131,24 @@ function wrapVerticalText(element, text, charsPerColumn = 11, maxColumns = 6, co
   });
 }
 
+function fitVerticalBarLabel(label, fullTitle, rect) {
+  if (!label || !rect) return;
+  const x = Number(rect.getAttribute("x"));
+  const y = Number(rect.getAttribute("y"));
+  const width = Number(rect.getAttribute("width"));
+  const height = Number(rect.getAttribute("height"));
+  if (![x, y, width, height].every(Number.isFinite)) return;
+  const maxGlyphs = 9;
+  const displayTitle = fullTitle.length > maxGlyphs
+    ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
+    : fullTitle;
+  setText(label, displayTitle);
+  label.setAttribute("text-anchor", "middle");
+  label.setAttribute("dominant-baseline", "central");
+  // 编制数字占据官职条底部，标题在其上方的正文区垂直居中。
+  label.setAttribute("transform", `translate(${x + width / 2} ${y + (height - 17) / 2})`);
+}
+
 function constrainTextWidth(element, maxWidth) {
   if (!element) return;
   element.removeAttribute("textLength");
@@ -390,6 +408,12 @@ const INLINE_DETAIL_BOUNDS = {
   top: 143.72 - 196.11,
   bottom: 288.41 - 196.11,
 };
+const INLINE_TITLE_POLYGON_BOUNDS = {
+  x: 747.3,
+  y: 160.96,
+  width: 33.22,
+  height: 126.85,
+};
 
 function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (!templateGroup || !layout || !entity) return;
@@ -401,16 +425,17 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   card.setAttribute("transform", `translate(${layout.x - 763.56} ${layout.y - 196.11})`);
 
   const titleLabel = findTextAt(card, 763.56, 196.11, 2);
-  const titlePolygon = titleLabel?.parentElement?.querySelector("polygon");
-  setText(titleLabel, entity.title);
-  fitDynamicNodeLabel(titleLabel, entity.title, elementBounds(titlePolygon));
+  // 克隆卡片尚未插入 DOM 时 getBBox() 会得到 0 尺寸，原实现因此把标题
+  // 截成省略号并移到 (0, 0)。这里直接使用设计稿书脊的真实边界。
+  fitDynamicNodeLabel(titleLabel, entity.title, INLINE_TITLE_POLYGON_BOUNDS);
 
   const values = inlineDetailValues(entity);
   const description = findTextAt(card, 863.21, 184.51, 2);
-  wrapVerticalText(description, values[inlineDetailField.value], 11, 6, 9.81);
+  // 原稿每列约 15 个小字；11 个会让正文只挤在框的上半截。
+  wrapVerticalText(description, values[inlineDetailField.value], 15, 6, 9.81);
   const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
   descriptionTitle.textContent = values[inlineDetailField.value];
-  description?.appendChild(descriptionTitle);
+  description?.parentElement?.appendChild(descriptionTitle);
 
   for (const field of INLINE_DETAIL_FIELDS) {
     const label = [...card.querySelectorAll("text.cls-67")]
@@ -422,7 +447,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     label.style.fill = active ? "#866d6d" : "#351704";
     const fieldTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     fieldTitle.textContent = values[field.key];
-    label.appendChild(fieldTitle);
+    label.parentElement?.appendChild(fieldTitle);
     d3.select(label).on("click.inline-detail-field", (event) => {
       event.stopPropagation();
       inlineDetailField.value = field.key;
@@ -442,7 +467,8 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     const edge = staff[index];
     group.style.display = edge ? "" : "none";
     if (!edge) return;
-    setText(label, titleOf(edge.official));
+    const officialTitleText = titleOf(edge.official);
+    fitVerticalBarLabel(label, officialTitleText, group.querySelector("rect.cls-15"));
     const quota = group.querySelector("text.cls-72");
     const person = group.querySelector("text.cls-74");
     setText(quota, edge.staff_quota ? `（${edge.staff_quota}）` : "（未载）");
