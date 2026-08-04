@@ -54,6 +54,17 @@ CATALOG_FILE = OCR_DIR / "职官条目分类目录-catalog-refined.json"
 # 编组配置：章节与 OCR 文件、目录切片右边界（不含；None=切到目录末尾）、
 # 输出文件名前缀、目录修正开关
 PROFILES = {
+    "1": {
+        "chapters": [
+            {"h1": "第一编 皇帝制度类",
+             "file": "MinerU_01-宋代官制辞典-第一编__20260409092216.json"},
+        ],
+        "next_h1": "第二编 宰执官类",
+        "out": "第一编",
+        "fix_xiangmen": False,
+        "fix_ch1_emperor_catalog": True,
+        "drop_surnames": set(),
+    },
     "2t4": {
         "chapters": [
             {"h1": "第二编 宰执官类",
@@ -557,6 +568,28 @@ def load_catalog():
         r = dict(r)
         if r["type"] == "h1":
             cur_h1 = r["text"]
+        if (
+            PROFILE.get("fix_ch1_emperor_catalog")
+            and cur_h1 == "第一编 皇帝制度类"
+        ):
+            if (
+                r["type"] == "surname" and r["text"] == "太祖"
+                and str(r.get("page")) == "2"
+            ):
+                fixed.append({"type": "name", "text": "宋太祖", "page": "2"})
+                fix_log.append("在 surname '太祖'(p2) 前补回 name '宋太祖'(p2)")
+            elif (
+                r["type"] == "surname" and r["text"] == "大宗"
+                and str(r.get("page")) == "3"
+            ):
+                fixed.append({"type": "name", "text": "宋太宗", "page": "3"})
+                fix_log.append("在 surname '大宗'(p3) 前补回 name '宋太宗'(p3)")
+            elif (
+                r["type"] == "name" and r["text"] == "宋真宗"
+                and str(r.get("page")) == "31"
+            ):
+                r["page"] = "3"
+                fix_log.append("name '宋真宗' 页码 p31 -> p3（目录页码粘连）")
         rename = next(
             (item for item in PROFILE.get("catalog_renames", [])
              if r["type"] == "name" and r["text"] == item["from"]

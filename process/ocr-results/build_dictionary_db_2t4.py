@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """从表格化结果建辞典库（按编组）。
 
-用法: python3 build_dictionary_db_2t4.py [2t4|5t7|11t12]   (默认 2t4)
+用法: python3 build_dictionary_db_2t4.py [1|2t4|5t7|11t12]   (默认 2t4)
 
 输入:
   data/ocr-results/<编组名>-表格化结果.json   (条目内容: name/text/各属性)
@@ -22,6 +22,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 PROFILES = {
+    "1": {"out": "第一编"},
     "2t4": {"out": "第二至四编"},
     "5t7": {"out": "第五至七编"},
     "11t12": {"out": "第十一至十二编"},
