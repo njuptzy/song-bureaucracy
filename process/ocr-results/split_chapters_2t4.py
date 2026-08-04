@@ -4406,6 +4406,82 @@ def main():
             "简称": deputy_alias_marker + deputy_aliases.strip(),
         })
         cavalry_deputy_head_meta["status"] = "ok"
+
+        infantry_deputy = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐步军副都军头"
+            and str(m.get("page")) == "462"
+        )
+        assert infantry_deputy["text"] == "军职名。"
+        infantry_deputy["text"] = (
+            "禁军职名。为御前忠佐六资最末一等，"
+            "位于马军副都军头之后。"
+        )
+
+        waiting_soldier = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐军头引见司祗候军员"
+            and str(m.get("page")) == "462"
+        )
+        assert waiting_soldier["简称"].startswith("祇候军员。")
+        waiting_soldier["简称"] = waiting_soldier["简称"].replace(
+            "祇候军员。", "祗候军员。", 1
+        )
+
+        scattered_class = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐军头司祗候散员班"
+            and str(m.get("page")) == "463"
+        )
+        assert scattered_class["text"] == "禁 军编制。"
+        scattered_class["text"] = "禁军编制。"
+
+        scattered_officers = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐军头司散员班将校"
+            and str(m.get("page")) == "463"
+        )
+        assert scattered_officers["text"].startswith("祇候指挥使、")
+        scattered_officers["text"] = scattered_officers["text"].replace(
+            "祇候指挥使、", "祗候指挥使、", 1
+        )
+
+        scattered_commander = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "军头司散指挥使"
+            and str(m.get("page")) == "463"
+        )
+        assert scattered_commander["text"] == "军职名。隶御前忠佐\n军头引见司。"
+        scattered_commander["text"] = "军职名。隶御前忠佐军头引见司。"
+
+        gate_officers = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "阁门官" and str(m.get("page")) == "468"
+        )
+        assert gate_officers["简称"].startswith("阎门。")
+        gate_officers["简称"] = gate_officers["简称"].replace(
+            "阎门。", "阁门。", 1
+        )
+
+        gate_posts = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "阁职" and str(m.get("page")) == "468"
+        )
+        assert gate_posts["text"].startswith("阎门通事")
+        gate_posts["text"] = gate_posts["text"].replace(
+            "阎门通事", "阁门通事", 1
+        )
+
+        gate_records = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "点检阁门簿书公事"
+            and str(m.get("page")) == "468"
+        )
+        wrong_source = "《宋史·职官志》34之8"
+        assert wrong_source in gate_records["text"]
+        gate_records["text"] = gate_records["text"].replace(
+            wrong_source, "《宋会要·职官》34之8", 1
+        )
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4426,7 +4502,9 @@ def main():
               "南宋‘军’正式词条，取消其空占位；按p458-459原页补回逻卒"
               "句首并拆出别称‘察子’，从快行拆回司圜正式词条，拆回冰井务"
               "职源字段，并统一恢复‘行宫禁卫所’字形；按p459-462原页拆回"
-              "御前忠佐军头引见司职源、干办差遣及马军副都军头正式词条")
+              "御前忠佐军头引见司职源、干办差遣及马军副都军头正式词条；"
+              "按p462-468补回步军副都军头正文，并修正祗候、禁军断字、"
+              "军头引见司机构断行及阁门相关误识")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
