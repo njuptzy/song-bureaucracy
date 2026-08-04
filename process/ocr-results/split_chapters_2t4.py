@@ -4011,6 +4011,72 @@ def main():
         })
         lower_rank_meta["name"] = "下班祗应"
         lower_rank_meta["status"] = "ok"
+
+        imperial_dragon = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "殿前御龙诸直" and str(m.get("page")) == "443"
+        )
+        left_right_marker = "御龙左直、右直 殿前诸直之一"
+        bone_marker = "御龙骨铢子左直、右直 殿前诸直之一"
+        combined_aliases = imperial_dragon["简称"]
+        assert left_right_marker in combined_aliases
+        dragon_aliases, two_embedded = combined_aliases.split(left_right_marker, 1)
+        assert bone_marker in two_embedded
+        left_right_text, bone_and_alias = two_embedded.split(bone_marker, 1)
+        bone_alias_marker = "骨朵直。"
+        assert bone_alias_marker in bone_and_alias
+        bone_text, bone_alias = bone_and_alias.split(bone_alias_marker, 1)
+        imperial_dragon["简称"] = dragon_aliases.rstrip()
+        for key, value in list(imperial_dragon.items()):
+            if isinstance(value, str):
+                imperial_dragon[key] = value.replace("骨铢", "骨朵")
+
+        dragon_left_right, dragon_left_right_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御龙左直" and str(m.get("page")) == "443"
+        )
+        assert dragon_left_right.get("_placeholder") is True
+        dragon_left_right.clear()
+        dragon_left_right.update({
+            "name": "御龙左直、右直",
+            "text": "殿前诸直之一" + left_right_text.strip(),
+        })
+        dragon_left_right_meta["name"] = "御龙左直、右直"
+        dragon_left_right_meta["status"] = "ok"
+
+        dragon_bone, dragon_bone_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御龙骨子左直、右直"
+            and str(m.get("page")) == "443"
+        )
+        assert dragon_bone.get("_placeholder") is True
+        dragon_bone.clear()
+        dragon_bone.update({
+            "name": "御龙骨朵子左直、右直",
+            "text": ("殿前诸直之一" + bone_text.strip()).replace("骨铢", "骨朵"),
+            "简称": bone_alias_marker + bone_alias.strip(),
+        })
+        dragon_bone_meta["name"] = "御龙骨朵子左直、右直"
+        dragon_bone_meta["status"] = "ok"
+
+        dragon_crossbow = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御龙弩直" and str(m.get("page")) == "444"
+        )
+        assert dragon_crossbow["简称"].startswith("弃直。")
+        dragon_crossbow["简称"] = "弩直。" + dragon_crossbow["简称"][3:]
+
+        pengri = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "捧日左、右厢" and str(m.get("page")) == "445"
+        )
+        roster_marker = "\n编制 "
+        assert roster_marker in pengri["职掌"]
+        duty, roster = pengri["职掌"].split(roster_marker, 1)
+        duplicate_duty = "司马军诸军公事(《玉海》卷139《京朝四厢军》)。"
+        assert duty.endswith(duplicate_duty)
+        pengri["职掌"] = duty[:-len(duplicate_duty)].rstrip()
+        pengri["编制"] = roster.strip()
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4020,7 +4086,9 @@ def main():
               "从法直官官品拆回刑部参见条，从纠察司别名拆回纠察官，"
               "从两司三衙正文拆回三衙正式词条；恢复三组殿前诸班"
               "左右合并词头及第441页页码；从金枪班拆回散直左右班，"
-              "从殿侍班拆回祗应与下班祗应并校正词头字形")
+              "从殿侍班拆回祗应与下班祗应并校正词头字形；恢复御龙"
+              "左右直、御龙骨朵子左右直词头，校正御龙弩直简称，并拆回"
+              "捧日左右厢编制字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
