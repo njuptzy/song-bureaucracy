@@ -602,6 +602,52 @@ test("层级断档会递归隐藏依附机构，但不影响从未有上级的�
   assert.equal(snapshot.entityIds.has(4), true);
 });
 
+test("同一通用官职可以同时作为多个机构的编制", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "尚书省", type: "机构" },
+      { id: 2, title: "中书省", type: "机构" },
+      { id: 3, title: "驱使官", type: "官职" },
+    ],
+    timepoints: {
+      1: [timepoint(10, 960, "宋前期设置")],
+      2: [timepoint(20, 960, "宋前期设置")],
+      3: [
+        timepoint(30, 960, "尚书省驱使官三人"),
+        timepoint(31, 960, "中书省驱使官三人"),
+      ],
+    },
+    hierarchyEdges: [],
+    staffEdges: [
+      {
+        id: 40,
+        org: 1,
+        official: 3,
+        staff_quota: 3,
+        staff_type: "吏",
+        periods: [],
+        states: [{ id: 40, subject_timepoint_id: 10, object_timepoint_id: 30 }],
+      },
+      {
+        id: 41,
+        org: 2,
+        official: 3,
+        staff_quota: 3,
+        staff_type: "吏",
+        periods: [],
+        states: [{ id: 41, subject_timepoint_id: 20, object_timepoint_id: 31 }],
+      },
+    ],
+    evolutionEdges: [],
+    collectiveInstanceEdges: [],
+  };
+  const snapshot = buildYearSnapshot(data, 1080);
+  assert.deepEqual(
+    snapshot.staffEdges.map((edge) => [edge.org, edge.official]).sort(),
+    [[1, 3], [2, 3]],
+  );
+});
+
 test("新上级关系生效后，层级断档机构自动恢复显示", () => {
   const data = {
     entities: [

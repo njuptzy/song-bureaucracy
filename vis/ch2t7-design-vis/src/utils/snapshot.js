@@ -374,7 +374,10 @@ export function buildYearSnapshot(data, year) {
     year,
     entityIds,
     timepointById,
-    (edge) => `staff:${edge.official}`
+    // “令史”“驱使官”等通用吏职可以在同一年分别隶属多个机构；
+    // 只按官职实体取最新状态会把其他机构的同期编制错误覆盖掉。
+    // 同一机构内该官职的员额变化仍按时间取最新状态。
+    (edge) => `staff:${edge.org}:${edge.official}`
   );
   return { year, currentTimepointByEntity, entityIds, hierarchyEdges, staffEdges };
 }
