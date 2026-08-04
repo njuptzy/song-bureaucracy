@@ -24,6 +24,7 @@ const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
 const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
+const inlineDetailOfficialId = ref(null);
 const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
@@ -145,7 +146,6 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   setText(label, displayTitle);
   label.setAttribute("text-anchor", "middle");
   label.setAttribute("dominant-baseline", "central");
-  // 编制数字占据官职条底部，标题在其上方的正文区垂直居中。
   label.setAttribute("transform", `translate(${x + width / 2} ${y + (height - 17) / 2})`);
 }
 
@@ -404,9 +404,19 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
 
 const INLINE_DETAIL_BOUNDS = {
   left: 614.19 - 763.56,
-  right: 1075.8 - 763.56,
   top: 143.72 - 196.11,
   bottom: 288.41 - 196.11,
+};
+const INLINE_COMPOSITION = {
+  spineX: 763.56,
+  panelX: 786.04,
+  barX: 794.72,
+  barWidth: 15.42,
+  barPitch: 21.11,
+  pageXOffset: 17.8,
+  pageWidth: 62.96,
+  pageShift: 65.7,
+  panelRightPadding: 7.53,
 };
 const INLINE_TITLE_POLYGON_BOUNDS = {
   x: 747.3,
@@ -415,58 +425,121 @@ const INLINE_TITLE_POLYGON_BOUNDS = {
   height: 126.85,
 };
 
+function inlineCompositionGeometry(entityId) {
+  const staff = staffFor(entityId);
+  const selectedIndex = staff.findIndex(
+    (edge) => edge.official === inlineDetailOfficialId.value
+  );
+  const barX = (index) => (
+    INLINE_COMPOSITION.barX
+    + index * INLINE_COMPOSITION.barPitch
+    + (selectedIndex >= 0 && index > selectedIndex ? INLINE_COMPOSITION.pageShift : 0)
+  );
+  let contentRight = staff.length
+    ? barX(staff.length - 1) + INLINE_COMPOSITION.barWidth
+    : INLINE_COMPOSITION.panelX + 4;
+  if (selectedIndex >= 0) {
+    contentRight = Math.max(
+      contentRight,
+      barX(selectedIndex) + INLINE_COMPOSITION.pageXOffset + INLINE_COMPOSITION.pageWidth
+    );
+  }
+  const panelRight = contentRight + INLINE_COMPOSITION.panelRightPadding;
+  return {
+    staff,
+    selectedIndex,
+    barX,
+    panelRight,
+    left: INLINE_DETAIL_BOUNDS.left,
+    right: panelRight - INLINE_COMPOSITION.spineX,
+  };
+}
+
 function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (!templateGroup || !layout || !entity) return;
   const card = templateGroup.cloneNode(true);
   card.classList.add("inline-design-detail");
   card.dataset.entityId = String(entity.id);
-  // 详情卡的机构书脊就是树节点锚点；空间由树布局提前留出，不再把卡片
-  // 单独钳制到视口内，否则靠近边缘时书脊会和被双击的节点错位。
   card.setAttribute("transform", `translate(${layout.x - 763.56} ${layout.y - 196.11})`);
 
   const titleLabel = findTextAt(card, 763.56, 196.11, 2);
-  // 克隆卡片尚未插入 DOM 时 getBBox() 会得到 0 尺寸，原实现因此把标题
-  // 截成省略号并移到 (0, 0)。这里直接使用设计稿书脊的真实边界。
   fitDynamicNodeLabel(titleLabel, entity.title, INLINE_TITLE_POLYGON_BOUNDS);
 
-  const values = inlineDetailValues(entity);
-  const description = findTextAt(card, 863.21, 184.51, 2);
-  // 原稿每列约 15 个小字；11 个会让正文只挤在框的上半截。
-  wrapVerticalText(description, values[inlineDetailField.value], 15, 6, 9.81);
-  const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-  descriptionTitle.textContent = values[inlineDetailField.value];
-  description?.parentElement?.appendChild(descriptionTitle);
+  const geometry = inlineCompositionGeometry(entity.id);
+  const officialGroups = [...card.children].filter(
+    (element) => element.tagName.toLowerCase() === "g" && element.querySelector("text.cls-64")
+  );
+  const officialTemplate = officialGroups.find((group) => (
+    Math.abs(Number(group.querySelector("rect.cls-15")?.getAttribute("x")) - INLINE_COMPOSITION.barX) < 0.1
+  )) || officialGroups[0];
+  const pageGroup = [...card.children].find(
+    (element) => element.tagName.toLowerCase() === "g" && element.querySelector("text.cls-66")
+  );
+  const pageTemplate = pageGroup?.cloneNode(true);
+  officialGroups.forEach((group) => group.remove());
+  pageGroup?.remove();
+
+  const panelRect = [...card.children].find((element) => (
+    element.tagName.toLowerCase() === "rect"
+      && Math.abs(Number(element.getAttribute("x")) - INLINE_COMPOSITION.panelX) < 0.1
+  ));
+  if (panelRect) {
+    panelRect.setAttribute("width", String(geometry.panelRight - INLINE_COMPOSITION.panelX));
+  }
+  const panelBorder = [...card.children].find((element) => (
+    element.tagName.toLowerCase() === "line"
+      && Math.abs(Number(element.getAttribute("x1")) - 1075.8) < 0.1
+  ));
+  if (panelBorder) {
+    panelBorder.setAttribute("x1", String(geometry.panelRight + 2.42));
+    panelBorder.setAttribute("x2", String(geometry.panelRight + 2.42));
+  }
+  const panelTrack = [...card.children].find((element) => (
+    element.tagName.toLowerCase() === "rect" && element.classList.contains("cls-79")
+  ));
+  const panelProgress = [...card.children].find((element) => (
+    element.tagName.toLowerCase() === "rect" && element.classList.contains("cls-37")
+  ));
+  const panelWidth = geometry.panelRight - INLINE_COMPOSITION.panelX;
+  for (const [element, width] of [
+    [panelTrack, panelWidth],
+    [panelProgress, Math.min(panelWidth, Math.max(18, panelWidth * 0.62))],
+  ]) {
+    if (!element) continue;
+    element.removeAttribute("transform");
+    element.setAttribute("x", String(INLINE_COMPOSITION.panelX));
+    element.setAttribute("y", "284.6");
+    element.setAttribute("width", String(width));
+    element.setAttribute("height", "2.77");
+  }
+
+  const selectedOfficial = geometry.selectedIndex >= 0
+    ? entityMap.get(geometry.staff[geometry.selectedIndex].official)
+    : null;
+  const values = selectedOfficial ? inlineDetailValues(selectedOfficial) : null;
 
   for (const field of INLINE_DETAIL_FIELDS) {
     const label = [...card.querySelectorAll("text.cls-67")]
       .find((element) => normalizeText(element) === field.label.replace(/\s+/g, ""));
     if (!label) continue;
-    const active = inlineDetailField.value === field.key;
-    label.style.cursor = "pointer";
+    const active = Boolean(selectedOfficial) && inlineDetailField.value === field.key;
+    label.style.cursor = selectedOfficial ? "pointer" : "default";
     label.style.fontWeight = active ? "700" : "400";
     label.style.fill = active ? "#866d6d" : "#351704";
-    const fieldTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    fieldTitle.textContent = values[field.key];
-    label.parentElement?.appendChild(fieldTitle);
     d3.select(label).on("click.inline-detail-field", (event) => {
       event.stopPropagation();
+      if (!selectedOfficial) return;
       inlineDetailField.value = field.key;
       renderTemplate();
     });
   }
 
-  const staff = staffFor(entity.id);
-  const officialLabels = [...card.querySelectorAll("text.cls-64")]
-    .filter((element) => {
-      const point = position(element);
-      return point && point.x >= 790 && point.x <= 1070 && point.y >= 175 && point.y <= 220;
-    })
-    .sort((a, b) => position(a).x - position(b).x);
-  officialLabels.forEach((label, index) => {
-    const group = label.parentElement;
-    const edge = staff[index];
-    group.style.display = edge ? "" : "none";
-    if (!edge) return;
+  geometry.staff.forEach((edge, index) => {
+    if (!officialTemplate) return;
+    const group = officialTemplate.cloneNode(true);
+    const label = group.querySelector("text.cls-64");
+    const offsetX = geometry.barX(index) - INLINE_COMPOSITION.barX;
+    group.setAttribute("transform", `translate(${offsetX} 0)`);
     const officialTitleText = titleOf(edge.official);
     fitVerticalBarLabel(label, officialTitleText, group.querySelector("rect.cls-15"));
     const quota = group.querySelector("text.cls-72");
@@ -476,10 +549,32 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     const officialTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     officialTitle.textContent = quotaText(edge);
     group.appendChild(officialTitle);
+    const isSelected = edge.official === inlineDetailOfficialId.value;
+    label.style.fill = isSelected ? "#866d6d" : "#351704";
+    group.style.cursor = "pointer";
+    d3.select(group).on("click.inline-official", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      inlineDetailOfficialId.value = isSelected ? null : edge.official;
+      inlineDetailField.value = "duty";
+      renderTemplate();
+    });
+    card.appendChild(group);
   });
 
+  if (selectedOfficial && pageTemplate && values) {
+    const pageX = geometry.barX(geometry.selectedIndex) + INLINE_COMPOSITION.pageXOffset;
+    pageTemplate.setAttribute("transform", `translate(${pageX - 812.52} 0)`);
+    const description = pageTemplate.querySelector("text.cls-66");
+    wrapVerticalText(description, values[inlineDetailField.value], 15, 6, 9.81);
+    const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    descriptionTitle.textContent = `${selectedOfficial.title}：${values[inlineDetailField.value]}`;
+    pageTemplate.appendChild(descriptionTitle);
+    card.appendChild(pageTemplate);
+  }
+
   const cardTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-  cardTitle.textContent = `${entity.title}：点击左侧字段切换详情，双击机构书脊收起`;
+  cardTitle.textContent = `${entity.title}：点击官职翻开详情书页，双击机构书脊收起`;
   card.appendChild(cardTitle);
   d3.select(card)
     .on("click.inline-detail", (event) => event.stopPropagation())
@@ -490,6 +585,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       event.preventDefault();
       event.stopPropagation();
       expandedDetailId.value = null;
+      inlineDetailOfficialId.value = null;
       renderTemplate();
     });
   }
@@ -532,9 +628,12 @@ function renderDynamicHierarchy(svg) {
   const root = d3.hierarchy(data);
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
   const depthGap = 145;
+  const expandedComposition = expandedDetailId.value != null
+    ? inlineCompositionGeometry(expandedDetailId.value)
+    : null;
   const detailHalfWidth = Math.max(
-    Math.abs(INLINE_DETAIL_BOUNDS.left),
-    Math.abs(INLINE_DETAIL_BOUNDS.right)
+    Math.abs(expandedComposition?.left ?? INLINE_DETAIL_BOUNDS.left),
+    Math.abs(expandedComposition?.right ?? 17)
   );
   const nodeHalfWidth = (node) => (
     !node.data.isVirtual && expandedDetailId.value === node.data.id ? detailHalfWidth : 17
@@ -590,10 +689,12 @@ function renderDynamicHierarchy(svg) {
       x,
       y,
       left: x + (
-        expandedDetailId.value === node.data.id ? INLINE_DETAIL_BOUNDS.left : -17
+        expandedDetailId.value === node.data.id
+          ? expandedComposition?.left ?? INLINE_DETAIL_BOUNDS.left
+          : -17
       ),
       right: x + (
-        expandedDetailId.value === node.data.id ? INLINE_DETAIL_BOUNDS.right : 17
+        expandedDetailId.value === node.data.id ? expandedComposition?.right ?? 17 : 17
       ),
       top: y + (
         expandedDetailId.value === node.data.id
@@ -812,6 +913,7 @@ function renderDynamicHierarchy(svg) {
         hierarchyClickTimer = window.setTimeout(() => {
           detailPanelScrollOffset = 0;
           expandedDetailId.value = null;
+          inlineDetailOfficialId.value = null;
           selectedId.value = node.data.id;
           if (node.data.childCount) {
             const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
@@ -834,7 +936,9 @@ function renderDynamicHierarchy(svg) {
         detailPanelScrollOffset = 0;
         selectedId.value = node.data.id;
         inlineDetailField.value = "duty";
-        expandedDetailId.value = expandedDetailId.value === node.data.id ? null : node.data.id;
+        const closing = expandedDetailId.value === node.data.id;
+        expandedDetailId.value = closing ? null : node.data.id;
+        inlineDetailOfficialId.value = null;
         renderTemplate();
       });
   }
