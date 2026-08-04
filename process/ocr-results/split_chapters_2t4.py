@@ -4159,6 +4159,28 @@ def main():
             "侍卫 亲军步军司", "侍卫亲军步军司"
         )
 
+        army_guard = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "军都虞候" and str(m.get("page")) == "454"
+        )
+        army_alias_marker = "简称 军候。"
+        assert army_alias_marker in army_guard["text"]
+        army_text, army_aliases = army_guard["text"].split(
+            army_alias_marker, 1
+        )
+        army_guard["text"] = army_text.rstrip()
+        army_guard["简称"] = "军候。" + army_aliases
+
+        capital = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "都" and str(m.get("page")) == "454"
+        )
+        capital_citation = "(《武经总要·前集》)卷1《军制》:"
+        assert capital_citation in capital["text"]
+        capital["text"] = capital["text"].replace(
+            capital_citation, "(《武经总要·前集》卷1《军制》):"
+        )
+
         foot_commands = next(
             e for e, m in zip(all_entries, all_meta)
             if e["name"] == "殿前司步军诸指挥" and str(m.get("page")) == "446"
@@ -4215,7 +4237,8 @@ def main():
               "编制及马军副都指挥使品位与别名，补回马军都虞候正文，"
               "并合并四处版面断行、校正侍卫司OCR字误；恢复龙卫左右厢"
               "和神卫左右厢‘简称与旧名’字段，补回步军司都虞候正文并拆出品位，"
-              "合并步军司虎翼军机构名中的版面空格")
+              "合并步军司虎翼军机构名中的版面空格；从军都虞候正文拆回简称，"
+              "并删除‘都’条引书名后的OCR赘括号")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
