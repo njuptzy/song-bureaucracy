@@ -384,22 +384,21 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
   );
 }
 
-function renderInlineDetailCard(svg, layer, templateGroup, layout, entity, area) {
+const INLINE_DETAIL_BOUNDS = {
+  left: 614.19 - 763.56,
+  right: 1075.8 - 763.56,
+  top: 143.72 - 196.11,
+  bottom: 288.41 - 196.11,
+};
+
+function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (!templateGroup || !layout || !entity) return;
   const card = templateGroup.cloneNode(true);
   card.classList.add("inline-design-detail");
   card.dataset.entityId = String(entity.id);
-
-  const templateBounds = elementBounds(card) || { x: 614.19, y: 143.72, width: 461.61, height: 144.25 };
-  const preferredX = layout.x - 763.56;
-  const preferredY = layout.y - 196.11;
-  const minX = area.left - templateBounds.x;
-  const maxX = area.right - templateBounds.x - templateBounds.width;
-  const minY = area.top - templateBounds.y;
-  const maxY = area.bottom - templateBounds.y - templateBounds.height;
-  const offsetX = Math.max(minX, Math.min(maxX, preferredX));
-  const offsetY = Math.max(minY, Math.min(maxY, preferredY));
-  card.setAttribute("transform", `translate(${offsetX} ${offsetY})`);
+  // 详情卡的机构书脊就是树节点锚点；空间由树布局提前留出，不再把卡片
+  // 单独钳制到视口内，否则靠近边缘时书脊会和被双击的节点错位。
+  card.setAttribute("transform", `translate(${layout.x - 763.56} ${layout.y - 196.11})`);
 
   const titleLabel = findTextAt(card, 763.56, 196.11, 2);
   const titlePolygon = titleLabel?.parentElement?.querySelector("polygon");
@@ -507,9 +506,19 @@ function renderDynamicHierarchy(svg) {
   const root = d3.hierarchy(data);
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
   const depthGap = 145;
+  const detailHalfWidth = Math.max(
+    Math.abs(INLINE_DETAIL_BOUNDS.left),
+    Math.abs(INLINE_DETAIL_BOUNDS.right)
+  );
+  const nodeHalfWidth = (node) => (
+    !node.data.isVirtual && expandedDetailId.value === node.data.id ? detailHalfWidth : 17
+  );
   d3.tree()
     .nodeSize([52, depthGap])
-    .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(root);
+    .separation((a, b) => {
+      const requiredDistance = nodeHalfWidth(a) + nodeHalfWidth(b) + (a.parent === b.parent ? 18 : 30);
+      return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
+    })(root);
 
   const clipId = "dynamic-tree-viewport-clip";
   const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
@@ -554,14 +563,28 @@ function renderDynamicHierarchy(svg) {
     return [node, {
       x,
       y,
-      top: y + templatePolygonBounds.y - 196.11,
-      bottom: y + templatePolygonBounds.y + templatePolygonBounds.height - 196.11,
+      left: x + (
+        expandedDetailId.value === node.data.id ? INLINE_DETAIL_BOUNDS.left : -17
+      ),
+      right: x + (
+        expandedDetailId.value === node.data.id ? INLINE_DETAIL_BOUNDS.right : 17
+      ),
+      top: y + (
+        expandedDetailId.value === node.data.id
+          ? INLINE_DETAIL_BOUNDS.top
+          : templatePolygonBounds.y - 196.11
+      ),
+      bottom: y + (
+        expandedDetailId.value === node.data.id
+          ? INLINE_DETAIL_BOUNDS.bottom
+          : templatePolygonBounds.y + templatePolygonBounds.height - 196.11
+      ),
     }];
   }));
 
   const horizontalBounds = [...nodeLayout.values()].map((layout) => ({
-    left: layout.x - (layout.width || 34) / 2,
-    right: layout.x + (layout.width || 34) / 2,
+    left: layout.left ?? layout.x - (layout.width || 34) / 2,
+    right: layout.right ?? layout.x + (layout.width || 34) / 2,
   }));
   const contentLeft = d3.min(horizontalBounds, (bounds) => bounds.left) ?? area.left;
   const contentRight = d3.max(horizontalBounds, (bounds) => bounds.right) ?? area.right;
@@ -580,7 +603,24 @@ function renderDynamicHierarchy(svg) {
     hierarchyPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
     layer.setAttribute("transform", `translate(${hierarchyPanX} ${hierarchyPanY})`);
   };
-  applyHierarchyPan(hierarchyPanX, hierarchyPanY);
+  let nextPanX = hierarchyPanX;
+  let nextPanY = hierarchyPanY;
+  const expandedLayout = nodeLayout.get(
+    root.descendants().find((node) => (
+      !node.data.isVirtual && node.data.id === expandedDetailId.value
+    ))
+  );
+  if (expandedLayout) {
+    const detailLeft = expandedLayout.left + nextPanX;
+    const detailRight = expandedLayout.right + nextPanX;
+    const detailTop = expandedLayout.top + nextPanY;
+    const detailBottom = expandedLayout.bottom + nextPanY;
+    if (detailLeft < area.left) nextPanX += area.left - detailLeft;
+    if (detailRight > area.right) nextPanX -= detailRight - area.right;
+    if (detailTop < area.top) nextPanY += area.top - detailTop;
+    if (detailBottom > area.bottom) nextPanY -= detailBottom - area.bottom;
+  }
+  applyHierarchyPan(nextPanX, nextPanY);
 
   d3.select(viewport)
     .call(d3.drag()
@@ -680,6 +720,10 @@ function renderDynamicHierarchy(svg) {
     const templatePolygon = node.data.isVirtual ? null : nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
     if (!node.data.isVirtual) fitDynamicNodeLabel(label, node.data.title, polygonBounds);
+    if (!node.data.isVirtual && expandedDetailId.value === node.data.id) {
+      // 详情 SVG 自带同一根书脊，隐藏基础节点以免两层描边和文字叠在一起。
+      nodeGroup.style.visibility = "hidden";
+    }
     if (label && polygonBounds) {
       const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
       nodeIndex += 1;
@@ -775,8 +819,7 @@ function renderDynamicHierarchy(svg) {
       layer,
       inlineDetailTemplate,
       nodeLayout.get(expandedDetailNode),
-      entityMap.get(expandedDetailNode.data.id),
-      area
+      entityMap.get(expandedDetailNode.data.id)
     );
   }
 }
