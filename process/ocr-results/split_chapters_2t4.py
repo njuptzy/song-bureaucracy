@@ -4181,6 +4181,28 @@ def main():
             capital_citation, "(《武经总要·前集》卷1《军制》):"
         )
 
+        generic_supervisor = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "主管某司公事" and str(m.get("page")) == "456"
+        )
+        southern_army, southern_army_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "军" and str(m.get("page")) == "456"
+        )
+        assert southern_army.get("_placeholder") is True
+        southern_army_marker = "南宋三衙编制大单位"
+        assert southern_army_marker in generic_supervisor["text"]
+        supervisor_text, army_text = generic_supervisor["text"].split(
+            southern_army_marker, 1
+        )
+        generic_supervisor["text"] = supervisor_text.rstrip()
+        southern_army.clear()
+        southern_army.update({
+            "name": "军",
+            "text": southern_army_marker + army_text,
+        })
+        southern_army_meta["status"] = "ok"
+
         foot_commands = next(
             e for e, m in zip(all_entries, all_meta)
             if e["name"] == "殿前司步军诸指挥" and str(m.get("page")) == "446"
@@ -4238,7 +4260,8 @@ def main():
               "并合并四处版面断行、校正侍卫司OCR字误；恢复龙卫左右厢"
               "和神卫左右厢‘简称与旧名’字段，补回步军司都虞候正文并拆出品位，"
               "合并步军司虎翼军机构名中的版面空格；从军都虞候正文拆回简称，"
-              "并删除‘都’条引书名后的OCR赘括号")
+              "并删除‘都’条引书名后的OCR赘括号；从主管某司公事中拆回"
+              "南宋‘军’正式词条，取消其空占位")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
