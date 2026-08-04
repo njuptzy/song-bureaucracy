@@ -4757,11 +4757,20 @@ def main():
         thousand_cattle_commander["品位"] = thousand_cattle_commander["品位"].replace(
             "而右诸卫将军之上", "而居诸卫将军之上", 1
         )
+
+        thousand_cattle_officer = next(
+            e for e in all_entries if e["name"] == "左、右千牛卫将军"
+        )
+        assert "《诸位将军》" in thousand_cattle_officer["品位"]
+        thousand_cattle_officer["品位"] = thousand_cattle_officer["品位"].replace(
+            "《诸位将军》", "《诸卫将军》", 1
+        )
         print("  [OCR符号与页码归位] p474-477：恢复六统军页码474，补齐"
               "左、右骁卫上将军编制引文闭合符号，并删除左、右武卫"
               "上将军品位的赘余书名号")
         print("  [字段与OCR归位] p478-480：拆回屯卫大将军、监门卫将军"
-              "职能字段，恢复《旧唐书》、士儃及千牛卫品位引文符号")
+              "职能字段，恢复《旧唐书》、士儃、千牛卫品位引文符号及"
+              "《诸卫将军》篇名")
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
