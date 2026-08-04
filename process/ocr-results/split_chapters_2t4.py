@@ -4687,9 +4687,81 @@ def main():
             "从三品(《宋史·职官志》8《官品》)。",
             1,
         )
+
+        for title in ("左、右屯卫大将军", "左、右监门卫将军"):
+            guard_entry = next(e for e in all_entries if e["name"] == title)
+            assert "职能" not in guard_entry
+            assert "\n职能 " in guard_entry["职源"]
+            guard_entry["职源"], guard_entry["职能"] = guard_entry["职源"].split(
+                "\n职能 ", 1
+            )
+
+        leading_guard_general = next(
+            e for e in all_entries if e["name"] == "左、右领军卫将军"
+        )
+        assert any(
+            book in leading_guard_general["职源"]
+            for book in ("《日唐书·职官志》", "《旧唐书·职官志》")
+        )
+        leading_guard_general["职源"] = leading_guard_general["职源"].replace(
+            "《日唐书·职官志》", "《旧唐书·职官志》", 1
+        )
+
+        gate_guard_general = next(
+            e for e in all_entries if e["name"] == "左、右监门卫上将军"
+        )
+        assert any(
+            book in gate_guard_general["职源"]
+            for book in ("《日唐书·职官志》", "《旧唐书·职官志》")
+        )
+        gate_guard_general["职源"] = gate_guard_general["职源"].replace(
+            "《日唐书·职官志》", "《旧唐书·职官志》", 1
+        ).replace("卷 52", "卷52", 1)
+
+        gate_guard_commander = next(
+            e for e in all_entries if e["name"] == "左、右监门卫大将军"
+        )
+        assert "《士Hy磨勘转右监门卫大将军》" in gate_guard_commander["简称"]
+        gate_guard_commander["简称"] = gate_guard_commander["简称"].replace(
+            "《士Hy磨勘转右监门卫大将军》",
+            "《士儃磨勘转右监门卫大将军》",
+            1,
+        )
+
+        gate_guard_officer = next(
+            e for e in all_entries if e["name"] == "左、右监门卫将军"
+        )
+        assert any(
+            book in gate_guard_officer["职源"]
+            for book in ("《日唐书·职官志》", "《旧唐书·职官志》")
+        )
+        gate_guard_officer["职源"] = gate_guard_officer["职源"].replace(
+            "《日唐书·职官志》", "《旧唐书·职官志》", 1
+        )
+
+        thousand_cattle_general = next(
+            e for e in all_entries if e["name"] == "左、右千牛卫上将军"
+        )
+        assert "之上《宋会要·职官》" in thousand_cattle_general["品位"]
+        thousand_cattle_general["品位"] = thousand_cattle_general["品位"].replace(
+            "之上《宋会要·职官》", "之上(《宋会要·职官》", 1
+        )
+        thousand_cattle_general["编制"] = thousand_cattle_general["编制"].replace(
+            "卷 52", "卷52", 1
+        )
+
+        thousand_cattle_commander = next(
+            e for e in all_entries if e["name"] == "左、右千牛卫大将军"
+        )
+        assert "而右诸卫将军之上" in thousand_cattle_commander["品位"]
+        thousand_cattle_commander["品位"] = thousand_cattle_commander["品位"].replace(
+            "而右诸卫将军之上", "而居诸卫将军之上", 1
+        )
         print("  [OCR符号与页码归位] p474-477：恢复六统军页码474，补齐"
               "左、右骁卫上将军编制引文闭合符号，并删除左、右武卫"
               "上将军品位的赘余书名号")
+        print("  [字段与OCR归位] p478-480：拆回屯卫大将军、监门卫将军"
+              "职能字段，恢复《旧唐书》、士儃及千牛卫品位引文符号")
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
