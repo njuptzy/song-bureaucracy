@@ -307,25 +307,36 @@ const INLINE_DETAIL_FIELDS = [
 function inlineDetailValues(entity) {
   const dictionary = props.data.dictionary[entity.title] || {};
   const timepoints = activeTimepoints(entity.id);
+  const detailTimepoints = (props.data.timepoints[String(entity.id)] || [])
+    .filter((timepoint) => Object.keys(timepoint).some((key) => key.startsWith("detail_")))
+    .filter((timepoint) => (
+      currentSnapshot.value
+        ? timepoint.year_start <= selectedRange.value[0]
+        : timepointActive(timepoint)
+    ))
+    .sort((a, b) => a.year_start - b.year_start || a.id - b.id);
+  const currentTimepoint = detailTimepoints.at(-1) || timepoints.at(-1) || {};
   const staff = staffFor(entity.id);
   const children = childrenFor(entity.id);
   const events = timepoints
     .map((item) => `${item.time || "时间未明"}：${item.event || item.quotation || "未载事件"}`)
     .join("；");
+  const page = dictionary.page || "";
   const source = [
-    dictionary.page ? `《宋代官制辞典》第${dictionary.page}页` : "",
+    page ? (page.startsWith("《") ? page : `《宋代官制辞典》第${page}页`) : "",
     dictionary.catalog || "",
+    currentTimepoint.detail_source || dictionary.source || "",
   ].filter(Boolean).join("；");
   return {
     source: source || "当前实体未匹配到独立辞典词条。",
-    origin: dictionary.origin || events || "原文未单列职源与沿革。",
+    origin: currentTimepoint.detail_origin || dictionary.origin || events || "原文未单列职源与沿革。",
     aliases: dictionary.aliases || "原文未单列简称与别名。",
-    duty: dictionary.duty || events || dictionary.text || "当前年份未载明确职掌。",
+    duty: currentTimepoint.detail_duty || dictionary.duty || events || dictionary.text || "当前年份未载明确职掌。",
     children: children.length
       ? children.map((edge) => titleOf(edge.child)).join("、")
       : dictionary.children || "当前年份未载明确下级机构。",
-    office: dictionary.office || "原文未单列衙署。",
-    composition: dictionary.composition
+    office: currentTimepoint.detail_office || dictionary.office || "原文未单列衙署。",
+    composition: currentTimepoint.detail_composition || dictionary.composition
       || (staff.length ? staff.map(quotaText).join("；") : "当前年份未载明确编制。"),
   };
 }
