@@ -1389,13 +1389,17 @@ function setupDetailPanel(svg) {
   };
   panelGroup.__updateDetailScroll = updateScroll;
 
-  scrollViewport.addEventListener("wheel", (event) => {
+  const scrollDetailPanel = (event) => {
     event.preventDefault();
     event.stopPropagation();
     const renderedHeight = svg.getBoundingClientRect().height || svg.viewBox.baseVal.height;
     detailPanelScrollOffset += event.deltaY * svg.viewBox.baseVal.height / renderedHeight;
     updateScroll();
-  }, { passive: false });
+  };
+  // 正文链接位于 scrollViewport，空白区域由底层 hit area 承接；
+  // 两层都监听滚轮，保持整个详情框可滚动。
+  scrollViewport.addEventListener("wheel", scrollDetailPanel, { passive: false });
+  scrollHitArea.addEventListener("wheel", scrollDetailPanel, { passive: false });
 
   if (scrollThumb) {
     d3.select(scrollThumb).call(
