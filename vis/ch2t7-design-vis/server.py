@@ -303,7 +303,11 @@ def build_payload() -> dict:
             "summary": text[:SUMMARY_LEN],
             "text": text,
             "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
+            "aliases": _dict_section(fields, ("简称与别名", "简称", "别称")),
             "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
+            "children": _dict_section(fields, ("下级机构", "所辖机构", "所属机构")),
+            "office": _dict_section(fields, ("衙署", "办公地点")),
+            "composition": _dict_section(fields, ("编制", "官额", "吏额")),
         }
 
     sources_by_entity = {}

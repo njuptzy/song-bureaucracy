@@ -22,9 +22,12 @@ const selectedRange = ref([1080, 1080]);
 const timelineSelectionActive = ref(true);
 const selectedId = ref(null);
 const selectedCategory = ref("中央机构");
+const expandedDetailId = ref(null);
+const inlineDetailField = ref("duty");
 const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
+let hierarchyClickTimer = null;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
@@ -102,6 +105,30 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
     element.appendChild(tspan);
   }
   return lines.length;
+}
+
+function wrapVerticalText(element, text, charsPerColumn = 11, maxColumns = 6, columnGap = 9.81) {
+  if (!element) return;
+  const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
+  const columns = [];
+  let offset = 0;
+  while (offset < content.length && columns.length < maxColumns) {
+    const end = Math.min(content.length, offset + charsPerColumn);
+    let column = content.slice(offset, end);
+    if (end < content.length && columns.length === maxColumns - 1) {
+      column = `${column.slice(0, -1)}…`;
+    }
+    columns.push(column);
+    offset = end;
+  }
+  element.replaceChildren();
+  columns.forEach((column, index) => {
+    const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+    tspan.setAttribute("x", String(-index * columnGap));
+    tspan.setAttribute("y", "0");
+    tspan.textContent = column;
+    element.appendChild(tspan);
+  });
 }
 
 function constrainTextWidth(element, maxWidth) {
@@ -205,6 +232,42 @@ function categoryFocus(category) {
 function quotaText(edge) {
   const quota = edge.staff_quota ? `${edge.staff_quota}人` : "员额未载";
   return `${titleOf(edge.official)}（${quota}${edge.staff_type ? `，${edge.staff_type}` : ""}）`;
+}
+
+const INLINE_DETAIL_FIELDS = [
+  { key: "source", label: "出处：" },
+  { key: "origin", label: "职源与沿革文本：" },
+  { key: "aliases", label: "简称与别名：" },
+  { key: "duty", label: "执掌：" },
+  { key: "children", label: "下级机构：" },
+  { key: "office", label: "衙署：" },
+  { key: "composition", label: "编制文本：" },
+];
+
+function inlineDetailValues(entity) {
+  const dictionary = props.data.dictionary[entity.title] || {};
+  const timepoints = activeTimepoints(entity.id);
+  const staff = staffFor(entity.id);
+  const children = childrenFor(entity.id);
+  const events = timepoints
+    .map((item) => `${item.time || "时间未明"}：${item.event || item.quotation || "未载事件"}`)
+    .join("；");
+  const source = [
+    dictionary.page ? `《宋代官制辞典》第${dictionary.page}页` : "",
+    dictionary.catalog || "",
+  ].filter(Boolean).join("；");
+  return {
+    source: source || "当前实体未匹配到独立辞典词条。",
+    origin: dictionary.origin || events || "原文未单列职源与沿革。",
+    aliases: dictionary.aliases || "原文未单列简称与别名。",
+    duty: dictionary.duty || events || dictionary.text || "当前年份未载明确职掌。",
+    children: children.length
+      ? children.map((edge) => titleOf(edge.child)).join("、")
+      : dictionary.children || "当前年份未载明确下级机构。",
+    office: dictionary.office || "原文未单列衙署。",
+    composition: dictionary.composition
+      || (staff.length ? staff.map(quotaText).join("；") : "当前年份未载明确编制。"),
+  };
 }
 
 function selectedEntity() {
@@ -321,9 +384,97 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
   );
 }
 
+function renderInlineDetailCard(svg, layer, templateGroup, layout, entity, area) {
+  if (!templateGroup || !layout || !entity) return;
+  const card = templateGroup.cloneNode(true);
+  card.classList.add("inline-design-detail");
+  card.dataset.entityId = String(entity.id);
+
+  const templateBounds = elementBounds(card) || { x: 614.19, y: 143.72, width: 461.61, height: 144.25 };
+  const preferredX = layout.x - 763.56;
+  const preferredY = layout.y - 196.11;
+  const minX = area.left - templateBounds.x;
+  const maxX = area.right - templateBounds.x - templateBounds.width;
+  const minY = area.top - templateBounds.y;
+  const maxY = area.bottom - templateBounds.y - templateBounds.height;
+  const offsetX = Math.max(minX, Math.min(maxX, preferredX));
+  const offsetY = Math.max(minY, Math.min(maxY, preferredY));
+  card.setAttribute("transform", `translate(${offsetX} ${offsetY})`);
+
+  const titleLabel = findTextAt(card, 763.56, 196.11, 2);
+  const titlePolygon = titleLabel?.parentElement?.querySelector("polygon");
+  setText(titleLabel, entity.title);
+  fitDynamicNodeLabel(titleLabel, entity.title, elementBounds(titlePolygon));
+
+  const values = inlineDetailValues(entity);
+  const description = findTextAt(card, 863.21, 184.51, 2);
+  wrapVerticalText(description, values[inlineDetailField.value], 11, 6, 9.81);
+  const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  descriptionTitle.textContent = values[inlineDetailField.value];
+  description?.appendChild(descriptionTitle);
+
+  for (const field of INLINE_DETAIL_FIELDS) {
+    const label = [...card.querySelectorAll("text.cls-67")]
+      .find((element) => normalizeText(element) === field.label.replace(/\s+/g, ""));
+    if (!label) continue;
+    const active = inlineDetailField.value === field.key;
+    label.style.cursor = "pointer";
+    label.style.fontWeight = active ? "700" : "400";
+    label.style.fill = active ? "#866d6d" : "#351704";
+    const fieldTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    fieldTitle.textContent = values[field.key];
+    label.appendChild(fieldTitle);
+    d3.select(label).on("click.inline-detail-field", (event) => {
+      event.stopPropagation();
+      inlineDetailField.value = field.key;
+      renderTemplate();
+    });
+  }
+
+  const staff = staffFor(entity.id);
+  const officialLabels = [...card.querySelectorAll("text.cls-64")]
+    .filter((element) => {
+      const point = position(element);
+      return point && point.x >= 790 && point.x <= 1070 && point.y >= 175 && point.y <= 220;
+    })
+    .sort((a, b) => position(a).x - position(b).x);
+  officialLabels.forEach((label, index) => {
+    const group = label.parentElement;
+    const edge = staff[index];
+    group.style.display = edge ? "" : "none";
+    if (!edge) return;
+    setText(label, titleOf(edge.official));
+    const quota = group.querySelector("text.cls-72");
+    const person = group.querySelector("text.cls-74");
+    setText(quota, edge.staff_quota ? `（${edge.staff_quota}）` : "（未载）");
+    if (person) person.style.display = edge.staff_quota ? "" : "none";
+    const officialTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    officialTitle.textContent = quotaText(edge);
+    group.appendChild(officialTitle);
+  });
+
+  const cardTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  cardTitle.textContent = `${entity.title}：点击左侧字段切换详情，双击机构书脊收起`;
+  card.appendChild(cardTitle);
+  d3.select(card)
+    .on("click.inline-detail", (event) => event.stopPropagation())
+    .on("dblclick.inline-detail", (event) => event.stopPropagation());
+  if (titleLabel?.parentElement) {
+    titleLabel.parentElement.style.cursor = "zoom-out";
+    d3.select(titleLabel.parentElement).on("dblclick.inline-detail-close", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      expandedDetailId.value = null;
+      renderTemplate();
+    });
+  }
+  layer.appendChild(card);
+}
+
 function renderDynamicHierarchy(svg) {
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
   const templateGroup = templateText?.parentElement?.cloneNode(true);
+  const inlineDetailTemplate = templateText?.parentElement?.parentElement?.cloneNode(true);
   const templatePolygonBounds = elementBounds(templateText?.parentElement?.querySelector("polygon"));
   const emperorText = findTextAt(svg, 1141.69, 153.09, 2);
   const emperorRect = [...svg.querySelectorAll("rect")].find(
@@ -486,6 +637,7 @@ function renderDynamicHierarchy(svg) {
   }
 
   let nodeIndex = 0;
+  let expandedDetailNode = null;
   for (const node of root.descendants()) {
     const layout = nodeLayout.get(node);
     const nodeGroup = node.data.isVirtual
@@ -565,17 +717,17 @@ function renderDynamicHierarchy(svg) {
     const interactionHint = node.data.childCount
       ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
       : "";
+    const detailHint = node.data.isVirtual ? "" : "；双击展开机构详情";
     title.textContent = hiddenCount
-      ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}`
-      : `${node.data.title}${interactionHint}`;
+      ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
+      : `${node.data.title}${interactionHint}${detailHint}`;
     nodeGroup.appendChild(title);
 
     nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
-    d3.select(nodeGroup).on("click.dynamic-tree", (event) => {
-      event.stopPropagation();
-      detailPanelScrollOffset = 0;
-      if (!node.data.isVirtual) selectedId.value = node.data.id;
-      if (node.data.childCount) {
+    if (!node.data.isVirtual && expandedDetailId.value === node.data.id) expandedDetailNode = node;
+    d3.select(nodeGroup)
+      .on("click.dynamic-tree", (event) => {
+        event.stopPropagation();
         if (node.data.isVirtual) {
           if (collapsedHierarchyIds.has(node.data.id)) {
             collapsedHierarchyIds.delete(node.data.id);
@@ -583,20 +735,49 @@ function renderDynamicHierarchy(svg) {
             collapsedHierarchyIds.add(node.data.id);
             expandedHierarchyPath = [];
           }
-        } else {
-          const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
-          if (expandedIndex >= 0) {
-            expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
-          } else {
-            expandedHierarchyPath = node.ancestors()
-              .reverse()
-              .filter((ancestor) => !ancestor.data.isVirtual)
-              .map((ancestor) => ancestor.data.id);
-          }
+          renderTemplate();
+          return;
         }
-      }
-      renderTemplate();
-    });
+        window.clearTimeout(hierarchyClickTimer);
+        hierarchyClickTimer = window.setTimeout(() => {
+          detailPanelScrollOffset = 0;
+          expandedDetailId.value = null;
+          selectedId.value = node.data.id;
+          if (node.data.childCount) {
+            const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
+            if (expandedIndex >= 0) {
+              expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
+            } else {
+              expandedHierarchyPath = node.ancestors()
+                .reverse()
+                .filter((ancestor) => !ancestor.data.isVirtual)
+                .map((ancestor) => ancestor.data.id);
+            }
+          }
+          renderTemplate();
+        }, 220);
+      })
+      .on("dblclick.dynamic-tree-detail", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        window.clearTimeout(hierarchyClickTimer);
+        detailPanelScrollOffset = 0;
+        selectedId.value = node.data.id;
+        inlineDetailField.value = "duty";
+        expandedDetailId.value = expandedDetailId.value === node.data.id ? null : node.data.id;
+        renderTemplate();
+      });
+  }
+
+  if (expandedDetailNode) {
+    renderInlineDetailCard(
+      svg,
+      layer,
+      inlineDetailTemplate,
+      nodeLayout.get(expandedDetailNode),
+      entityMap.get(expandedDetailNode.data.id),
+      area
+    );
   }
 }
 
