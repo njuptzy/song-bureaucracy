@@ -42,6 +42,41 @@ CREATE TABLE {table} (
 CATALOG_PREFIX = "宋代官制辞典/I.职官条目分类目录"
 
 
+def fix_ch1_chenfei(entries, meta):
+    """修复第一编 p14 的嵌入切分错误。
+
+    目录 OCR 把“宸妃”误识为“寝妃”；正文 OCR 中宸妃的定义和
+    “职源与沿革”又被粘到上一条“贵人”。原始页块明确依次为：
+    贵人品阶 -> 宸妃定义 -> 宸妃职源与沿革 -> 宝林。
+    """
+    noble = entries[92]
+    chenfei = entries[93]
+    chenfei_meta = meta[93]
+    assert noble == {
+        "name": "贵人",
+        "职源": "东汉光武帝建武元年(25)始置（见《后汉书·光烈阴皇后纪》）。宋真宗大中祥符二年(1009)特置贵人。",
+        "品阶": "属内命妇末阶，无视品。宸妃 内命妇，特置封号。仁宗用以追赠生母、真宗顺容李氏而设。",
+        "职源与沿革": "唐高宗时已有此名号（《唐会要》卷3《内职杂录》）。宋仁宗明道元年（1032）二月特置（见《长编》卷111）。",
+        "text": "皇帝妾之位号。",
+    }
+    assert chenfei == {"name": "寝妃", "text": "", "_placeholder": True}
+    assert chenfei_meta["name"] == "寝妃" and chenfei_meta["status"] == "placeholder"
+
+    noble["品阶"] = "属内命妇末阶，无视品。"
+    history = noble.pop("职源与沿革")
+    chenfei.clear()
+    chenfei.update({
+        "name": "宸妃",
+        "职源与沿革": history,
+        "text": "内命妇，特置封号。仁宗用以追赠生母、真宗顺容李氏而设。",
+    })
+    chenfei_meta.update({
+        "name": "宸妃",
+        "body_page": "14",
+        "status": "ok",
+    })
+
+
 def main() -> int:
     profile_name = sys.argv[1] if len(sys.argv) > 1 else "2t4"
     if profile_name not in PROFILES:
@@ -56,6 +91,8 @@ def main() -> int:
         entries = json.load(f)
     with open(meta_json, encoding="utf-8") as f:
         meta = json.load(f)
+    if profile_name == "1":
+        fix_ch1_chenfei(entries, meta)
     assert len(entries) == len(meta), "结果与 meta 条数不一致"
     for i, (e, m) in enumerate(zip(entries, meta)):
         assert e["name"] == m["name"], f"第 {i} 条 name 不对齐: {e['name']} vs {m['name']}"
