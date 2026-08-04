@@ -18,6 +18,7 @@
             'in-range': item.rangeEventCount > 0,
           }"
           @click="emit('select-entity', item.id)"
+          @dblclick.stop.prevent="emit('open-annotation', item.id)"
         >
           <span class="item-shape" aria-hidden="true"></span>
           <span class="item-title" :title="item.title">{{ item.title }}</span>
@@ -35,7 +36,10 @@
     <div v-if="entity" class="timeline-stage">
       <div class="timeline-head">
         <div class="head-title">
-          <strong :title="entity.title">{{ entity.title }}</strong>
+          <strong
+            :title="`${entity.title} · 双击查看标注原文`"
+            @dblclick.stop.prevent="emit('open-annotation', entity.id)"
+          >{{ entity.title }}</strong>
           <em>{{ entity.type }}</em>
           <small v-if="entity.yearMin != null">公元{{ entity.yearMin }}—{{ entity.yearMax }}年</small>
           <small>
@@ -123,6 +127,7 @@
               class="comparison-label"
               :title="row.entity.title"
               @click="focusComparisonEntity(row.entity.id)"
+              @dblclick.stop.prevent="emit('open-annotation', row.entity.id)"
             >
               <i :class="{ office: row.entity.type === '官职' }"></i>
               <span>{{ row.entity.title }}</span>
@@ -161,6 +166,7 @@
                 :data-event-id="event.id"
                 :title="`${event.rawTime} · ${event.event}`"
                 @click="onCardClick(event)"
+                @dblclick.stop.prevent="emit('open-annotation', event.entityId)"
               ></button>
               <span v-if="!row.datedEvents.length" class="comparison-undated-only">
                 仅有时间未明或仅知范围记录
@@ -210,6 +216,7 @@
                 :class="[{ selected: selectedEvent?.id === row.event.id }, `event-${row.event.eventType}`]"
                 :style="{ animationDelay: `${Math.min(index, 12) * 45}ms` }"
                 @click="onCardClick(row.event)"
+                @dblclick.stop.prevent="emit('open-annotation', row.event.entityId)"
               >
                 <span class="card-top">
                   <strong>{{ row.event.rawTime }}</strong>
@@ -243,6 +250,7 @@
             }"
             :data-event-id="event.id"
             @click="onCardClick(event)"
+            @dblclick.stop.prevent="emit('open-annotation', event.entityId)"
           >
             <span class="u-time">
               {{ event.rawTime }}
@@ -286,7 +294,7 @@ const props = defineProps({
   range: { type: Array, default: null },
   selectionActive: { type: Boolean, default: true },
 });
-const emit = defineEmits(["select-entity", "select-event"]);
+const emit = defineEmits(["select-entity", "select-event", "open-annotation"]);
 
 const GAP_YEARS = 4; // 相邻纪年相差达到该年数即插入「隔 N 年」行
 const DIVIDER_YEAR = 1127;

@@ -76,6 +76,7 @@
               type="button"
               :title="`${item.entity.title} · ${edgePeriodLabel(item.edge)}`"
               @click="toggleSelection(item.entity.id)"
+              @dblclick.stop.prevent="emit('open-annotation', item.entity.id)"
             >
               <i :class="{ office: item.entity.type === '官职' }"></i>
               <span>{{ item.entity.title }}</span>
@@ -121,6 +122,7 @@
               'linked-hover': tree.institutionIds.has(hoveredEntityId) || tree.officeIds.has(hoveredEntityId),
             }"
             @click="focusEntity(tree.id)"
+            @dblclick.stop.prevent="emit('open-annotation', tree.id)"
           >
             <span class="tree-root-mark" aria-hidden="true">根</span>
             <span class="tree-directory-copy">
@@ -241,6 +243,7 @@
               tabindex="0"
               role="button"
               @click.stop="onNodeClick(node.data)"
+              @dblclick.stop.prevent="onNodeDoubleClick(node.data)"
               @keydown.enter.prevent="onNodeClick(node.data)"
             >
               <rect
@@ -346,6 +349,7 @@
         <strong>{{ canvasLayout.realNodeCount }}</strong> 个可见实体
         <span v-if="canvasLayout.hiddenCount">· 尚有 {{ canvasLayout.hiddenCount }} 个下级待展开</span>
         <span>· 单击看详情</span>
+        <span>· 双击查标注原文</span>
         <span>· 节点左上数字角标查看多上级</span>
       </div>
 
@@ -396,7 +400,12 @@
           <div class="semantic-list">
             <article v-for="item in section.items" :key="item.key">
               <div class="semantic-row">
-                <button type="button" class="semantic-name" @click="toggleSelection(item.entity.id)">
+                <button
+                  type="button"
+                  class="semantic-name"
+                  @click="toggleSelection(item.entity.id)"
+                  @dblclick.stop.prevent="emit('open-annotation', item.entity.id)"
+                >
                   <i :class="{ office: item.entity.type === '官职' }"></i>
                   <span>{{ item.entity.title }}</span>
                 </button>
@@ -451,7 +460,7 @@ const props = defineProps({
   range: { type: Array, default: null },
   selectionActive: { type: Boolean, default: true },
 });
-const emit = defineEmits(["select-entity"]);
+const emit = defineEmits(["select-entity", "open-annotation"]);
 
 const PRIMARY_VIA = { 上下级机构: 0 };
 // 关系类型图标（16×16 简笔，stroke=currentColor）：建筑=上下级机构、人形=编制隶属、交叠方框=统称与实例
@@ -1190,6 +1199,12 @@ async function onNodeClick(data) {
   }
   clearOtherParentCard();
   toggleSelection(data.id);
+}
+
+function onNodeDoubleClick(data) {
+  if (data.overflow || typeof data.id !== "number") return;
+  if (props.selectedEntityId !== data.id) emit("select-entity", data.id);
+  emit("open-annotation", data.id);
 }
 
 async function focusEntity(id, emitSelection = true) {

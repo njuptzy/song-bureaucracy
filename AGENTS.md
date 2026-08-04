@@ -14,8 +14,8 @@
 - 当前活跃开发：`vis/song-bureaucracy-visualization-v2/`（可视化）和 `agent-v0612/`（数据抽取）。
 - 当前最佳结果库：`agent-v0612/records/v0620-regen-test/song_bureaucracy_entries_v0620-regen-test.db`（覆盖辞典 833 条中的 832 条；981 实体 / 1813 时间点 / 1177 关系 / 3126 引用 / 7288 条 BuildRecords 追溯行）。
 - `vis/data/song_bureaucracy_best.db` 是该库的只读副本，是可视化的数据源；`vis/data/song_bureaucracy_visualization.db` 是由它生成的时间标准化工作库。
-- 辞典源库：`data/database/song_bureaucracy_dictionary.db`（表 `chapter8t10`，833 条）。
-- `agent-v0612/` **整个目录未被 git 跟踪**，改坏没有版本兜底；数据库改动前先备份文件。
+- 辞典源库：`data/database/song_bureaucracy_dictionary.db`（表 `chapter8t10`，833 条）。其余编组辞典库（schema 相同；placeholder 空条目在 `fields.__status__` 有标记）：`song_bureaucracy_dictionary_ch2t4.db`（表 `chapter2t4`，1649 条）、`..._ch5t7.db`（1489 条）、`..._ch11t12.db`（597 条），均由 `process/ocr-results/split_chapters_2t4.py <编组>` + `build_dictionary_db_2t4.py <编组>` 生成（编组：2t4/5t7/11t12）。对应的空四表结果库：`song_bureaucracy_entries_ch<编组>.db`。
+- `agent-v0612/` 源码已被 git 跟踪；`records/` 默认忽略，仅当前最佳 v0620 结果库作为云端快照显式跟踪。数据库改动前仍须先备份文件。
 - `db._recreate_tables()` 会清空结构化结果表，只允许对临时数据库副本执行。
 - `data/` 被根目录 `.gitignore` 忽略，但本地工作区已恢复外部数据。
 
@@ -23,12 +23,13 @@
 
 | 路径 | 用途 | 维护建议 |
 | --- | --- | --- |
-| `agent-v0612/` | 当前抽取实现：两阶段 agent（辞典 → 原子事实 → 四表）、`run.sh` 版本化批跑、多 provider LLM 客户端 | 主要开发目录之一；**未纳入 git** |
+| `agent-v0612/` | 当前抽取实现：两阶段 agent（辞典 → 原子事实 → 四表）、`run.sh` 版本化批跑、多 provider LLM 客户端 | 主要开发目录之一；源码已纳入 git，凭据与批跑产物默认忽略 |
 | `agent-v0612/records/<标签>/` | 各版本批跑产物（结果库、词条 records_*.json、failed_entries.json、run.log） | 生成物，不要手工编辑 |
 | `agent_framework/` | 共享的 OpenRouter 客户端（`llm.py`），被 agent-v0612 包装使用 | 稳定 |
-| `prompts/` | 两个独立 agent 技能提示词：逐条校对（`..._curation_...`）和全量重生成（`..._full_regeneration_...`），驱动 agent 直接操作 SQLite | 重生成路线的事实标准 |
+| `prompts/` | agent 提示词：`song_bureaucracy_entry_extraction_prompt.md`（新编组 2t4/5t7/11t12 的逐条提取标准，质量要求高于 v0620）；旧的逐条校对（`..._curation_...`）与全量重生成（`..._full_regeneration_...`）技能文件已丢失 | 重生成路线的事实标准 |
 | `vis/` | 可视化工作区：当前前端、后端数据链路、测试、文档与资源 | **当前主战场** |
 | `vis/song-bureaucracy-visualization-v2/` | 当前可视化版本（Vue 3 + Vite）：时序事件 / 层级结构 / 年表三视图 + 底部宋代总时间线 | 活跃开发 |
+| `vis/ch2t7-design-vis/` | 按《宋代职官可视化设计.pdf》设计稿实现的 ch2t7 库可视分析系统（Vue 3 + d3）：线装书机构 icon（装订线格 = 下级数）+ 官帽官职 + 帝系时间线；只读 `server.py`（默认 127.0.0.1:8650，`./run.sh` 启动）；`node_modules` 同为共享软链，不要 `pnpm install` | 活跃开发 |
 | `vis/backend/` | 时间标准化、离线 JSON 导出和实时只读服务 | 当前后端数据链路 |
 | `vis/tests/` | 可视化数据层单元测试 | 修改 `vis/backend/` 后必跑 |
 | `vis/docs/` / `vis/reports/` / `vis/resources/` | 流程说明、当前运行报告和外部参考资料 | 不放业务代码 |
@@ -36,8 +37,8 @@
 | `visualization/` | 旧的逐条审查工具（只读 `server.py` + 静态页）：四表数据与辞典原文并排审查，自动标可疑数据 | 历史工具，仍可用 |
 | `analysis/` | 模型对比报告（`v0614_first25_model_comparison.md`）、结果检查脚本 | 分析材料 |
 | `outputs/excel-db-overlap/` | 尚书省 Excel 表与数据库重叠核查产物 | 生成物 |
-| `process/ocr-results/` | OCR 清洗 notebook：MinerU 结果 → 半结构化辞典数据 | 输入预处理层 |
-| `data/` | 外部数据（辞典库、OCR 结果等），git 忽略 | 只入不删 |
+| `process/ocr-results/` | OCR 清洗：8–10 编 notebook（MinerU → 半结构化辞典数据）；`split_chapters_2t4.py` + `build_dictionary_db_2t4.py`（2–4 编切分与建库，可重复执行） | 输入预处理层 |
+| `data/` | 外部数据（辞典库、OCR 结果等）；默认 git 忽略，`data/database/` 的当前正式库作为云端快照显式跟踪 | 只入不删 |
 | `agent/`、`agent_v0126/`、`agent_v0211/`、`agent_v0303/`、`agent_test/` | 历史抽取版本 | 追溯思路用，不要同步修改 |
 | `doc/`、`plans/` | 设计文档与演进记录 | 阅读时注意版本号 |
 | `repair-agent/` | 空目录，预留 | — |

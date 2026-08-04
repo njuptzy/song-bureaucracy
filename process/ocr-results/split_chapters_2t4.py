@@ -406,6 +406,13 @@ PROFILES = {
         "fix_xiangmen": False,
         "fix_wensan_head": True,
         "drop_surnames": set(),
+        "joins": [
+            {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
+             "status": "not_in_catalog", "target_field": "别名",
+             "reason": "镇国大将军别名引文跨页断成‘骠骑大将军 辅国大将军/"
+                       "镇国大将军 冠军大将军 怀化大将军’，页首续句被同名词头"
+                       "误切为伪条目，应接回别名字段"},
+        ],
     },
 }
 
@@ -4862,8 +4869,77 @@ def main():
             "正四品下（资料出处参“开府仪同三司”条）。",
             1,
         )
-        print("  [正文OCR归位] p616-617：特进参见条恢复为‘开府仪同三司’，"
-              "通奉大夫品位引文恢复全角括号")
+
+        chengshi = next(e for e in all_entries if e["name"] == "承事郎")
+        assert "文散官第二十九阶之第二十三阶" in chengshi["text"]
+        chengshi["text"] = chengshi["text"].replace(
+            "文散官第二十九阶之第二十三阶",
+            "文散官二十九阶之第二十三阶",
+            1,
+        )
+
+        chengfeng = next(e for e in all_entries if e["name"] == "承奉郎")
+        assert "文散官二十七阶之第二十四阶" in chengfeng["text"]
+        chengfeng["text"] = chengfeng["text"].replace(
+            "文散官二十七阶之第二十四阶",
+            "文散官二十九阶之第二十四阶",
+            1,
+        )
+
+        chengwu = next(e for e in all_entries if e["name"] == "承务郎")
+        assert "承务郎(即唐之员外郎),职事官" in chengwu["text"]
+        assert "唐因其名,列入文散官" in chengwu["text"]
+        assert "宋沿置,为北宋前期" in chengwu["text"]
+        assert "从八品下(《六典》卷2《吏部郎中》,其余资料出处" in chengwu["text"]
+        chengwu["text"] = chengwu["text"].replace(
+            "承务郎(即唐之员外郎),职事官",
+            "承务郎（即唐之员外郎），职事官",
+            1,
+        ).replace(
+            "唐因其名,列入文散官", "唐因其名，列入文散官", 1
+        ).replace(
+            "宋沿置,为北宋前期", "宋沿置，为北宋前期", 1
+        ).replace(
+            "从八品下(《六典》卷2《吏部郎中》,其余资料出处",
+            "从八品下（《六典》卷2《吏部郎中》，其余资料出处",
+            1,
+        ).replace(
+            "条)。", "条）。", 1
+        )
+
+        auxiliary_general = next(e for e in all_entries if e["name"] == "辅国大将军")
+        assert "神宗元丰五年正为二十六日罢" in auxiliary_general["text"]
+        auxiliary_general["text"] = auxiliary_general["text"].replace(
+            "神宗元丰五年正为二十六日罢",
+            "神宗元丰五年正月二十六日罢",
+            1,
+        )
+
+        for title in ("忠武将军", "壮武将军"):
+            military_rank = next(e for e in all_entries if e["name"] == title)
+            assert "上(" in military_rank["text"] or "下(" in military_rank["text"]
+            military_rank["text"] = military_rank["text"].replace(
+                "上(", "上（", 1
+            ).replace("下(", "下（", 1).replace("条)。", "条）。", 1)
+
+        xuanwei = next(e for e in all_entries if e["name"] == "宣威将军")
+        assert "从四品上(" in xuanwei["text"] and "条)。" in xuanwei["text"]
+        xuanwei["text"] = xuanwei["text"].replace(
+            "从四品上(", "从四品上（", 1
+        ).replace("条)。", "条）。", 1)
+
+        state_guard = next(e for e in all_entries if e["name"] == "镇国大将军")
+        joined_alias = "辅国大将军镇国大将军冠军大将军 怀化大将军"
+        assert joined_alias in state_guard["别名"]
+        state_guard["别名"] = state_guard["别名"].replace(
+            joined_alias,
+            "辅国大将军 镇国大将军 冠军大将军 怀化大将军",
+            1,
+        )
+
+        print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
+              "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
+              "将军品位括号")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):

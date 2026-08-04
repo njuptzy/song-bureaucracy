@@ -134,6 +134,7 @@
                   { 'in-range': item.inRange, selected: centeredEvent?.id === item.event.id },
                 ]"
                 @click="handleEntryClick(item.event, $event)"
+                @dblclick.stop.prevent="openAnnotationEntity(item.event.entityId)"
               >
                 <span class="entry-date">
                   {{ item.event.rawTime }}
@@ -167,6 +168,7 @@
               ref="centerCardRef"
               :class="['center-card', `event-${centeredEvent.eventType}`]"
               @click="openDetail"
+              @dblclick.stop.prevent="openAnnotationEntity(centeredEvent.entityId)"
             >
               <div class="center-card-head">
                 <span>{{ centeredEvent.entityType }} · {{ centeredEvent.category || "未分类" }}</span>
@@ -218,6 +220,7 @@
             :selection-active="timelineSelectionActive"
             @select-entity="onTimelineEntity"
             @select-event="onTimelineEvent"
+            @open-annotation="openAnnotationEntity"
           />
 
           <EventDetailPanel
@@ -239,6 +242,7 @@
             :range="timelineSelectionActive ? selectedRange : null"
             :selection-active="timelineSelectionActive"
             @select-entity="onHierarchyEntity"
+            @open-annotation="openAnnotationEntity"
           />
 
           <Transition name="hierarchy-detail">
@@ -372,6 +376,40 @@
       @cancel-selection="clearRangeSelection"
       @change-range="setRange"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="annotationEntity"
+        class="annotation-overlay"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="`${annotationEntity.title}的标注系统详情`"
+        @click.self="closeAnnotationEntity"
+      >
+        <div v-if="!annotationReady" class="annotation-preloader" role="status">
+          <span aria-hidden="true">宋</span>
+          <strong>正在调取标注原文</strong>
+          <small>{{ annotationEntity.title }}</small>
+        </div>
+        <section class="annotation-window" :class="{ ready: annotationReady }">
+          <header class="annotation-window-head">
+            <div>
+              <span>标注系统 · 机构官职沿革与原文依据</span>
+              <strong>{{ annotationEntity.title }}</strong>
+            </div>
+            <nav>
+              <a :href="annotationUrl" target="_blank" rel="noopener">独立窗口打开</a>
+              <button type="button" aria-label="关闭标注系统详情" @click="closeAnnotationEntity">×</button>
+            </nav>
+          </header>
+          <iframe
+            :key="annotationEntity.id"
+            :src="annotationUrl"
+            :title="`${annotationEntity.title}的标注系统详情`"
+          ></iframe>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -398,6 +436,8 @@ const researchEntityId = ref(null);
 const researchEventId = ref(null);
 const selectedEntityId = ref(null);
 const hoveredHierarchyEntityId = ref(null);
+const annotationEntityId = ref(null);
+const annotationReady = ref(false);
 const timelineEntityId = ref(null);
 const timelineEvent = ref(null);
 const viewMode = ref("hierarchy");
@@ -519,11 +559,48 @@ onMounted(async () => {
     dataError.value = `数据库读取失败：${error.message}`;
   }
   refreshTimer = window.setInterval(refreshIfDatabaseChanged, 1500);
+  window.addEventListener("keydown", onGlobalKeydown);
+  window.addEventListener("message", onAnnotationMessage);
 });
 
 onBeforeUnmount(() => {
   if (refreshTimer) window.clearInterval(refreshTimer);
+  window.removeEventListener("keydown", onGlobalKeydown);
+  window.removeEventListener("message", onAnnotationMessage);
 });
+
+const annotationEntity = computed(() => (
+  dataset.value?.entities.find((entity) => entity.id === annotationEntityId.value) || null
+));
+
+const annotationUrl = computed(() => {
+  if (!annotationEntity.value || typeof window === "undefined") return "";
+  return `${window.location.protocol}//${window.location.hostname}:8645/?embed=entity#entity=${annotationEntity.value.id}`;
+});
+
+function openAnnotationEntity(entityId) {
+  if (!dataset.value?.entities.some((entity) => entity.id === entityId)) return;
+  annotationReady.value = false;
+  annotationEntityId.value = entityId;
+}
+
+function closeAnnotationEntity() {
+  annotationEntityId.value = null;
+  annotationReady.value = false;
+}
+
+function onGlobalKeydown(event) {
+  if (event.key === "Escape" && annotationEntityId.value != null) closeAnnotationEntity();
+}
+
+function onAnnotationMessage(event) {
+  if (typeof window === "undefined") return;
+  const expectedOrigin = `${window.location.protocol}//${window.location.hostname}:8645`;
+  if (event.origin !== expectedOrigin) return;
+  if (event.data?.type !== "song-bureaucracy:annotation-ready") return;
+  if (event.data.entityId !== annotationEntityId.value) return;
+  annotationReady.value = true;
+}
 
 const currentSnapshot = computed(() => (
   dataset.value && timelineSelectionActive.value
@@ -2101,6 +2178,149 @@ button {
   background: transparent;
 }
 
+.annotation-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(48, 31, 18, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.annotation-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1500px, 96vw);
+  height: min(920px, 94vh);
+  overflow: hidden;
+  border: 1px solid rgba(90, 58, 32, 0.48);
+  border-radius: 8px;
+  background: #f4f1ea;
+  box-shadow: 0 24px 80px rgba(35, 20, 10, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px) scale(0.995);
+  transition: opacity 150ms ease, transform 180ms ease, visibility 0s linear 180ms;
+}
+
+.annotation-window.ready {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+}
+
+.annotation-preloader {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 210px;
+  border: 1px solid rgba(244, 241, 234, 0.34);
+  border-radius: 7px;
+  padding: 18px 24px;
+  color: #f4f1ea;
+  background: rgba(63, 41, 24, 0.78);
+  box-shadow: 0 14px 44px rgba(20, 10, 4, 0.28);
+}
+
+.annotation-preloader span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(244, 241, 234, 0.58);
+  border-radius: 5px;
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 21px;
+  animation: annotation-pulse 1.15s ease-in-out infinite;
+}
+
+.annotation-preloader strong {
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.annotation-preloader small {
+  max-width: 260px;
+  overflow: hidden;
+  color: rgba(244, 241, 234, 0.68);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes annotation-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.annotation-window-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  min-height: 58px;
+  border-bottom: 1px solid rgba(114, 74, 43, 0.3);
+  padding: 8px 12px 8px 18px;
+  color: var(--ink);
+  background: #ebe4d9;
+}
+
+.annotation-window-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.annotation-window-head span {
+  color: rgba(90, 58, 32, 0.62);
+  font-family: "FZQINGKBYSJF", serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.annotation-window-head strong {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.annotation-window-head nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.annotation-window-head a,
+.annotation-window-head button {
+  border: 1px solid rgba(114, 74, 43, 0.38);
+  border-radius: 3px;
+  padding: 6px 10px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.38);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.annotation-window-head button {
+  min-width: 34px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.annotation-window iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #f7f4ed;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-rows: 78px minmax(0, 1fr) 160px;
@@ -2129,6 +2349,15 @@ button {
 
   .detail-panel {
     width: 42vw;
+  }
+
+  .annotation-overlay {
+    padding: 8px;
+  }
+
+  .annotation-window {
+    width: 100%;
+    height: 98vh;
   }
 }
 </style>

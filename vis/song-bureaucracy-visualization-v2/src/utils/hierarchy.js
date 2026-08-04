@@ -92,6 +92,11 @@ export function buildEntityGraph(dataset, yearOrRange = null) {
   const instancesOf = new Map(); // collectiveId -> [instance relation item]
   const collectivesOf = new Map(); // instanceId -> [collective relation item]
   const hierarchyTypeSet = new Set(HIERARCHY_TYPES);
+  const collectiveEntityIds = new Set(
+    dataset.relations
+      .filter((relation) => relation.type === "统称与实例")
+      .map((relation) => relation.subjectEntityId)
+  );
 
   for (const rel of sourceRelations) {
     const parent = rel.subjectEntityId;
@@ -174,11 +179,17 @@ export function buildEntityGraph(dataset, yearOrRange = null) {
   }
 
   const byActivity = compareEntities(entityById);
-  const roots = [...childrenOf.keys()].filter((id) => !parentRelsOf.has(id)).sort(byActivity);
+  const structuralRoots = [...childrenOf.keys()].filter((id) => !parentRelsOf.has(id));
   const isolated = sourceEntities
     .map((entity) => entity.id)
     .filter((id) => !parentRelsOf.has(id) && !childrenOf.has(id))
     .sort(byActivity);
+  const roots = [...new Set([
+    ...structuralRoots,
+    ...isolated.filter((id) => (
+      entityById.get(id)?.type === "机构" && !collectiveEntityIds.has(id)
+    )),
+  ])].sort(byActivity);
 
   // 从根到指定实体的主父链（不含自身），带环保护
   function ancestorChain(id) {
@@ -201,6 +212,7 @@ export function buildEntityGraph(dataset, yearOrRange = null) {
     staffParentsOf,
     instancesOf,
     collectivesOf,
+    collectiveEntityIds,
     primaryParent,
     roots,
     isolated,

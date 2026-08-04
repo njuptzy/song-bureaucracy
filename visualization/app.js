@@ -5,6 +5,7 @@ const state = {
   entities: [],
   meta: null,
   currentEntryId: null,
+  currentEntityModalId: null,
   filterText: "",
   onlyIssues: false,
   filterIssueType: null,
@@ -12,6 +13,8 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const entityEmbedMode = new URLSearchParams(location.search).get("embed") === "entity";
+if (entityEmbedMode) document.body.classList.add("entity-embed");
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -117,6 +120,9 @@ function matchingEntities() {
 }
 
 async function selectSearchedEntity(entity) {
+  state.filterText = entity.title;
+  if ($("entrySearch")) $("entrySearch").value = entity.title;
+  renderEntryList();
   if (entity.primary_entry_id !== null) {
     await selectEntry(entity.primary_entry_id);
   }
@@ -356,6 +362,11 @@ function readEntryFromHash() {
   return m ? m[1] : null;
 }
 
+function readEntityFromHash() {
+  const m = /^#entity=(\d+)$/.exec(location.hash || "");
+  return m ? Number(m[1]) : null;
+}
+
 async function selectEntry(id) {
   state.currentEntryId = id === "unlinked" ? "unlinked" : Number(id);
   const hashValue = id === "unlinked" ? "unlinked" : String(state.currentEntryId);
@@ -412,6 +423,10 @@ async function selectEntry(id) {
 async function openEntityModal(entityId) {
   const data = await fetchJson(`/api/entity/${entityId}`);
   const e = data.entity;
+  state.currentEntityModalId = e.id;
+  if (location.hash !== `#entity=${e.id}`) {
+    history.replaceState(null, "", `#entity=${e.id}`);
+  }
   $("modalTitle").textContent = `${e.title} （${e.type || "?"} #${e.id}）— 跨条目完整时间线`;
   $("modalTimeline").innerHTML =
     (e.chain_problems.length
@@ -430,6 +445,21 @@ async function openEntityModal(entityId) {
     : `<p class="placeholder-tip">该实体没有关联到任何辞典条目</p>`;
   bindCitationEvents($("modalTimeline"), $("modalEntries"));
   $("entityModal").classList.remove("hidden");
+  if (entityEmbedMode && window.parent !== window) {
+    window.parent.postMessage(
+      { type: "song-bureaucracy:annotation-ready", entityId: e.id },
+      "*"
+    );
+  }
+}
+
+function closeEntityModal({ syncHash = true } = {}) {
+  if (state.currentEntityModalId === null) return;
+  $("entityModal").classList.add("hidden");
+  state.currentEntityModalId = null;
+  if (!syncHash || state.currentEntryId === null) return;
+  const entryId = state.currentEntryId === "unlinked" ? "unlinked" : String(state.currentEntryId);
+  history.replaceState(null, "", `#entry=${entryId}`);
 }
 
 /* ---------------- 启动 ---------------- */
@@ -470,27 +500,41 @@ async function init() {
     state.showRecords = !state.showRecords;
     refreshCurrentView();
   });
-  $("modalClose").addEventListener("click", () => $("entityModal").classList.add("hidden"));
+  $("modalClose").addEventListener("click", () => closeEntityModal());
   $("entityModal").addEventListener("click", (ev) => {
-    if (ev.target === $("entityModal")) $("entityModal").classList.add("hidden");
+    if (ev.target === $("entityModal")) closeEntityModal();
   });
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") $("entityModal").classList.add("hidden");
+    if (ev.key === "Escape") closeEntityModal();
   });
 
-  const initialEntry = readEntryFromHash();
-  if (initialEntry !== null) {
-    const exists =
-      initialEntry === "unlinked" ||
-      state.entries.some((e) => String(e.id) === initialEntry);
-    if (exists) {
-      await selectEntry(initialEntry);
+  const initialEntityId = readEntityFromHash();
+  const initialEntity = state.entities.find((entity) => entity.id === initialEntityId);
+  if (initialEntity) {
+    await selectSearchedEntity(initialEntity);
+  } else {
+    const initialEntry = readEntryFromHash();
+    if (initialEntry !== null) {
+      const exists =
+        initialEntry === "unlinked" ||
+        state.entries.some((e) => String(e.id) === initialEntry);
+      if (exists) {
+        await selectEntry(initialEntry);
+      }
     }
   }
 
   window.addEventListener("hashchange", () => {
+    const entityId = readEntityFromHash();
+    if (entityId !== null) {
+      if (entityId === state.currentEntityModalId) return;
+      const entity = state.entities.find((item) => item.id === entityId);
+      if (entity) selectSearchedEntity(entity);
+      return;
+    }
     const id = readEntryFromHash();
     if (id === null) return;
+    if (state.currentEntityModalId !== null) closeEntityModal({ syncHash: false });
     const sameAsCurrent =
       (id === "unlinked" && state.currentEntryId === "unlinked") ||
       (id !== "unlinked" && Number(id) === state.currentEntryId);

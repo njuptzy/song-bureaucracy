@@ -434,6 +434,30 @@ mark.hl.active { background: var(--hl-active); outline: 2px solid var(--accent);
   border-left: 1px solid var(--border);
   background: #fbfaf7;
 }
+
+/* 供8051内嵌：只展示实体完整时间线弹窗，不显示后方搜索审查界面。 */
+body.entity-embed {
+  display: block;
+  overflow: hidden;
+  background: var(--panel);
+}
+body.entity-embed > .topbar,
+body.entity-embed > .columns {
+  display: none;
+}
+body.entity-embed .modal {
+  align-items: stretch;
+  justify-content: stretch;
+  background: transparent;
+}
+body.entity-embed .modal-box {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+body.entity-embed .modal-close {
+  display: none;
+}
 .fatal {
   position: fixed;
   inset: 0 0 auto;

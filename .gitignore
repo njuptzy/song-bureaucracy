@@ -2,4 +2,9 @@ data/
 __pycache__/
 *.pyc
 .env
-/vis/legacy/CBDB-Migration-Map/
+.DS_Store
+*.log
+tmp/
+.playwright-cli/
+.vscode/
+/vis/legacy/
