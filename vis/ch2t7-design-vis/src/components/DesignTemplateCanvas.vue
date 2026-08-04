@@ -108,6 +108,64 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
   return lines.length;
 }
 
+function selectLinkedEntity(entityId) {
+  const target = entityMap.get(entityId);
+  if (!target) return;
+  detailPanelScrollOffset = 0;
+  expandedDetailId.value = null;
+  inlineDetailOfficialId.value = null;
+  selectedId.value = target.id;
+  if (target.type === "机构") {
+    selectedCategory.value = entityCategory(target);
+  } else {
+    const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
+    const org = affiliation ? entityMap.get(affiliation.org) : null;
+    if (org) selectedCategory.value = entityCategory(org);
+  }
+  renderTemplate();
+}
+
+function renderLinkedTokens(element, tokens, emptyText, charsPerLine = 28, lineHeight = 18) {
+  if (!element) return 0;
+  const normalized = tokens.length ? tokens : [{ text: emptyText }];
+  element.replaceChildren();
+  let line = 0;
+  let lineLength = 0;
+  for (const token of normalized) {
+    let remaining = token.text;
+    while (remaining) {
+      const room = charsPerLine - lineLength;
+      if (room <= 0) {
+        line += 1;
+        lineLength = 0;
+        continue;
+      }
+      const chunk = remaining.slice(0, room);
+      remaining = remaining.slice(chunk.length);
+      const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      if (lineLength === 0) {
+        tspan.setAttribute("x", "0");
+        tspan.setAttribute("y", String(line * lineHeight));
+      }
+      tspan.textContent = chunk;
+      if (token.entityId != null) {
+        tspan.dataset.entityId = String(token.entityId);
+        tspan.style.cursor = "pointer";
+        tspan.style.fill = "#866d6d";
+        tspan.style.textDecoration = "underline";
+        d3.select(tspan).on("click.detail-entity-link", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          selectLinkedEntity(token.entityId);
+        });
+      }
+      element.appendChild(tspan);
+      lineLength += chunk.length;
+    }
+  }
+  return line + 1;
+}
+
 function wrapVerticalText(element, text, charsPerColumn = 11, maxColumns = 6, columnGap = 9.81) {
   if (!element) return;
   const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
@@ -1204,12 +1262,20 @@ function setupDetailPanel(svg) {
   const contentNodes = bodyPositions
     .map(([x, y]) => findTextAt(svg, x, y))
     .filter(Boolean);
-  contentNodes.forEach((node) => scrollContent.appendChild(node));
-  const mainTextNode = findTextAt(svg, 101.29, 570.06);
-  if (mainTextNode) {
-    const childrenContent = mainTextNode.cloneNode(false);
-    childrenContent.dataset.detailChildrenContent = "true";
-    scrollContent.appendChild(childrenContent);
+  const labelTemplate = findTextAt(svg, 100.33, 536.92)?.cloneNode(false);
+  const contentTemplate = findTextAt(svg, 101.29, 570.06)?.cloneNode(false);
+  contentNodes.forEach((node) => node.remove());
+  if (labelTemplate && contentTemplate) {
+    const sectionLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    sectionLayer.classList.add("detail-panel-sections");
+    for (const field of INLINE_DETAIL_FIELDS) {
+      const label = labelTemplate.cloneNode(false);
+      label.dataset.detailSectionLabel = field.key;
+      const content = contentTemplate.cloneNode(false);
+      content.dataset.detailSectionContent = field.key;
+      sectionLayer.append(label, content);
+    }
+    scrollContent.appendChild(sectionLayer);
   }
 
   const scrollTrack = [...panelGroup.querySelectorAll("rect")].find((rect) => (
@@ -1251,7 +1317,7 @@ function setupDetailPanel(svg) {
   scrollHitArea.setAttribute("fill", "transparent");
   scrollHitArea.setAttribute("pointer-events", "all");
   scrollHitArea.style.cursor = "default";
-  panelGroup.appendChild(scrollHitArea);
+  panelGroup.insertBefore(scrollHitArea, scrollViewport);
   if (scrollThumb) panelGroup.appendChild(scrollThumb);
 
   const updateScroll = () => {
@@ -1277,7 +1343,7 @@ function setupDetailPanel(svg) {
   };
   panelGroup.__updateDetailScroll = updateScroll;
 
-  scrollHitArea.addEventListener("wheel", (event) => {
+  scrollViewport.addEventListener("wheel", (event) => {
     event.preventDefault();
     event.stopPropagation();
     const renderedHeight = svg.getBoundingClientRect().height || svg.viewBox.baseVal.height;
@@ -1346,24 +1412,13 @@ function setupDetailPanel(svg) {
 function updateDetails(svg) {
   const entity = selectedEntity();
   if (!entity) return;
-  const dictionary = props.data.dictionary[entity.title] || {};
-  const timepoints = activeTimepoints(entity.id);
-  const staff = staffFor(entity.id);
+  const values = inlineDetailValues(entity);
+  const staff = displayStaffFor(entity.id);
   const children = childrenFor(entity.id);
-  const eventText = timepoints.map((item) => `${item.time || "时间未明"}：${item.event}`).join("；");
-  const mainText = eventText || dictionary.text || "当前年份未载明确事件。";
-  const staffText = staff.length ? staff.map(quotaText).join("；") : "当前年份未载明确编制。";
-  const childText = children.length ? children.map((edge) => titleOf(edge.child)).join("、") : "当前年份未载明确下级机构。";
 
   const detailSlots = {
     title: findTextAt(svg, 99.85, 505.87),
     year: findTextAt(svg, 189.74, 502.91),
-    main: findTextAt(svg, 101.29, 570.06),
-    mainLabel: findTextAt(svg, 100.33, 536.92),
-    staff: findTextAt(svg, 101.29, 783.54),
-    staffLabel: findTextAt(svg, 100.33, 750.4),
-    children: findTextAt(svg, 100.33, 846.08),
-    childrenContent: svg.querySelector("[data-detail-children-content='true']"),
   };
   setText(detailSlots.title, entity.title);
   setText(detailSlots.year, selectedRangeLabel());
@@ -1383,24 +1438,49 @@ function updateDetails(svg) {
     );
   }
   let cursorY = 536.92;
-  detailSlots.mainLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
-  setText(detailSlots.mainLabel, "编制与沿革");
-  cursorY += 25;
-  detailSlots.main?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const mainLines = wrapText(detailSlots.main, mainText, 28, 18, Infinity);
-  cursorY += Math.max(1, mainLines) * 18 + 13;
-  detailSlots.staffLabel?.setAttribute("transform", `translate(100.33 ${cursorY})`);
-  setText(detailSlots.staffLabel, "编制");
-  cursorY += 25;
-  detailSlots.staff?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const staffLines = wrapText(detailSlots.staff, staffText, 28, 18, Infinity);
-  cursorY += Math.max(1, staffLines) * 18 + 13;
-  detailSlots.children?.setAttribute("transform", `translate(100.33 ${cursorY})`);
-  setText(detailSlots.children, "下级机构");
-  cursorY += 25;
-  detailSlots.childrenContent?.setAttribute("transform", `translate(101.29 ${cursorY})`);
-  const childrenLines = wrapText(detailSlots.childrenContent, childText, 28, 18, Infinity);
-  cursorY += Math.max(1, childrenLines) * 18 + 10;
+  for (const field of INLINE_DETAIL_FIELDS) {
+    const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
+    if (!label || !content) continue;
+    label.setAttribute("transform", `translate(100.33 ${cursorY})`);
+    setText(label, field.label);
+    label.style.cursor = "pointer";
+    label.style.fill = inlineDetailField.value === field.key ? "#866d6d" : "#351704";
+    const labelTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    labelTitle.textContent = `打开${entity.title}的${field.label.replace("：", "")}书页`;
+    label.appendChild(labelTitle);
+    d3.select(label).on("click.detail-field-link", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const focus = graphFocusEntity();
+      if (!focus) return;
+      expandedDetailId.value = focus.id;
+      inlineDetailOfficialId.value = entity.type === "官职" ? entity.id : null;
+      inlineDetailField.value = field.key;
+      renderTemplate();
+    });
+    cursorY += 25;
+    content.setAttribute("transform", `translate(101.29 ${cursorY})`);
+    let lines;
+    if (field.key === "children" && children.length) {
+      const tokens = children.flatMap((edge, index) => [
+        { text: titleOf(edge.child), entityId: edge.child },
+        ...(index < children.length - 1 ? [{ text: "、" }] : []),
+      ]);
+      lines = renderLinkedTokens(content, tokens, values.children);
+    } else if (field.key === "composition" && staff.length) {
+      const tokens = staff.flatMap((edge, index) => [
+        { text: titleOf(edge.official), entityId: edge.official },
+        { text: `（${edge.staff_quota ? `${edge.staff_quota}人` : "员额未载"}${edge.staff_type ? `，${edge.staff_type}` : ""}）` },
+        ...(index < staff.length - 1 ? [{ text: "；" }] : []),
+      ]);
+      lines = renderLinkedTokens(content, tokens, values.composition);
+    } else {
+      lines = wrapText(content, values[field.key], 28, 18, Infinity);
+    }
+    cursorY += Math.max(1, lines) * 18 + 13;
+  }
+  cursorY += 2;
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY);
   svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
