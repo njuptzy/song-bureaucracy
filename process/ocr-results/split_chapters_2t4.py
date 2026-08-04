@@ -393,6 +393,7 @@ PROFILES = {
         "next_h1": None,
         "out": "第十一至十二编",
         "fix_xiangmen": False,
+        "fix_wensan_head": True,
         "drop_surnames": set(),
     },
 }
@@ -582,6 +583,19 @@ def load_catalog():
                 f"{old_type} '{r['text']}'(p{r.get('page')}) -> {r['type']}"
                 f"（{retype['reason']}）"
             )
+        if (
+            PROFILE.get("fix_wensan_head")
+            and r["type"] == "h2"
+            and r["text"] == "一、文武散阶文散官"
+        ):
+            r["text"] = "一、文武散阶"
+            fixed.append(r)
+            fixed.append({"type": "name", "text": "文散官", "page": "616"})
+            fix_log.append(
+                "h2 '一、文武散阶文散官' -> h2 '一、文武散阶' + "
+                "name '文散官'(p616)（目录 OCR 粘连首条目名）"
+            )
+            continue
         if (
             PROFILE.get("fix_xiangmen")
             and r["type"] == "h2"
@@ -4798,6 +4812,25 @@ def main():
               "同兼客省，并从四方馆职源中拆回职掌字段；按p469恢复知阁门"
               "事兼客省、四方馆事及同知阁门事同兼客省、四方馆事两个"
               "长词头，将误拆续文归回正文")
+
+    if PROFILE_NAME == "11t12":
+        special_advance = next(e for e in all_entries if e["name"] == "特进")
+        wrong_reference = "资料出处参“开封仪同三司”条"
+        assert wrong_reference in special_advance["text"]
+        special_advance["text"] = special_advance["text"].replace(
+            wrong_reference, "资料出处参“开府仪同三司”条", 1
+        )
+
+        tongfeng = next(e for e in all_entries if e["name"] == "通奉大夫")
+        wrong_parentheses = "正四品下(资料出处参“开府仪同三司”条)。"
+        assert wrong_parentheses in tongfeng["text"]
+        tongfeng["text"] = tongfeng["text"].replace(
+            wrong_parentheses,
+            "正四品下（资料出处参“开府仪同三司”条）。",
+            1,
+        )
+        print("  [正文OCR归位] p616-617：特进参见条恢复为‘开府仪同三司’，"
+              "通奉大夫品位引文恢复全角括号")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
