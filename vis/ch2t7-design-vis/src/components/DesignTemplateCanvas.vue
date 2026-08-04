@@ -139,20 +139,38 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   const width = Number(rect.getAttribute("width"));
   const height = Number(rect.getAttribute("height"));
   if (![x, y, width, height].every(Number.isFinite)) return;
-  const maxGlyphs = 9;
+  const maxGlyphs = 10;
   const displayTitle = fullTitle.length > maxGlyphs
     ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
     : fullTitle;
   setText(label, displayTitle);
-  // writing-mode: tb 下 text-anchor=middle 会把整列从锚点向上排，动态克隆后
-  // 很容易整列落到官职条外。按字符高度计算顶部起点，保持向下书写。
   label.removeAttribute("text-anchor");
   label.removeAttribute("dominant-baseline");
-  const bodyHeight = height - 21;
-  const glyphHeight = 9.2;
-  const textHeight = displayTitle.length * glyphHeight;
-  const startY = y + Math.max(5, (bodyHeight - textHeight) / 2);
-  label.setAttribute("transform", `translate(${x + width / 2} ${startY})`);
+  // 所有官职名使用同一顶部基线；长名称只缩小字号，不再按字数改变起点。
+  const bodyHeight = height - 29;
+  const fontSize = Math.min(9.2, bodyHeight / Math.max(1, displayTitle.length));
+  label.style.fontSize = `${fontSize}px`;
+  label.setAttribute("transform", `translate(${x + width / 2} ${y + 7})`);
+}
+
+function fitQuotaLabel(quota, person, edge, rect) {
+  if (!quota || !rect) return;
+  const x = Number(rect.getAttribute("x"));
+  const y = Number(rect.getAttribute("y"));
+  const width = Number(rect.getAttribute("width"));
+  const height = Number(rect.getAttribute("height"));
+  if (![x, y, width, height].every(Number.isFinite)) return;
+  const text = edge.staff_quota ? `（${edge.staff_quota}）` : "未载";
+  setText(quota, text);
+  quota.setAttribute("text-anchor", "middle");
+  quota.setAttribute("dominant-baseline", "central");
+  quota.style.fontSize = `${Math.min(5.01, 16 / Math.max(2, text.length))}px`;
+  quota.setAttribute("transform", `translate(${x + width / 2} ${y + height - 8.5})`);
+  if (person) {
+    person.style.display = edge.staff_quota ? "" : "none";
+    person.setAttribute("text-anchor", "middle");
+    person.setAttribute("transform", `translate(${x + width / 2} ${y + height - 2.8})`);
+  }
 }
 
 function constrainTextWidth(element, maxWidth) {
@@ -431,8 +449,22 @@ const INLINE_TITLE_POLYGON_BOUNDS = {
   height: 126.85,
 };
 
+function displayStaffFor(entityId) {
+  const byOfficial = new Map();
+  for (const edge of staffFor(entityId)) {
+    const official = entityMap.get(edge.official);
+    if (!official?.title?.trim() || official.type !== "官职") continue;
+    const current = byOfficial.get(edge.official);
+    if (!current || (!current.staff_quota && edge.staff_quota)) {
+      byOfficial.set(edge.official, edge);
+    }
+  }
+  return [...byOfficial.values()];
+}
+
 function inlineCompositionGeometry(entityId) {
-  const staff = staffFor(entityId);
+  // 一个有效官职实体只生成一根书脊；重复关系和无标题端点不占空槽。
+  const staff = displayStaffFor(entityId);
   const selectedIndex = staff.findIndex(
     (edge) => edge.official === inlineDetailOfficialId.value
   );
@@ -550,11 +582,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     fitVerticalBarLabel(label, officialTitleText, group.querySelector("rect.cls-15"));
     const quota = group.querySelector("text.cls-72");
     const person = group.querySelector("text.cls-74");
-    setText(quota, edge.staff_quota ? `（${edge.staff_quota}）` : "（未载）");
-    if (person) person.style.display = edge.staff_quota ? "" : "none";
-    const officialTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    officialTitle.textContent = quotaText(edge);
-    group.appendChild(officialTitle);
+    fitQuotaLabel(quota, person, edge, group.querySelector("rect.cls-15"));
     const isSelected = edge.official === inlineDetailOfficialId.value;
     label.style.fill = isSelected ? "#866d6d" : "#351704";
     group.style.cursor = "pointer";
