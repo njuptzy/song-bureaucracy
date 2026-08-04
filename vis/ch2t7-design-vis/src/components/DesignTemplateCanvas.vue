@@ -144,9 +144,15 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
     ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
     : fullTitle;
   setText(label, displayTitle);
-  label.setAttribute("text-anchor", "middle");
-  label.setAttribute("dominant-baseline", "central");
-  label.setAttribute("transform", `translate(${x + width / 2} ${y + (height - 17) / 2})`);
+  // writing-mode: tb 下 text-anchor=middle 会把整列从锚点向上排，动态克隆后
+  // 很容易整列落到官职条外。按字符高度计算顶部起点，保持向下书写。
+  label.removeAttribute("text-anchor");
+  label.removeAttribute("dominant-baseline");
+  const bodyHeight = height - 21;
+  const glyphHeight = 9.2;
+  const textHeight = displayTitle.length * glyphHeight;
+  const startY = y + Math.max(5, (bodyHeight - textHeight) / 2);
+  label.setAttribute("transform", `translate(${x + width / 2} ${startY})`);
 }
 
 function constrainTextWidth(element, maxWidth) {
@@ -458,7 +464,7 @@ function inlineCompositionGeometry(entityId) {
 function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (!templateGroup || !layout || !entity) return;
   const card = templateGroup.cloneNode(true);
-  card.classList.add("inline-design-detail");
+  card.classList.add("inline-design-detail", "dynamic-tree-node");
   card.dataset.entityId = String(entity.id);
   card.setAttribute("transform", `translate(${layout.x - 763.56} ${layout.y - 196.11})`);
 
