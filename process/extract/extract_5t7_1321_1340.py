@@ -211,7 +211,7 @@ def entry1324():
         w, touched, i, "行宫禁卫所", "行在皇城司",
         "南宋绍兴元年二月三日", origin,
         "绍兴元年二月三日行宫禁卫所改称行在皇城司。", "职源与沿革",
-        source_event="改称行在皇城司",
+        source_event="一分为行在皇城司、主管禁卫所",
         target_event="由行宫禁卫所改称",
     )
     cite(w, "Timepoints", palace, i, duty, "保存皇城司宫门管钥、敕号审验及宫廷供役职掌。", "职掌")
@@ -530,11 +530,11 @@ def entry1340():
         w, touched, i, "行宫禁卫所", "行在皇城司",
         "南宋绍兴元年二月三日", main,
         "绍兴元年二月三日行宫禁卫所改为行在皇城司。",
-        source_event="改称行在皇城司",
+        source_event="一分为行在皇城司、主管禁卫所",
         target_event="由行宫禁卫所改称",
     )
     supervisor_early = node(
-        w, touched, i, "主管禁卫所", "官职", "南宋建炎初",
+        w, touched, i, "主管禁卫所主管官", "官职", "南宋建炎初",
         "由皇城司官权领，主管行宫禁卫所", main, "禁卫所主管官",
         "建立建炎初主管禁卫所。", officer="主管官", update_event=True,
     )
@@ -542,7 +542,7 @@ def entry1340():
           "建炎初差皇城司官权领主管行宫禁卫所。",
           quota="一员", staff_type="主管官")
     supervisor_after = node(
-        w, touched, i, "主管禁卫所", "官职", "南宋绍兴元年二月三日",
+        w, touched, i, "主管禁卫所主管官", "官职", "南宋绍兴元年二月三日",
         "机构改名行在皇城司后仍置一员", main, "禁卫所主管官",
         "保存机构改名后主管禁卫所官继续设置。", officer="主管官",
         update_event=True,

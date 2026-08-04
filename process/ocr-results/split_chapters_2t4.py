@@ -377,6 +377,10 @@ PROFILES = {
             {"from": "大学内舍生", "to": "太学内舍生", "page": "388",
              "reason": "核对第五编 PDF p388，目录漏识‘太’字下点，"
                        "正文独立词头明确作‘太学内舍生’"},
+            {"from": "于办御前忠佐军头引见司",
+             "to": "干办御前忠佐军头引见司", "page": "461",
+             "reason": "核对第七编 PDF p461，目录漏识差遣名首字‘干’，"
+                       "正文独立词头明确作‘干办御前忠佐军头引见司’"},
         ],
     },
     "11t12": {
@@ -4311,6 +4315,97 @@ def main():
         mobile_guard["text"] = mobile_guard["text"].replace(
             "行官禁卫所", "行宫禁卫所"
         )
+
+        guard_office = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "主管禁卫所" and str(m.get("page")) == "459"
+        )
+        assert "行官禁卫所一分为二" in guard_office["text"]
+        guard_office["text"] = guard_office["text"].replace(
+            "行官禁卫所一分为二", "行宫禁卫所一分为二", 1
+        )
+
+        head_intro = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐军头、引见司"
+            and str(m.get("page")) == "459"
+        )
+        history_marker = "\n职源与沿革 "
+        assert history_marker in head_intro["text"]
+        intro_text, intro_history = head_intro["text"].split(
+            history_marker, 1
+        )
+        head_intro["text"] = intro_text.rstrip()
+        head_intro["职源与沿革"] = intro_history.strip()
+
+        supervisor_post = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "主管御前忠佐军头引见司"
+            and str(m.get("page")) == "460"
+        )
+        administrator_post, administrator_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "干办御前忠佐军头引见司"
+            and str(m.get("page")) == "461"
+        )
+        administrator_marker = "干办御前忠佐军头引见司差遣\n名。"
+        if administrator_marker in supervisor_post["text"]:
+            assert administrator_post.get("_placeholder") is True
+            supervisor_text, administrator_text = supervisor_post["text"].split(
+                administrator_marker, 1
+            )
+            supervisor_post["text"] = supervisor_text.rstrip()
+            administrator_post.clear()
+            administrator_post.update({
+                "name": "干办御前忠佐军头引见司",
+                "text": "差遣名。" + administrator_text.strip(),
+                "简称": supervisor_post.pop("简称"),
+            })
+            administrator_meta["status"] = "ok"
+        else:
+            # 目录词头修正为“干办”后，切分器可直接识别正文独立标题。
+            assert administrator_post.get("_placeholder") is not True
+            assert administrator_post["text"].startswith("差遣\n名。")
+            assert "简称" in administrator_post
+            assert "简称" not in supervisor_post
+            administrator_post["text"] = administrator_post["text"].replace(
+                "差遣\n名。", "差遣名。", 1
+            )
+
+        cavalry_head = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐马军都军头"
+            and str(m.get("page")) == "462"
+        )
+        cavalry_deputy_head, cavalry_deputy_head_meta = next(
+            (e, m) for e, m in zip(all_entries, all_meta)
+            if e["name"] == "御前忠佐马军副都军头"
+            and str(m.get("page")) == "462"
+        )
+        deputy_event_marker = (
+            "为御前忠佐六资之一,次于御前忠佐步军都军头、"
+            "高于御前忠佐步军副都军头(《攻媿集》卷30"
+            "《缴成立带行遥刺》)。"
+        )
+        deputy_alias_marker = "马军副都军头。"
+        aliases = cavalry_head["简称"]
+        assert deputy_event_marker in aliases
+        head_aliases, deputy_text_and_alias = aliases.split(
+            deputy_event_marker, 1
+        )
+        assert deputy_alias_marker in deputy_text_and_alias
+        _, deputy_aliases = deputy_text_and_alias.split(
+            deputy_alias_marker, 1
+        )
+        cavalry_head["简称"] = head_aliases.rstrip()
+        assert cavalry_deputy_head.get("_placeholder") is True
+        cavalry_deputy_head.clear()
+        cavalry_deputy_head.update({
+            "name": "御前忠佐马军副都军头",
+            "text": "禁军职名。" + deputy_event_marker,
+            "简称": deputy_alias_marker + deputy_aliases.strip(),
+        })
+        cavalry_deputy_head_meta["status"] = "ok"
         print("  [条目字段与OCR归位] p422-427：从六察司编制拆回吏察，从左巡使"
               "简称拆回监祭使，并补正推直官、御史台检法官引文标点及"
               "杂事案机构名；修复三京留台差遣断字、判南京留台引文括号，"
@@ -4330,7 +4425,8 @@ def main():
               "并删除‘都’条引书名后的OCR赘括号；从主管某司公事中拆回"
               "南宋‘军’正式词条，取消其空占位；按p458-459原页补回逻卒"
               "句首并拆出别称‘察子’，从快行拆回司圜正式词条，拆回冰井务"
-              "职源字段，并统一恢复‘行宫禁卫所’字形")
+              "职源字段，并统一恢复‘行宫禁卫所’字形；按p459-462原页拆回"
+              "御前忠佐军头引见司职源、干办差遣及马军副都军头正式词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
