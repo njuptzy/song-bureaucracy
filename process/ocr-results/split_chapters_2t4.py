@@ -422,6 +422,50 @@ PROFILES = {
                           "独立完整条目排在翊麾校尉之后",
             },
         ],
+        "explicit_title_heads": [
+            {
+                "ocr_title": "诸寺监主簿、秘书省校书郎、正",
+                "name": "诸寺监主簿、秘书省校书郎、正字、助教",
+                "continuation": "字、助教",
+                "page": "621",
+                "reason": "目录将该参见型正式词头记为 surname；正文标题又在‘正/字’处断块",
+            },
+            {
+                "ocr_title": "太常、宗正、秘书丞，著作郎",
+                "name": "太常、宗正、秘书丞、著作郎",
+                "page": "621",
+                "reason": "目录将该参见型正式词头记为 surname，且正文 OCR 将顿号误作逗号",
+            },
+            {
+                "ocr_title": "后行员外郎（礼、工部诸司员外",
+                "name": "后行员外郎（礼、工部诸司员外郎）",
+                "continuation": "郎）",
+                "page": "621",
+                "reason": "目录将该参见型正式词头记为 surname；正文标题在‘员外/郎’处断块",
+            },
+            {
+                "ocr_title": "中行员外郎（户、刑部诸司员外",
+                "name": "中行员外郎（户、刑部诸司员外郎）",
+                "continuation": "郎）",
+                "page": "622",
+                "reason": "目录将该参见型正式词头记为 surname；正文标题在‘员外/郎’处断块",
+            },
+            {
+                "ocr_title": "前行员外郎(吏、兵部诸司员外",
+                "name": "前行员外郎（吏、兵部诸司员外郎）",
+                "continuation": "郎）",
+                "page": "622",
+                "reason": "目录将该参见型正式词头记为 surname；正文标题含半角括号并在‘员外/郎’处断块",
+            },
+        ],
+        "catalog_renames": [
+            {
+                "from": "擎壶正",
+                "to": "挈壶正",
+                "page": "662",
+                "reason": "目录 OCR 将天文阶官‘挈壶正’误识为‘擎壶正’；正文词头及引文均作‘挈壶正’",
+            },
+        ],
         "joins": [
             {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
              "status": "not_in_catalog", "target_field": "别名",
@@ -864,6 +908,41 @@ def split_chapter(chapter_meta, blocks):
         mtext = norm_match(text)
         # 1) 标题块（h1/h2/h3），整块精确匹配才跳过
         if norm_heading(text) in headings:
+            continue
+        # 个别参见型正式词头在目录中记为 surname，且正文标题发生断块或
+        # 标点异形，无法进入仅针对 name 的通用截断标题补全。按编组配置
+        # 精确恢复，避免把规则扩大到其他正文标题。
+        explicit_head = next(
+            (
+                item
+                for item in PROFILE.get("explicit_title_heads", [])
+                if blk["type"] == "title"
+                and str(blk["page"]) == str(item["page"])
+                and text == item["ocr_title"]
+            ),
+            None,
+        )
+        if explicit_head:
+            continuation = explicit_head.get("continuation")
+            if continuation:
+                nxt = blocks[idx + 1]["text"] if idx + 1 < len(blocks) else ""
+                assert nxt.startswith(continuation), (
+                    f"显式词头续块不匹配：{explicit_head['name']} p{blk['page']}"
+                )
+            stream.append(
+                {
+                    "type": "bureaucracy_name",
+                    "text": explicit_head["name"],
+                    "page": blk["page"],
+                    "from_surname": True,
+                }
+            )
+            report["truncated_heads"].append(
+                (text, explicit_head["name"], blk["page"])
+            )
+            pending_strip = norm_match(continuation) if continuation else None
+            last_name = explicit_head["name"]
+            pending_body = True
             continue
         # 2) 截断标题头的续块：剥掉名字剩余字符
         if pending_strip:

@@ -69,7 +69,7 @@ def validate_dictionary(path: Path) -> None:
         source_11t12 = connection.execute(
             "SELECT COUNT(*) FROM DictionarySources WHERE source_group='11t12'"
         ).fetchone()[0]
-        assert (count, mappings, source_11t12) == (5247, 5247, 600), (
+        assert (count, mappings, source_11t12) == (5252, 5252, 605), (
             count,
             mappings,
             source_11t12,
@@ -122,7 +122,7 @@ def main() -> None:
         replace(temp_result, args.result_output, args.overwrite)
         print(f"dictionary={args.dictionary_output}")
         print(f"result={args.result_output}")
-        print("dictionary_rows=5247 source_11t12=600")
+        print("dictionary_rows=5252 source_11t12=605")
     finally:
         temp_dictionary.unlink(missing_ok=True)
         temp_result.unlink(missing_ok=True)
