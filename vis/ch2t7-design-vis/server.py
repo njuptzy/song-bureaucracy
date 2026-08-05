@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""ch2t7 宋代职官设计稿可视化：只读数据服务 + dist 静态托管。
+"""宋代职官设计稿可视化：只读数据服务 + dist 静态托管。
 
 用法:
-    python3 server.py [--port 8650]
+    python3 server.py [--port 8650] [--entries-db PATH] [--dict-db PATH]
 
 接口:
     GET /api/data   一次返回前端所需全部 JSON（启动后惰性构建并缓存）
@@ -11,6 +11,7 @@
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import threading
@@ -25,6 +26,7 @@ sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 from normalize_times import normalize_time  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
+DICT_TABLE = "chapter2t7"
 DIST_DIR = HERE / "dist"
 DESIGN_DIR = REPO_ROOT / "vis/宋代职官体系可视化打包文件 /svg格式"
 DESIGN_HIERARCHY_SVG = DESIGN_DIR / "宋代职官体系可视化界面_画板 1 副本 4-01.svg"
@@ -278,10 +280,11 @@ def build_payload() -> dict:
             }
         )
 
-    # 辞典匹配：按 title 精确匹配 chapter2t7，抽取摘要与 fields 中的职源/职掌
+    # 辞典匹配：按 title 精确匹配当前辞典表，抽取摘要与 fields 中的职源/职掌
     dict_rows = {}
     catalogs_by_title = {}
-    for r in dictionary.execute("SELECT title, catalog, page, text, fields FROM chapter2t7"):
+    query = f'SELECT title, catalog, page, text, fields FROM "{DICT_TABLE}"'
+    for r in dictionary.execute(query):
         title = r["title"]
         full_catalog = r["catalog"] or ""
         catalogs_by_title.setdefault(title, set()).add(full_catalog)
@@ -455,12 +458,23 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global ENTRIES_DB, DICT_DB, DICT_TABLE
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8650)
     parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--entries-db", type=Path, default=ENTRIES_DB)
+    parser.add_argument("--dict-db", type=Path, default=DICT_DB)
+    parser.add_argument("--dict-table", default=DICT_TABLE)
     args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", args.dict_table):
+        parser.error("--dict-table 必须是合法的 SQLite 表名")
+    ENTRIES_DB = args.entries_db.expanduser().resolve()
+    DICT_DB = args.dict_db.expanduser().resolve()
+    DICT_TABLE = args.dict_table
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"[server] 数据源: {ENTRIES_DB}")
+    print(f"[server] 结构化数据源: {ENTRIES_DB}")
+    print(f"[server] 辞典数据源: {DICT_DB}（表 {DICT_TABLE}）")
     print(f"[server] 服务地址: http://{args.host}:{args.port}/", flush=True)
     try:
         server.serve_forever()
