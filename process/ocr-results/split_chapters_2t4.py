@@ -406,6 +406,22 @@ PROFILES = {
         "fix_xiangmen": False,
         "fix_wensan_head": True,
         "drop_surnames": set(),
+        "catalog_inserts_after": [
+            {
+                "after": "昭武副尉",
+                "page": "619",
+                "names": ["振威校尉", "振威副尉"],
+                "reason": "目录 OCR 在昭武副尉与致果校尉之间漏掉两个正式词头；"
+                          "原书 p619 正文有两个各自独立的完整条目块",
+            },
+            {
+                "after": "翊麾校尉",
+                "page": "620",
+                "names": ["翊麾副尉"],
+                "reason": "目录 OCR 漏掉翊麾副尉；原书 p620 正文将其作为"
+                          "独立完整条目排在翊麾校尉之后",
+            },
+        ],
         "joins": [
             {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
              "status": "not_in_catalog", "target_field": "别名",
@@ -677,6 +693,23 @@ def load_catalog():
             )
             continue
         fixed.append(r)
+        insert = next(
+            (
+                item
+                for item in PROFILE.get("catalog_inserts_after", [])
+                if r["type"] in {"name", "surname"}
+                and r["text"] == item["after"]
+                and str(r.get("page")) == item["page"]
+            ),
+            None,
+        )
+        if insert:
+            for name in insert["names"]:
+                fixed.append({"type": "name", "text": name, "page": insert["page"]})
+            fix_log.append(
+                f"在 name '{insert['after']}'(p{insert['page']}) 后补回 "
+                f"{insert['names']}（{insert['reason']}）"
+            )
     records = fixed
 
     chapters = {}
@@ -4923,10 +4956,12 @@ def main():
             ).replace("下(", "下（", 1).replace("条)。", "条）。", 1)
 
         xuanwei = next(e for e in all_entries if e["name"] == "宣威将军")
-        assert "从四品上(" in xuanwei["text"] and "条)。" in xuanwei["text"]
-        xuanwei["text"] = xuanwei["text"].replace(
-            "从四品上(", "从四品上（", 1
-        ).replace("条)。", "条）。", 1)
+        if "从四品上(" in xuanwei["text"]:
+            xuanwei["text"] = xuanwei["text"].replace(
+                "从四品上(", "从四品上（", 1
+            ).replace("条)。", "条）。", 1)
+        else:
+            assert "从四品上（" in xuanwei["text"] and "条）。" in xuanwei["text"]
 
         state_guard = next(e for e in all_entries if e["name"] == "镇国大将军")
         joined_alias = "辅国大将军镇国大将军冠军大将军 怀化大将军"
