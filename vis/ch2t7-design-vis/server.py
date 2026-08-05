@@ -24,6 +24,7 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
 from normalize_times import normalize_time  # noqa: E402
+from institution_categories import classify_institution  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DICT_TABLE = "chapter2t7"
@@ -60,28 +61,6 @@ def _database_fingerprint() -> str:
             except FileNotFoundError:
                 parts.append(f"{candidate.name}:missing")
     return "|".join(parts)
-
-
-def _institution_category(attr_categories: list[str], source_catalogs: list[str]) -> tuple[str, str]:
-    """按结构化类别和辞典目录给机构归入设计稿的五类，不使用实体名称猜测。"""
-    attrs = " ".join(attr_categories)
-    if any(marker in attrs for marker in ("州府", "州县", "县级")):
-        return "州县机构", "时间点类别"
-    if "路级" in attrs:
-        return "路级机构", "时间点类别"
-    if any(marker in attrs for marker in ("军事", "军队", "禁军", "军号", "统兵")):
-        return "军队机构", "时间点类别"
-    if any(marker in attrs for marker in ("内廷", "宫廷", "宫中", "御前", "内侍", "内诸司")):
-        return "内廷机构", "时间点类别"
-
-    catalogs = " ".join(source_catalogs)
-    if "第七编 皇宫京城禁卫侍奉机构类" in catalogs:
-        military_sections = ("禁军三衙门", "三卫官与六统军门", "环卫官门")
-        if any(section in catalogs for section in military_sections):
-            return "军队机构", "辞典目录"
-        return "内廷机构", "辞典目录"
-    # 二至六编均属于宰执、中枢、寺监或司法监察体系，归入中央机构。
-    return "中央机构", "辞典编目范围"
 
 
 def _connect(path: Path) -> sqlite3.Connection:
@@ -283,11 +262,17 @@ def build_payload() -> dict:
     # 辞典匹配：按 title 精确匹配当前辞典表，抽取摘要与 fields 中的职源/职掌
     dict_rows = {}
     catalogs_by_title = {}
+    catalogs_by_page = {}
+    catalogs_by_reference = {}
     query = f'SELECT title, catalog, page, text, fields FROM "{DICT_TABLE}"'
     for r in dictionary.execute(query):
         title = r["title"]
+        page = str(r["page"] or "").strip()
         full_catalog = r["catalog"] or ""
         catalogs_by_title.setdefault(title, set()).add(full_catalog)
+        if page:
+            catalogs_by_page.setdefault(page, set()).add(full_catalog)
+            catalogs_by_reference.setdefault((title, page), set()).add(full_catalog)
         if title in dict_rows:
             continue
         fields = {}
@@ -315,26 +300,78 @@ def build_payload() -> dict:
 
     sources_by_entity = {}
     for r in entries.execute(
-        "SELECT target_id, source_entry FROM BuildRecords WHERE target_table = 'Entities'"
+        "SELECT target_id, source_entry, source_page"
+        " FROM BuildRecords WHERE target_table = 'Entities'"
     ):
-        sources_by_entity.setdefault(r["target_id"], set()).add(r["source_entry"])
+        source = (r["source_entry"] or "").strip()
+        page = str(r["source_page"] or "").strip()
+        sources_by_entity.setdefault(r["target_id"], set()).add((source, page))
 
-    category_counts = {}
+    category_by_entity = {}
     for entity in entities:
         if entity["type"] != "机构":
             continue
-        source_catalogs = sorted({
-            catalog
-            for source_entry in sources_by_entity.get(entity["id"], ())
-            for catalog in catalogs_by_title.get(source_entry, ())
-            if catalog
-        })
+        source_catalogs = set()
+        for source_entry, source_page in sources_by_entity.get(entity["id"], ()):
+            catalogs = catalogs_by_reference.get((source_entry, source_page), set())
+            if not catalogs and source_page:
+                catalogs = catalogs_by_page.get(source_page, set())
+            if not catalogs and source_entry:
+                catalogs = catalogs_by_title.get(source_entry, set())
+            source_catalogs.update(catalogs)
         attr_categories = sorted({
             item["attr_category"]
             for item in timepoints.get(entity["id"], ())
             if item["attr_category"]
         })
-        category, category_basis = _institution_category(attr_categories, source_catalogs)
+        category_by_entity[entity["id"]] = classify_institution(
+            attr_categories, sorted(source_catalogs)
+        )
+
+    # Derived instances and renamed successors may have no direct BuildRecord.
+    # They inherit only across semantic identity edges, never from hierarchy.
+    identity_edges = [
+        (edge["collective"], edge["instance"], "统称与实例")
+        for edge in collective_instance_edges
+    ] + [
+        (edge["source"], edge["target"], "前后演变")
+        for edge in evolution_edges
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for source_id, target_id, relation_type in identity_edges:
+            source_category = category_by_entity.get(source_id, (None, ""))[0]
+            target_category = category_by_entity.get(target_id, (None, ""))[0]
+            if source_category and target_id in category_by_entity and not target_category:
+                category_by_entity[target_id] = (
+                    source_category,
+                    f"沿{relation_type}继承自实体 #{source_id}",
+                )
+                changed = True
+            elif target_category and source_id in category_by_entity and not source_category:
+                category_by_entity[source_id] = (
+                    target_category,
+                    f"沿{relation_type}继承自实体 #{target_id}",
+                )
+                changed = True
+
+    unresolved_category_ids = [
+        entity_id
+        for entity_id, (category, _) in category_by_entity.items()
+        if category is None
+    ]
+    if unresolved_category_ids:
+        sample = ", ".join(str(entity_id) for entity_id in unresolved_category_ids[:20])
+        raise ValueError(
+            f"有 {len(unresolved_category_ids)} 个机构缺少分类证据，示例实体 ID: {sample}"
+        )
+
+    category_counts = {}
+    for entity in entities:
+        if entity["type"] != "机构":
+            continue
+        category, category_basis = category_by_entity[entity["id"]]
         entity["category"] = category
         entity["category_basis"] = category_basis
         category_counts[category] = category_counts.get(category, 0) + 1
@@ -364,6 +401,8 @@ def build_payload() -> dict:
             "collectiveInstanceEdges": len(collective_instance_edges),
             "dictionaryMatched": len(dictionary_payload),
             "categoryCounts": category_counts,
+            "categoryUnresolved": len(unresolved_category_ids),
+            "categoryUnresolvedIds": unresolved_category_ids,
             "source": ENTRIES_DB.name,
             "yearMin": 960,
             "yearMax": 1279,
