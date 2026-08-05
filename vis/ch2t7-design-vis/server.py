@@ -24,7 +24,7 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
 from normalize_times import normalize_time  # noqa: E402
-from institution_categories import classify_institution  # noqa: E402
+from institution_categories import classify_institution, resolve_source_catalogs  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DICT_TABLE = "chapter2t7"
@@ -311,14 +311,13 @@ def build_payload() -> dict:
     for entity in entities:
         if entity["type"] != "机构":
             continue
-        source_catalogs = set()
-        for source_entry, source_page in sources_by_entity.get(entity["id"], ()):
-            catalogs = catalogs_by_reference.get((source_entry, source_page), set())
-            if not catalogs and source_page:
-                catalogs = catalogs_by_page.get(source_page, set())
-            if not catalogs and source_entry:
-                catalogs = catalogs_by_title.get(source_entry, set())
-            source_catalogs.update(catalogs)
+        source_catalogs = resolve_source_catalogs(
+            entity["title"],
+            sources_by_entity.get(entity["id"], ()),
+            catalogs_by_reference,
+            catalogs_by_page,
+            catalogs_by_title,
+        )
         attr_categories = sorted({
             item["attr_category"]
             for item in timepoints.get(entity["id"], ())

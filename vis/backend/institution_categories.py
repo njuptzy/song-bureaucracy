@@ -13,7 +13,8 @@ CATEGORY_NAMES = (
 
 _ATTRIBUTE_MARKERS = {
     "州县机构": ("州府", "州县", "县级", "地方行政单位"),
-    "路级机构": ("路级", "路机构"),
+    # “路”只按明确的行政层级措辞识别，避免把“京师道路机构”误判为路级。
+    "路级机构": ("路级",),
     "军队机构": ("军事", "军队", "禁军", "军号", "统兵", "军实例", "军编制"),
     "内廷机构": (
         "内廷",
@@ -78,6 +79,36 @@ def catalog_categories(source_catalogs: Iterable[str]) -> set[str]:
         for catalog in source_catalogs
         if catalog and (category := _catalog_category(catalog))
     }
+
+
+def resolve_source_catalogs(
+    entity_title: str,
+    source_refs: Iterable[tuple[str, str]],
+    catalogs_by_reference,
+    catalogs_by_page,
+    catalogs_by_title,
+) -> set[str]:
+    """Resolve catalogs without letting ambiguous title fallback pollute precise evidence."""
+    headword_catalogs = set()
+    precise_catalogs = set()
+    fallback_catalogs = set()
+
+    for source_entry, source_page in source_refs:
+        exact = catalogs_by_reference.get((source_entry, source_page), set())
+        catalogs = exact
+        if not catalogs and source_page:
+            catalogs = catalogs_by_page.get(source_page, set())
+        if catalogs:
+            precise_catalogs.update(catalogs)
+            if exact and source_entry == entity_title:
+                headword_catalogs.update(catalogs)
+        elif source_entry:
+            fallback_catalogs.update(catalogs_by_title.get(source_entry, set()))
+
+    # The entity's own formal dictionary headword is stronger than incidental
+    # mentions in other entries. If no own headword exists, page evidence is
+    # still stronger than a page-less same-title fallback.
+    return headword_catalogs or precise_catalogs or fallback_catalogs
 
 
 def classify_institution(

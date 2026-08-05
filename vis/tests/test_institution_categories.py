@@ -1,6 +1,9 @@
 import unittest
 
-from vis.backend.institution_categories import classify_institution
+from vis.backend.institution_categories import (
+    classify_institution,
+    resolve_source_catalogs,
+)
 
 
 class InstitutionCategoriesTest(unittest.TestCase):
@@ -44,6 +47,37 @@ class InstitutionCategoriesTest(unittest.TestCase):
 
     def test_missing_evidence_stays_unresolved(self):
         self.assertEqual(classify_institution(["官署名"], [])[0], None)
+
+    def test_road_in_a_common_noun_does_not_mean_circuit_level(self):
+        category, _ = classify_institution(
+            ["京师道路机构"],
+            ["宋代官制辞典/第四编 元丰正名后中枢机构类之一"],
+        )
+        self.assertEqual(category, "中央机构")
+
+    def test_precise_page_ignores_ambiguous_title_only_fallback(self):
+        military = "宋代官制辞典/第八编 军事统率机构与地方治安机构类"
+        circuit = "宋代官制辞典/第九编 地方官类之一——路官"
+        catalogs = resolve_source_catalogs(
+            "经制司（军事机构）",
+            [("经制司", "510"), ("经制司", "")],
+            {("经制司", "510"): {military}},
+            {"510": {military}},
+            {"经制司": {military, circuit}},
+        )
+        self.assertEqual(catalogs, {military})
+
+    def test_formal_headword_beats_incidental_mentions(self):
+        central = "宋代官制辞典/第三编 北宋前期中枢机构类"
+        county = "宋代官制辞典/第十编 地方官类之二——府州县官"
+        catalogs = resolve_source_catalogs(
+            "粮料院",
+            [("粮料院", "139"), ("监当官", "614")],
+            {("粮料院", "139"): {central}, ("监当官", "614"): {county}},
+            {"139": {central}, "614": {county}},
+            {"粮料院": {central}, "监当官": {county}},
+        )
+        self.assertEqual(catalogs, {central})
 
 
 if __name__ == "__main__":
