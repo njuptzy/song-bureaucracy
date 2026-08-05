@@ -534,8 +534,8 @@ def entry395():
     hanlin_yuan = w.entity("翰林院", "机构", "职源字段明确翰林院为供奉之司，与学士院不同。", quotation=distinct_quote)
     timepoint(w, i, hanlin_yuan, "宋代", "供奉之司，与学士院非同一机构", distinct_quote, "建立翰林院与学士院分立的制度节点。", "职源", category="供奉机构")
 
-    for title in ("学士院待诏",):
-        role = w.entity(title, "官职", "编制字段明载学士院待诏员额。", quotation=staffing)
+    for title in ("翰林待诏",):
+        role = w.entity(title, "官职", "编制字段明载学士院待诏员额；依#405正式词头规范为翰林待诏。", quotation=staffing)
         north_role = timepoint(w, i, role, "北宋前期", "学士院待诏三人", staffing, "建立北宋前期学士院待诏编制。", "编制", category="学士院吏额")
         reform_role = timepoint(w, i, role, "宋神宗元丰改制后", "学士院待诏三人", staffing, "建立元丰改制后学士院待诏编制。", "编制", category="学士院吏额")
         relation(w, i, north, north_role, "编制隶属", staffing, "北宋前期学士院置待诏三人。", "编制", staff_quota=3)
