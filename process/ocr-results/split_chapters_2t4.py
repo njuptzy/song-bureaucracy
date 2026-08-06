@@ -5607,9 +5607,29 @@ def main():
             "冬官大夫", "春官正", "夏官正", "中官正", "秋官正",
             "冬官正", "太史局丞", "太史局直长", "灵台郎",
             "保章正", "挈壶正", "局生",
+            "嗣王", "郡王", "国公", "郡公", "开国公", "开国郡公",
+            "开国县公", "开国侯", "开国伯", "开国子", "开国男",
+            "食邑", "食实封", "勋", "上柱国", "柱国", "上护军",
+            "护军", "上轻车都尉", "轻车都尉",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
+
+        merit = next(e for e in all_entries if e["name"] == "勋")
+        truncated_merit_source = (
+            "（《宋会要·职官》10之18、19《勋官》，"
+            "《玉海》卷135《唐勋级十二转》。"
+        )
+        complete_merit_source = (
+            "（《宋会要·职官》10之18、19《勋官》，"
+            "《玉海》卷135《唐勋级十二转》）。"
+        )
+        if truncated_merit_source in merit["text"]:
+            merit["text"] = merit["text"].replace(
+                truncated_merit_source, complete_merit_source, 1
+            )
+        else:
+            assert complete_merit_source in merit["text"]
 
         # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
         legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
@@ -5755,7 +5775,8 @@ def main():
               "p658-660 校正祗候内品、内常侍 OCR 字样，并将粘在内品条末的"
               "伎术官阶正文拆回正式词条；p660-661 恢复医官二十二阶至"
               "翰林医学各条中文标点；p661-662 恢复翰林祗候及天文官"
-              "十六阶各条中文标点")
+              "十六阶各条中文标点；p663-666 恢复嗣王至轻车都尉各条"
+              "中文标点，并补回勋条跨页出处尾注")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
