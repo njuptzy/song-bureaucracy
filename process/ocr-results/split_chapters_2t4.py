@@ -5340,6 +5340,12 @@ def main():
             "防御、团练、军事推官，军、监判官",
             "县令、录事参军",
             "试衔知县令、知录事参军",
+            "三京府军巡判官，司理、司户、司法、户曹、法曹参军，县主簿、县尉",
+            "初等职官",
+            "令录",
+            "职令",
+            "判司簿尉",
+            "通仕郎",
         )
         for title in selection_rank_titles:
             selection_rank = next(e for e in all_entries if e["name"] == title)
@@ -5360,6 +5366,30 @@ def main():
             assert junior_office_rank["text"].endswith("条）。")
             assert junior_office_rank["简称"].startswith("防、团、军事推官，")
 
+        xiuzhilang = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "修职郎" and str(m.get("page")) == "634"
+        )
+        if "《永东大典》卷14628" in xiuzhilang["简称与别名"]:
+            xiuzhilang["简称与别名"] = xiuzhilang["简称与别名"].replace(
+                "《永东大典》卷14628", "《永乐大典》卷14628", 1
+            )
+        else:
+            assert "《永乐大典》卷14628" in xiuzhilang["简称与别名"]
+
+        digonglang = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "迪功郎" and str(m.get("page")) == "634"
+        )
+        joined_alias_marker = "\n简称与别名 "
+        if joined_alias_marker in digonglang["text"]:
+            body, alias = digonglang["text"].split(joined_alias_marker, 1)
+            digonglang["text"] = body.rstrip()
+            digonglang["简称与别名"] = alias.strip()
+        else:
+            assert digonglang["text"].endswith("‘将仕郎’条。")
+            assert digonglang["简称与别名"].startswith("①迪功。")
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
@@ -5371,7 +5401,8 @@ def main():
               "引文标点；p629-630 将误粘在正郎条末的朝请郎正文归回正式词条，"
               "恢复朝散郎、宣德郎品位括号，并将左、右奉议郎‘北宁’校正为‘北宋’；"
               "p630 校正宣义郎词头；p631-632 恢复选人阶官六条中文标点，并从"
-              "防御、团练、军事推官条拆回简称字段")
+              "防御、团练、军事推官条拆回简称字段；p632-634 继续恢复判司簿尉等"
+              "四条中文标点，校正修职郎‘永乐大典’，并从迪功郎拆回简称与别名字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
