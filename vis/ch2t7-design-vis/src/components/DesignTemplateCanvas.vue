@@ -2886,6 +2886,8 @@ onUnmounted(() => {
 .design-template { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f5f3ec; }
 .svg-mount { width: 100%; height: 100%; }
 .svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
+.svg-mount :deep(.dynamic-tree-node:focus) { outline: none; }
+.svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) { stroke: #563905; stroke-width: 1.2; stroke-dasharray: 3 2; }
 .svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }
 .template-message { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; color: #563905; background: #f5f3ec; letter-spacing: 3px; }
 </style>
