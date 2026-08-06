@@ -5095,10 +5095,21 @@ def main():
             else:
                 assert repeated_entry["text"].startswith("文阶名。")
 
+        lesser_ministers = next(
+            e for e in all_entries if e["name"] == "卫尉少卿、司农少卿"
+        )
+        if "朝议大夫阶(" in lesser_ministers["text"]:
+            lesser_ministers["text"] = lesser_ministers["text"].replace(
+                "朝议大夫阶(", "朝议大夫阶（", 1
+            ).replace("条)。", "条）。", 1)
+        else:
+            assert "朝议大夫阶（" in lesser_ministers["text"]
+            assert "条）。" in lesser_ministers["text"]
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
-              "给事中、礼部尚书正文重复词头")
+              "给事中、礼部尚书正文重复词头，并恢复卫尉少卿、司农少卿条括号")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
