@@ -24,7 +24,11 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
 from normalize_times import normalize_time  # noqa: E402
-from institution_categories import classify_institution, resolve_source_catalogs  # noqa: E402
+from institution_categories import (  # noqa: E402
+    classify_central_group,
+    classify_institution,
+    resolve_source_catalogs,
+)
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DICT_TABLE = "chapter2t7"
@@ -308,6 +312,8 @@ def build_payload() -> dict:
         sources_by_entity.setdefault(r["target_id"], set()).add((source, page))
 
     category_by_entity = {}
+    source_catalogs_by_entity = {}
+    attr_categories_by_entity = {}
     for entity in entities:
         if entity["type"] != "机构":
             continue
@@ -323,6 +329,8 @@ def build_payload() -> dict:
             for item in timepoints.get(entity["id"], ())
             if item["attr_category"]
         })
+        source_catalogs_by_entity[entity["id"]] = sorted(source_catalogs)
+        attr_categories_by_entity[entity["id"]] = attr_categories
         category_by_entity[entity["id"]] = classify_institution(
             attr_categories, sorted(source_catalogs)
         )
@@ -367,6 +375,8 @@ def build_payload() -> dict:
         )
 
     category_counts = {}
+    central_group_counts = {}
+    central_group_unresolved_ids = []
     for entity in entities:
         if entity["type"] != "机构":
             continue
@@ -374,6 +384,18 @@ def build_payload() -> dict:
         entity["category"] = category
         entity["category_basis"] = category_basis
         category_counts[category] = category_counts.get(category, 0) + 1
+        if category == "中央机构":
+            central_group, central_group_basis = classify_central_group(
+                entity["title"],
+                attr_categories_by_entity.get(entity["id"], ()),
+                source_catalogs_by_entity.get(entity["id"], ()),
+            )
+            entity["central_group"] = central_group or ""
+            entity["central_group_basis"] = central_group_basis
+            if central_group:
+                central_group_counts[central_group] = central_group_counts.get(central_group, 0) + 1
+            else:
+                central_group_unresolved_ids.append(entity["id"])
 
     entries.close()
     dictionary.close()
@@ -402,6 +424,9 @@ def build_payload() -> dict:
             "categoryCounts": category_counts,
             "categoryUnresolved": len(unresolved_category_ids),
             "categoryUnresolvedIds": unresolved_category_ids,
+            "centralGroupCounts": central_group_counts,
+            "centralGroupUnresolved": len(central_group_unresolved_ids),
+            "centralGroupUnresolvedIds": central_group_unresolved_ids,
             "source": ENTRIES_DB.name,
             "yearMin": 960,
             "yearMax": 1279,

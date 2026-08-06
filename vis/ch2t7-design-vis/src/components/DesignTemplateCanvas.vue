@@ -10,6 +10,7 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
+import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
 
 const props = defineProps({ data: { type: Object, required: true } });
 
@@ -34,6 +35,7 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
+let expandedCentralGroupId = null;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -59,6 +61,9 @@ const titleMap = new Map();
 for (const entity of props.data.entities) {
   if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
 }
+expandedCentralGroupId = centralGroupId(
+  titleMap.get("尚书省")?.central_group || "三省六部与馆阁"
+);
 const currentSnapshot = computed(() => (
   timelineSelectionActive.value ? buildYearSnapshot(props.data, selectedRange.value[0]) : null
 ));
@@ -118,6 +123,9 @@ function selectLinkedEntity(entityId) {
   selectedId.value = target.id;
   if (target.type === "机构") {
     selectedCategory.value = entityCategory(target);
+    if (selectedCategory.value === "中央机构" && target.central_group) {
+      expandedCentralGroupId = centralGroupId(target.central_group);
+    }
   } else {
     const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
     const org = affiliation ? entityMap.get(affiliation.org) : null;
@@ -477,16 +485,25 @@ function categoryForestData(category) {
   );
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
-  const visibleRoots = showRoots ? orderedRoots : [];
+  const visibleRoots = showRoots
+    ? (
+        category === "中央机构"
+          ? buildCentralGroupNodes({
+              rootIds: orderedRoots,
+              entityMap,
+              expandedGroupId: expandedCentralGroupId,
+              treeForRoot: (id) => hierarchyTreeData(id, 2),
+            })
+          : orderedRoots.map((id) => hierarchyTreeData(id, 1)).filter(Boolean)
+      )
+    : [];
   return {
     id: virtualId,
     title: category,
     childCount: orderedRoots.length,
     hiddenCount: orderedRoots.length - visibleRoots.length,
     isVirtual: true,
-    children: visibleRoots
-      .map((id) => hierarchyTreeData(id, 1))
-      .filter(Boolean),
+    children: visibleRoots,
   };
 }
 
@@ -802,9 +819,14 @@ function renderDynamicHierarchy(svg) {
     Math.abs(expandedComposition?.left ?? INLINE_DETAIL_BOUNDS.left),
     Math.abs(expandedComposition?.right ?? 17)
   );
-  const nodeHalfWidth = (node) => (
-    !node.data.isVirtual && expandedDetailId.value === node.data.id ? detailHalfWidth : 17
+  const virtualNodeWidth = (node) => Math.max(
+    Number(emperorRect.getAttribute("width")),
+    node.data.title.length * 17.14 + 24
   );
+  const nodeHalfWidth = (node) => {
+    if (node.data.isVirtual) return virtualNodeWidth(node) / 2;
+    return expandedDetailId.value === node.data.id ? detailHalfWidth : 17;
+  };
   d3.tree()
     .nodeSize([52, depthGap])
     .separation((a, b) => {
@@ -842,13 +864,10 @@ function renderDynamicHierarchy(svg) {
 
   const nodeLayout = new Map(root.descendants().map((node) => {
     const x = (area.left + area.right) / 2 + node.x;
-    // 分类根占用原“皇帝”中心位置；一级机构下移，为根节点与横向总线留出净空。
-    const y = node.data.isVirtual ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
+    // 分类根占用原“皇帝”中心位置；虚拟制度组与真实机构逐层下移。
+    const y = node.depth === 0 ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
-      const width = Math.max(
-        Number(emperorRect.getAttribute("width")),
-        node.data.title.length * 17.14 + 24
-      );
+      const width = virtualNodeWidth(node);
       const height = Number(emperorRect.getAttribute("height"));
       return [node, { x, y, top: y - height / 2, bottom: y + height / 2, width, height }];
     }
@@ -947,13 +966,15 @@ function renderDynamicHierarchy(svg) {
     layer.appendChild(polyline);
   };
 
-  // 根节点与横向总线分离：根底部短竖线、下方总线、各一级机构独立竖线。
-  const firstLevelLinks = root.links().filter((link) => link.source.data.isVirtual);
-  if (firstLevelLinks.length) {
-    const rootLayout = nodeLayout.get(root);
-    const targets = firstLevelLinks.map((link) => nodeLayout.get(link.target));
-    const busY = (rootLayout.bottom + Math.min(...targets.map((target) => target.top))) / 2;
-    appendLink(`${rootLayout.x},${rootLayout.bottom} ${rootLayout.x},${busY}`);
+  // 每个虚拟节点使用独立横向总线，虚拟分组不冒充数据库中的历史层级边。
+  const virtualParents = root.descendants().filter((node) => (
+    node.data.isVirtual && node.children?.length
+  ));
+  for (const virtualParent of virtualParents) {
+    const source = nodeLayout.get(virtualParent);
+    const targets = virtualParent.children.map((child) => nodeLayout.get(child));
+    const busY = (source.bottom + Math.min(...targets.map((target) => target.top))) / 2;
+    appendLink(`${source.x},${source.bottom} ${source.x},${busY}`);
     appendLink(`${d3.min(targets, (target) => target.x)},${busY} ${d3.max(targets, (target) => target.x)},${busY}`);
     targets.forEach((target) => {
       appendLink(`${target.x},${busY} ${target.x},${target.top}`);
@@ -980,6 +1001,10 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.classList.add("dynamic-tree-node");
     if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
     if (node.data.isVirtual) {
+      nodeGroup.dataset.virtualRole = node.data.isCentralGroup ? "central-group" : "category-root";
+      nodeGroup.setAttribute("role", "button");
+      nodeGroup.setAttribute("tabindex", "0");
+      nodeGroup.setAttribute("aria-label", `${node.data.title}，${node.data.childCount}项`);
       const rootRect = emperorRect.cloneNode(true);
       rootRect.style.removeProperty("display");
       rootRect.setAttribute("x", String(-layout.width / 2));
@@ -994,6 +1019,7 @@ function renderDynamicHierarchy(svg) {
       rootLabel.setAttribute("text-anchor", "middle");
       rootLabel.setAttribute("dominant-baseline", "central");
       setText(rootLabel, node.data.title);
+      if (node.data.isCentralGroup) rootRect.setAttribute("opacity", "0.82");
       nodeGroup.append(rootRect, rootLabel);
       nodeGroup.setAttribute("transform", `translate(${layout.x} ${layout.y})`);
     } else {
@@ -1003,8 +1029,10 @@ function renderDynamicHierarchy(svg) {
     const hiddenCount = node.data.hiddenCount || 0;
     if (!node.data.isVirtual) setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
-    const isExpanded = node.data.isVirtual
-      ? !collapsedHierarchyIds.has(node.data.id)
+    const isExpanded = node.data.isCentralGroup
+      ? expandedCentralGroupId === node.data.id
+      : node.data.isVirtual
+        ? !collapsedHierarchyIds.has(node.data.id)
       : expandedHierarchyPath.includes(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value && !isExpanded) {
       nodeGroup.querySelector("g.cls-81")?.remove();
@@ -1063,19 +1091,29 @@ function renderDynamicHierarchy(svg) {
 
     nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
     if (!node.data.isVirtual && expandedDetailId.value === node.data.id) expandedDetailNode = node;
-    d3.select(nodeGroup)
+    const toggleVirtualNode = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (node.data.isCentralGroup) {
+        expandedCentralGroupId = expandedCentralGroupId === node.data.id ? null : node.data.id;
+        expandedHierarchyPath = [];
+      } else if (collapsedHierarchyIds.has(node.data.id)) {
+        collapsedHierarchyIds.delete(node.data.id);
+      } else {
+        collapsedHierarchyIds.add(node.data.id);
+        expandedHierarchyPath = [];
+      }
+      hierarchyPanX = 0;
+      hierarchyPanY = 0;
+      renderTemplate();
+    };
+    const nodeSelection = d3.select(nodeGroup)
       .on("click.dynamic-tree", (event) => {
-        event.stopPropagation();
         if (node.data.isVirtual) {
-          if (collapsedHierarchyIds.has(node.data.id)) {
-            collapsedHierarchyIds.delete(node.data.id);
-          } else {
-            collapsedHierarchyIds.add(node.data.id);
-            expandedHierarchyPath = [];
-          }
-          renderTemplate();
+          toggleVirtualNode(event);
           return;
         }
+        event.stopPropagation();
         window.clearTimeout(hierarchyClickTimer);
         hierarchyClickTimer = window.setTimeout(() => {
           detailPanelScrollOffset = 0;
@@ -1099,6 +1137,7 @@ function renderDynamicHierarchy(svg) {
       .on("dblclick.dynamic-tree-detail", (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (node.data.isVirtual) return;
         window.clearTimeout(hierarchyClickTimer);
         detailPanelScrollOffset = 0;
         selectedId.value = node.data.id;
@@ -1108,6 +1147,11 @@ function renderDynamicHierarchy(svg) {
         inlineDetailOfficialId.value = null;
         renderTemplate();
       });
+    if (node.data.isVirtual) {
+      nodeSelection.on("keydown.dynamic-tree", (event) => {
+        if (event.key === "Enter" || event.key === " ") toggleVirtualNode(event);
+      });
+    }
   }
 
   if (expandedDetailNode) {
@@ -1657,6 +1701,9 @@ function bindTemplateControls(svg) {
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
+          expandedCentralGroupId = category === "中央机构" && focus?.central_group
+            ? centralGroupId(focus.central_group)
+            : null;
           renderTemplate();
         };
         this.style.cursor = "pointer";

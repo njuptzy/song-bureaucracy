@@ -1,6 +1,7 @@
 import unittest
 
 from vis.backend.institution_categories import (
+    classify_central_group,
     classify_institution,
     resolve_source_catalogs,
 )
@@ -78,6 +79,58 @@ class InstitutionCategoriesTest(unittest.TestCase):
             {"粮料院": {central}, "监当官": {county}},
         )
         self.assertEqual(catalogs, {central})
+
+    def test_central_groups_follow_dictionary_institutional_systems(self):
+        cases = (
+            (
+                "中书门下",
+                ["官署名"],
+                ["宋代官制辞典/第三编 北宋前期中枢机构类/一、中书门下门"],
+                "宰辅与决策中枢",
+            ),
+            (
+                "尚书省",
+                ["中央政务机构"],
+                ["宋代官制辞典/第四编 元丰正名后中枢机构类之一/一、三省门"],
+                "三省六部与馆阁",
+            ),
+            (
+                "提举太医局所",
+                ["中央医学教育机构"],
+                ["宋代官制辞典/第五编 元丰正名后中枢机构类之二/二、太常寺门"],
+                "礼仪宗室与宫廷事务",
+            ),
+            (
+                "元丰库",
+                ["中央封桩库"],
+                ["宋代官制辞典/第五编 元丰正名后中枢机构类之二/九、太府寺门"],
+                "财赋农政与马政",
+            ),
+            (
+                "国子监",
+                ["中央教育管理机构"],
+                ["宋代官制辞典/第五编 元丰正名后中枢机构类之二/一、总九寺五监门"],
+                "五监与工程教育",
+            ),
+            (
+                "御史台",
+                ["中央监察机构"],
+                ["宋代官制辞典/第六编 司法、监察机构类/一、御史台门"],
+                "司法监察",
+            ),
+        )
+        for title, attrs, catalogs, expected in cases:
+            with self.subTest(title=title):
+                self.assertEqual(classify_central_group(title, attrs, catalogs)[0], expected)
+
+    def test_central_collective_stays_in_a_non_historical_summary_group(self):
+        group, basis = classify_central_group(
+            "九寺五监",
+            ["机构统称"],
+            ["宋代官制辞典/第五编 元丰正名后中枢机构类之二/一、总九寺五监门"],
+        )
+        self.assertEqual(group, "寺监制度统称")
+        self.assertIn("统称", basis)
 
 
 if __name__ == "__main__":
