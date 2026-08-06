@@ -47,3 +47,9 @@ export function collapseInstitutionGroups(expandedIds, lastExpandedId) {
     : expandedIds.at(-1);
   return focusId ? [focusId] : [];
 }
+
+export function isRepeatedHierarchyPointer(previous, entityId, timeStamp, maxDelay = 650) {
+  return previous?.id === entityId
+    && timeStamp >= previous.timeStamp
+    && timeStamp - previous.timeStamp <= maxDelay;
+}

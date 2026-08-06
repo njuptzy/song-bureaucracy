@@ -32,6 +32,7 @@ import {
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
+  isRepeatedHierarchyPointer,
   mergeExpansionPaths,
   removeExpandedSubtree,
   toggleInstitutionGroupIds,
@@ -67,7 +68,8 @@ const yearSnapshotCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 let pendingDetailSectionKey = null;
-let lastHierarchyClick = null;
+let lastHierarchyPointer = null;
+let suppressedHierarchyClick = null;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
@@ -180,7 +182,8 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
 function selectLinkedEntity(entityId) {
   const target = entityMap.get(entityId);
   if (!target) return;
-  lastHierarchyClick = null;
+  lastHierarchyPointer = null;
+  suppressedHierarchyClick = null;
   detailPanelScrollOffset = 0;
   inlineCompositionScrollOffset = 0;
   expandedDetailId.value = null;
@@ -1754,7 +1757,8 @@ function renderDynamicHierarchy(svg) {
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      lastHierarchyClick = null;
+      lastHierarchyPointer = null;
+      suppressedHierarchyClick = null;
       if (node.data.isInstitutionGroup) {
         const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
         expandedInstitutionGroupIds = toggleInstitutionGroupIds(
@@ -1783,6 +1787,42 @@ function renderDynamicHierarchy(svg) {
       refreshTemplate();
     };
     const nodeSelection = d3.select(nodeGroup)
+      .on("pointerdown.dynamic-tree-detail", (event) => {
+        if (node.data.isVirtual) return;
+        if (!isRepeatedHierarchyPointer(
+          lastHierarchyPointer,
+          node.data.id,
+          event.timeStamp,
+        )) {
+          lastHierarchyPointer = {
+            id: node.data.id,
+            timeStamp: event.timeStamp,
+            expandedHierarchyPath: [...expandedHierarchyPath],
+            lastExpandedHierarchyId,
+            panX: hierarchyPanX,
+            panY: hierarchyPanY,
+          };
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        expandedHierarchyPath = lastHierarchyPointer.expandedHierarchyPath;
+        lastExpandedHierarchyId = lastHierarchyPointer.lastExpandedHierarchyId;
+        hierarchyPanX = lastHierarchyPointer.panX;
+        hierarchyPanY = lastHierarchyPointer.panY;
+        lastHierarchyPointer = null;
+        suppressedHierarchyClick = {
+          id: node.data.id,
+          until: event.timeStamp + 300,
+        };
+        detailPanelScrollOffset = 0;
+        selectedId.value = node.data.id;
+        inlineDetailField.value = "duty";
+        inlineCompositionScrollOffset = 0;
+        expandedDetailId.value = node.data.id;
+        inlineDetailOfficialId.value = null;
+        refreshTemplate();
+      })
       .on("click.dynamic-tree", (event) => {
         if (node.data.isVirtual) {
           toggleVirtualNode(event);
@@ -1790,31 +1830,12 @@ function renderDynamicHierarchy(svg) {
         }
         event.preventDefault();
         event.stopPropagation();
-        const repeatedClick = lastHierarchyClick?.id === node.data.id
-          && event.timeStamp - lastHierarchyClick.timeStamp <= 360;
-        if (repeatedClick) {
-          expandedHierarchyPath = lastHierarchyClick.expandedHierarchyPath;
-          lastExpandedHierarchyId = lastHierarchyClick.lastExpandedHierarchyId;
-          hierarchyPanX = lastHierarchyClick.panX;
-          hierarchyPanY = lastHierarchyClick.panY;
-          lastHierarchyClick = null;
-          detailPanelScrollOffset = 0;
-          selectedId.value = node.data.id;
-          inlineDetailField.value = "duty";
-          inlineCompositionScrollOffset = 0;
-          expandedDetailId.value = node.data.id;
-          inlineDetailOfficialId.value = null;
-          refreshTemplate();
-          return;
+        if (suppressedHierarchyClick) {
+          const shouldSuppress = suppressedHierarchyClick.id === node.data.id
+            && event.timeStamp <= suppressedHierarchyClick.until;
+          suppressedHierarchyClick = null;
+          if (shouldSuppress) return;
         }
-        lastHierarchyClick = {
-          id: node.data.id,
-          timeStamp: event.timeStamp,
-          expandedHierarchyPath: [...expandedHierarchyPath],
-          lastExpandedHierarchyId,
-          panX: hierarchyPanX,
-          panY: hierarchyPanY,
-        };
         detailPanelScrollOffset = 0;
         inlineCompositionScrollOffset = 0;
         expandedDetailId.value = null;
@@ -1843,7 +1864,7 @@ function renderDynamicHierarchy(svg) {
         refreshTemplate();
       })
       .on("dblclick.dynamic-tree-detail", (event) => {
-        // 双击已由连续两次 click 跨 SVG 重绘识别；这里只阻止浏览器默认行为。
+        // 双击在第二次 pointerdown 时跨节点重绘识别；这里只阻止浏览器默认行为。
         event.preventDefault();
         event.stopPropagation();
       });
@@ -2460,7 +2481,8 @@ function bindSpaceAwareExpansionControl(svg) {
   const toggle = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    lastHierarchyClick = null;
+    lastHierarchyPointer = null;
+    suppressedHierarchyClick = null;
     spaceAwareExpansion.value = !spaceAwareExpansion.value;
     if (!spaceAwareExpansion.value) {
       expandedInstitutionGroupIds = collapseInstitutionGroups(
@@ -2562,7 +2584,8 @@ function bindTemplateControls(svg) {
         const group = this.parentElement;
         const activate = (event) => {
           event.stopPropagation();
-          lastHierarchyClick = null;
+          lastHierarchyPointer = null;
+          suppressedHierarchyClick = null;
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
           expandedHierarchyPath = [];
