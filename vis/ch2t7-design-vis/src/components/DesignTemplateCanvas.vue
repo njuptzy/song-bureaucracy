@@ -206,7 +206,7 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   const width = Number(rect.getAttribute("width"));
   const height = Number(rect.getAttribute("height"));
   if (![x, y, width, height].every(Number.isFinite)) return;
-  const maxGlyphs = 10;
+  const maxGlyphs = 12;
   const displayTitle = fullTitle.length > maxGlyphs
     ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
     : fullTitle;
@@ -217,21 +217,32 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   label.style.writingMode = "horizontal-tb";
   label.style.textOrientation = "mixed";
   label.setAttribute("text-anchor", "middle");
-  // 不使用浏览器竖排流：每个字独立放在本格中心，避免标题串到相邻书脊。
-  const bodyHeight = height - 38;
+  // 长名称在加宽的书脊内按传统顺序分成右、左两列，避免靠增加高度换字号。
+  const columns = displayTitle.length > 6
+    ? [
+        displayTitle.slice(0, Math.ceil(displayTitle.length / 2)),
+        displayTitle.slice(Math.ceil(displayTitle.length / 2)),
+      ]
+    : [displayTitle];
+  const longestColumn = Math.max(...columns.map((column) => column.length));
+  const bodyHeight = height - 34;
   const fontSize = Math.min(
     INLINE_COMPOSITION.titleFontSize,
-    bodyHeight / Math.max(1, displayTitle.length)
+    bodyHeight / Math.max(1, longestColumn)
   );
   label.style.fontSize = `${fontSize}px`;
   const centerX = x + width / 2;
-  const top = y + 9;
-  [...displayTitle].forEach((character, index) => {
-    const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-    tspan.setAttribute("x", String(centerX));
-    tspan.setAttribute("y", String(top + fontSize * (index + 0.82)));
-    tspan.textContent = character;
-    label.appendChild(tspan);
+  const top = y + 7;
+  const columnGap = Math.min(width * 0.34, fontSize * 1.08);
+  columns.forEach((column, columnIndex) => {
+    const columnX = centerX + ((columns.length - 1) / 2 - columnIndex) * columnGap;
+    [...column].forEach((character, index) => {
+      const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      tspan.setAttribute("x", String(columnX));
+      tspan.setAttribute("y", String(top + fontSize * (index + 0.82)));
+      tspan.textContent = character;
+      label.appendChild(tspan);
+    });
   });
 }
 
@@ -540,27 +551,27 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
 
 const INLINE_DETAIL_BOUNDS = {
   left: 747.3 - 763.56,
-  top: 153 - 196.11,
-  bottom: 334 - 196.11,
+  top: 160.96 - 196.11,
+  bottom: 287.81 - 196.11,
 };
 const INLINE_COMPOSITION = {
   spineX: 763.56,
   panelX: 786.04,
   barX: 794.72,
-  panelY: 153,
-  panelHeight: 181,
-  barY: 166,
-  barHeight: 158,
-  barWidth: 24,
-  barPitch: 32,
+  panelY: 160.96,
+  panelHeight: 126.85,
+  barY: 160.96,
+  barHeight: 126.85,
+  barWidth: 32,
+  barPitch: 40,
   titleFontSize: 13.2,
   quotaFontSize: 7.5,
   personFontSize: 8,
-  pageXOffset: 29,
-  pageWidth: 110,
-  pageShift: 116,
+  pageXOffset: 37,
+  pageWidth: 126,
+  pageShift: 134,
   panelRightPadding: 12,
-  trackY: 329,
+  trackY: 284.6,
 };
 const INLINE_TITLE_POLYGON_BOUNDS = {
   x: 747.3,
@@ -675,7 +686,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     element.setAttribute("x", String(INLINE_COMPOSITION.panelX));
     element.setAttribute("y", String(INLINE_COMPOSITION.trackY));
     element.setAttribute("width", String(width));
-    element.setAttribute("height", "3.6");
+    element.setAttribute("height", "2.77");
   }
 
   const selectedOfficial = geometry.selectedIndex >= 0
@@ -725,7 +736,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       `translate(${812.52 + INLINE_COMPOSITION.pageWidth - 12} ${INLINE_COMPOSITION.barY + 10})`
     );
     description.style.fontSize = "9px";
-    wrapVerticalText(description, values[inlineDetailField.value], 15, 10, 10.2);
+    wrapVerticalText(description, values[inlineDetailField.value], 11, 12, 10.2);
     const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     descriptionTitle.textContent = `${selectedOfficial.title}：${values[inlineDetailField.value]}`;
     pageTemplate.appendChild(descriptionTitle);
@@ -786,8 +797,7 @@ function renderDynamicHierarchy(svg) {
   if (!data) return;
   const root = d3.hierarchy(data);
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
-  // 放大的编制书页需要更大的层间净空，避免与下级机构及连接总线重叠。
-  const depthGap = expandedDetailId.value != null ? 190 : 145;
+  const depthGap = 145;
   const expandedComposition = expandedDetailId.value != null
     ? inlineCompositionGeometry(expandedDetailId.value)
     : null;
