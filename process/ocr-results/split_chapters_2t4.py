@@ -532,6 +532,12 @@ PROFILES = {
                 "page": "622",
                 "reason": "正文标题使用半角括号，目录正式词头使用全角括号",
             },
+            {
+                "from": "试秩(试衔)",
+                "to": "试秩（试衔）",
+                "page": "669",
+                "reason": "核对原书 p669，正式词头使用全角括号",
+            },
         ],
         "joins": [
             {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
@@ -5623,9 +5629,20 @@ def main():
             "检校司徒", "检校司空", "检校少师", "检校少傅",
             "检校少保", "检校尚书左仆射", "检校尚书右仆射",
             "检校吏部尚书", "检校兵部尚书",
+            "检校户部尚书", "检校刑部尚书", "检校礼部尚书",
+            "检校工部尚书", "检校左散骑常侍", "检校右散骑常侍",
+            "检校太子宾客", "检校国子祭酒", "检校水部员外郎",
+            "枢密太尉", "功臣", "宪衔", "银酒监武", "试秩(试衔)",
+            "试衔", "祠禄官", "外祠", "内祠", "宫观使",
+            "玉清昭应宫使",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
+            for field_name, value in list(entry.items()):
+                if field_name in {"name", "text", "_placeholder", "__status__"}:
+                    continue
+                if isinstance(value, str):
+                    entry[field_name] = value.translate(fullwidth_translation)
 
         merit = next(e for e in all_entries if e["name"] == "勋")
         truncated_merit_source = (
@@ -5690,6 +5707,18 @@ def main():
             )
         else:
             assert "太保、司徒、司空" in inspection["text"]
+
+        inspection_libation = next(
+            e for e in all_entries if e["name"] == "检校国子祭酒"
+        )
+        broken_source = "《朝野杂记》甲集卷12《检校官》。元丰三年"
+        repaired_source = "《朝野杂记》甲集卷12《检校官》）。元丰三年"
+        if broken_source in inspection_libation["text"]:
+            inspection_libation["text"] = inspection_libation["text"].replace(
+                broken_source, repaired_source, 1
+            )
+        else:
+            assert repaired_source in inspection_libation["text"]
 
         # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
         legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
