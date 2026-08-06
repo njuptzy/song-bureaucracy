@@ -2511,6 +2511,7 @@ function bindTimelineRange(svg) {
       if (event.key === "Enter" || event.key === " ") cancelSelection(event);
     });
 
+  svg.__syncTimelineSelectionStyle = () => renderRange(selectedRange.value);
   renderRange(selectedRange.value);
   if (timelineSelectionActive.value) moveBrush(selectedRange.value);
 }
@@ -2594,6 +2595,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   }
   if (rebindControls) bindTemplateControls(svg);
   updateDetails(svg);
+  svg.__syncTimelineSelectionStyle?.();
 }
 
 function scheduleTimelineRefresh({ rebindStatic = false } = {}) {
