@@ -5198,13 +5198,79 @@ def main():
         else:
             assert corrected_xuanfeng in xuanfeng["text"]
 
+        left_right_tongfeng = next(
+            e for e in all_entries if e["name"] == "左、右通奉大夫"
+        )
+        missing_tongfeng_prefix = "年十二月分左、右"
+        corrected_tongfeng_prefix = "通奉大夫于南宋绍兴元年十二月分左、右"
+        if left_right_tongfeng["text"].startswith(missing_tongfeng_prefix):
+            left_right_tongfeng["text"] = (
+                corrected_tongfeng_prefix
+                + left_right_tongfeng["text"][len(missing_tongfeng_prefix):]
+            )
+        else:
+            assert left_right_tongfeng["text"].startswith(corrected_tongfeng_prefix)
+
+        taizhong = next(
+            e for e in all_entries
+            if e["name"] == "太中大夫" and e["text"].startswith("寄禄官名。")
+        )
+        duplicated_taizhong = "至太中大夫止。至太中大夫止。"
+        if duplicated_taizhong in taizhong["text"]:
+            taizhong["text"] = taizhong["text"].replace(
+                duplicated_taizhong, "至太中大夫止。", 1
+            )
+        else:
+            assert taizhong["text"].count("至太中大夫止。") == 1
+
+        for title, malformed, corrected in (
+            (
+                "中大夫",
+                "中大夫为执政所带阶官(《通考·职官》18《文散官·光禄大夫以下》，余参“特进”条)。",
+                "中大夫为执政所带阶官（《通考·职官》18《文散官·光禄大夫以下》，余参“特进”条）。",
+            ),
+            (
+                "中散大夫",
+                "候有阙方许除授(《宋会要·职官》56之16、18，余参“特进”条)。",
+                "候有阙方许除授（《宋会要·职官》56之16、18，余参“特进”条）。",
+            ),
+        ):
+            rank_entry = next(
+                e for e in all_entries
+                if e["name"] == title and e["text"].startswith("寄禄官名。")
+            )
+            if malformed in rank_entry["text"]:
+                rank_entry["text"] = rank_entry["text"].replace(
+                    malformed, corrected, 1
+                )
+            else:
+                assert corrected in rank_entry["text"]
+
+        fengzhi = next(e for e in all_entries if e["name"] == "奉直大夫")
+        malformed_fengzhi_alias = (
+            "奉直。《编年备要》卷 27:“(大观二年)奉直易朝议。”"
+            "《演繁露》卷1：“（大观二年）奉直大夫代右朝议大夫。”"
+        )
+        corrected_fengzhi_alias = (
+            "奉直。《编年备要》卷27：“（大观二年）奉直易朝议。”"
+            "《演繁露》卷1：“（大观二年）奉直大夫代右朝议大夫。”"
+        )
+        if malformed_fengzhi_alias in fengzhi["简称"]:
+            fengzhi["简称"] = fengzhi["简称"].replace(
+                malformed_fengzhi_alias, corrected_fengzhi_alias, 1
+            )
+        else:
+            assert corrected_fengzhi_alias in fengzhi["简称"]
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
               "给事中、礼部尚书正文重复词头，恢复卫尉少卿、司农少卿条括号；"
               "据 p622-624 原页补回九条词头同行的文阶分类说明；p624-626 "
               "移除太师条误粘节标题，恢复元丰以后寄禄官、开府仪同三司及"
-              "宣奉大夫的全角标点和版面断行")
+              "宣奉大夫的全角标点和版面断行；p627-628 补回左、右通奉大夫"
+              "开头，删除太中大夫重复句，并恢复中大夫、中散大夫及奉直大夫"
+              "引文标点")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
