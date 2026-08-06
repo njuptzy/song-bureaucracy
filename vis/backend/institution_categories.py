@@ -110,7 +110,14 @@ _GROUP_CATALOG_SECTIONS = {
 
 _GROUP_ATTRIBUTE_MARKERS = {
     "内廷机构": {
-        "皇帝后妃与宫中省司": ("皇帝", "后妃", "尚书内省", "宫中省司"),
+        "皇帝后妃与宫中省司": (
+            "皇帝",
+            "后妃",
+            "尚书内省",
+            "宫中省司",
+            # 德寿宫、重华宫等太上皇宫殿，不与中央礼仪宫观混分。
+            "宫殿",
+        ),
         "东宫公主与宗室府第": ("东宫", "皇太子", "公主", "亲王府", "王府"),
         "学士经筵与翰林供奉": ("学士院", "经筵", "翰林", "供奉"),
         "宦官内侍与皇城侍奉": ("宦官", "内侍", "皇城司", "横行"),
@@ -332,6 +339,11 @@ def classify_central_group(
     catalogs = " ".join(item for item in source_catalogs if item)
     attrs = " ".join(item for item in attr_categories if item)
     title_and_attrs = f"{title} {attrs}"
+
+    # 宫观是朝廷礼仪性宗教机构；这里依据明确的“宫观”类别判定，
+    # 不以标题中泛化的“宫”字推断，以免与德寿宫、重华宫等宫殿混淆。
+    if "宫观" in attrs:
+        return "礼仪宗室与宫廷事务", "时间点类别明确为中央礼仪宫观"
 
     formal_systems = {
         "礼仪宗室与宫廷事务": {"太常寺", "宗正寺", "光禄寺", "卫尉寺", "鸿胪寺"},

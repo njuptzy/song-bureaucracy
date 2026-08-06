@@ -54,6 +54,29 @@ class InstitutionCategoriesTest(unittest.TestCase):
         self.assertEqual(classify_institution(["宫观"], [])[0], "中央机构")
         self.assertEqual(classify_institution(["宫殿"], [])[0], "内廷机构")
 
+    def test_palaces_and_temple_complexes_have_specific_visual_groups(self):
+        central_temples = (
+            "昭应宫",
+            "玉清昭应宫",
+            "景灵宫",
+            "中太乙宫",
+            "玉清和阳宫",
+            "玉清神霄宫",
+            "神霄玉清万寿宫",
+        )
+        for title in central_temples:
+            with self.subTest(title=title):
+                self.assertEqual(
+                    classify_institution_group("中央机构", title, ["宫观"], [])[0],
+                    "礼仪宗室与宫廷事务",
+                )
+        for title in ("德寿宫", "重华宫"):
+            with self.subTest(title=title):
+                self.assertEqual(
+                    classify_institution_group("内廷机构", title, ["宫殿"], [])[0],
+                    "皇帝后妃与宫中省司",
+                )
+
     def test_title_fallback_covers_generic_attributes(self):
         cases = (
             ("淮东宣抚使司", "军队机构"),
