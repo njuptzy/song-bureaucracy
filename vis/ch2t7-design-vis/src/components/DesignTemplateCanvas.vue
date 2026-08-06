@@ -70,7 +70,6 @@ const spaceAwareExpansion = ref(false);
 const svgCache = new Map();
 const hierarchyTemplateCache = new WeakMap();
 const yearSnapshotCache = new Map();
-const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 let pendingDetailSectionKey = null;
 const collapsedHierarchyIds = new Set();
@@ -2127,7 +2126,6 @@ function setupDetailPanel(svg) {
 
   const panelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
   panelGroup.classList.add("detail-panel-group");
-  panelGroup.setAttribute("transform", `translate(${detailPanelOffset.x} ${detailPanelOffset.y})`);
   svg.insertBefore(panelGroup, panelNodes[0]);
   panelNodes.forEach((node) => panelGroup.appendChild(node));
   panelGroup.__topRightBorder = [...panelGroup.querySelectorAll("polyline")].find((polyline) => (
@@ -2280,42 +2278,6 @@ function setupDetailPanel(svg) {
     );
   }
 
-  const dragHandle = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  dragHandle.classList.add("detail-panel-drag-handle");
-  dragHandle.setAttribute("x", String(DETAIL_PANEL_BOUNDS.x));
-  dragHandle.setAttribute("y", String(DETAIL_PANEL_BOUNDS.y));
-  dragHandle.setAttribute("width", String(DETAIL_PANEL_BOUNDS.width));
-  dragHandle.setAttribute("height", "52");
-  dragHandle.setAttribute("fill", "transparent");
-  dragHandle.setAttribute("pointer-events", "all");
-  dragHandle.style.cursor = "grab";
-  panelGroup.appendChild(dragHandle);
-
-  const viewBox = svg.viewBox.baseVal;
-  const minX = viewBox.x - DETAIL_PANEL_BOUNDS.x;
-  const maxX = viewBox.x + viewBox.width - DETAIL_PANEL_BOUNDS.x - DETAIL_PANEL_BOUNDS.width;
-  const minY = viewBox.y - DETAIL_PANEL_BOUNDS.y;
-  const maxY = viewBox.y + viewBox.height - DETAIL_PANEL_BOUNDS.y - DETAIL_PANEL_BOUNDS.height;
-  const movePanel = () => {
-    panelGroup.setAttribute("transform", `translate(${detailPanelOffset.x} ${detailPanelOffset.y})`);
-  };
-  d3.select(dragHandle)
-    .on("click", (event) => event.stopPropagation())
-    .call(
-      d3.drag()
-        .on("start", (event) => {
-          event.sourceEvent?.stopPropagation();
-          dragHandle.style.cursor = "grabbing";
-        })
-        .on("drag", (event) => {
-          detailPanelOffset.x = Math.max(minX, Math.min(maxX, detailPanelOffset.x + event.dx));
-          detailPanelOffset.y = Math.max(minY, Math.min(maxY, detailPanelOffset.y + event.dy));
-          movePanel();
-        })
-        .on("end", () => {
-          dragHandle.style.cursor = "grab";
-        })
-    );
 }
 
 function updateDetails(svg) {
