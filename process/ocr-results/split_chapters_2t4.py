@@ -467,6 +467,13 @@ PROFILES = {
                 "reason": "核对原书 p630，正式词头为‘宣义郎’，目录及正文 OCR 均误作‘宣议郎’",
             },
             {
+                "from": "内容省使",
+                "to": "内容省使",
+                "canonical": "内客省使",
+                "page": "641",
+                "reason": "核对原书 p641，正式词头为‘内客省使’，目录 OCR 误作‘内容省使’，正文又粘入横行条别名字段",
+            },
+            {
                 "from": "擎壶正",
                 "to": "挈壶正",
                 "page": "662",
@@ -5442,6 +5449,44 @@ def main():
             assert "编制" in commissioner
             assert "\n编制 " not in commissioner["品位"]
 
+        # 原书 p641 的“内客省使”正文被 MinerU 粘进“横行”别名字段，
+        # 同时目录又误识成“内容省使”而留下空占位。先按版面边界拆回正文，
+        # 再由下方 catalog_renames 将输出词头规范成“内客省使”。
+        horizontal = next(e for e in all_entries if e["name"] == "横行")
+        domestic_guest_marker = "内客省使 横行武阶名。"
+        domestic_guest_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "内容省使" and str(m.get("page")) == "641"
+        )
+        domestic_guest = all_entries[domestic_guest_i]
+        if domestic_guest_marker in horizontal["别名"]:
+            alias, body = horizontal["别名"].split(domestic_guest_marker, 1)
+            assert domestic_guest.get("_placeholder") is True
+            horizontal["别名"] = alias.rstrip()
+            domestic_guest["text"] = "横行武阶名。" + body.strip()
+            domestic_guest.pop("_placeholder", None)
+            domestic_guest.pop("__status__", None)
+            all_meta[domestic_guest_i]["status"] = "ok"
+        else:
+            assert domestic_guest_marker not in horizontal["别名"]
+            assert domestic_guest["text"].startswith("横行武阶名。唐官")
+            assert domestic_guest.get("_placeholder") is not True
+
+        for title in (
+            "遥郡节度观察留后", "遥郡观察使", "遥郡团练使", "遥郡刺史",
+            "横行", "内容省使", "引进使", "西上阁门使",
+        ):
+            entry = next(e for e in all_entries if e["name"] == title)
+            entry["text"] = entry["text"].translate(fullwidth_translation)
+
+        for title in ("防御使", "团练使", "刺史"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            for field_name, value in list(entry.items()):
+                if field_name in {"name", "text", "_placeholder", "__status__"}:
+                    continue
+                if isinstance(value, str):
+                    entry[field_name] = value.translate(fullwidth_translation)
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
@@ -5456,7 +5501,8 @@ def main():
               "防御、团练、军事推官条拆回简称字段；p632-634 继续恢复判司簿尉等"
               "四条中文标点，校正修职郎‘永乐大典’，并从迪功郎拆回简称与别名字段；"
               "p635-638 恢复节度使等五条中文标点，修正节度州三印《长编》括号，"
-              "并从节度观察留后、观察使拆回编制字段")
+              "并从节度观察留后、观察使拆回编制字段；p638-642 恢复正任、遥郡、"
+              "横行诸条中文标点，从横行别名字段拆回内客省使正文并校正词头")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
