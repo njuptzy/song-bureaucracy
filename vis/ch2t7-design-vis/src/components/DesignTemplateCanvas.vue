@@ -78,7 +78,8 @@ let hierarchyPanX = 0;
 let hierarchyPanY = 0;
 let expandedInstitutionGroupIds = [];
 let lastExpandedInstitutionGroupId = null;
-const expandedSubordinateGroupIds = new Set();
+let expandedSubordinateGroupIds = [];
+let lastExpandedSubordinateGroupId = null;
 let inlineCompositionScrollOffset = 0;
 let renderRevision = 0;
 let lastExpandedHierarchyId = null;
@@ -424,11 +425,17 @@ function focusHierarchyContext(entity, revealPath = false) {
   if (revealPath) {
     expandedHierarchyPath = context.path.slice(0, -1);
     lastExpandedHierarchyId = expandedHierarchyPath.at(-1) ?? null;
+    if (!spaceAwareExpansion.value) expandedSubordinateGroupIds = [];
     for (let index = 0; index < context.path.length - 1; index += 1) {
       const parent = entityMap.get(context.path[index]);
       const child = entityMap.get(context.path[index + 1]);
       const group = subordinateGroupFor(parent?.title, child?.title);
-      if (group) expandedSubordinateGroupIds.add(subordinateGroupId(parent.id, group));
+      if (!group) continue;
+      const groupId = subordinateGroupId(parent.id, group);
+      expandedSubordinateGroupIds = spaceAwareExpansion.value
+        ? [...new Set([...expandedSubordinateGroupIds, groupId])]
+        : [groupId];
+      lastExpandedSubordinateGroupId = groupId;
     }
   }
   return context;
@@ -1699,7 +1706,7 @@ function renderDynamicHierarchy(svg) {
     const isExpanded = node.data.isInstitutionGroup
       ? expandedInstitutionGroupIds.includes(node.data.id)
       : node.data.isSubordinateGroup
-        ? expandedSubordinateGroupIds.has(node.data.id)
+        ? expandedSubordinateGroupIds.includes(node.data.id)
       : node.data.isVirtual
         ? !collapsedHierarchyIds.has(node.data.id)
       : expandedHierarchyPath.includes(node.data.id);
@@ -1856,11 +1863,13 @@ function renderDynamicHierarchy(svg) {
       event.preventDefault();
       event.stopPropagation();
       if (node.data.isSubordinateGroup) {
-        if (expandedSubordinateGroupIds.has(node.data.id)) {
-          expandedSubordinateGroupIds.delete(node.data.id);
-        } else {
-          expandedSubordinateGroupIds.add(node.data.id);
-        }
+        const wasExpanded = expandedSubordinateGroupIds.includes(node.data.id);
+        expandedSubordinateGroupIds = toggleInstitutionGroupIds(
+          expandedSubordinateGroupIds,
+          node.data.id,
+          spaceAwareExpansion.value
+        );
+        if (!wasExpanded) lastExpandedSubordinateGroupId = node.data.id;
       } else if (node.data.isInstitutionGroup) {
         const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
         expandedInstitutionGroupIds = toggleInstitutionGroupIds(
@@ -2541,6 +2550,10 @@ function bindSpaceAwareExpansionControl(svg) {
       expandedInstitutionGroupIds = collapseInstitutionGroups(
         expandedInstitutionGroupIds,
         lastExpandedInstitutionGroupId
+      );
+      expandedSubordinateGroupIds = collapseInstitutionGroups(
+        expandedSubordinateGroupIds,
+        lastExpandedSubordinateGroupId
       );
     }
     if (!spaceAwareExpansion.value && expandedHierarchyPath.length > 1) {

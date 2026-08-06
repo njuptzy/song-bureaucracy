@@ -60,6 +60,13 @@ test("空间模式允许同时展开左右两个虚拟分类", () => {
   assert.deepEqual(toggleInstitutionGroupIds(["left"], "right", true), ["left", "right"]);
 });
 
+test("三司虚拟分类在普通模式只保留新点击项，空间模式才允许并列展开", () => {
+  const accounting = "subordinate-group:406:勾院与帐籍审核";
+  const storage = "subordinate-group:406:库藏与粮料";
+  assert.deepEqual(toggleInstitutionGroupIds([accounting], storage, false), [storage]);
+  assert.deepEqual(toggleInstitutionGroupIds([accounting], storage, true), [accounting, storage]);
+});
+
 test("多个虚拟分类放不下时回退到新点击分类", () => {
   assert.deepEqual(institutionGroupsAfterLayout({
     candidateIds: ["left", "right"],
