@@ -11,6 +11,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
 import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
+import { anchorBranchToGroup, virtualBusRange } from "../utils/hierarchy_layout";
 import {
   clampCompositionScroll,
   compositionScrollAfterDrag,
@@ -999,6 +1000,9 @@ function renderDynamicHierarchy(svg) {
     : areaCenterX;
   if (expandedCentralGroupNode?.descendants().length > 1) {
     const branchNodes = expandedCentralGroupNode.descendants().slice(1);
+    const focusedBranchNode = branchNodes.find((node) => (
+      node.data.id === expandedHierarchyPath[0]
+    ));
     const minOffset = d3.min(
       branchNodes,
       (node) => node.x - expandedCentralGroupNode.x - nodeLeftExtent(node)
@@ -1009,12 +1013,22 @@ function renderDynamicHierarchy(svg) {
     );
     const branchWidth = maxOffset - minOffset;
     const viewportWidth = area.right - area.left;
-    expandedBranchCenterX = branchWidth <= viewportWidth
-      ? Math.max(
-          area.left - minOffset,
-          Math.min(area.right - maxOffset, expandedBranchCenterX)
-        )
-      : areaCenterX - (minOffset + maxOffset) / 2;
+    if (focusedBranchNode) {
+      // 展开大机构时让它仍位于所属制度组正下方；超宽的下级树交给视口拖动，
+      // 不能为了塞满画布把父节点漂到相邻制度组下面。
+      expandedBranchCenterX = anchorBranchToGroup(
+        expandedBranchCenterX,
+        expandedCentralGroupNode.x,
+        focusedBranchNode.x
+      );
+    } else {
+      expandedBranchCenterX = branchWidth <= viewportWidth
+        ? Math.max(
+            area.left - minOffset,
+            Math.min(area.right - maxOffset, expandedBranchCenterX)
+          )
+        : areaCenterX - (minOffset + maxOffset) / 2;
+    }
   }
 
   const clipId = "dynamic-tree-viewport-clip";
@@ -1171,8 +1185,12 @@ function renderDynamicHierarchy(svg) {
     const source = nodeLayout.get(virtualParent);
     const targets = virtualParent.children.map((child) => nodeLayout.get(child));
     const busY = (source.bottom + Math.min(...targets.map((target) => target.top))) / 2;
+    const [busLeft, busRight] = virtualBusRange(
+      source.x,
+      targets.map((target) => target.x)
+    );
     appendLink(`${source.x},${source.bottom} ${source.x},${busY}`);
-    appendLink(`${d3.min(targets, (target) => target.x)},${busY} ${d3.max(targets, (target) => target.x)},${busY}`);
+    appendLink(`${busLeft},${busY} ${busRight},${busY}`);
     targets.forEach((target) => {
       appendLink(`${target.x},${busY} ${target.x},${target.top}`);
     });
