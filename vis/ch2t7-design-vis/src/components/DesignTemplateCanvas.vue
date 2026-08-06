@@ -48,6 +48,8 @@ const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
 const inlineDetailOfficialId = ref(null);
 const svgCache = new Map();
+const hierarchyTemplateCache = new WeakMap();
+const yearSnapshotCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 let pendingDetailSectionKey = null;
@@ -93,8 +95,23 @@ expandedInstitutionGroupId = institutionGroupId(
   "中央机构",
   entityInstitutionGroup(titleMap.get("尚书省"), "中央机构")
 );
+function yearSnapshot(year) {
+  if (yearSnapshotCache.has(year)) {
+    const cached = yearSnapshotCache.get(year);
+    yearSnapshotCache.delete(year);
+    yearSnapshotCache.set(year, cached);
+    return cached;
+  }
+  const snapshot = buildYearSnapshot(props.data, year);
+  yearSnapshotCache.set(year, snapshot);
+  if (yearSnapshotCache.size > 16) {
+    yearSnapshotCache.delete(yearSnapshotCache.keys().next().value);
+  }
+  return snapshot;
+}
+
 const currentSnapshot = computed(() => (
-  timelineSelectionActive.value ? buildYearSnapshot(props.data, selectedRange.value[0]) : null
+  timelineSelectionActive.value ? yearSnapshot(selectedRange.value[0]) : null
 ));
 
 function normalizeText(element) {
@@ -952,7 +969,8 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   layer.appendChild(card);
 }
 
-function renderDynamicHierarchy(svg) {
+function hierarchyTemplates(svg) {
+  if (hierarchyTemplateCache.has(svg)) return hierarchyTemplateCache.get(svg);
   const templateText = findTextAt(svg, 763.56, 196.11, 2);
   const templateGroup = templateText?.parentElement?.cloneNode(true);
   const inlineDetailTemplate = templateText?.parentElement?.parentElement?.cloneNode(true);
@@ -964,7 +982,7 @@ function renderDynamicHierarchy(svg) {
       && Math.abs(Number(element.getAttribute("width")) - 60.84) <= 0.1
       && Math.abs(Number(element.getAttribute("height")) - 28.23) <= 0.1
   );
-  if (!templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return;
+  if (!templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return null;
 
   // 原稿的“皇帝”只作为横排分类根的样式模板，不在动态机构树中重复显示。
   emperorText.style.display = "none";
@@ -982,6 +1000,28 @@ function renderDynamicHierarchy(svg) {
   centerNodes.forEach((element) => {
     element.style.display = "none";
   });
+
+  const templates = {
+    templateGroup,
+    inlineDetailTemplate,
+    templatePolygonBounds,
+    emperorText,
+    emperorRect,
+  };
+  hierarchyTemplateCache.set(svg, templates);
+  return templates;
+}
+
+function renderDynamicHierarchy(svg) {
+  const templates = hierarchyTemplates(svg);
+  if (!templates) return;
+  const {
+    templateGroup,
+    inlineDetailTemplate,
+    templatePolygonBounds,
+    emperorText,
+    emperorRect,
+  } = templates;
 
   const data = categoryForestData(selectedCategory.value);
   if (!data) return;
@@ -2444,7 +2484,7 @@ function bindTimelineRange(svg) {
     timelineSelectionActive.value = true;
     selectedRange.value = nextRange;
     moveBrush(nextRange);
-    flushTimelineRefresh(true);
+    flushTimelineRefresh();
   });
 
   const cancelSelection = (event) => {
@@ -2454,7 +2494,7 @@ function bindTimelineRange(svg) {
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
-    flushTimelineRefresh(true);
+    flushTimelineRefresh();
   };
   d3.select(cancelControl)
     .on("click.cancel-selection", cancelSelection)
