@@ -29,7 +29,7 @@ test("循环关系不会让上下文定位无限递归", () => {
   assert.deepEqual(new Set(context.path), new Set([1, 2]));
 });
 
-test("选中机构退出年份后只回退到当前类别的可见根机构", () => {
+test("只有已选机构退出年份后才回退到当前类别的可见根机构", () => {
   const inactive = { id: 1, title: "旧机构" };
   const currentCategoryRoot = { id: 2, title: "当前类别根机构" };
   const unrelatedDefault = { id: 3, title: "尚书省" };
@@ -37,7 +37,7 @@ test("选中机构退出年份后只回退到当前类别的可见根机构", ()
     resolveVisibleSelection(inactive, new Set([2, 3]), currentCategoryRoot),
     currentCategoryRoot
   );
-  assert.equal(resolveVisibleSelection(null, null, currentCategoryRoot), currentCategoryRoot);
+  assert.equal(resolveVisibleSelection(null, null, currentCategoryRoot), null);
   assert.notEqual(
     resolveVisibleSelection(inactive, new Set([2, 3]), currentCategoryRoot),
     unrelatedDefault

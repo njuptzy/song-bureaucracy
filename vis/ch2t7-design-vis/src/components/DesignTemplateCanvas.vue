@@ -520,7 +520,9 @@ function graphFocusEntity() {
   const selected = selectedEntity();
   if (selected?.type === "机构") return selected;
   const affiliation = staffEdgesForView().find((edge) => edge.official === selected?.id);
-  return affiliation ? entityMap.get(affiliation.org) : selected || null;
+  return affiliation
+    ? entityMap.get(affiliation.org)
+    : selected || categoryFocus(selectedCategory.value);
 }
 
 function hierarchyLevels(rootId, maxDepth) {
@@ -2491,6 +2493,7 @@ function bindSpaceAwareExpansionControl(svg) {
 }
 
 function bindTemplateControls(svg) {
+  svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
   const categoryItems = [...svg.querySelectorAll("text")]
     .filter((textElement) => !textElement.closest(".dynamic-tree-layer"))
     .map((textElement) => ({
@@ -2529,12 +2532,29 @@ function bindTemplateControls(svg) {
       if (this.closest(".dynamic-tree-layer")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
-        this.style.cursor = "pointer";
-        this.style.fontWeight = (text === "层级视图") === (viewMode.value === "hierarchy") ? "700" : "400";
-        d3.select(this).on("click", (event) => {
+        const activateView = (event) => {
           event.stopPropagation();
           viewMode.value = text === "层级视图" ? "hierarchy" : "composition";
-        });
+        };
+        this.style.cursor = "pointer";
+        this.style.fontWeight = (text === "层级视图") === (viewMode.value === "hierarchy") ? "700" : "400";
+        d3.select(this).on("click.view-mode", activateView);
+        const bounds = elementBounds(this);
+        if (bounds && this.parentNode) {
+          const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          hitArea.classList.add("view-mode-hit-area");
+          hitArea.setAttribute("x", String(bounds.x - 12));
+          hitArea.setAttribute("y", String(bounds.y - 8));
+          hitArea.setAttribute("width", String(bounds.width + 24));
+          hitArea.setAttribute("height", String(bounds.height + 16));
+          hitArea.setAttribute("fill", "transparent");
+          hitArea.setAttribute("pointer-events", "all");
+          hitArea.style.cursor = "pointer";
+          const transform = this.getAttribute("transform");
+          if (transform) hitArea.setAttribute("transform", transform);
+          this.parentNode.insertBefore(hitArea, this);
+          d3.select(hitArea).on("click.view-mode", activateView);
+        }
       }
 
       if (CATEGORY_NAMES.includes(text)) {
@@ -2550,8 +2570,10 @@ function bindTemplateControls(svg) {
           hierarchyPanX = 0;
           hierarchyPanY = 0;
           selectedCategory.value = category;
+          selectedId.value = null;
+          expandedDetailId.value = null;
+          inlineDetailOfficialId.value = null;
           const focus = categoryFocus(category);
-          selectedId.value = focus?.id ?? null;
           lastExpandedInstitutionGroupId = focus
             ? institutionGroupId(category, entityInstitutionGroup(focus, category))
             : null;

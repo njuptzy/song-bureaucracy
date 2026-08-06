@@ -19,6 +19,7 @@ export function resolveHierarchyContext(entityId, hierarchyEdges, entityMap) {
 }
 
 export function resolveVisibleSelection(selected, activeEntityIds, categoryFallback) {
+  if (!selected) return null;
   if (selected && (!activeEntityIds || activeEntityIds.has(selected.id))) return selected;
   return categoryFallback || null;
 }
