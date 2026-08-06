@@ -9,7 +9,10 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import * as d3 from "d3";
-import { buildYearSnapshot } from "../utils/snapshot";
+import {
+  buildYearSnapshot,
+  hierarchyEdgesWithoutCollectives,
+} from "../utils/snapshot";
 import {
   buildInstitutionGroupNodes,
   CENTRAL_GROUP_NAMES,
@@ -376,7 +379,10 @@ function entityActive(entityId) {
 }
 
 function hierarchyEdgesForView() {
-  return currentSnapshot.value?.hierarchyEdges || props.data.hierarchyEdges;
+  return hierarchyEdgesWithoutCollectives(
+    currentSnapshot.value?.hierarchyEdges || props.data.hierarchyEdges,
+    collectiveEntityIds,
+  );
 }
 
 function staffEdgesForView() {
@@ -421,12 +427,9 @@ function focusHierarchyContext(entity, revealPath = false) {
 function hierarchyRootEntities(category) {
   const hierarchyEdges = hierarchyEdgesForView();
   const childIds = new Set(hierarchyEdges.map((edge) => edge.child));
-  const hierarchyEntityIds = new Set(
-    hierarchyEdges.flatMap((edge) => [edge.parent, edge.child])
-  );
   return props.data.entities.filter(
     (entity) => entity.type === "机构"
-      && !(collectiveEntityIds.has(entity.id) && !hierarchyEntityIds.has(entity.id))
+      && !collectiveEntityIds.has(entity.id)
       && entityCategory(entity) === category
       && entityActive(entity.id)
       && !childIds.has(entity.id)

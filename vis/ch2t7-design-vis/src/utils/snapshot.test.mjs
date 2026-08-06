@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildYearSnapshot, classifyExistenceEffect } from "./snapshot.js";
+import {
+  buildYearSnapshot,
+  classifyExistenceEffect,
+  hierarchyEdgesWithoutCollectives,
+} from "./snapshot.js";
 
 function timepoint(id, year, event, extra = {}) {
   return {
@@ -28,6 +32,18 @@ function dataFor(entity, timepoints, hierarchyEdges = []) {
     collectiveInstanceEdges: [],
   };
 }
+
+test("统称实体即使被误建为层级端点也不进入机构树", () => {
+  const edges = [
+    { id: 30, parent: 1, child: 2 },
+    { id: 31, parent: 2, child: 3 },
+    { id: 32, parent: 3, child: 4 },
+  ];
+  assert.deepEqual(
+    hierarchyEdgesWithoutCollectives(edges, [2]),
+    [{ id: 32, parent: 3, child: 4 }],
+  );
+});
 
 test("罢废后的普通记载不会自动复活实体", () => {
   const entity = { id: 1, title: "朝集院", type: "机构" };
@@ -801,7 +817,7 @@ test("统称改名时旧实例同步退出而新实例按自身时间点进入",
   assert.equal(renamed.entityIds.has(4), true);
 });
 
-test("实例继承统称的历史上级记录，只由有真实层级边的统称代表显示", () => {
+test("实例不继承统称的层级边，按自身证据作为独立节点保留", () => {
   const data = {
     entities: [
       { id: 1, title: "军器监", type: "机构" },
@@ -818,13 +834,14 @@ test("实例继承统称的历史上级记录，只由有真实层级边的统�
     ],
     staffEdges: [],
     evolutionEdges: [],
+    collectiveEntityIds: [2],
     collectiveInstanceEdges: [
       { collective: 2, instance: 3, states: [{ subject_timepoint_id: 20, object_timepoint_id: 30 }] },
     ],
   };
-  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(3), false);
+  assert.equal(buildYearSnapshot(data, 1080).entityIds.has(3), true);
   const affiliated = buildYearSnapshot(data, 1082);
   assert.equal(affiliated.entityIds.has(2), true);
-  assert.equal(affiliated.entityIds.has(3), false);
-  assert.equal(affiliated.hierarchyEdges[0]?.child, 2);
+  assert.equal(affiliated.entityIds.has(3), true);
+  assert.equal(affiliated.hierarchyEdges.length, 0);
 });

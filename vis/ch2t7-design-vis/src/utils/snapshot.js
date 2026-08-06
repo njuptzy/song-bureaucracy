@@ -10,6 +10,15 @@ import {
 
 export { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
 
+export function hierarchyEdgesWithoutCollectives(edges, collectiveEntityIds = []) {
+  const collectiveIds = collectiveEntityIds instanceof Set
+    ? collectiveEntityIds
+    : new Set(collectiveEntityIds);
+  return (edges || []).filter((edge) => (
+    !collectiveIds.has(edge.parent) && !collectiveIds.has(edge.child)
+  ));
+}
+
 function effectiveYear(timepoint) {
   if (!SNAPSHOT_TIME_TYPES.has(timepoint?.time_type) || timepoint?.year_start == null) return null;
   // “元祐初/熙宁末”等 bounded 纪年只知道事件落在一个区间内；到上界年后
@@ -260,6 +269,11 @@ function evolutionTransitions(data, timepointById, memberships) {
 }
 
 export function buildYearSnapshot(data, year) {
+  const hierarchyEdgesForSnapshot = hierarchyEdgesWithoutCollectives(
+    data.hierarchyEdges,
+    data.collectiveEntityIds,
+  );
+  const snapshotData = { ...data, hierarchyEdges: hierarchyEdgesForSnapshot };
   const entityById = new Map((data.entities || []).map((entity) => [entity.id, entity]));
   const timepointById = new Map();
   const timepointsByEntity = new Map();
@@ -270,8 +284,8 @@ export function buildYearSnapshot(data, year) {
     timepointsByEntity.set(entityId, normalized);
     normalized.forEach((timepoint) => timepointById.set(timepoint.id, timepoint));
   }
-  const presenceEvidenceByEntity = relationPresenceEvidence(data, year, timepointById);
-  const hierarchyParentTimepointIds = hierarchyParentTimepoints(data, year, timepointById);
+  const presenceEvidenceByEntity = relationPresenceEvidence(snapshotData, year, timepointById);
+  const hierarchyParentTimepointIds = hierarchyParentTimepoints(snapshotData, year, timepointById);
   for (const [entityId, entity] of entityById) {
     const eligible = (timepointsByEntity.get(entityId) || [])
       .filter((timepoint) => isDated(timepoint) && effectiveYear(timepoint) <= year)
@@ -343,7 +357,7 @@ export function buildYearSnapshot(data, year) {
   }
   const entityIds = new Set(currentTimepointByEntity.keys());
   const latestHierarchyStates = selectRelationStates(
-    data.hierarchyEdges || [],
+    hierarchyEdgesForSnapshot,
     year,
     entityIds,
     timepointById,
@@ -354,7 +368,7 @@ export function buildYearSnapshot(data, year) {
     latestHierarchyStates.map((edge) => ({ parentId: edge.parent, childId: edge.child })),
     entityIds,
     expandHistoricalHierarchyChildIds(
-      new Set((data.hierarchyEdges || []).map((edge) => edge.child)),
+      new Set(hierarchyEdgesForSnapshot.map((edge) => edge.child)),
       memberships,
     ),
   );
@@ -363,7 +377,7 @@ export function buildYearSnapshot(data, year) {
     currentTimepointByEntity.delete(entityId);
   }
   const hierarchyEdges = selectRelationStates(
-    data.hierarchyEdges || [],
+    hierarchyEdgesForSnapshot,
     year,
     entityIds,
     timepointById,
