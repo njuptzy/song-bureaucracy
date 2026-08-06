@@ -549,6 +549,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self._send(200, get_payload(), "application/json; charset=utf-8")
             except Exception as exc:  # noqa: BLE001
+                import traceback
+                traceback.print_exc()
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
             return
         if path == "/api/version":

@@ -15,7 +15,15 @@ let versionTimer = null;
 
 async function fetchJson(url) {
   const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    // 服务端 500 会带 JSON 错误说明（如缺少分类证据的机构 ID），一并显示便于定位。
+    let detail = "";
+    try {
+      const body = await response.json();
+      if (body?.error) detail = `：${body.error}`;
+    } catch { /* 非 JSON 错误体 */ }
+    throw new Error(`HTTP ${response.status}${detail}`);
+  }
   return response.json();
 }
 
