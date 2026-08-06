@@ -11,7 +11,11 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
 import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
-import { anchorBranchToGroup, virtualBusRange } from "../utils/hierarchy_layout";
+import {
+  anchorBranchToGroup,
+  fitRangeShift,
+  virtualBusRange,
+} from "../utils/hierarchy_layout";
 import {
   clampCompositionScroll,
   compositionScrollAfterDrag,
@@ -998,9 +1002,10 @@ function renderDynamicHierarchy(svg) {
   let expandedBranchCenterX = expandedCentralGroupNode
     ? centralGroupRowX.get(expandedCentralGroupNode.data.id) ?? areaCenterX
     : areaCenterX;
+  let focusedBranchNode = null;
   if (expandedCentralGroupNode?.descendants().length > 1) {
     const branchNodes = expandedCentralGroupNode.descendants().slice(1);
-    const focusedBranchNode = branchNodes.find((node) => (
+    focusedBranchNode = branchNodes.find((node) => (
       node.data.id === expandedHierarchyPath[0]
     ));
     const minOffset = d3.min(
@@ -1105,6 +1110,33 @@ function renderDynamicHierarchy(svg) {
       ),
     }];
   }));
+
+  if (focusedBranchNode?.children?.length) {
+    const descendantLayouts = focusedBranchNode.descendants()
+      .slice(1)
+      .map((node) => nodeLayout.get(node));
+    const descendantLeft = d3.min(
+      descendantLayouts,
+      (layout) => layout.left ?? layout.x - (layout.width || 34) / 2
+    );
+    const descendantRight = d3.max(
+      descendantLayouts,
+      (layout) => layout.right ?? layout.x + (layout.width || 34) / 2
+    );
+    const descendantShift = fitRangeShift(
+      descendantLeft,
+      descendantRight,
+      area.left + 18,
+      area.right - 18
+    );
+    if (descendantShift) {
+      descendantLayouts.forEach((layout) => {
+        layout.x += descendantShift;
+        if (layout.left != null) layout.left += descendantShift;
+        if (layout.right != null) layout.right += descendantShift;
+      });
+    }
+  }
 
   const horizontalBounds = [...nodeLayout.values()].map((layout) => ({
     left: layout.left ?? layout.x - (layout.width || 34) / 2,
