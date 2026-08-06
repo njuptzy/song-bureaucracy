@@ -7,7 +7,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
 import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
@@ -40,7 +40,7 @@ const svgCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 let pendingDetailSectionKey = null;
-let hierarchyClickTimer = null;
+let lastHierarchyClick = null;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
@@ -1360,41 +1360,53 @@ function renderDynamicHierarchy(svg) {
           toggleVirtualNode(event);
           return;
         }
-        event.stopPropagation();
-        window.clearTimeout(hierarchyClickTimer);
-        hierarchyClickTimer = window.setTimeout(() => {
-          detailPanelScrollOffset = 0;
-          inlineCompositionScrollOffset = 0;
-          expandedDetailId.value = null;
-          inlineDetailOfficialId.value = null;
-          selectedId.value = node.data.id;
-          if (node.data.childCount) {
-            const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
-            if (expandedIndex >= 0) {
-              expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
-            } else {
-              expandedHierarchyPath = node.ancestors()
-                .reverse()
-                .filter((ancestor) => !ancestor.data.isVirtual)
-                .map((ancestor) => ancestor.data.id);
-            }
-          }
-          renderTemplate();
-        }, 220);
-      })
-      .on("dblclick.dynamic-tree-detail", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (node.data.isVirtual) return;
-        window.clearTimeout(hierarchyClickTimer);
+        const repeatedClick = lastHierarchyClick?.id === node.data.id
+          && event.timeStamp - lastHierarchyClick.timeStamp <= 360;
+        if (repeatedClick) {
+          expandedHierarchyPath = lastHierarchyClick.expandedHierarchyPath;
+          hierarchyPanX = lastHierarchyClick.panX;
+          hierarchyPanY = lastHierarchyClick.panY;
+          lastHierarchyClick = null;
+          detailPanelScrollOffset = 0;
+          selectedId.value = node.data.id;
+          inlineDetailField.value = "duty";
+          inlineCompositionScrollOffset = 0;
+          expandedDetailId.value = node.data.id;
+          inlineDetailOfficialId.value = null;
+          renderTemplate();
+          return;
+        }
+        lastHierarchyClick = {
+          id: node.data.id,
+          timeStamp: event.timeStamp,
+          expandedHierarchyPath: [...expandedHierarchyPath],
+          panX: hierarchyPanX,
+          panY: hierarchyPanY,
+        };
         detailPanelScrollOffset = 0;
-        selectedId.value = node.data.id;
-        inlineDetailField.value = "duty";
-        const closing = expandedDetailId.value === node.data.id;
         inlineCompositionScrollOffset = 0;
-        expandedDetailId.value = closing ? null : node.data.id;
+        expandedDetailId.value = null;
         inlineDetailOfficialId.value = null;
+        selectedId.value = node.data.id;
+        if (node.data.childCount) {
+          const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
+          if (expandedIndex >= 0) {
+            expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
+          } else {
+            expandedHierarchyPath = node.ancestors()
+              .reverse()
+              .filter((ancestor) => !ancestor.data.isVirtual)
+              .map((ancestor) => ancestor.data.id);
+          }
+        }
         renderTemplate();
+      })
+      .on("dblclick.dynamic-tree-detail", (event) => {
+        // 双击已由连续两次 click 跨 SVG 重绘识别；这里只阻止浏览器默认行为。
+        event.preventDefault();
+        event.stopPropagation();
       });
     if (node.data.isVirtual) {
       nodeSelection.on("keydown.dynamic-tree", (event) => {
@@ -2165,19 +2177,24 @@ function installDesignFonts() {
 }
 
 async function renderTemplate() {
-  loading.value = true;
-  error.value = "";
   const url = `/api/design/${viewMode.value}.svg`;
+  const needsLoad = !svgCache.has(url);
+  if (needsLoad) loading.value = true;
+  error.value = "";
   try {
-    if (!svgCache.has(url)) {
+    if (needsLoad) {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      svgCache.set(url, await response.text());
+      const source = await response.text();
+      const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
+      const parsedSvg = parsed.documentElement;
+      if (parsedSvg.localName !== "svg" || parsed.querySelector("parsererror")) {
+        throw new Error("原 SVG 无法解析");
+      }
+      svgCache.set(url, document.importNode(parsedSvg, true));
     }
-    svgMountRef.value.innerHTML = svgCache.get(url);
-    await nextTick();
-    const svg = svgMountRef.value.querySelector("svg");
-    if (!svg) throw new Error("原 SVG 中未找到画板");
+    const svg = svgCache.get(url).cloneNode(true);
+    svgMountRef.value.replaceChildren(svg);
     svg.removeAttribute("width");
     svg.removeAttribute("height");
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -2192,7 +2209,7 @@ async function renderTemplate() {
   } catch (reason) {
     error.value = `SVG 设计稿加载失败：${reason.message}`;
   } finally {
-    loading.value = false;
+    if (needsLoad) loading.value = false;
   }
 }
 
