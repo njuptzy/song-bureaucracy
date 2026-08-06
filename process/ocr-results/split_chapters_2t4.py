@@ -538,6 +538,12 @@ PROFILES = {
                 "page": "669",
                 "reason": "核对原书 p669，正式词头使用全角括号",
             },
+            {
+                "from": "管勾(主管)成都府玉局观",
+                "to": "管勾（主管）成都府玉局观",
+                "page": "675",
+                "reason": "核对原书 p675，正式词头使用全角括号",
+            },
         ],
         "joins": [
             {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
@@ -5642,6 +5648,12 @@ def main():
             "提举会灵观公事", "提举中太一宫兼集禧观公事",
             "提举在外宫观", "提举西京嵩山崇福宫",
             "提举凤翔府上清太平宫",
+            "提举杭州洞霄宫", "提举南京鸿庆宫", "提点宫观",
+            "提点万寿观公事", "提点佑神观公事", "管勾宫观",
+            "管勾祥源观公事", "管勾兖州仙源县景灵宫太极观公事",
+            "主管台州崇道观", "管勾(主管)成都府玉局观", "监岳庙",
+            "破格岳庙", "义官", "散官", "节度副使", "节度行军司马",
+            "防御副使", "团练副使", "州别驾", "州长史",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
@@ -5736,6 +5748,37 @@ def main():
             )
         else:
             assert central_palace_and_jubilee["text"].startswith("祠禄官名。")
+
+        jingling_taiji = next(
+            e for e in all_entries
+            if e["name"] == "管勾兖州仙源县景灵宫太极观公事"
+        )
+        bogus_external = [
+            (i, e, all_meta[i]) for i, e in enumerate(all_entries)
+            if e["name"] == "外祠"
+            and str(all_meta[i].get("page")) == "674"
+            and all_meta[i].get("status") == "not_in_catalog"
+        ]
+        if bogus_external:
+            assert len(bogus_external) == 1
+            bogus_i, bogus, bogus_meta = bogus_external[0]
+            assert jingling_taiji.get("_placeholder") is True
+            assert bogus["text"].startswith("官名。神宗熙宁三年五月")
+            jingling_taiji["text"] = (
+                "外祠" + bogus["text"]
+            ).translate(fullwidth_translation)
+            jingling_taiji.pop("_placeholder", None)
+            jingling_taiji.pop("__status__", None)
+            target_i = all_entries.index(jingling_taiji)
+            all_meta[target_i]["status"] = "ok"
+            all_meta[target_i]["body_page"] = "674"
+            del all_entries[bogus_i]
+            del all_meta[bogus_i]
+        else:
+            assert jingling_taiji.get("_placeholder") is not True
+            assert jingling_taiji["text"].startswith(
+                "外祠官名。神宗熙宁三年五月"
+            )
 
         # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
         legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
