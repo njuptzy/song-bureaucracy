@@ -5106,10 +5106,37 @@ def main():
             assert "朝议大夫阶（" in lesser_ministers["text"]
             assert "条）。" in lesser_ministers["text"]
 
+        # 原书 p622-624 把“文阶（朝官）名。北宋前期朝官本官阶。”排在
+        # 词头同行；MinerU 对若干独占 title 块漏掉了同行小字。按 PDF 原页
+        # 逐条补回，不以相邻条目的重复格式推断。
+        missing_inline_prefixes = {
+            "秘书监": "文阶朝官名。北宋前期朝官本官阶。",
+            "礼部侍郎": "文阶名。北宋前期朝官本官阶。",
+            "户部侍郎": "文阶名。北宋前期朝官本官阶。",
+            "吏部侍郎": "文阶名。北宋前期朝官本官阶。",
+            "户部尚书": "文阶名。北宋前期朝官本官阶。",
+            "兵部尚书": "文阶名。北宋前期朝官本官阶。",
+            "吏部尚书": "文阶名。北宋前期朝官本官阶。",
+        }
+        for title, prefix in missing_inline_prefixes.items():
+            entry = next(e for e in all_entries if e["name"] == title)
+            if not entry["text"].startswith(prefix):
+                entry["text"] = prefix + entry["text"]
+
+        vice_ministers = next(
+            e for e in all_entries if e["name"] == "尚书左丞、尚书右丞"
+        )
+        full_prefix = "文阶名。北宋前期朝官本官阶。"
+        if vice_ministers["text"].startswith("期朝官本官阶。"):
+            vice_ministers["text"] = full_prefix + vice_ministers["text"][len("期朝官本官阶。"):]
+        else:
+            assert vice_ministers["text"].startswith(full_prefix)
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
-              "给事中、礼部尚书正文重复词头，并恢复卫尉少卿、司农少卿条括号")
+              "给事中、礼部尚书正文重复词头，恢复卫尉少卿、司农少卿条括号；"
+              "据 p622-624 原页补回八条词头同行的文阶分类说明")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
