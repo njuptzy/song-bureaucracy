@@ -834,6 +834,15 @@ function renderDynamicHierarchy(svg) {
       return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
     })(root);
 
+  // D3 会按整棵不对称树分配横坐标。制度组加入后，展开最左或最右的组会让
+  // 当前分支被挤到视口边缘。分类总根固定在画布中心；有展开制度组时，以该组
+  // 作为下方机构树的横向原点，使详情书页和下级机构都围绕当前操作对象展开。
+  const areaCenterX = (area.left + area.right) / 2;
+  const expandedCentralGroupNode = selectedCategory.value === "中央机构"
+    ? root.children?.find((node) => node.data.id === expandedCentralGroupId)
+    : null;
+  const hierarchyOriginX = expandedCentralGroupNode?.x ?? root.x;
+
   const clipId = "dynamic-tree-viewport-clip";
   const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
   clipPath.id = clipId;
@@ -863,7 +872,9 @@ function renderDynamicHierarchy(svg) {
   svg.appendChild(viewport);
 
   const nodeLayout = new Map(root.descendants().map((node) => {
-    const x = (area.left + area.right) / 2 + node.x;
+    const x = node.depth === 0
+      ? areaCenterX
+      : areaCenterX + node.x - hierarchyOriginX;
     // 分类根占用原“皇帝”中心位置；虚拟制度组与真实机构逐层下移。
     const y = node.depth === 0 ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
