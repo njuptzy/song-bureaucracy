@@ -25,8 +25,9 @@ sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
 from normalize_times import normalize_time  # noqa: E402
 from institution_categories import (  # noqa: E402
-    classify_central_group,
+    INSTITUTION_GROUP_NAMES,
     classify_institution,
+    classify_institution_group,
     resolve_source_catalogs,
 )
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
@@ -374,7 +375,46 @@ def build_payload() -> dict:
             f"有 {len(unresolved_category_ids)} 个机构缺少分类证据，示例实体 ID: {sample}"
         )
 
+    institution_group_by_entity = {}
+    for entity in entities:
+        if entity["type"] != "机构":
+            continue
+        category = category_by_entity[entity["id"]][0]
+        institution_group_by_entity[entity["id"]] = classify_institution_group(
+            category,
+            entity["title"],
+            attr_categories_by_entity.get(entity["id"], ()),
+            source_catalogs_by_entity.get(entity["id"], ()),
+        )
+
+    # 分组同样只沿语义身份边继承；不沿历史上下级边传播，避免把虚拟分类
+    # 误当成真实隶属，也避免改隶时静默改变实体的长期分组。
+    changed = True
+    while changed:
+        changed = False
+        for source_id, target_id, relation_type in identity_edges:
+            source_group = institution_group_by_entity.get(source_id, (None, ""))[0]
+            target_group = institution_group_by_entity.get(target_id, (None, ""))[0]
+            source_category = category_by_entity.get(source_id, (None, ""))[0]
+            target_category = category_by_entity.get(target_id, (None, ""))[0]
+            if source_category != target_category:
+                continue
+            if source_group and target_id in institution_group_by_entity and not target_group:
+                institution_group_by_entity[target_id] = (
+                    source_group,
+                    f"沿{relation_type}继承分组自实体 #{source_id}",
+                )
+                changed = True
+            elif target_group and source_id in institution_group_by_entity and not source_group:
+                institution_group_by_entity[source_id] = (
+                    target_group,
+                    f"沿{relation_type}继承分组自实体 #{target_id}",
+                )
+                changed = True
+
     category_counts = {}
+    institution_group_counts = {}
+    institution_group_unresolved_ids = {}
     central_group_counts = {}
     central_group_unresolved_ids = []
     for entity in entities:
@@ -384,16 +424,19 @@ def build_payload() -> dict:
         entity["category"] = category
         entity["category_basis"] = category_basis
         category_counts[category] = category_counts.get(category, 0) + 1
+        institution_group, institution_group_basis = institution_group_by_entity[entity["id"]]
+        resolved_group = institution_group or f"其他{category}"
+        entity["institution_group"] = resolved_group
+        entity["institution_group_basis"] = institution_group_basis
+        category_groups = institution_group_counts.setdefault(category, {})
+        category_groups[resolved_group] = category_groups.get(resolved_group, 0) + 1
+        if not institution_group:
+            institution_group_unresolved_ids.setdefault(category, []).append(entity["id"])
         if category == "中央机构":
-            central_group, central_group_basis = classify_central_group(
-                entity["title"],
-                attr_categories_by_entity.get(entity["id"], ()),
-                source_catalogs_by_entity.get(entity["id"], ()),
-            )
-            entity["central_group"] = central_group or ""
-            entity["central_group_basis"] = central_group_basis
-            if central_group:
-                central_group_counts[central_group] = central_group_counts.get(central_group, 0) + 1
+            entity["central_group"] = institution_group or ""
+            entity["central_group_basis"] = institution_group_basis
+            if institution_group:
+                central_group_counts[institution_group] = central_group_counts.get(institution_group, 0) + 1
             else:
                 central_group_unresolved_ids.append(entity["id"])
 
@@ -424,6 +467,16 @@ def build_payload() -> dict:
             "categoryCounts": category_counts,
             "categoryUnresolved": len(unresolved_category_ids),
             "categoryUnresolvedIds": unresolved_category_ids,
+            "institutionGroupNames": {
+                category: list(groups)
+                for category, groups in INSTITUTION_GROUP_NAMES.items()
+            },
+            "institutionGroupCounts": institution_group_counts,
+            "institutionGroupUnresolved": {
+                category: len(ids)
+                for category, ids in institution_group_unresolved_ids.items()
+            },
+            "institutionGroupUnresolvedIds": institution_group_unresolved_ids,
             "centralGroupCounts": central_group_counts,
             "centralGroupUnresolved": len(central_group_unresolved_ids),
             "centralGroupUnresolvedIds": central_group_unresolved_ids,

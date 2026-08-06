@@ -3,6 +3,7 @@ import unittest
 from vis.backend.institution_categories import (
     classify_central_group,
     classify_institution,
+    classify_institution_group,
     resolve_source_catalogs,
 )
 
@@ -131,6 +132,39 @@ class InstitutionCategoriesTest(unittest.TestCase):
         )
         self.assertEqual(group, "寺监制度统称")
         self.assertIn("统称", basis)
+
+    def test_all_five_categories_have_stable_visual_groups(self):
+        cases = (
+            ("内廷机构", "皇城司", [], ["第七编/二、皇城司与横行五司门"], "宦官内侍与皇城侍奉"),
+            ("路级机构", "转运司", [], ["第九编/二、发运使、转运使门"], "转运发运"),
+            ("州县机构", "州学", [], ["第十编/四、州府学与书院门"], "州学与书院"),
+            ("军队机构", "御前诸军都统制司", [], ["第八编/五、御前诸军都统制司门"], "宣抚总领与御前诸军"),
+        )
+        for category, title, attrs, catalogs, expected in cases:
+            with self.subTest(category=category, title=title):
+                self.assertEqual(
+                    classify_institution_group(category, title, attrs, catalogs)[0],
+                    expected,
+                )
+
+    def test_group_classifier_does_not_invent_a_group_without_evidence(self):
+        group, basis = classify_institution_group("路级机构", "未详机构", ["路级机构"], [])
+        self.assertIsNone(group)
+        self.assertIn("缺少", basis)
+
+    def test_cross_chapter_entities_use_explicit_attributes_for_visual_grouping(self):
+        cases = (
+            ("内廷机构", "奉宸库", ["御前内庭宝库"], "御前供奉与宫廷库务"),
+            ("路级机构", "提举秦凤等路买马监牧司", ["路级机构", "马政机构"], "买马监牧"),
+            ("军队机构", "御营使司前军", ["军事编制机构"], "宣抚总领与御前诸军"),
+            ("军队机构", "堡", ["地方/军事设施"], "城关堡寨与地方防务"),
+        )
+        for category, title, attrs, expected in cases:
+            with self.subTest(title=title):
+                self.assertEqual(
+                    classify_institution_group(category, title, attrs, ["其他编目录"])[0],
+                    expected,
+                )
 
 
 if __name__ == "__main__":

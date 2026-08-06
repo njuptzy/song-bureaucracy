@@ -10,7 +10,12 @@
 import { computed, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
-import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
+import {
+  buildInstitutionGroupNodes,
+  CENTRAL_GROUP_NAMES,
+  entityInstitutionGroup,
+  institutionGroupId,
+} from "../utils/central_groups";
 import {
   anchorBranchToGroup,
   fitRangeShift,
@@ -45,7 +50,7 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
-let expandedCentralGroupId = null;
+let expandedInstitutionGroupId = null;
 let inlineCompositionScrollOffset = 0;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
@@ -72,8 +77,12 @@ const titleMap = new Map();
 for (const entity of props.data.entities) {
   if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
 }
-expandedCentralGroupId = centralGroupId(
-  titleMap.get("尚书省")?.central_group || "三省六部与馆阁"
+const institutionGroupNames = props.data.meta?.institutionGroupNames || {
+  中央机构: CENTRAL_GROUP_NAMES,
+};
+expandedInstitutionGroupId = institutionGroupId(
+  "中央机构",
+  entityInstitutionGroup(titleMap.get("尚书省"), "中央机构")
 );
 const currentSnapshot = computed(() => (
   timelineSelectionActive.value ? buildYearSnapshot(props.data, selectedRange.value[0]) : null
@@ -135,13 +144,20 @@ function selectLinkedEntity(entityId) {
   selectedId.value = target.id;
   if (target.type === "机构") {
     selectedCategory.value = entityCategory(target);
-    if (selectedCategory.value === "中央机构" && target.central_group) {
-      expandedCentralGroupId = centralGroupId(target.central_group);
-    }
+    expandedInstitutionGroupId = institutionGroupId(
+      selectedCategory.value,
+      entityInstitutionGroup(target, selectedCategory.value)
+    );
   } else {
     const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
     const org = affiliation ? entityMap.get(affiliation.org) : null;
-    if (org) selectedCategory.value = entityCategory(org);
+    if (org) {
+      selectedCategory.value = entityCategory(org);
+      expandedInstitutionGroupId = institutionGroupId(
+        selectedCategory.value,
+        entityInstitutionGroup(org, selectedCategory.value)
+      );
+    }
   }
   renderTemplate();
 }
@@ -516,16 +532,14 @@ function categoryForestData(category) {
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
   const visibleRoots = showRoots
-    ? (
-        category === "中央机构"
-          ? buildCentralGroupNodes({
-              rootIds: orderedRoots,
-              entityMap,
-              expandedGroupId: expandedCentralGroupId,
-              treeForRoot: (id) => hierarchyTreeData(id, 2),
-            })
-          : orderedRoots.map((id) => hierarchyTreeData(id, 1)).filter(Boolean)
-      )
+    ? buildInstitutionGroupNodes({
+        rootIds: orderedRoots,
+        entityMap,
+        category,
+        groupNames: institutionGroupNames[category] || [],
+        expandedGroupId: expandedInstitutionGroupId,
+        treeForRoot: (id) => hierarchyTreeData(id, 2),
+      })
     : [];
   return {
     id: virtualId,
@@ -978,43 +992,44 @@ function renderDynamicHierarchy(svg) {
   // 制度组是稳定导航层，必须完整铺在中央区域；下方机构树单独按当前组定位。
   // 不能直接用整棵不对称树的坐标，否则展开某组时会把其他制度组推出画布。
   const areaCenterX = (area.left + area.right) / 2;
-  const expandedCentralGroupNode = selectedCategory.value === "中央机构"
-    ? root.children?.find((node) => node.data.id === expandedCentralGroupId)
-    : null;
-  const centralGroupNodes = selectedCategory.value === "中央机构"
-    ? (root.children || []).filter((node) => node.data.isCentralGroup)
-    : [];
-  const centralGroupRowX = new Map();
-  if (centralGroupNodes.length) {
-    const groupGap = 22;
-    const rowWidth = centralGroupNodes.reduce(
-      (sum, node) => sum + virtualNodeWidth(node),
-      groupGap * (centralGroupNodes.length - 1)
-    );
+  const expandedInstitutionGroupNode = root.children?.find(
+    (node) => node.data.id === expandedInstitutionGroupId
+  );
+  const institutionGroupNodes = (root.children || []).filter(
+    (node) => node.data.isInstitutionGroup
+  );
+  const institutionGroupRowX = new Map();
+  if (institutionGroupNodes.length) {
+    const nodeWidths = institutionGroupNodes.map(virtualNodeWidth);
+    const availableGap = institutionGroupNodes.length > 1
+      ? ((area.right - area.left) - d3.sum(nodeWidths)) / (institutionGroupNodes.length - 1)
+      : 22;
+    const groupGap = Math.max(12, Math.min(22, availableGap));
+    const rowWidth = d3.sum(nodeWidths) + groupGap * (institutionGroupNodes.length - 1);
     let cursorX = areaCenterX - rowWidth / 2;
-    for (const node of centralGroupNodes) {
-      const width = virtualNodeWidth(node);
-      centralGroupRowX.set(node.data.id, cursorX + width / 2);
+    for (const [index, node] of institutionGroupNodes.entries()) {
+      const width = nodeWidths[index];
+      institutionGroupRowX.set(node.data.id, cursorX + width / 2);
       cursorX += width + groupGap;
     }
   }
 
-  let expandedBranchCenterX = expandedCentralGroupNode
-    ? centralGroupRowX.get(expandedCentralGroupNode.data.id) ?? areaCenterX
+  let expandedBranchCenterX = expandedInstitutionGroupNode
+    ? institutionGroupRowX.get(expandedInstitutionGroupNode.data.id) ?? areaCenterX
     : areaCenterX;
   let focusedBranchNode = null;
-  if (expandedCentralGroupNode?.descendants().length > 1) {
-    const branchNodes = expandedCentralGroupNode.descendants().slice(1);
+  if (expandedInstitutionGroupNode?.descendants().length > 1) {
+    const branchNodes = expandedInstitutionGroupNode.descendants().slice(1);
     focusedBranchNode = branchNodes.find((node) => (
       node.data.id === expandedHierarchyPath[0]
     ));
     const minOffset = d3.min(
       branchNodes,
-      (node) => node.x - expandedCentralGroupNode.x - nodeLeftExtent(node)
+      (node) => node.x - expandedInstitutionGroupNode.x - nodeLeftExtent(node)
     );
     const maxOffset = d3.max(
       branchNodes,
-      (node) => node.x - expandedCentralGroupNode.x + nodeRightExtent(node)
+      (node) => node.x - expandedInstitutionGroupNode.x + nodeRightExtent(node)
     );
     const branchWidth = maxOffset - minOffset;
     const viewportWidth = area.right - area.left;
@@ -1023,7 +1038,7 @@ function renderDynamicHierarchy(svg) {
       // 不能为了塞满画布把父节点漂到相邻制度组下面。
       expandedBranchCenterX = anchorBranchToGroup(
         expandedBranchCenterX,
-        expandedCentralGroupNode.x,
+        expandedInstitutionGroupNode.x,
         focusedBranchNode.x
       );
     } else {
@@ -1068,18 +1083,18 @@ function renderDynamicHierarchy(svg) {
     let x;
     if (node.depth === 0) {
       x = areaCenterX;
-    } else if (node.data.isCentralGroup) {
-      x = centralGroupRowX.get(node.data.id) ?? areaCenterX;
-    } else if (expandedCentralGroupNode && node.ancestors().includes(expandedCentralGroupNode)) {
-      x = expandedBranchCenterX + node.x - expandedCentralGroupNode.x;
+    } else if (node.data.isInstitutionGroup) {
+      x = institutionGroupRowX.get(node.data.id) ?? areaCenterX;
+    } else if (expandedInstitutionGroupNode && node.ancestors().includes(expandedInstitutionGroupNode)) {
+      x = expandedBranchCenterX + node.x - expandedInstitutionGroupNode.x;
     } else {
       x = areaCenterX + node.x - root.x;
     }
-    // 中央制度组是新增的一层导航，不能再完整占用旧树的一层高度。
+    // 制度组是新增的一层导航，不能再完整占用旧树的一层高度。
     // 一级机构贴近制度组，后续真实上下级仍沿用设计稿的层间距。
     const y = node.depth === 0
       ? 147.15
-      : selectedCategory.value === "中央机构" && node.depth >= 2
+      : node.depth >= 2
         ? 305 + (node.depth - 2) * depthGap
         : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
@@ -1248,7 +1263,7 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.classList.add("dynamic-tree-node");
     if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
     if (node.data.isVirtual) {
-      nodeGroup.dataset.virtualRole = node.data.isCentralGroup ? "central-group" : "category-root";
+      nodeGroup.dataset.virtualRole = node.data.isInstitutionGroup ? "institution-group" : "category-root";
       nodeGroup.setAttribute("role", "button");
       nodeGroup.setAttribute("tabindex", "0");
       nodeGroup.setAttribute("aria-label", `${node.data.title}，${node.data.childCount}项`);
@@ -1266,7 +1281,7 @@ function renderDynamicHierarchy(svg) {
       rootLabel.setAttribute("text-anchor", "middle");
       rootLabel.setAttribute("dominant-baseline", "central");
       setText(rootLabel, node.data.title);
-      if (node.data.isCentralGroup) rootRect.setAttribute("opacity", "0.82");
+      if (node.data.isInstitutionGroup) rootRect.setAttribute("opacity", "0.82");
       nodeGroup.append(rootRect, rootLabel);
       nodeGroup.setAttribute("transform", `translate(${layout.x} ${layout.y})`);
     } else {
@@ -1276,8 +1291,8 @@ function renderDynamicHierarchy(svg) {
     const hiddenCount = node.data.hiddenCount || 0;
     if (!node.data.isVirtual) setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
-    const isExpanded = node.data.isCentralGroup
-      ? expandedCentralGroupId === node.data.id
+    const isExpanded = node.data.isInstitutionGroup
+      ? expandedInstitutionGroupId === node.data.id
       : node.data.isVirtual
         ? !collapsedHierarchyIds.has(node.data.id)
       : expandedHierarchyPath.includes(node.data.id);
@@ -1341,8 +1356,8 @@ function renderDynamicHierarchy(svg) {
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (node.data.isCentralGroup) {
-        expandedCentralGroupId = expandedCentralGroupId === node.data.id ? null : node.data.id;
+      if (node.data.isInstitutionGroup) {
+        expandedInstitutionGroupId = expandedInstitutionGroupId === node.data.id ? null : node.data.id;
         expandedHierarchyPath = [];
       } else if (collapsedHierarchyIds.has(node.data.id)) {
         collapsedHierarchyIds.delete(node.data.id);
@@ -1962,8 +1977,8 @@ function bindTemplateControls(svg) {
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
-          expandedCentralGroupId = category === "中央机构" && focus?.central_group
-            ? centralGroupId(focus.central_group)
+          expandedInstitutionGroupId = focus
+            ? institutionGroupId(category, entityInstitutionGroup(focus, category))
             : null;
           renderTemplate();
         };

@@ -8,38 +8,54 @@ export const CENTRAL_GROUP_NAMES = [
   "寺监制度统称",
 ];
 
-export const OTHER_CENTRAL_GROUP = "其他中央机构";
-
-export function centralGroupId(group) {
-  return `central-group:${group}`;
+export function otherInstitutionGroup(category) {
+  return `其他${category}`;
 }
 
-export function groupCentralRootIds(rootIds, entityMap) {
+export function institutionGroupId(category, group) {
+  return `institution-group:${category}:${group}`;
+}
+
+export function entityInstitutionGroup(entity, category) {
+  return entity?.institution_group
+    || (category === "中央机构" ? entity?.central_group : "")
+    || otherInstitutionGroup(category);
+}
+
+export function groupInstitutionRootIds(rootIds, entityMap, category, groupNames = []) {
   const grouped = new Map();
   for (const entityId of rootIds) {
-    const group = entityMap.get(entityId)?.central_group || OTHER_CENTRAL_GROUP;
+    const group = entityInstitutionGroup(entityMap.get(entityId), category);
     if (!grouped.has(group)) grouped.set(group, []);
     grouped.get(group).push(entityId);
   }
-  const known = CENTRAL_GROUP_NAMES.filter((group) => grouped.has(group));
+  const known = groupNames.filter((group) => grouped.has(group));
   const extra = [...grouped.keys()]
-    .filter((group) => !CENTRAL_GROUP_NAMES.includes(group))
+    .filter((group) => !groupNames.includes(group))
     .sort((a, b) => a.localeCompare(b, "zh"));
   return [...known, ...extra].map((group) => ({ group, rootIds: grouped.get(group) }));
 }
 
-export function buildCentralGroupNodes({ rootIds, entityMap, expandedGroupId, treeForRoot }) {
-  return groupCentralRootIds(rootIds, entityMap).map(({ group, rootIds: groupedRootIds }) => {
-    const id = centralGroupId(group);
-    const expanded = id === expandedGroupId;
-    return {
-      id,
-      title: group,
-      childCount: groupedRootIds.length,
-      hiddenCount: expanded ? 0 : groupedRootIds.length,
-      isVirtual: true,
-      isCentralGroup: true,
-      children: expanded ? groupedRootIds.map(treeForRoot).filter(Boolean) : [],
-    };
-  });
+export function buildInstitutionGroupNodes({
+  rootIds,
+  entityMap,
+  category,
+  groupNames,
+  expandedGroupId,
+  treeForRoot,
+}) {
+  return groupInstitutionRootIds(rootIds, entityMap, category, groupNames)
+    .map(({ group, rootIds: groupedRootIds }) => {
+      const id = institutionGroupId(category, group);
+      const expanded = id === expandedGroupId;
+      return {
+        id,
+        title: group,
+        childCount: groupedRootIds.length,
+        hiddenCount: expanded ? 0 : groupedRootIds.length,
+        isVirtual: true,
+        isInstitutionGroup: true,
+        children: expanded ? groupedRootIds.map(treeForRoot).filter(Boolean) : [],
+      };
+    });
 }
