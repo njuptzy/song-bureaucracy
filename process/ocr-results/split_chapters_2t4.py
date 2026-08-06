@@ -5557,9 +5557,42 @@ def main():
             "西染院副使", "礼宾副使", "供备库副使", "东班诸司使、副使",
             "翰林使、副使", "尚食使、副使", "御厨使、副使",
             "军器库使、副使", "弓箭库使、副使", "衣库使、副使",
+            "东绫锦使、副使", "西绫锦使、副使", "东八作使、副使",
+            "西八作使、副使", "香药库使、副使", "牛羊使、副使",
+            "榷易使、副使", "毡毯使、副使", "鞍辔库使、副使",
+            "酒坊使、副使", "法酒库使、副使", "翰林医官使、副使",
+            "使臣", "大使臣", "内殿承制", "内殿崇班", "阁门祗候",
+            "小使臣", "东头供奉官", "西头供奉官",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
+
+        # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
+        legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
+        if "善造法面酒" in legal_wine["text"]:
+            legal_wine["text"] = legal_wine["text"].replace(
+                "善造法面酒", "善造法曲酒", 1
+            )
+        else:
+            assert "善造法曲酒" in legal_wine["text"]
+
+        senior_envoys = next(e for e in all_entries if e["name"] == "大使臣")
+        if "《朱诏令》卷163" in senior_envoys["text"]:
+            senior_envoys["text"] = senior_envoys["text"].replace(
+                "《朱诏令》卷163", "《宋诏令》卷163", 1
+            )
+        else:
+            assert "《宋诏令》卷163" in senior_envoys["text"]
+
+        western_supplying = next(
+            e for e in all_entries if e["name"] == "西头供奉官"
+        )
+        if "侍从称东头供奉宫" in western_supplying["text"]:
+            western_supplying["text"] = western_supplying["text"].replace(
+                "侍从称东头供奉宫", "侍从称东头供奉官", 1
+            )
+        else:
+            assert "侍从称东头供奉官" in western_supplying["text"]
 
         for title in ("诸司正使", "诸司副使"):
             entry = next(e for e in all_entries if e["name"] == title)
@@ -5595,7 +5628,8 @@ def main():
               "横行诸条中文标点，从横行别名字段拆回内客省使正文并校正词头；"
               "p642-643 将武功郎伪条续文并回诸司副使简称，将东班末的皇城使"
               "正文拆回目录占位并校正词头，恢复诸司使副各条中文标点；"
-              "p644-647 继续恢复六宅使至衣库使、副使各条中文标点")
+              "p644-650 继续恢复六宅使至西头供奉官各条中文标点，校正"
+              "法酒库使、大使臣、西头供奉官三处 OCR 错字")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
