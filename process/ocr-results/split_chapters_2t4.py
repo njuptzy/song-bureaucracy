@@ -5635,6 +5635,13 @@ def main():
             "枢密太尉", "功臣", "宪衔", "银酒监武", "试秩(试衔)",
             "试衔", "祠禄官", "外祠", "内祠", "宫观使",
             "玉清昭应宫使",
+            "景灵宫使", "祥源观使", "醴泉观使", "同醴泉观使",
+            "会灵观使", "万寿观使", "集禧观使", "中太乙宫使",
+            "佑神观使", "神霄玉清万寿宫使", "德寿宫使",
+            "宫观副使", "宫观判官", "宫观都监", "提举宫观",
+            "提举会灵观公事", "提举中太一宫兼集禧观公事",
+            "提举在外宫观", "提举西京嵩山崇福宫",
+            "提举凤翔府上清太平宫",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
@@ -5719,6 +5726,16 @@ def main():
             )
         else:
             assert repaired_source in inspection_libation["text"]
+
+        central_palace_and_jubilee = next(
+            e for e in all_entries if e["name"] == "提举中太一宫兼集禧观公事"
+        )
+        if central_palace_and_jubilee["text"].startswith("禄官名。"):
+            central_palace_and_jubilee["text"] = (
+                "祠" + central_palace_and_jubilee["text"]
+            )
+        else:
+            assert central_palace_and_jubilee["text"].startswith("祠禄官名。")
 
         # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
         legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
