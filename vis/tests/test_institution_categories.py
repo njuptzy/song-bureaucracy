@@ -133,6 +133,26 @@ class InstitutionCategoriesTest(unittest.TestCase):
         self.assertEqual(group, "寺监制度统称")
         self.assertIn("统称", basis)
 
+    def test_horse_service_bureau_is_not_absorbed_by_the_privy_council_catalog(self):
+        catalog = "宋代官制辞典/第三编 北宋前期中枢机构类/三、枢密院门"
+        for title in ("皮剥所", "行在皮剥所", "枢密院皮剥所", "剥马务"):
+            with self.subTest(title=title):
+                group, basis = classify_central_group(title, ["监当局"], [catalog])
+                self.assertEqual(group, "财赋农政与马政")
+                self.assertIn("马政", basis)
+
+    def test_third_chapter_sections_do_not_all_fall_into_the_policy_group(self):
+        cases = (
+            ("三司", "四、三司门", "财赋农政与马政"),
+            ("群牧司", "六、群牧司门", "财赋农政与马政"),
+            ("宣徽院", "五、宣徽院门", "礼仪宗室与宫廷事务"),
+            ("崇文院", "[附]殿阁学士与三馆秘阁门", "三省六部与馆阁"),
+        )
+        for title, section, expected in cases:
+            with self.subTest(title=title):
+                catalog = f"宋代官制辞典/第三编 北宋前期中枢机构类/{section}"
+                self.assertEqual(classify_central_group(title, ["官署名"], [catalog])[0], expected)
+
     def test_all_five_categories_have_stable_visual_groups(self):
         cases = (
             ("内廷机构", "皇城司", [], ["第七编/二、皇城司与横行五司门"], "宦官内侍与皇城侍奉"),

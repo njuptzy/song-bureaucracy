@@ -306,6 +306,7 @@ def classify_central_group(
     """Classify a central institution by the dictionary's institutional system."""
     catalogs = " ".join(item for item in source_catalogs if item)
     attrs = " ".join(item for item in attr_categories if item)
+    title_and_attrs = f"{title} {attrs}"
 
     formal_systems = {
         "礼仪宗室与宫廷事务": {"太常寺", "宗正寺", "光禄寺", "卫尉寺", "鸿胪寺"},
@@ -318,6 +319,11 @@ def classify_central_group(
         if title in titles:
             basis = "寺监制度统称" if group == "寺监制度统称" else "正式寺监制度归属"
             return group, basis
+
+    # 辞典分门是检索编排，不等于下属机构都具有门名机构的决策职能。
+    # 皮剥所一系虽列在枢密院门，原文仍明确其为马政监当局，并曾隶太仆寺、驾部。
+    if any(marker in title_and_attrs for marker in ("马政", "马务", "剥马", "皮剥所")):
+        return "财赋农政与马政", "实体名称或类别明确属于马政监当体系"
 
     if "第六编 司法、监察机构类" in catalogs or any(
         marker in attrs for marker in ("司法机构", "监察机构", "谏官机构")
@@ -367,8 +373,18 @@ def classify_central_group(
             ):
                 return "礼仪宗室与宫廷事务", "寺监总类中的礼仪宫廷职能"
 
-    if "第二编" in catalogs or "第三编" in catalogs:
+    if "第三编" in catalogs:
+        section_groups = {
+            "财赋农政与马政": ("四、三司门", "六、群牧司门"),
+            "礼仪宗室与宫廷事务": ("五、宣徽院门",),
+            "三省六部与馆阁": ("[附]殿阁学士与三馆秘阁门",),
+        }
+        for group, sections in section_groups.items():
+            if any(section in catalogs for section in sections):
+                return group, "辞典北宋前期中枢机构分门"
         return "宰辅与决策中枢", "辞典宰执或北宋前期中枢编目"
+    if "第二编" in catalogs:
+        return "宰辅与决策中枢", "辞典宰执编目"
     return None, "缺少中央制度分组证据"
 
 
