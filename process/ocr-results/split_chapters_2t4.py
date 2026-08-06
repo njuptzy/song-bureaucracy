@@ -467,6 +467,12 @@ PROFILES = {
         ],
         "catalog_renames": [
             {
+                "from": "技术官阶",
+                "to": "伎术官阶",
+                "page": "659",
+                "reason": "核对原书 p659，正式词头及节标题均作‘伎术官阶’，目录 OCR 误作‘技术官阶’",
+            },
+            {
                 "from": "下班祇应",
                 "to": "下班祗应",
                 "page": "656",
@@ -5640,6 +5646,65 @@ def main():
         else:
             assert "参刑部选" in advancing_righteous_deputy["text"]
 
+        waiting_inner_rank = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "祗候内品" and str(m.get("page")) == "658"
+        )
+        if "位次子祗候黄门内品" in waiting_inner_rank["text"]:
+            waiting_inner_rank["text"] = waiting_inner_rank["text"].replace(
+                "位次子祗候黄门内品", "位次于祗候黄门内品", 1
+            )
+        else:
+            assert "位次于祗候黄门内品" in waiting_inner_rank["text"]
+
+        inner_attendant = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "内常侍" and str(m.get("page")) == "659"
+        )
+        if "定为人内、内侍二省" in inner_attendant["text"]:
+            inner_attendant["text"] = inner_attendant["text"].replace(
+                "定为人内、内侍二省", "定为入内、内侍二省", 1
+            )
+        else:
+            assert "定为入内、内侍二省" in inner_attendant["text"]
+
+        inner_grade_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "内品" and str(m.get("page")) == "659"
+        )
+        technique_grade_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "伎术官阶" and str(m.get("page")) == "659"
+        )
+        inner_grade = all_entries[inner_grade_i]
+        technique_grade = all_entries[technique_grade_i]
+        technique_section_heading = "九、伎术官阶门"
+        technique_marker = "九、伎术官阶门伎术官阶 "
+        if technique_marker in inner_grade["text"]:
+            assert technique_grade.get("_placeholder") is True
+            inner_text, technique_text = inner_grade["text"].split(
+                technique_marker, 1
+            )
+            inner_grade["text"] = inner_text.rstrip()
+            technique_grade["text"] = technique_text.translate(
+                fullwidth_translation
+            )
+            technique_grade.pop("_placeholder", None)
+            technique_grade.pop("__status__", None)
+            all_meta[technique_grade_i]["status"] = "ok"
+            all_meta[technique_grade_i]["body_page"] = "659"
+        else:
+            assert technique_grade.get("_placeholder") is not True
+            assert technique_grade["text"].startswith("唐制")
+            assert "伎术官地位卑下" in technique_grade["text"]
+            assert inner_grade["text"].endswith(technique_section_heading)
+            inner_grade["text"] = inner_grade["text"].removesuffix(
+                technique_section_heading
+            ).rstrip()
+            technique_grade["text"] = technique_grade["text"].translate(
+                fullwidth_translation
+            )
+
         for title in ("诸司正使", "诸司副使"):
             entry = next(e for e in all_entries if e["name"] == title)
             for field_name, value in list(entry.items()):
@@ -5676,7 +5741,9 @@ def main():
               "正文拆回目录占位并校正词头，恢复诸司使副各条中文标点；"
               "p644-655 继续恢复六宅使至武德郎各条中文标点，校正"
               "法酒库使、大使臣、西头供奉官、右侍禁四处 OCR 错字；"
-              "p656 补回下班祗应完整词头并校正进义副尉‘刑部’字样")
+              "p656 补回下班祗应完整词头并校正进义副尉‘刑部’字样；"
+              "p658-660 校正祗候内品、内常侍 OCR 字样，并将粘在内品条末的"
+              "伎术官阶正文拆回正式词条")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
