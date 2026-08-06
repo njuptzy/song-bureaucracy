@@ -649,6 +649,24 @@ function renderInstitutionGroupCandidate(clickedId) {
   refreshTemplate();
 }
 
+function renderSubordinateGroupCandidate(clickedId) {
+  const candidateIds = [...expandedSubordinateGroupIds];
+  refreshTemplate();
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  const resolvedIds = institutionGroupsAfterLayout({
+    candidateIds,
+    clickedId,
+    spaceAware: spaceAwareExpansion.value,
+    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+  });
+  if (
+    resolvedIds.length === candidateIds.length
+    && resolvedIds.every((id, index) => id === candidateIds[index])
+  ) return;
+  expandedSubordinateGroupIds = resolvedIds;
+  refreshTemplate();
+}
+
 function categoryForestData(category) {
   const roots = hierarchyRootEntities(category).map((entity) => entity.id);
   const scoreCache = new Map();
@@ -1870,6 +1888,12 @@ function renderDynamicHierarchy(svg) {
           spaceAwareExpansion.value
         );
         if (!wasExpanded) lastExpandedSubordinateGroupId = node.data.id;
+        hierarchyPanX = 0;
+        hierarchyPanY = 0;
+        if (!wasExpanded) {
+          renderSubordinateGroupCandidate(node.data.id);
+          return;
+        }
       } else if (node.data.isInstitutionGroup) {
         const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
         expandedInstitutionGroupIds = toggleInstitutionGroupIds(

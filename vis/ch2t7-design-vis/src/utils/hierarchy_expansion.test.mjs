@@ -82,6 +82,17 @@ test("多个虚拟分类放不下时回退到新点击分类", () => {
   }), ["right"]);
 });
 
+test("三司多个分类在空间模式下排不进画布时只保留新点击分类", () => {
+  const accounting = "subordinate-group:406:勾院与帐籍审核";
+  const storage = "subordinate-group:406:库藏与粮料";
+  assert.deepEqual(institutionGroupsAfterLayout({
+    candidateIds: [accounting, storage],
+    clickedId: storage,
+    spaceAware: true,
+    layoutFits: false,
+  }), [storage]);
+});
+
 test("关闭空间模式后只保留最近展开的虚拟分类", () => {
   assert.deepEqual(collapseInstitutionGroups(["left", "right"], "right"), ["right"]);
 });
