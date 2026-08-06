@@ -20,6 +20,11 @@ import {
   institutionGroupId,
 } from "../utils/central_groups";
 import {
+  buildSubordinateGroupNodes,
+  subordinateGroupFor,
+  subordinateGroupId,
+} from "../utils/subordinate_groups";
+import {
   anchorBranchToGroup,
   fitRangeShift,
   horizontalRangesFit,
@@ -73,6 +78,7 @@ let hierarchyPanX = 0;
 let hierarchyPanY = 0;
 let expandedInstitutionGroupIds = [];
 let lastExpandedInstitutionGroupId = null;
+const expandedSubordinateGroupIds = new Set();
 let inlineCompositionScrollOffset = 0;
 let renderRevision = 0;
 let lastExpandedHierarchyId = null;
@@ -418,6 +424,12 @@ function focusHierarchyContext(entity, revealPath = false) {
   if (revealPath) {
     expandedHierarchyPath = context.path.slice(0, -1);
     lastExpandedHierarchyId = expandedHierarchyPath.at(-1) ?? null;
+    for (let index = 0; index < context.path.length - 1; index += 1) {
+      const parent = entityMap.get(context.path[index]);
+      const child = entityMap.get(context.path[index + 1]);
+      const group = subordinateGroupFor(parent?.title, child?.title);
+      if (group) expandedSubordinateGroupIds.add(subordinateGroupId(parent.id, group));
+    }
   }
   return context;
 }
@@ -552,13 +564,22 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
     .filter((id) => !nextVisiting.has(id))
     .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
   const shouldExpand = expandedHierarchyPath.includes(rootId);
+  const groupedChildren = shouldExpand
+    ? buildSubordinateGroupNodes({
+        parent: entity,
+        childIds: allChildren,
+        entityMap,
+        expandedGroupIds: expandedSubordinateGroupIds,
+        treeForChild: (id) => hierarchyTreeData(id, depth + 2, nextVisiting),
+      })
+    : null;
   const shownChildren = shouldExpand ? allChildren : [];
   return {
     id: rootId,
     title: entity.title,
     childCount: allChildren.length,
     hiddenCount: allChildren.length - shownChildren.length,
-    children: shownChildren
+    children: groupedChildren || shownChildren
       .map((id) => hierarchyTreeData(id, depth + 1, nextVisiting))
       .filter(Boolean),
   };
@@ -1641,7 +1662,11 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.setAttribute("tabindex", "0");
     if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
     if (node.data.isVirtual) {
-      nodeGroup.dataset.virtualRole = node.data.isInstitutionGroup ? "institution-group" : "category-root";
+      nodeGroup.dataset.virtualRole = node.data.isInstitutionGroup
+        ? "institution-group"
+        : node.data.isSubordinateGroup
+          ? "subordinate-group"
+          : "category-root";
       nodeGroup.setAttribute("aria-label", `${node.data.title}，${node.data.childCount}项`);
       const rootRect = emperorRect.cloneNode(true);
       rootRect.style.removeProperty("display");
@@ -1673,6 +1698,8 @@ function renderDynamicHierarchy(svg) {
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     const isExpanded = node.data.isInstitutionGroup
       ? expandedInstitutionGroupIds.includes(node.data.id)
+      : node.data.isSubordinateGroup
+        ? expandedSubordinateGroupIds.has(node.data.id)
       : node.data.isVirtual
         ? !collapsedHierarchyIds.has(node.data.id)
       : expandedHierarchyPath.includes(node.data.id);
@@ -1828,7 +1855,13 @@ function renderDynamicHierarchy(svg) {
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (node.data.isInstitutionGroup) {
+      if (node.data.isSubordinateGroup) {
+        if (expandedSubordinateGroupIds.has(node.data.id)) {
+          expandedSubordinateGroupIds.delete(node.data.id);
+        } else {
+          expandedSubordinateGroupIds.add(node.data.id);
+        }
+      } else if (node.data.isInstitutionGroup) {
         const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
         expandedInstitutionGroupIds = toggleInstitutionGroupIds(
           expandedInstitutionGroupIds,

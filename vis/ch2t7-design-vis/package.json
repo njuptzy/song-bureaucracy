@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test src/utils/snapshot.test.mjs src/utils/central_groups.test.mjs src/utils/composition_scroll.test.mjs src/utils/hierarchy_layout.test.mjs src/utils/hierarchy_navigation.test.mjs src/utils/hierarchy_expansion.test.mjs",
+    "test": "node --test src/utils/snapshot.test.mjs src/utils/central_groups.test.mjs src/utils/subordinate_groups.test.mjs src/utils/composition_scroll.test.mjs src/utils/hierarchy_layout.test.mjs src/utils/hierarchy_navigation.test.mjs src/utils/hierarchy_expansion.test.mjs",
     "preview": "vite preview",
     "live": "pnpm build && python3 server.py"
   },
