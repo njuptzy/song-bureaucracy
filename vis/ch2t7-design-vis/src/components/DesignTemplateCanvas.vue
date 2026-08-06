@@ -11,6 +11,11 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
 import { buildCentralGroupNodes, centralGroupId } from "../utils/central_groups";
+import {
+  clampCompositionScroll,
+  compositionScrollAfterDrag,
+  compositionSliderGeometry,
+} from "../utils/composition_scroll";
 
 const props = defineProps({ data: { type: Object, required: true } });
 
@@ -36,6 +41,7 @@ let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
 let expandedCentralGroupId = null;
+let inlineCompositionScrollOffset = 0;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -118,6 +124,7 @@ function selectLinkedEntity(entityId) {
   const target = entityMap.get(entityId);
   if (!target) return;
   detailPanelScrollOffset = 0;
+  inlineCompositionScrollOffset = 0;
   expandedDetailId.value = null;
   inlineDetailOfficialId.value = null;
   selectedId.value = target.id;
@@ -560,8 +567,8 @@ const INLINE_COMPOSITION = {
   barX: 794.72,
   panelY: 160.96,
   panelHeight: 126.85,
-  barY: 160.96,
-  barHeight: 126.85,
+  barY: 169.5,
+  barHeight: 110,
   barWidth: 32,
   barPitch: 40,
   titleFontSize: 13.2,
@@ -571,6 +578,7 @@ const INLINE_COMPOSITION = {
   pageWidth: 126,
   pageShift: 134,
   panelRightPadding: 12,
+  maxPanelWidth: 330,
   trackY: 284.6,
 };
 const INLINE_TITLE_POLYGON_BOUNDS = {
@@ -612,12 +620,40 @@ function inlineCompositionGeometry(entityId) {
       barX(selectedIndex) + INLINE_COMPOSITION.pageXOffset + INLINE_COMPOSITION.pageWidth
     );
   }
-  const panelRight = contentRight + INLINE_COMPOSITION.panelRightPadding;
+  const totalContentWidth = contentRight + INLINE_COMPOSITION.panelRightPadding
+    - INLINE_COMPOSITION.panelX;
+  const panelWidth = Math.min(totalContentWidth, INLINE_COMPOSITION.maxPanelWidth);
+  const panelRight = INLINE_COMPOSITION.panelX + panelWidth;
+  const maxScroll = Math.max(0, totalContentWidth - panelWidth);
+  inlineCompositionScrollOffset = clampCompositionScroll(
+    inlineCompositionScrollOffset,
+    maxScroll
+  );
+  if (selectedIndex >= 0 && maxScroll > 0) {
+    const selectedLeft = barX(selectedIndex) - INLINE_COMPOSITION.panelX;
+    const selectedRight = barX(selectedIndex)
+      + INLINE_COMPOSITION.pageXOffset
+      + INLINE_COMPOSITION.pageWidth
+      - INLINE_COMPOSITION.panelX;
+    if (selectedLeft < inlineCompositionScrollOffset) {
+      inlineCompositionScrollOffset = selectedLeft;
+    } else if (selectedRight > inlineCompositionScrollOffset + panelWidth) {
+      inlineCompositionScrollOffset = selectedRight - panelWidth;
+    }
+    inlineCompositionScrollOffset = clampCompositionScroll(
+      inlineCompositionScrollOffset,
+      maxScroll
+    );
+  }
   return {
     staff,
     selectedIndex,
     barX,
     panelRight,
+    panelWidth,
+    totalContentWidth,
+    maxScroll,
+    scrollOffset: inlineCompositionScrollOffset,
     left: INLINE_DETAIL_BOUNDS.left,
     right: panelRight - INLINE_COMPOSITION.spineX,
   };
@@ -676,18 +712,91 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   const panelProgress = [...card.children].find((element) => (
     element.tagName.toLowerCase() === "rect" && element.classList.contains("cls-37")
   ));
-  const panelWidth = geometry.panelRight - INLINE_COMPOSITION.panelX;
-  for (const [element, width] of [
-    [panelTrack, panelWidth],
-    [panelProgress, Math.min(panelWidth, Math.max(18, panelWidth * 0.62))],
-  ]) {
-    if (!element) continue;
-    element.removeAttribute("transform");
-    element.setAttribute("x", String(INLINE_COMPOSITION.panelX));
-    element.setAttribute("y", String(INLINE_COMPOSITION.trackY));
-    element.setAttribute("width", String(width));
-    element.setAttribute("height", "2.77");
+  const panelWidth = geometry.panelWidth;
+
+  const clipId = `inline-composition-clip-${entity.id}`;
+  const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+  clipPath.id = clipId;
+  clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+  const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  clipRect.setAttribute("x", String(INLINE_COMPOSITION.panelX));
+  clipRect.setAttribute("y", String(INLINE_COMPOSITION.panelY));
+  clipRect.setAttribute("width", String(panelWidth));
+  clipRect.setAttribute("height", String(INLINE_COMPOSITION.panelHeight));
+  clipPath.appendChild(clipRect);
+  svg.querySelector("defs")?.appendChild(clipPath);
+  const compositionViewport = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  compositionViewport.classList.add("inline-composition-scroll-viewport");
+  compositionViewport.setAttribute("clip-path", `url(#${clipId})`);
+  const compositionContent = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  compositionContent.classList.add("inline-composition-scroll-content");
+  compositionViewport.appendChild(compositionContent);
+
+  const slider = compositionSliderGeometry({
+    panelWidth,
+    totalContentWidth: geometry.totalContentWidth,
+    scrollOffset: geometry.scrollOffset,
+    maxScroll: geometry.maxScroll,
+  });
+  const sliderEnabled = slider.enabled;
+  const { thumbWidth, thumbTravel } = slider;
+  const updateCompositionScroll = (nextOffset) => {
+    inlineCompositionScrollOffset = clampCompositionScroll(nextOffset, geometry.maxScroll);
+    compositionContent.setAttribute(
+      "transform",
+      `translate(${-inlineCompositionScrollOffset} 0)`
+    );
+    if (panelProgress && sliderEnabled) {
+      const thumbX = INLINE_COMPOSITION.panelX
+        + compositionSliderGeometry({
+          panelWidth,
+          totalContentWidth: geometry.totalContentWidth,
+          scrollOffset: inlineCompositionScrollOffset,
+          maxScroll: geometry.maxScroll,
+        }).thumbOffset;
+      panelProgress.setAttribute("x", String(thumbX));
+    }
+  };
+
+  if (panelTrack) {
+    panelTrack.removeAttribute("transform");
+    panelTrack.setAttribute("x", String(INLINE_COMPOSITION.panelX));
+    panelTrack.setAttribute("y", String(INLINE_COMPOSITION.trackY));
+    panelTrack.setAttribute("width", String(panelWidth));
+    panelTrack.setAttribute("height", "2.77");
+    panelTrack.style.display = sliderEnabled ? "" : "none";
   }
+  if (panelProgress) {
+    panelProgress.removeAttribute("transform");
+    panelProgress.setAttribute("y", String(INLINE_COMPOSITION.trackY - 0.7));
+    panelProgress.setAttribute("width", String(thumbWidth));
+    panelProgress.setAttribute("height", "4.2");
+    panelProgress.setAttribute("rx", "2.1");
+    panelProgress.style.display = sliderEnabled ? "" : "none";
+    panelProgress.style.cursor = sliderEnabled ? "grab" : "default";
+  }
+  if (sliderEnabled && panelProgress) {
+    const sliderHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    sliderHitArea.classList.add("inline-composition-slider-hit-area");
+    sliderHitArea.setAttribute("x", String(INLINE_COMPOSITION.panelX));
+    sliderHitArea.setAttribute("y", String(INLINE_COMPOSITION.trackY - 5));
+    sliderHitArea.setAttribute("width", String(panelWidth));
+    sliderHitArea.setAttribute("height", "12");
+    sliderHitArea.setAttribute("fill", "transparent");
+    sliderHitArea.style.cursor = "ew-resize";
+    card.insertBefore(sliderHitArea, panelProgress);
+    d3.select(sliderHitArea).on("click.inline-composition-slider", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const [pointerX] = d3.pointer(event, card);
+      const desiredThumbOffset = Math.max(
+        0,
+        Math.min(thumbTravel, pointerX - INLINE_COMPOSITION.panelX - thumbWidth / 2)
+      );
+      updateCompositionScroll(desiredThumbOffset / Math.max(1, thumbTravel) * geometry.maxScroll);
+    });
+  }
+  updateCompositionScroll(geometry.scrollOffset);
 
   const selectedOfficial = geometry.selectedIndex >= 0
     ? entityMap.get(geometry.staff[geometry.selectedIndex].official)
@@ -719,7 +828,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       inlineDetailField.value = "duty";
       renderTemplate();
     });
-    card.appendChild(group);
+    compositionContent.appendChild(group);
   });
 
   if (selectedOfficial && pageTemplate && values) {
@@ -740,8 +849,41 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     descriptionTitle.textContent = `${selectedOfficial.title}：${values[inlineDetailField.value]}`;
     pageTemplate.appendChild(descriptionTitle);
-    card.appendChild(pageTemplate);
+    compositionContent.appendChild(pageTemplate);
   }
+
+  const scrollComposition = (event) => {
+    if (!sliderEnabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.deltaY;
+    updateCompositionScroll(inlineCompositionScrollOffset + delta);
+  };
+  compositionViewport.addEventListener("wheel", scrollComposition, { passive: false });
+  panelRect?.addEventListener("wheel", scrollComposition, { passive: false });
+  if (panelProgress && sliderEnabled) {
+    d3.select(panelProgress).call(
+      d3.drag()
+        .on("start", (event) => {
+          event.sourceEvent?.stopPropagation();
+          panelProgress.style.cursor = "grabbing";
+        })
+        .on("drag", (event) => {
+          updateCompositionScroll(compositionScrollAfterDrag({
+            currentOffset: inlineCompositionScrollOffset,
+            deltaX: event.dx,
+            maxScroll: geometry.maxScroll,
+            thumbTravel,
+          }));
+        })
+        .on("end", () => {
+          panelProgress.style.cursor = "grab";
+        })
+    );
+  }
+  card.appendChild(compositionViewport);
 
   const cardTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
   cardTitle.textContent = `${entity.title}：点击官职翻开详情书页，双击机构书脊收起`;
@@ -801,22 +943,30 @@ function renderDynamicHierarchy(svg) {
   const expandedComposition = expandedDetailId.value != null
     ? inlineCompositionGeometry(expandedDetailId.value)
     : null;
-  const detailHalfWidth = Math.max(
-    Math.abs(expandedComposition?.left ?? INLINE_DETAIL_BOUNDS.left),
-    Math.abs(expandedComposition?.right ?? 17)
-  );
   const virtualNodeWidth = (node) => Math.max(
     Number(emperorRect.getAttribute("width")),
     node.data.title.length * 17.14 + 24
   );
-  const nodeHalfWidth = (node) => {
+  const nodeLeftExtent = (node) => {
     if (node.data.isVirtual) return virtualNodeWidth(node) / 2;
-    return expandedDetailId.value === node.data.id ? detailHalfWidth : 17;
+    return expandedDetailId.value === node.data.id
+      ? Math.abs(expandedComposition?.left ?? INLINE_DETAIL_BOUNDS.left)
+      : 17;
+  };
+  const nodeRightExtent = (node) => {
+    if (node.data.isVirtual) return virtualNodeWidth(node) / 2;
+    return expandedDetailId.value === node.data.id
+      ? Math.max(17, expandedComposition?.right ?? 17)
+      : 17;
   };
   d3.tree()
     .nodeSize([52, depthGap])
     .separation((a, b) => {
-      const requiredDistance = nodeHalfWidth(a) + nodeHalfWidth(b) + (a.parent === b.parent ? 18 : 30);
+      // D3 在同层按“右节点 a、左节点 b”询问间距；详情只向右展开，
+      // 因此只把 b 的右宽度和 a 的左宽度计入，不能在左侧镜像留白。
+      const requiredDistance = nodeRightExtent(b)
+        + nodeLeftExtent(a)
+        + (a.parent === b.parent ? 18 : 30);
       return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
     })(root);
 
@@ -851,11 +1001,11 @@ function renderDynamicHierarchy(svg) {
     const branchNodes = expandedCentralGroupNode.descendants().slice(1);
     const minOffset = d3.min(
       branchNodes,
-      (node) => node.x - expandedCentralGroupNode.x - nodeHalfWidth(node)
+      (node) => node.x - expandedCentralGroupNode.x - nodeLeftExtent(node)
     );
     const maxOffset = d3.max(
       branchNodes,
-      (node) => node.x - expandedCentralGroupNode.x + nodeHalfWidth(node)
+      (node) => node.x - expandedCentralGroupNode.x + nodeRightExtent(node)
     );
     const branchWidth = maxOffset - minOffset;
     const viewportWidth = area.right - area.left;
@@ -906,8 +1056,13 @@ function renderDynamicHierarchy(svg) {
     } else {
       x = areaCenterX + node.x - root.x;
     }
-    // 分类根占用原“皇帝”中心位置；虚拟制度组与真实机构逐层下移。
-    const y = node.depth === 0 ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
+    // 中央制度组是新增的一层导航，不能再完整占用旧树的一层高度。
+    // 一级机构贴近制度组，后续真实上下级仍沿用设计稿的层间距。
+    const y = node.depth === 0
+      ? 147.15
+      : selectedCategory.value === "中央机构" && node.depth >= 2
+        ? 305 + (node.depth - 2) * depthGap
+        : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
       const width = virtualNodeWidth(node);
       const height = Number(emperorRect.getAttribute("height"));
@@ -1159,6 +1314,7 @@ function renderDynamicHierarchy(svg) {
         window.clearTimeout(hierarchyClickTimer);
         hierarchyClickTimer = window.setTimeout(() => {
           detailPanelScrollOffset = 0;
+          inlineCompositionScrollOffset = 0;
           expandedDetailId.value = null;
           inlineDetailOfficialId.value = null;
           selectedId.value = node.data.id;
@@ -1185,6 +1341,7 @@ function renderDynamicHierarchy(svg) {
         selectedId.value = node.data.id;
         inlineDetailField.value = "duty";
         const closing = expandedDetailId.value === node.data.id;
+        inlineCompositionScrollOffset = 0;
         expandedDetailId.value = closing ? null : node.data.id;
         inlineDetailOfficialId.value = null;
         renderTemplate();
