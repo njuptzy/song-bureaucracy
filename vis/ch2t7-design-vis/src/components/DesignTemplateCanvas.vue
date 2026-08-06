@@ -1756,12 +1756,9 @@ function renderDynamicHierarchy(svg) {
       && expandedDetailId.value !== node.data.id
       && polygonBounds
     ) {
-      const buttonSize = 20;
-      const buttonGap = 5;
-      const buttonX = layout.x > areaCenterX
-        ? polygonBounds.x - buttonSize - buttonGap
-        : polygonBounds.x + polygonBounds.width + buttonGap;
-      const buttonY = polygonBounds.y + 4;
+      const buttonSize = 11;
+      const buttonX = polygonBounds.x + polygonBounds.width - buttonSize - 3;
+      const buttonY = polygonBounds.y + 3;
       const detailButton = document.createElementNS("http://www.w3.org/2000/svg", "g");
       detailButton.classList.add("composition-detail-button");
       detailButton.setAttribute("transform", `translate(${buttonX} ${buttonY})`);
@@ -1771,10 +1768,10 @@ function renderDynamicHierarchy(svg) {
       detailButton.style.cursor = "pointer";
 
       const buttonHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      buttonHitArea.setAttribute("x", "-6");
-      buttonHitArea.setAttribute("y", "-6");
-      buttonHitArea.setAttribute("width", "32");
-      buttonHitArea.setAttribute("height", "32");
+      buttonHitArea.setAttribute("x", "-4");
+      buttonHitArea.setAttribute("y", "-4");
+      buttonHitArea.setAttribute("width", "19");
+      buttonHitArea.setAttribute("height", "19");
       buttonHitArea.setAttribute("fill", "transparent");
       buttonHitArea.setAttribute("pointer-events", "all");
 
@@ -1782,7 +1779,7 @@ function renderDynamicHierarchy(svg) {
       buttonSurface.classList.add("composition-detail-button-surface");
       buttonSurface.setAttribute("width", String(buttonSize));
       buttonSurface.setAttribute("height", String(buttonSize));
-      buttonSurface.setAttribute("rx", "2");
+      buttonSurface.setAttribute("rx", "1.5");
       buttonSurface.setAttribute("fill", "#f5f0e4");
       buttonSurface.setAttribute("stroke", "#563905");
       buttonSurface.setAttribute("stroke-width", "0.9");
@@ -1797,6 +1794,7 @@ function renderDynamicHierarchy(svg) {
       bookIcon.setAttribute("stroke-width", "1.15");
       bookIcon.setAttribute("stroke-linecap", "round");
       bookIcon.setAttribute("stroke-linejoin", "round");
+      bookIcon.setAttribute("transform", "scale(0.62)");
 
       const buttonTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
       buttonTitle.textContent = "展开编制关系";
