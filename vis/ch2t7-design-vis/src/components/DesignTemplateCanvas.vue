@@ -51,6 +51,8 @@ import {
   compositionScrollAfterDrag,
   compositionSliderGeometry,
 } from "../utils/composition_scroll";
+import { buildCompositionModel } from "../utils/composition_model";
+import { layoutComposition, COMPOSITION_GEOMETRY } from "../utils/composition_layout";
 
 const props = defineProps({ data: { type: Object, required: true } });
 
@@ -2037,39 +2039,156 @@ function populateHierarchyCenter(svg) {
   if (contextSlot) assignSlots([contextSlot], parentEdge ? [parentEdge.parent] : []);
 }
 
-function populateCompositionCenter(svg) {
-  const focus = graphFocusEntity();
-  const slots = [...svg.querySelectorAll("text")].filter((element) => {
+// —— 编制视图（画板 4-02）：数据 join + 模板盖章 ——
+// 设计稿中的示例机构列只作为样式来源（cls-17/18 边框、cls-28/38/50/31 文字类），
+// 首次进入编制视图时整批隐藏；实际内容由 composition_model（数据 join）
+// 和 composition_layout（坐标排版）两个纯函数生成，不再复用示例槽位。
+const compositionExampleCache = new WeakMap();
+
+function hideCompositionExamples(svg) {
+  if (compositionExampleCache.has(svg)) return;
+  [...svg.children].forEach((element) => {
+    if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return;
+    // getBBox 不含元素自身的 translate，文本类元素必须用 transform 里的参考点判断位置。
     const point = position(element);
-    const className = element.getAttribute("class");
-    return (
-      point &&
-      point.x > 500 &&
-      point.y > 140 &&
-      point.y < 850 &&
-      ["cls-28", "cls-38", "cls-50"].includes(className) &&
-      normalizeText(element).length <= 16
-    );
+    const rawX = element.getAttribute("x");
+    const rawY = element.getAttribute("y");
+    const attrX = rawX == null ? null : Number(rawX);
+    const attrY = rawY == null ? null : Number(rawY);
+    const bbox = elementBounds(element);
+    const x = point?.x ?? attrX ?? bbox?.x;
+    const y = point?.y ?? attrY ?? bbox?.y;
+    if (x == null || y == null) return;
+    if (x >= 480 && y >= 130 && x <= 1835 && y <= 885) {
+      element.style.display = "none";
+    }
   });
-  if (!focus) {
-    assignSlots(slots, []);
-    return;
+  compositionExampleCache.set(svg, true);
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgElement(tag, attrs = {}) {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, String(value));
+  return element;
+}
+
+// 竖排文字：首列落在 (x, y)，后续列向右 +pitch（CSS writing-mode: tb 负责竖排）。
+function stampVerticalText(parent, {
+  x, y, text, cls, charsPerCol, pitch, maxCols = 4, entityId = null,
+}) {
+  const element = svgElement("text", { class: cls, transform: `translate(${x} ${y})` });
+  const content = String(text || "");
+  const cols = [];
+  for (let offset = 0; offset < content.length && cols.length < maxCols; offset += charsPerCol) {
+    let column = content.slice(offset, offset + charsPerCol);
+    if (offset + charsPerCol < content.length && cols.length === maxCols - 1) {
+      column = `${column.slice(0, -1)}…`;
+    }
+    cols.push(column);
   }
-  const levels = hierarchyLevels(focus.id, 5);
-  const flattened = levels.flat();
-  const seen = new Set();
-  const unique = flattened.filter((id) => !seen.has(id) && seen.add(id));
-  const orderedSlots = [...slots].sort((a, b) => {
-    const pa = position(a);
-    const pb = position(b);
-    return pa.y - pb.y || pa.x - pb.x;
+  cols.forEach((column, index) => {
+    const tspan = svgElement("tspan", { x: String(index * pitch), y: "0" });
+    tspan.textContent = column;
+    element.appendChild(tspan);
   });
-  assignSlots(orderedSlots, unique);
+  if (entityId != null) element.dataset.entityId = String(entityId);
+  parent.appendChild(element);
+  return element;
+}
+
+function stampCompositionItem(layer, item, geometry) {
+  const { rect } = item;
+  if (item.kind === "column") {
+    layer.appendChild(svgElement("rect", {
+      class: "cls-18", x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+    }));
+  }
+  const group = svgElement("g", { class: `composition-item composition-${item.kind}` });
+  group.style.cursor = "pointer";
+  d3.select(group).on("click", (event) => {
+    event.stopPropagation();
+    selectLinkedEntity(item.id);
+  });
+  stampVerticalText(group, {
+    x: rect.x + geometry.titleXOffset,
+    y: rect.y + geometry.titleYOffset,
+    text: item.title,
+    cls: item.kind === "section" ? "cls-38" : "cls-50",
+    charsPerCol: item.titleCapacity,
+    pitch: (item.kind === "section" ? geometry.sectionTitleFontSize : geometry.columnTitleFontSize)
+      + geometry.titleColGap,
+    entityId: item.id,
+  });
+  if (item.staffText) {
+    stampVerticalText(group, {
+      x: item.staffMode === "below"
+        ? rect.x + geometry.titleXOffset
+        : rect.x + geometry.titleXOffset + item.titleWidth + geometry.staffTextPad,
+      y: item.staffMode === "below"
+        ? rect.y + item.staffYOffset
+        : rect.y + geometry.titleYOffset,
+      text: item.staffText,
+      cls: "cls-31",
+      charsPerCol: item.staffCharsPerCol,
+      pitch: geometry.staffColPitch,
+      maxCols: item.staffCols + 1,
+    });
+  }
+  layer.appendChild(group);
+}
+
+function renderDynamicComposition(svg) {
+  svg.querySelector(".dynamic-composition-layer")?.remove();
+  hideCompositionExamples(svg);
+  const layer = svgElement("g", { class: "dynamic-composition-layer" });
+  svg.appendChild(layer);
+  const focus = graphFocusEntity();
+  const model = focus && buildCompositionModel({
+    focusId: focus.id,
+    entityMap,
+    childrenFor,
+    staffFor,
+    titleOf,
+  });
+  const layout = model && layoutComposition(model, {
+    origin: { x: 505, y: 138 },
+    maxWidth: 1320,
+  });
+  if (!layout) return;
+  const { geometry } = layout;
+  // 内容超高时整体向顶部缩放，保持设计稿比例不变形。
+  const fit = Math.min(1, 745 / layout.block.height);
+  const content = fit < 1
+    ? svgElement("g", {
+      transform: `translate(${layout.origin.x} 0) scale(${fit}) translate(${-layout.origin.x} 0)`,
+    })
+    : layer;
+  if (content !== layer) layer.appendChild(content);
+
+  content.appendChild(svgElement("rect", {
+    class: "cls-17",
+    x: layout.block.x,
+    y: layout.block.y,
+    width: layout.block.width,
+    height: layout.block.height,
+  }));
+  stampVerticalText(content, {
+    x: layout.label.x,
+    y: layout.label.y,
+    text: layout.label.title,
+    cls: "cls-28",
+    charsPerCol: geometry.blockLabelCharsPerCol,
+    pitch: geometry.blockLabelFontSize + geometry.titleColGap,
+    entityId: layout.focus.id,
+  });
+  for (const item of layout.items) stampCompositionItem(content, item, geometry);
 }
 
 function populateCenter(svg) {
   if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
-  else populateCompositionCenter(svg);
+  else renderDynamicComposition(svg);
 }
 
 function bindEntityTexts(svg) {
@@ -2420,46 +2539,6 @@ function updateDetails(svg) {
       });
       if (quotaSlot) setText(quotaSlot, edge.staff_quota ? `（${edge.staff_quota}）` : "（未载）");
     });
-  }
-}
-
-function replaceCompositionDescriptions(svg) {
-  if (viewMode.value !== "composition") return;
-  const candidates = [...svg.querySelectorAll("text")].filter((element) => {
-    const point = position(element);
-    const text = normalizeText(element);
-    return point && point.x > 500 && point.y > 130 && point.y < 870 && text.length > 14 && /人|官额|吏额|郎中|侍郎/.test(text) && !titleMap.has(text);
-  });
-  if (!graphFocusEntity()) {
-    candidates.forEach((candidate) => {
-      candidate.style.opacity = "0";
-    });
-    return;
-  }
-  const institutionSlots = [...svg.querySelectorAll("text")].filter((element) => {
-    const point = position(element);
-    const entity = element.dataset.entityId
-      ? entityMap.get(Number(element.dataset.entityId))
-      : titleMap.get(normalizeText(element));
-    return point && point.x > 500 && point.y > 130 && point.y < 870 && entity?.type === "机构";
-  });
-  const used = new Set();
-  for (const candidate of candidates) {
-    const point = position(candidate);
-    const nearest = institutionSlots
-      .filter((slot) => !used.has(slot))
-      .map((slot) => {
-        const p = position(slot);
-        return { slot, distance: Math.abs(p.x - point.x) + Math.abs(p.y - point.y) * 0.35 };
-      })
-      .sort((a, b) => a.distance - b.distance)[0];
-    if (!nearest) continue;
-    used.add(nearest.slot);
-    const entity = nearest.slot.dataset.entityId
-      ? entityMap.get(Number(nearest.slot.dataset.entityId))
-      : titleMap.get(normalizeText(nearest.slot));
-    const staff = staffFor(entity.id);
-    setText(candidate, staff.length ? staff.slice(0, 10).map(quotaText).join("；") : "当前年份未载明确编制");
   }
 }
 
@@ -2905,7 +2984,6 @@ async function renderTemplate() {
     selectedEntity();
     populateCenter(svg);
     bindEntityTexts(svg);
-    replaceCompositionDescriptions(svg);
     bindTemplateControls(svg);
     bindTimelineRange(svg);
     setupDetailPanel(svg);
@@ -2934,11 +3012,10 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
 
   selectedEntity();
   populateCenter(svg);
-  // 编制画板会复用并改写原 SVG 槽位，槽位对应实体变化后必须同步重绑；
-  // 层级画板的动态节点则在 populateCenter 内自行绑定，可跳过整图扫描。
+  // 编制画板的动态机构列由 renderDynamicComposition 生成并自带 data-entity-id，
+  // 需要整图扫描绑定悬停与点击；层级画板的动态节点在 populateCenter 内自行绑定。
   if (rebindStatic || viewMode.value === "composition") {
     bindEntityTexts(svg);
-    replaceCompositionDescriptions(svg);
   }
   if (rebindControls) bindTemplateControls(svg);
   updateDetails(svg);

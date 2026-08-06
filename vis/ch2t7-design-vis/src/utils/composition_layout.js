@@ -1,7 +1,8 @@
 // 编制视图布局：把 composition_model.js 的模型映射成画板 4-02 的坐标。
 // 几何常量取自原设计稿（SVG viewBox 1920×1080）：
 //   列高 211.61，行距 2.29；列框 y 比大框顶部低 2.12；
-//   列宽 = 内边距 8.3 + 标题宽 + 编制文本列数 × 列距（7px 竖排小字）。
+//   列内左侧竖排机构名（cls-50 16px），右侧小号竖排编制文本（cls-31 7px）；
+//   分节是无边框窄条：竖排分节名（cls-38 24px）下方接着本节的编制文本。
 // 输出全部是数据坐标，渲染层只负责盖章和整体缩放适配。
 
 export const COMPOSITION_GEOMETRY = {
@@ -11,9 +12,10 @@ export const COMPOSITION_GEOMETRY = {
   blockPaddingY: 2.12,
   blockLabelWidth: 40, // cls-28（32px 竖排大标题）占位
   blockLabelFontSize: 32,
+  blockLabelCharsPerCol: 12,
   columnPaddingX: 8.3,
-  columnTitleWidth: 16, // cls-50（16px 竖排机构名）
-  sectionTitleWidth: 24, // cls-38（24px 竖排分节名）
+  columnTitleFontSize: 16, // cls-50 竖排机构名
+  sectionTitleFontSize: 24, // cls-38 竖排分节名
   sectionGap: 10, // 分节之间的额外间距
   staffFontSize: 7, // cls-31
   staffColPitch: 11,
@@ -21,60 +23,85 @@ export const COMPOSITION_GEOMETRY = {
   staffCharsPerCol: 28,
   titleXOffset: 5.4, // 标题文字相对列框左边的偏移
   titleYOffset: 5.0, // 标题文字相对列框顶部的偏移
+  titleColGap: 1, // 多列标题之间的额外间隙
 };
 
-export function staffTextCols(staffText, geometry = COMPOSITION_GEOMETRY) {
-  if (!staffText || staffText === "编制未载") return staffText ? 1 : 0;
-  return Math.max(1, Math.ceil(staffText.length / geometry.staffCharsPerCol));
+function titleMetrics(title, fontSize, geometry) {
+  const capacity = Math.max(4, Math.floor(
+    (geometry.columnHeight - geometry.titleYOffset * 2) / fontSize
+  ));
+  const cols = Math.max(1, Math.ceil(String(title).length / capacity));
+  return {
+    capacity,
+    cols,
+    width: cols * fontSize + (cols - 1) * geometry.titleColGap,
+    lines: Math.min(String(title).length, capacity),
+  };
 }
 
-function columnWidth(staffText, titleWidth, geometry) {
-  const cols = staffTextCols(staffText, geometry);
-  return geometry.columnPaddingX
-    + titleWidth
-    + (cols > 0 ? cols * geometry.staffColPitch + geometry.staffTextPad : 0);
+export function staffTextCols(staffText, geometry = COMPOSITION_GEOMETRY, charsPerCol = null) {
+  if (!staffText) return 0;
+  const perCol = charsPerCol ?? geometry.staffCharsPerCol;
+  return Math.max(1, Math.ceil(staffText.length / perCol));
 }
 
-function stripWidth(titleWidth, geometry) {
-  return geometry.columnPaddingX + titleWidth;
+function columnItem(column, geometry, fontSize) {
+  const title = titleMetrics(column.title, fontSize, geometry);
+  const staffCols = staffTextCols(column.staffText, geometry);
+  return {
+    ...column,
+    titleCols: title.cols,
+    titleCapacity: title.capacity,
+    titleWidth: title.width,
+    staffCols,
+    staffCharsPerCol: geometry.staffCharsPerCol,
+    staffMode: "side", // 编制文本排在标题右侧
+    width: geometry.columnPaddingX
+      + title.width
+      + (staffCols > 0 ? staffCols * geometry.staffColPitch + geometry.staffTextPad : 0),
+  };
+}
+
+function sectionItem(section, geometry) {
+  const title = titleMetrics(section.title, geometry.sectionTitleFontSize, geometry);
+  // 分节编制文本接在标题下方：标题占去的竖向空间先扣除。
+  const usedByTitle = title.lines * geometry.sectionTitleFontSize + geometry.staffTextPad;
+  const underChars = Math.max(6, Math.floor(
+    (geometry.columnHeight - geometry.titleYOffset * 2 - usedByTitle) / geometry.staffFontSize
+  ));
+  const staffCols = staffTextCols(section.staffText, geometry, underChars);
+  return {
+    kind: "section",
+    id: section.id,
+    title: section.title,
+    staff: section.staff,
+    staffText: section.staffText,
+    titleCols: title.cols,
+    titleCapacity: title.capacity,
+    titleWidth: title.width,
+    staffCols,
+    staffCharsPerCol: underChars,
+    staffMode: "below", // 编制文本接在标题正下方，溢出列向右排
+    staffYOffset: geometry.titleYOffset + usedByTitle,
+    width: geometry.columnPaddingX
+      + title.width
+      + (staffCols > 1 ? (staffCols - 1) * geometry.staffColPitch + geometry.staffTextPad : 0),
+  };
 }
 
 // 把 selfColumn / looseColumns / sections 展平成带宽度的排版项序列
 function layoutItems(model, geometry) {
   const items = [];
   if (model.selfColumn) {
-    items.push({
-      kind: "column",
-      ...model.selfColumn,
-      titleWidth: geometry.columnTitleWidth,
-      width: columnWidth(model.selfColumn.staffText, geometry.columnTitleWidth, geometry),
-    });
+    items.push({ kind: "column", ...columnItem(model.selfColumn, geometry, geometry.columnTitleFontSize) });
   }
   for (const column of model.looseColumns) {
-    items.push({
-      kind: "column",
-      ...column,
-      titleWidth: geometry.columnTitleWidth,
-      width: columnWidth(column.staffText, geometry.columnTitleWidth, geometry),
-    });
+    items.push({ kind: "column", ...columnItem(column, geometry, geometry.columnTitleFontSize) });
   }
   for (const section of model.sections) {
-    items.push({
-      kind: "section",
-      id: section.id,
-      title: section.title,
-      staff: section.staff,
-      staffText: section.staffText,
-      titleWidth: geometry.sectionTitleWidth,
-      width: columnWidth(section.staffText, geometry.sectionTitleWidth, geometry),
-    });
+    items.push(sectionItem(section, geometry));
     for (const column of section.columns) {
-      items.push({
-        kind: "column",
-        ...column,
-        titleWidth: geometry.columnTitleWidth,
-        width: columnWidth(column.staffText, geometry.columnTitleWidth, geometry),
-      });
+      items.push({ kind: "column", ...columnItem(column, geometry, geometry.columnTitleFontSize) });
     }
     items.push({ kind: "sectionEnd", id: `section-end:${section.id}`, width: geometry.sectionGap });
   }
@@ -128,8 +155,9 @@ export function layoutComposition(model, {
   return {
     origin,
     geometry,
+    focus: model.focus,
     label: {
-      x: origin.x + geometry.blockPaddingX + geometry.blockLabelWidth / 2,
+      x: origin.x + geometry.blockPaddingX + geometry.titleXOffset,
       y: rowY0 + geometry.titleYOffset,
       title: model.focus.title,
     },
