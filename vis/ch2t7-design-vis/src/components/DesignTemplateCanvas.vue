@@ -810,14 +810,52 @@ function renderDynamicHierarchy(svg) {
       return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
     })(root);
 
-  // D3 会按整棵不对称树分配横坐标。制度组加入后，展开最左或最右的组会让
-  // 当前分支被挤到视口边缘。分类总根固定在画布中心；有展开制度组时，以该组
-  // 作为下方机构树的横向原点，使详情书页和下级机构都围绕当前操作对象展开。
+  // 制度组是稳定导航层，必须完整铺在中央区域；下方机构树单独按当前组定位。
+  // 不能直接用整棵不对称树的坐标，否则展开某组时会把其他制度组推出画布。
   const areaCenterX = (area.left + area.right) / 2;
   const expandedCentralGroupNode = selectedCategory.value === "中央机构"
     ? root.children?.find((node) => node.data.id === expandedCentralGroupId)
     : null;
-  const hierarchyOriginX = expandedCentralGroupNode?.x ?? root.x;
+  const centralGroupNodes = selectedCategory.value === "中央机构"
+    ? (root.children || []).filter((node) => node.data.isCentralGroup)
+    : [];
+  const centralGroupRowX = new Map();
+  if (centralGroupNodes.length) {
+    const groupGap = 22;
+    const rowWidth = centralGroupNodes.reduce(
+      (sum, node) => sum + virtualNodeWidth(node),
+      groupGap * (centralGroupNodes.length - 1)
+    );
+    let cursorX = areaCenterX - rowWidth / 2;
+    for (const node of centralGroupNodes) {
+      const width = virtualNodeWidth(node);
+      centralGroupRowX.set(node.data.id, cursorX + width / 2);
+      cursorX += width + groupGap;
+    }
+  }
+
+  let expandedBranchCenterX = expandedCentralGroupNode
+    ? centralGroupRowX.get(expandedCentralGroupNode.data.id) ?? areaCenterX
+    : areaCenterX;
+  if (expandedCentralGroupNode?.descendants().length > 1) {
+    const branchNodes = expandedCentralGroupNode.descendants().slice(1);
+    const minOffset = d3.min(
+      branchNodes,
+      (node) => node.x - expandedCentralGroupNode.x - nodeHalfWidth(node)
+    );
+    const maxOffset = d3.max(
+      branchNodes,
+      (node) => node.x - expandedCentralGroupNode.x + nodeHalfWidth(node)
+    );
+    const branchWidth = maxOffset - minOffset;
+    const viewportWidth = area.right - area.left;
+    expandedBranchCenterX = branchWidth <= viewportWidth
+      ? Math.max(
+          area.left - minOffset,
+          Math.min(area.right - maxOffset, expandedBranchCenterX)
+        )
+      : areaCenterX - (minOffset + maxOffset) / 2;
+  }
 
   const clipId = "dynamic-tree-viewport-clip";
   const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
@@ -848,9 +886,16 @@ function renderDynamicHierarchy(svg) {
   svg.appendChild(viewport);
 
   const nodeLayout = new Map(root.descendants().map((node) => {
-    const x = node.depth === 0
-      ? areaCenterX
-      : areaCenterX + node.x - hierarchyOriginX;
+    let x;
+    if (node.depth === 0) {
+      x = areaCenterX;
+    } else if (node.data.isCentralGroup) {
+      x = centralGroupRowX.get(node.data.id) ?? areaCenterX;
+    } else if (expandedCentralGroupNode && node.ancestors().includes(expandedCentralGroupNode)) {
+      x = expandedBranchCenterX + node.x - expandedCentralGroupNode.x;
+    } else {
+      x = areaCenterX + node.x - root.x;
+    }
     // 分类根占用原“皇帝”中心位置；虚拟制度组与真实机构逐层下移。
     const y = node.depth === 0 ? 147.15 : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
