@@ -421,6 +421,13 @@ PROFILES = {
                 "reason": "目录 OCR 漏掉翊麾副尉；原书 p620 正文将其作为"
                           "独立完整条目排在翊麾校尉之后",
             },
+            {
+                "after": "骑都尉",
+                "page": "666",
+                "names": ["骁骑尉"],
+                "reason": "目录 OCR 漏掉骁骑尉；原书 p666 将其作为独立完整"
+                          "条目排在骑都尉之后，正文 OCR 又把整条粘入骑都尉条末",
+            },
         ],
         "explicit_title_heads": [
             {
@@ -5610,7 +5617,12 @@ def main():
             "嗣王", "郡王", "国公", "郡公", "开国公", "开国郡公",
             "开国县公", "开国侯", "开国伯", "开国子", "开国男",
             "食邑", "食实封", "勋", "上柱国", "柱国", "上护军",
-            "护军", "上轻车都尉", "轻车都尉",
+            "护军", "上轻车都尉", "轻车都尉", "上骑都尉", "骑都尉",
+            "骁骑尉", "飞骑尉", "云骑尉", "武骑尉",
+            "检校官", "检校太师", "检校太尉", "检校太傅", "检校太保",
+            "检校司徒", "检校司空", "检校少师", "检校少傅",
+            "检校少保", "检校尚书左仆射", "检校尚书右仆射",
+            "检校吏部尚书", "检校兵部尚书",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
@@ -5630,6 +5642,54 @@ def main():
             )
         else:
             assert complete_merit_source in merit["text"]
+
+        cavalry = next(e for e in all_entries if e["name"] == "骑都尉")
+        swift_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "骁骑尉" and str(m.get("page")) == "666"
+        )
+        swift = all_entries[swift_i]
+        swift_marker = "骁骑尉 勋级名。"
+        if swift_marker in cavalry["text"]:
+            assert swift.get("_placeholder") is True
+            cavalry_text, swift_text = cavalry["text"].split(swift_marker, 1)
+            cavalry["text"] = cavalry_text.rstrip()
+            swift["text"] = "勋级名。" + swift_text.strip()
+            swift.pop("_placeholder", None)
+            swift.pop("__status__", None)
+            all_meta[swift_i]["status"] = "ok"
+            all_meta[swift_i]["body_page"] = "666"
+        else:
+            assert swift.get("_placeholder") is not True
+            assert swift["text"].startswith("勋级名。隋文帝开皇三年始置")
+            assert cavalry["text"].endswith("并参“勋”条。") is False
+            assert "骁骑尉 勋级名" not in cavalry["text"]
+
+        # 目录 OCR 把“武骑尉”误作“骆骑尉”并提前匹配到了骑都尉之后；
+        # 原书 p666 的正式次序按勋级第四至第一转依次为骁、飞、云、武。
+        merit_tail = []
+        for title in ("骁骑尉", "飞骑尉", "云骑尉", "武骑尉"):
+            matches = [
+                (i, e, all_meta[i]) for i, e in enumerate(all_entries)
+                if e["name"] == title and str(all_meta[i].get("page")) == "666"
+            ]
+            assert len(matches) == 1, (title, matches)
+            merit_tail.append(matches[0])
+        for i, _, _ in sorted(merit_tail, reverse=True):
+            del all_entries[i]
+            del all_meta[i]
+        cavalry_i = all_entries.index(cavalry)
+        for offset, (_, entry, meta) in enumerate(merit_tail, start=1):
+            all_entries.insert(cavalry_i + offset, entry)
+            all_meta.insert(cavalry_i + offset, meta)
+
+        inspection = next(e for e in all_entries if e["name"] == "检校官")
+        if "太保、司徙、司空" in inspection["text"]:
+            inspection["text"] = inspection["text"].replace(
+                "太保、司徙、司空", "太保、司徒、司空", 1
+            )
+        else:
+            assert "太保、司徒、司空" in inspection["text"]
 
         # 原书 p648-650 的三处字形清晰，修复 MinerU 误识。
         legal_wine = next(e for e in all_entries if e["name"] == "法酒库使、副使")
@@ -5776,7 +5836,8 @@ def main():
               "伎术官阶正文拆回正式词条；p660-661 恢复医官二十二阶至"
               "翰林医学各条中文标点；p661-662 恢复翰林祗候及天文官"
               "十六阶各条中文标点；p663-666 恢复嗣王至轻车都尉各条"
-              "中文标点，并补回勋条跨页出处尾注")
+              "中文标点，补回勋条跨页出处尾注，并将粘在骑都尉条末的"
+              "骁骑尉正文拆回正式词条，并校正检校官条‘司徒’字样")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):

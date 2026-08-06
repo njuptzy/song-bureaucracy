@@ -59,7 +59,15 @@ def build_dictionary(base: Path, source_11t12: Path, output: Path) -> None:
         source.close()
 
 
-def validate_dictionary(path: Path) -> None:
+def table_count(path: Path, table: str) -> int:
+    connection = ro_connect(path)
+    try:
+        return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    finally:
+        connection.close()
+
+
+def validate_dictionary(path: Path, expected_total: int, expected_11t12: int) -> None:
     connection = sqlite3.connect(path)
     try:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -69,7 +77,9 @@ def validate_dictionary(path: Path) -> None:
         source_11t12 = connection.execute(
             "SELECT COUNT(*) FROM DictionarySources WHERE source_group='11t12'"
         ).fetchone()[0]
-        assert (count, mappings, source_11t12) == (5252, 5252, 605), (
+        assert (count, mappings, source_11t12) == (
+            expected_total, expected_total, expected_11t12,
+        ), (
             count,
             mappings,
             source_11t12,
@@ -110,19 +120,27 @@ def main() -> None:
     for source_file in (args.dictionary_base, args.dictionary_11t12, args.result_base):
         if not source_file.is_file():
             raise FileNotFoundError(source_file)
+    base_count = table_count(args.dictionary_base, "chapter1t10")
+    source_11t12_count = table_count(args.dictionary_11t12, "chapter11t12")
+    expected_dictionary_count = base_count + source_11t12_count
     temp_dir = Path(tempfile.mkdtemp(prefix="song-bureaucracy-ch1t12-"))
     temp_dictionary = temp_dir / "dictionary.db"
     temp_result = temp_dir / "result.db"
     try:
         build_dictionary(args.dictionary_base, args.dictionary_11t12, temp_dictionary)
         copy_database(args.result_base, temp_result)
-        validate_dictionary(temp_dictionary)
+        validate_dictionary(
+            temp_dictionary, expected_dictionary_count, source_11t12_count
+        )
         validate_result(temp_result)
         replace(temp_dictionary, args.dictionary_output, args.overwrite)
         replace(temp_result, args.result_output, args.overwrite)
         print(f"dictionary={args.dictionary_output}")
         print(f"result={args.result_output}")
-        print("dictionary_rows=5252 source_11t12=605")
+        print(
+            f"dictionary_rows={expected_dictionary_count} "
+            f"source_11t12={source_11t12_count}"
+        )
     finally:
         temp_dictionary.unlink(missing_ok=True)
         temp_result.unlink(missing_ok=True)
