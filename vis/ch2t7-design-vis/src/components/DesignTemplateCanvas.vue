@@ -32,7 +32,6 @@ import {
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
-  isRepeatedHierarchyPointer,
   mergeExpansionPaths,
   removeExpandedSubtree,
   toggleInstitutionGroupIds,
@@ -68,8 +67,6 @@ const yearSnapshotCache = new Map();
 const detailPanelOffset = { x: 0, y: 0 };
 let detailPanelScrollOffset = 0;
 let pendingDetailSectionKey = null;
-let lastHierarchyPointer = null;
-let suppressedHierarchyClick = null;
 const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
@@ -182,8 +179,6 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
 function selectLinkedEntity(entityId) {
   const target = entityMap.get(entityId);
   if (!target) return;
-  lastHierarchyPointer = null;
-  suppressedHierarchyClick = null;
   detailPanelScrollOffset = 0;
   inlineCompositionScrollOffset = 0;
   expandedDetailId.value = null;
@@ -1033,14 +1028,14 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   card.appendChild(compositionViewport);
 
   const cardTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-  cardTitle.textContent = `${entity.title}：点击官职翻开详情书页，双击机构书脊收起`;
+  cardTitle.textContent = `${entity.title}：点击官职翻开详情书页，点击机构书脊收起`;
   card.appendChild(cardTitle);
   d3.select(card)
     .on("click.inline-detail", (event) => event.stopPropagation())
     .on("dblclick.inline-detail", (event) => event.stopPropagation());
   if (titleLabel?.parentElement) {
     titleLabel.parentElement.style.cursor = "zoom-out";
-    d3.select(titleLabel.parentElement).on("dblclick.inline-detail-close", (event) => {
+    d3.select(titleLabel.parentElement).on("click.inline-detail-close", (event) => {
       event.preventDefault();
       event.stopPropagation();
       expandedDetailId.value = null;
@@ -1745,7 +1740,7 @@ function renderDynamicHierarchy(svg) {
     const interactionHint = node.data.childCount
       ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
       : "";
-    const detailHint = node.data.isVirtual ? "" : "；双击展开机构详情";
+    const detailHint = node.data.isVirtual ? "" : "；选中后点击开书按钮展开编制关系";
     title.textContent = hiddenCount
       ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
       : `${node.data.title}${interactionHint}${detailHint}`;
@@ -1754,11 +1749,88 @@ function renderDynamicHierarchy(svg) {
 
     nodeGroup.style.cursor = "pointer";
     if (!node.data.isVirtual && expandedDetailId.value === node.data.id) expandedDetailNode = node;
+
+    if (
+      !node.data.isVirtual
+      && node.data.id === selectedId.value
+      && expandedDetailId.value !== node.data.id
+      && polygonBounds
+    ) {
+      const buttonSize = 20;
+      const buttonGap = 5;
+      const buttonX = layout.x > areaCenterX
+        ? polygonBounds.x - buttonSize - buttonGap
+        : polygonBounds.x + polygonBounds.width + buttonGap;
+      const buttonY = polygonBounds.y + 4;
+      const detailButton = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      detailButton.classList.add("composition-detail-button");
+      detailButton.setAttribute("transform", `translate(${buttonX} ${buttonY})`);
+      detailButton.setAttribute("role", "button");
+      detailButton.setAttribute("tabindex", "0");
+      detailButton.setAttribute("aria-label", `展开${node.data.title}的编制关系`);
+      detailButton.style.cursor = "pointer";
+
+      const buttonHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      buttonHitArea.setAttribute("x", "-6");
+      buttonHitArea.setAttribute("y", "-6");
+      buttonHitArea.setAttribute("width", "32");
+      buttonHitArea.setAttribute("height", "32");
+      buttonHitArea.setAttribute("fill", "transparent");
+      buttonHitArea.setAttribute("pointer-events", "all");
+
+      const buttonSurface = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      buttonSurface.classList.add("composition-detail-button-surface");
+      buttonSurface.setAttribute("width", String(buttonSize));
+      buttonSurface.setAttribute("height", String(buttonSize));
+      buttonSurface.setAttribute("rx", "2");
+      buttonSurface.setAttribute("fill", "#f5f0e4");
+      buttonSurface.setAttribute("stroke", "#563905");
+      buttonSurface.setAttribute("stroke-width", "0.9");
+
+      const bookIcon = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      bookIcon.setAttribute(
+        "d",
+        "M4 5.5c2.15-.7 4.02-.28 5.5 1.05v8.05C8 13.32 6.15 12.9 4 13.55V5.5Zm11 0c-2.15-.7-4.02-.28-5.5 1.05v8.05c1.5-1.28 3.35-1.7 5.5-1.05V5.5Z"
+      );
+      bookIcon.setAttribute("fill", "none");
+      bookIcon.setAttribute("stroke", "#563905");
+      bookIcon.setAttribute("stroke-width", "1.15");
+      bookIcon.setAttribute("stroke-linecap", "round");
+      bookIcon.setAttribute("stroke-linejoin", "round");
+
+      const buttonTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      buttonTitle.textContent = "展开编制关系";
+      detailButton.append(buttonHitArea, buttonSurface, bookIcon, buttonTitle);
+      const openComposition = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        detailPanelScrollOffset = 0;
+        inlineDetailField.value = "duty";
+        inlineCompositionScrollOffset = 0;
+        expandedDetailId.value = node.data.id;
+        inlineDetailOfficialId.value = null;
+        refreshTemplate();
+      };
+      d3.select(detailButton)
+        .on("pointerdown.composition-detail", (event) => event.stopPropagation())
+        .on("click.composition-detail", openComposition)
+        .on("keydown.composition-detail", (event) => {
+          if (event.key === "Enter" || event.key === " ") openComposition(event);
+        })
+        .on("mouseenter.composition-detail", () => {
+          buttonSurface.setAttribute("fill", "#e9dfca");
+          buttonSurface.setAttribute("stroke-width", "1.25");
+        })
+        .on("mouseleave.composition-detail", () => {
+          buttonSurface.setAttribute("fill", "#f5f0e4");
+          buttonSurface.setAttribute("stroke-width", "0.9");
+        });
+      nodeGroup.appendChild(detailButton);
+    }
+
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      lastHierarchyPointer = null;
-      suppressedHierarchyClick = null;
       if (node.data.isInstitutionGroup) {
         const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
         expandedInstitutionGroupIds = toggleInstitutionGroupIds(
@@ -1787,42 +1859,6 @@ function renderDynamicHierarchy(svg) {
       refreshTemplate();
     };
     const nodeSelection = d3.select(nodeGroup)
-      .on("pointerdown.dynamic-tree-detail", (event) => {
-        if (node.data.isVirtual) return;
-        if (!isRepeatedHierarchyPointer(
-          lastHierarchyPointer,
-          node.data.id,
-          event.timeStamp,
-        )) {
-          lastHierarchyPointer = {
-            id: node.data.id,
-            timeStamp: event.timeStamp,
-            expandedHierarchyPath: [...expandedHierarchyPath],
-            lastExpandedHierarchyId,
-            panX: hierarchyPanX,
-            panY: hierarchyPanY,
-          };
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        expandedHierarchyPath = lastHierarchyPointer.expandedHierarchyPath;
-        lastExpandedHierarchyId = lastHierarchyPointer.lastExpandedHierarchyId;
-        hierarchyPanX = lastHierarchyPointer.panX;
-        hierarchyPanY = lastHierarchyPointer.panY;
-        lastHierarchyPointer = null;
-        suppressedHierarchyClick = {
-          id: node.data.id,
-          until: event.timeStamp + 300,
-        };
-        detailPanelScrollOffset = 0;
-        selectedId.value = node.data.id;
-        inlineDetailField.value = "duty";
-        inlineCompositionScrollOffset = 0;
-        expandedDetailId.value = node.data.id;
-        inlineDetailOfficialId.value = null;
-        refreshTemplate();
-      })
       .on("click.dynamic-tree", (event) => {
         if (node.data.isVirtual) {
           toggleVirtualNode(event);
@@ -1830,12 +1866,6 @@ function renderDynamicHierarchy(svg) {
         }
         event.preventDefault();
         event.stopPropagation();
-        if (suppressedHierarchyClick) {
-          const shouldSuppress = suppressedHierarchyClick.id === node.data.id
-            && event.timeStamp <= suppressedHierarchyClick.until;
-          suppressedHierarchyClick = null;
-          if (shouldSuppress) return;
-        }
         detailPanelScrollOffset = 0;
         inlineCompositionScrollOffset = 0;
         expandedDetailId.value = null;
@@ -1862,11 +1892,6 @@ function renderDynamicHierarchy(svg) {
           }
         }
         refreshTemplate();
-      })
-      .on("dblclick.dynamic-tree-detail", (event) => {
-        // 双击在第二次 pointerdown 时跨节点重绘识别；这里只阻止浏览器默认行为。
-        event.preventDefault();
-        event.stopPropagation();
       });
     nodeSelection.on("keydown.dynamic-tree", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -2481,8 +2506,6 @@ function bindSpaceAwareExpansionControl(svg) {
   const toggle = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    lastHierarchyPointer = null;
-    suppressedHierarchyClick = null;
     spaceAwareExpansion.value = !spaceAwareExpansion.value;
     if (!spaceAwareExpansion.value) {
       expandedInstitutionGroupIds = collapseInstitutionGroups(
@@ -2584,8 +2607,6 @@ function bindTemplateControls(svg) {
         const group = this.parentElement;
         const activate = (event) => {
           event.stopPropagation();
-          lastHierarchyPointer = null;
-          suppressedHierarchyClick = null;
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
           expandedHierarchyPath = [];
@@ -2936,6 +2957,8 @@ onUnmounted(() => {
 .svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
 .svg-mount :deep(.dynamic-tree-node:focus) { outline: none; }
 .svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) { stroke: #563905; stroke-width: 1.2; stroke-dasharray: 3 2; }
+.svg-mount :deep(.composition-detail-button:focus) { outline: none; }
+.svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) { stroke-width: 1.4; stroke-dasharray: 2 1.5; }
 .svg-mount :deep(.space-aware-expansion-control:focus) { outline: none; }
 .svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) { stroke-width: 1.35; stroke-dasharray: 3 2; }
 .svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }

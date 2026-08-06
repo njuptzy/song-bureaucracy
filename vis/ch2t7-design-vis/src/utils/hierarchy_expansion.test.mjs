@@ -6,19 +6,10 @@ import {
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
-  isRepeatedHierarchyPointer,
   mergeExpansionPaths,
   removeExpandedSubtree,
   toggleInstitutionGroupIds,
 } from "./hierarchy_expansion.js";
-
-test("同一机构的第二次按下可跨节点重绘识别为双击", () => {
-  const previous = { id: 12, timeStamp: 1000 };
-  assert.equal(isRepeatedHierarchyPointer(previous, 12, 1500), true);
-  assert.equal(isRepeatedHierarchyPointer(previous, 13, 1500), false);
-  assert.equal(isRepeatedHierarchyPointer(previous, 12, 1700), false);
-  assert.equal(isRepeatedHierarchyPointer(previous, 12, 900), false);
-});
 
 test("旧模式始终只保留刚点击节点的展开路径", () => {
   assert.deepEqual(mergeExpansionPaths([1, 2], [1, 3], false), [1, 3]);
