@@ -466,6 +466,26 @@ PROFILES = {
                 "reason": "目录 OCR 将天文阶官‘挈壶正’误识为‘擎壶正’；正文词头及引文均作‘挈壶正’",
             },
         ],
+        "output_title_renames": [
+            {
+                "from": "后行郎中(礼、工部诸司郎中)",
+                "to": "后行郎中（礼、工部诸司郎中）",
+                "page": "622",
+                "reason": "正文标题使用半角括号，目录正式词头使用全角括号",
+            },
+            {
+                "from": "中行郎中(户、刑部诸司郎中)",
+                "to": "中行郎中（户、刑部诸司郎中）",
+                "page": "622",
+                "reason": "匹配归一化把正文与目录全角括号输出成半角，恢复目录正式词头",
+            },
+            {
+                "from": "前行郎中(吏、兵部诸司郎中)",
+                "to": "前行郎中（吏、兵部诸司郎中）",
+                "page": "622",
+                "reason": "正文标题使用半角括号，目录正式词头使用全角括号",
+            },
+        ],
         "joins": [
             {"bogus": "镇国大将军", "page": "619", "into": "镇国大将军",
              "status": "not_in_catalog", "target_field": "别名",
@@ -5051,9 +5071,34 @@ def main():
             1,
         )
 
+        zhongshu_secretary = next(e for e in all_entries if e["name"] == "中书舍人")
+        malformed_yuanfeng = "新订《元丰寄《禄格》,罢其本官阶,其阶易为太中大夫("
+        corrected_yuanfeng = "新订《元丰寄禄格》，罢其本官阶，其阶易为太中大夫（"
+        if malformed_yuanfeng in zhongshu_secretary["text"]:
+            zhongshu_secretary["text"] = zhongshu_secretary["text"].replace(
+                malformed_yuanfeng, corrected_yuanfeng, 1
+            )
+        else:
+            assert corrected_yuanfeng in zhongshu_secretary["text"]
+        if "条)。" in zhongshu_secretary["text"]:
+            zhongshu_secretary["text"] = zhongshu_secretary["text"].replace(
+                "条)。", "条）。", 1
+            )
+        else:
+            assert "条）。" in zhongshu_secretary["text"]
+
+        for repeated_title in ("给事中", "礼部尚书"):
+            repeated_entry = next(e for e in all_entries if e["name"] == repeated_title)
+            duplicated_prefix = repeated_title + " "
+            if repeated_entry["text"].startswith(duplicated_prefix):
+                repeated_entry["text"] = repeated_entry["text"][len(duplicated_prefix):]
+            else:
+                assert repeated_entry["text"].startswith("文阶名。")
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
-              "将军品位括号")
+              "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
+              "给事中、礼部尚书正文重复词头")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
@@ -5082,6 +5127,20 @@ def main():
             all_entries[i]["text"] = text[len(prefix):]
         print(
             f"  [规范条目名] '{rename['to']}' -> '{canonical}'(p{rename['page']})："
+            f"{rename['reason']}"
+        )
+
+    for rename in PROFILE.get("output_title_renames", []):
+        matches = [
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == rename["from"] and str(m.get("page")) == rename["page"]
+        ]
+        assert len(matches) == 1, (rename, matches)
+        i = matches[0]
+        all_entries[i]["name"] = rename["to"]
+        all_meta[i]["name"] = rename["to"]
+        print(
+            f"  [规范输出词头] '{rename['from']}' -> '{rename['to']}'(p{rename['page']})："
             f"{rename['reason']}"
         )
 
