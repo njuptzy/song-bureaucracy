@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   anchorBranchToGroup,
   fitRangeShift,
+  panFromScrollbarOffset,
+  panScrollbarGeometry,
   virtualBusRange,
 } from "./hierarchy_layout.js";
 
@@ -21,4 +23,26 @@ test("下级子树利用可用宽度，不在左侧裁断后留下右侧空白",
   assert.equal(fitRangeShift(380, 1280, 500, 1810), 120);
   assert.equal(fitRangeShift(620, 1920, 500, 1810), -110);
   assert.equal(fitRangeShift(620, 1280, 500, 1810), 0);
+});
+
+test("机构树溢出时滚动条覆盖完整平移范围", () => {
+  const left = panScrollbarGeometry({
+    viewportSize: 1000,
+    contentSize: 2000,
+    minPan: -1000,
+    maxPan: 0,
+    currentPan: 0,
+  });
+  const right = panScrollbarGeometry({
+    viewportSize: 1000,
+    contentSize: 2000,
+    minPan: -1000,
+    maxPan: 0,
+    currentPan: -1000,
+  });
+  assert.equal(left.enabled, true);
+  assert.equal(left.thumbSize, 500);
+  assert.equal(left.thumbOffset, 0);
+  assert.equal(right.thumbOffset, right.thumbTravel);
+  assert.equal(panFromScrollbarOffset(right.thumbTravel, right.thumbTravel, -1000, 0), -1000);
 });

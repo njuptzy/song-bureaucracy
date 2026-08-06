@@ -19,8 +19,11 @@ import {
 import {
   anchorBranchToGroup,
   fitRangeShift,
+  panFromScrollbarOffset,
+  panScrollbarGeometry,
   virtualBusRange,
 } from "../utils/hierarchy_layout";
+import { resolveHierarchyContext } from "../utils/hierarchy_navigation";
 import {
   clampCompositionScroll,
   compositionScrollAfterDrag,
@@ -137,27 +140,18 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
 function selectLinkedEntity(entityId) {
   const target = entityMap.get(entityId);
   if (!target) return;
+  lastHierarchyClick = null;
   detailPanelScrollOffset = 0;
   inlineCompositionScrollOffset = 0;
   expandedDetailId.value = null;
   inlineDetailOfficialId.value = null;
   selectedId.value = target.id;
   if (target.type === "机构") {
-    selectedCategory.value = entityCategory(target);
-    expandedInstitutionGroupId = institutionGroupId(
-      selectedCategory.value,
-      entityInstitutionGroup(target, selectedCategory.value)
-    );
+    focusHierarchyContext(target, true);
   } else {
     const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
     const org = affiliation ? entityMap.get(affiliation.org) : null;
-    if (org) {
-      selectedCategory.value = entityCategory(org);
-      expandedInstitutionGroupId = institutionGroupId(
-        selectedCategory.value,
-        entityInstitutionGroup(org, selectedCategory.value)
-      );
-    }
+    if (org) focusHierarchyContext(org, true);
   }
   renderTemplate();
 }
@@ -370,6 +364,19 @@ function entityCategory(entity) {
   return entity.category || "中央机构";
 }
 
+function focusHierarchyContext(entity, revealPath = false) {
+  const context = resolveHierarchyContext(entity.id, hierarchyEdgesForView(), entityMap);
+  const root = context.root || entity;
+  const category = entityCategory(root);
+  selectedCategory.value = category;
+  expandedInstitutionGroupId = institutionGroupId(
+    category,
+    entityInstitutionGroup(root, category)
+  );
+  if (revealPath) expandedHierarchyPath = context.path.slice(0, -1);
+  return context;
+}
+
 function hierarchyRootEntities(category) {
   const hierarchyEdges = hierarchyEdgesForView();
   const childIds = new Set(hierarchyEdges.map((edge) => edge.child));
@@ -459,16 +466,17 @@ function selectedEntity() {
   if (!currentSnapshot.value || currentSnapshot.value.entityIds.has(selected?.id)) {
     return selected || titleMap.get("尚书省") || props.data.entities[0];
   }
-  const preferred = titleMap.get("尚书省");
-  if (preferred && currentSnapshot.value.entityIds.has(preferred.id)) return preferred;
-  return props.data.entities.find((entity) => currentSnapshot.value.entityIds.has(entity.id)) || null;
+  const fallback = categoryFocus(selectedCategory.value)
+    || null;
+  if (fallback) selectedId.value = fallback.id;
+  return fallback;
 }
 
 function graphFocusEntity() {
   const selected = selectedEntity();
   if (selected?.type === "机构") return selected;
   const affiliation = staffEdgesForView().find((edge) => edge.official === selected?.id);
-  return affiliation ? entityMap.get(affiliation.org) : titleMap.get("尚书省") || selected;
+  return affiliation ? entityMap.get(affiliation.org) : selected || null;
 }
 
 function hierarchyLevels(rootId, maxDepth) {
@@ -529,6 +537,21 @@ function categoryForestData(category) {
     (a, b) => descendantScore(b) - descendantScore(a)
       || titleOf(a).localeCompare(titleOf(b), "zh")
   );
+  const availableGroupIds = new Set(orderedRoots.map((entityId) => {
+    const entity = entityMap.get(entityId);
+    return institutionGroupId(category, entityInstitutionGroup(entity, category));
+  }));
+  if (
+    expandedInstitutionGroupId
+    && !availableGroupIds.has(expandedInstitutionGroupId)
+    && orderedRoots.length
+  ) {
+    const fallback = entityMap.get(orderedRoots[0]);
+    expandedInstitutionGroupId = institutionGroupId(
+      category,
+      entityInstitutionGroup(fallback, category)
+    );
+  }
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
   const visibleRoots = showRoots
@@ -1169,11 +1192,206 @@ function renderDynamicHierarchy(svg) {
   const viewportHeight = area.bottom - area.top;
   const minPanY = contentHeight <= viewportHeight ? 0 : area.bottom - contentBottom;
   const maxPanY = contentHeight <= viewportHeight ? 0 : area.top - contentTop;
+  const panControls = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  panControls.classList.add("dynamic-tree-pan-controls");
+  viewport.appendChild(panControls);
+  const makePanRect = (className, attributes) => {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.classList.add(className, "dynamic-tree-scroll-control");
+    Object.entries(attributes).forEach(([name, value]) => rect.setAttribute(name, String(value)));
+    panControls.appendChild(rect);
+    return rect;
+  };
+  let horizontalTrack = null;
+  let horizontalThumb = null;
+  let horizontalHitArea = null;
+  if (contentWidth > viewportWidth) {
+    horizontalHitArea = makePanRect("dynamic-tree-scroll-hit-horizontal", {
+      x: area.left,
+      y: area.bottom - 13,
+      width: viewportWidth,
+      height: 13,
+      fill: "transparent",
+    });
+    horizontalTrack = makePanRect("dynamic-tree-scroll-track-horizontal", {
+      x: area.left,
+      y: area.bottom - 6,
+      width: viewportWidth,
+      height: 1.5,
+      rx: 0.75,
+      fill: "#563905",
+      opacity: 0.2,
+    });
+    horizontalTrack.style.pointerEvents = "none";
+    horizontalThumb = makePanRect("dynamic-tree-scroll-thumb-horizontal", {
+      x: area.left,
+      y: area.bottom - 7.4,
+      width: 42,
+      height: 4.2,
+      rx: 2.1,
+      fill: "#563905",
+      opacity: 0.7,
+    });
+    horizontalHitArea.style.cursor = "ew-resize";
+    horizontalThumb.style.cursor = "grab";
+  }
+  let verticalTrack = null;
+  let verticalThumb = null;
+  let verticalHitArea = null;
+  if (contentHeight > viewportHeight) {
+    verticalHitArea = makePanRect("dynamic-tree-scroll-hit-vertical", {
+      x: area.right - 13,
+      y: area.top,
+      width: 13,
+      height: viewportHeight,
+      fill: "transparent",
+    });
+    verticalTrack = makePanRect("dynamic-tree-scroll-track-vertical", {
+      x: area.right - 6,
+      y: area.top,
+      width: 1.5,
+      height: viewportHeight,
+      rx: 0.75,
+      fill: "#563905",
+      opacity: 0.2,
+    });
+    verticalTrack.style.pointerEvents = "none";
+    verticalThumb = makePanRect("dynamic-tree-scroll-thumb-vertical", {
+      x: area.right - 7.4,
+      y: area.top,
+      width: 4.2,
+      height: 42,
+      rx: 2.1,
+      fill: "#563905",
+      opacity: 0.7,
+    });
+    verticalHitArea.style.cursor = "ns-resize";
+    verticalThumb.style.cursor = "grab";
+  }
+  const updatePanControls = () => {
+    if (horizontalThumb) {
+      const geometry = panScrollbarGeometry({
+        viewportSize: viewportWidth,
+        contentSize: contentWidth,
+        minPan,
+        maxPan,
+        currentPan: hierarchyPanX,
+      });
+      horizontalThumb.setAttribute("x", String(area.left + geometry.thumbOffset));
+      horizontalThumb.setAttribute("width", String(geometry.thumbSize));
+    }
+    if (verticalThumb) {
+      const geometry = panScrollbarGeometry({
+        viewportSize: viewportHeight,
+        contentSize: contentHeight,
+        minPan: minPanY,
+        maxPan: maxPanY,
+        currentPan: hierarchyPanY,
+      });
+      verticalThumb.setAttribute("y", String(area.top + geometry.thumbOffset));
+      verticalThumb.setAttribute("height", String(geometry.thumbSize));
+    }
+  };
   const applyHierarchyPan = (nextPanX, nextPanY = hierarchyPanY) => {
     hierarchyPanX = Math.max(minPan, Math.min(maxPan, nextPanX));
     hierarchyPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
     layer.setAttribute("transform", `translate(${hierarchyPanX} ${hierarchyPanY})`);
+    updatePanControls();
   };
+  if (horizontalHitArea && horizontalThumb) {
+    d3.select(horizontalHitArea).on("click.tree-scroll", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const geometry = panScrollbarGeometry({
+        viewportSize: viewportWidth,
+        contentSize: contentWidth,
+        minPan,
+        maxPan,
+        currentPan: hierarchyPanX,
+      });
+      const [pointerX] = d3.pointer(event, viewport);
+      const offset = pointerX - area.left - geometry.thumbSize / 2;
+      applyHierarchyPan(
+        panFromScrollbarOffset(offset, geometry.thumbTravel, minPan, maxPan),
+        hierarchyPanY
+      );
+    });
+    d3.select(horizontalThumb).call(
+      d3.drag()
+        .on("start", (event) => {
+          event.sourceEvent?.stopPropagation();
+          horizontalThumb.style.cursor = "grabbing";
+        })
+        .on("drag", (event) => {
+          const geometry = panScrollbarGeometry({
+            viewportSize: viewportWidth,
+            contentSize: contentWidth,
+            minPan,
+            maxPan,
+            currentPan: hierarchyPanX,
+          });
+          applyHierarchyPan(
+            panFromScrollbarOffset(
+              geometry.thumbOffset + event.dx,
+              geometry.thumbTravel,
+              minPan,
+              maxPan
+            ),
+            hierarchyPanY
+          );
+        })
+        .on("end", () => {
+          horizontalThumb.style.cursor = "grab";
+        })
+    );
+  }
+  if (verticalHitArea && verticalThumb) {
+    d3.select(verticalHitArea).on("click.tree-scroll", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const geometry = panScrollbarGeometry({
+        viewportSize: viewportHeight,
+        contentSize: contentHeight,
+        minPan: minPanY,
+        maxPan: maxPanY,
+        currentPan: hierarchyPanY,
+      });
+      const [, pointerY] = d3.pointer(event, viewport);
+      const offset = pointerY - area.top - geometry.thumbSize / 2;
+      applyHierarchyPan(
+        hierarchyPanX,
+        panFromScrollbarOffset(offset, geometry.thumbTravel, minPanY, maxPanY)
+      );
+    });
+    d3.select(verticalThumb).call(
+      d3.drag()
+        .on("start", (event) => {
+          event.sourceEvent?.stopPropagation();
+          verticalThumb.style.cursor = "grabbing";
+        })
+        .on("drag", (event) => {
+          const geometry = panScrollbarGeometry({
+            viewportSize: viewportHeight,
+            contentSize: contentHeight,
+            minPan: minPanY,
+            maxPan: maxPanY,
+            currentPan: hierarchyPanY,
+          });
+          applyHierarchyPan(
+            hierarchyPanX,
+            panFromScrollbarOffset(
+              geometry.thumbOffset + event.dy,
+              geometry.thumbTravel,
+              minPanY,
+              maxPanY
+            )
+          );
+        })
+        .on("end", () => {
+          verticalThumb.style.cursor = "grab";
+        })
+    );
+  }
   let nextPanX = hierarchyPanX;
   let nextPanY = hierarchyPanY;
   const expandedLayout = nodeLayout.get(
@@ -1195,7 +1413,10 @@ function renderDynamicHierarchy(svg) {
 
   d3.select(viewport)
     .call(d3.drag()
-      .filter((event) => !event.target.closest?.(".dynamic-tree-node"))
+      .filter((event) => (
+        !event.target.closest?.(".dynamic-tree-node")
+        && !event.target.closest?.(".dynamic-tree-scroll-control")
+      ))
       .on("start", () => {
         dragSurface.style.cursor = "grabbing";
       })
@@ -1261,11 +1482,11 @@ function renderDynamicHierarchy(svg) {
       ? document.createElementNS("http://www.w3.org/2000/svg", "g")
       : templateGroup.cloneNode(true);
     nodeGroup.classList.add("dynamic-tree-node");
+    nodeGroup.setAttribute("role", "button");
+    nodeGroup.setAttribute("tabindex", "0");
     if (!node.data.isVirtual) nodeGroup.dataset.entityId = String(node.data.id);
     if (node.data.isVirtual) {
       nodeGroup.dataset.virtualRole = node.data.isInstitutionGroup ? "institution-group" : "category-root";
-      nodeGroup.setAttribute("role", "button");
-      nodeGroup.setAttribute("tabindex", "0");
       nodeGroup.setAttribute("aria-label", `${node.data.title}，${node.data.childCount}项`);
       const rootRect = emperorRect.cloneNode(true);
       rootRect.style.removeProperty("display");
@@ -1350,12 +1571,14 @@ function renderDynamicHierarchy(svg) {
       ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
       : `${node.data.title}${interactionHint}${detailHint}`;
     nodeGroup.appendChild(title);
+    if (!node.data.isVirtual) nodeGroup.setAttribute("aria-label", title.textContent);
 
-    nodeGroup.style.cursor = node.data.childCount ? "pointer" : "default";
+    nodeGroup.style.cursor = "pointer";
     if (!node.data.isVirtual && expandedDetailId.value === node.data.id) expandedDetailNode = node;
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      lastHierarchyClick = null;
       if (node.data.isInstitutionGroup) {
         expandedInstitutionGroupId = expandedInstitutionGroupId === node.data.id ? null : node.data.id;
         expandedHierarchyPath = [];
@@ -1423,11 +1646,16 @@ function renderDynamicHierarchy(svg) {
         event.preventDefault();
         event.stopPropagation();
       });
-    if (node.data.isVirtual) {
-      nodeSelection.on("keydown.dynamic-tree", (event) => {
-        if (event.key === "Enter" || event.key === " ") toggleVirtualNode(event);
-      });
-    }
+    nodeSelection.on("keydown.dynamic-tree", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (node.data.isVirtual) {
+        toggleVirtualNode(event);
+      } else {
+        event.preventDefault();
+        event.stopPropagation();
+        nodeGroup.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
   }
 
   if (expandedDetailNode) {
@@ -1501,7 +1729,6 @@ function populateHierarchyCenter(svg) {
 
 function populateCompositionCenter(svg) {
   const focus = graphFocusEntity();
-  if (!focus) return;
   const slots = [...svg.querySelectorAll("text")].filter((element) => {
     const point = position(element);
     const className = element.getAttribute("class");
@@ -1514,6 +1741,10 @@ function populateCompositionCenter(svg) {
       normalizeText(element).length <= 16
     );
   });
+  if (!focus) {
+    assignSlots(slots, []);
+    return;
+  }
   const levels = hierarchyLevels(focus.id, 5);
   const flattened = levels.flat();
   const seen = new Set();
@@ -1562,10 +1793,7 @@ function bindEntityTexts(svg) {
         .on("mouseleave", () => this.classList.remove("svg-entity-hover"))
         .on("click", (event) => {
           event.stopPropagation();
-          detailPanelScrollOffset = 0;
-          selectedId.value = entity.id;
-          selectedCategory.value = entityCategory(entity);
-          renderTemplate();
+          selectLinkedEntity(entity.id);
         });
     });
 }
@@ -1781,7 +2009,42 @@ function setupDetailPanel(svg) {
 
 function updateDetails(svg) {
   const entity = selectedEntity();
-  if (!entity) return;
+  if (!entity) {
+    const title = findTextAt(svg, 99.85, 505.87);
+    const year = findTextAt(svg, 189.74, 502.91);
+    setText(title, selectedCategory.value);
+    setText(year, selectedRangeLabel());
+    constrainTextWidth(title, 78);
+    constrainTextWidth(year, 270);
+    const [firstField, ...hiddenFields] = INLINE_DETAIL_FIELDS;
+    const label = svg.querySelector(`[data-detail-section-label='${firstField.key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${firstField.key}']`);
+    if (label && content) {
+      label.style.display = "";
+      content.style.display = "";
+      label.setAttribute("transform", "translate(100.33 536.92)");
+      content.setAttribute("transform", "translate(101.29 561.92)");
+      setText(label, "当前截面：");
+      wrapText(
+        content,
+        "所选年份没有可展示的非统称根机构。统称实体仍按规则排除；可切换年份或取消时间选择查看。",
+        28,
+        18,
+        Infinity
+      );
+    }
+    hiddenFields.forEach((field) => {
+      const hiddenLabel = svg.querySelector(`[data-detail-section-label='${field.key}']`);
+      const hiddenContent = svg.querySelector(`[data-detail-section-content='${field.key}']`);
+      if (hiddenLabel) hiddenLabel.style.display = "none";
+      if (hiddenContent) hiddenContent.style.display = "none";
+    });
+    const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+    if (scrollContent) scrollContent.dataset.contentBottom = "650";
+    detailPanelScrollOffset = 0;
+    svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
+    return;
+  }
   const values = inlineDetailValues(entity);
   const staff = displayStaffFor(entity.id);
   const children = childrenFor(entity.id);
@@ -1812,6 +2075,8 @@ function updateDetails(svg) {
     const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
     if (!label || !content) continue;
+    label.style.display = "";
+    content.style.display = "";
     label.setAttribute("transform", `translate(100.33 ${cursorY})`);
     setText(label, field.label);
     label.style.cursor = "default";
@@ -1892,6 +2157,12 @@ function replaceCompositionDescriptions(svg) {
     const text = normalizeText(element);
     return point && point.x > 500 && point.y > 130 && point.y < 870 && text.length > 14 && /人|官额|吏额|郎中|侍郎/.test(text) && !titleMap.has(text);
   });
+  if (!graphFocusEntity()) {
+    candidates.forEach((candidate) => {
+      candidate.style.opacity = "0";
+    });
+    return;
+  }
   const institutionSlots = [...svg.querySelectorAll("text")].filter((element) => {
     const point = position(element);
     const entity = element.dataset.entityId
@@ -1969,6 +2240,7 @@ function bindTemplateControls(svg) {
         const group = this.parentElement;
         const activate = (event) => {
           event.stopPropagation();
+          lastHierarchyClick = null;
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
           expandedHierarchyPath = [];
