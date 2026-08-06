@@ -1780,9 +1780,9 @@ function renderDynamicHierarchy(svg) {
       buttonSurface.setAttribute("width", String(buttonSize));
       buttonSurface.setAttribute("height", String(buttonSize));
       buttonSurface.setAttribute("rx", "1.5");
-      buttonSurface.setAttribute("fill", "#f5f0e4");
-      buttonSurface.setAttribute("stroke", "#563905");
-      buttonSurface.setAttribute("stroke-width", "0.9");
+      buttonSurface.setAttribute("fill", "#563905");
+      buttonSurface.setAttribute("fill-opacity", "0");
+      buttonSurface.setAttribute("stroke", "none");
 
       const bookIcon = document.createElementNS("http://www.w3.org/2000/svg", "path");
       bookIcon.setAttribute(
@@ -1795,6 +1795,7 @@ function renderDynamicHierarchy(svg) {
       bookIcon.setAttribute("stroke-linecap", "round");
       bookIcon.setAttribute("stroke-linejoin", "round");
       bookIcon.setAttribute("transform", "scale(0.62)");
+      bookIcon.setAttribute("opacity", "0.9");
 
       const buttonTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
       buttonTitle.textContent = "展开编制关系";
@@ -1816,12 +1817,10 @@ function renderDynamicHierarchy(svg) {
           if (event.key === "Enter" || event.key === " ") openComposition(event);
         })
         .on("mouseenter.composition-detail", () => {
-          buttonSurface.setAttribute("fill", "#e9dfca");
-          buttonSurface.setAttribute("stroke-width", "1.25");
+          buttonSurface.setAttribute("fill-opacity", "0.12");
         })
         .on("mouseleave.composition-detail", () => {
-          buttonSurface.setAttribute("fill", "#f5f0e4");
-          buttonSurface.setAttribute("stroke-width", "0.9");
+          buttonSurface.setAttribute("fill-opacity", "0");
         });
       nodeGroup.appendChild(detailButton);
     }
@@ -2956,7 +2955,7 @@ onUnmounted(() => {
 .svg-mount :deep(.dynamic-tree-node:focus) { outline: none; }
 .svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) { stroke: #563905; stroke-width: 1.2; stroke-dasharray: 3 2; }
 .svg-mount :deep(.composition-detail-button:focus) { outline: none; }
-.svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) { stroke-width: 1.4; stroke-dasharray: 2 1.5; }
+.svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) { fill-opacity: 0.08; stroke: #563905; stroke-width: 0.8; stroke-dasharray: 1.5 1; }
 .svg-mount :deep(.space-aware-expansion-control:focus) { outline: none; }
 .svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) { stroke-width: 1.35; stroke-dasharray: 3 2; }
 .svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }
