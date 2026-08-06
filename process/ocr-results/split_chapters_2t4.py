@@ -474,6 +474,13 @@ PROFILES = {
                 "reason": "核对原书 p641，正式词头为‘内客省使’，目录 OCR 误作‘内容省使’，正文又粘入横行条别名字段",
             },
             {
+                "from": "城使",
+                "to": "城使",
+                "canonical": "皇城使",
+                "page": "643",
+                "reason": "核对原书 p643，正式词头为‘皇城使’，目录 OCR 漏首字，正文又粘入东班条末",
+            },
+            {
                 "from": "擎壶正",
                 "to": "挈壶正",
                 "page": "662",
@@ -5472,12 +5479,85 @@ def main():
             assert domestic_guest["text"].startswith("横行武阶名。唐官")
             assert domestic_guest.get("_placeholder") is not True
 
+        # 原书 p642-643 的诸司副使简称引文跨页，页首“武功郎”等八阶
+        # 被误切成目录外伪条；同页“皇城使”完整正文又粘在“东班”条末，
+        # 而目录 OCR 漏掉“皇”字留下“城使”空占位。按原页栏序归回。
+        vice_commissioners = next(e for e in all_entries if e["name"] == "诸司副使")
+        reform_roster_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "武功郎" and str(m.get("page")) == "643"
+        )
+        reform_roster = all_entries[reform_roster_i]
+        if reform_roster.get("text"):
+            assert reform_roster.get("_not_in_catalog") is True
+            assert vice_commissioners["简称"].endswith("旧诸司副使八阶")
+            assert reform_roster["text"].startswith("武德郎 武显郎 武节郎 武略郎")
+            vice_commissioners["简称"] = (
+                vice_commissioners["简称"].rstrip() + "\n武功郎 "
+                + reform_roster["text"].strip()
+            )
+            reform_roster.clear()
+            reform_roster.update({
+                "name": "武功郎", "text": "", "_placeholder": True,
+            })
+            all_meta[reform_roster_i]["status"] = "placeholder"
+            all_meta[reform_roster_i].pop("not_in_catalog", None)
+        else:
+            assert reform_roster.get("_placeholder") is True
+            assert "武功郎 武德郎 武显郎" in vice_commissioners["简称"]
+
+        eastern_class = next(e for e in all_entries if e["name"] == "东班")
+        imperial_city_marker = "皇城使 武阶名。"
+        imperial_city_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "城使" and str(m.get("page")) == "643"
+        )
+        imperial_city = all_entries[imperial_city_i]
+        if imperial_city_marker in eastern_class["text"]:
+            eastern_text, imperial_text = eastern_class["text"].split(
+                imperial_city_marker, 1
+            )
+            assert imperial_city.get("_placeholder") is True
+            eastern_class["text"] = eastern_text.rstrip()
+            imperial_city.clear()
+            imperial_city.update({
+                "name": "城使",
+                "text": "武阶名。" + imperial_text.strip(),
+            })
+            all_meta[imperial_city_i]["status"] = "ok"
+        else:
+            assert imperial_city_marker not in eastern_class["text"]
+            assert imperial_city["text"].startswith("武阶名。属诸司正使阶列")
+            assert imperial_city.get("_placeholder") is not True
+
+        internal_store = next(e for e in all_entries if e["name"] == "内藏库使")
+        malformed_internal_store = "初置库及使名《事物纪原》卷6《内藏》、《长编》卷19)"
+        corrected_internal_store = "初置库及使名（《事物纪原》卷6《内藏》、《长编》卷19）"
+        if malformed_internal_store in internal_store["text"]:
+            internal_store["text"] = internal_store["text"].replace(
+                malformed_internal_store, corrected_internal_store, 1
+            )
+        else:
+            assert corrected_internal_store in internal_store["text"]
+
         for title in (
             "遥郡节度观察留后", "遥郡观察使", "遥郡团练使", "遥郡刺史",
             "横行", "内容省使", "引进使", "西上阁门使",
+            "东上阁门使", "客省副使", "引进副使", "西上阁门副使",
+            "东上阁门副使", "诸司正使", "诸司副使", "西班", "东班",
+            "城使", "武德使", "宫苑使", "左骐骥使", "右骐骥使",
+            "内藏库使", "左藏库使", "东作坊使", "西作坊使", "庄宅使",
         ):
             entry = next(e for e in all_entries if e["name"] == title)
             entry["text"] = entry["text"].translate(fullwidth_translation)
+
+        for title in ("诸司正使", "诸司副使"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            for field_name, value in list(entry.items()):
+                if field_name in {"name", "text", "_placeholder", "__status__"}:
+                    continue
+                if isinstance(value, str):
+                    entry[field_name] = value.translate(fullwidth_translation)
 
         for title in ("防御使", "团练使", "刺史"):
             entry = next(e for e in all_entries if e["name"] == title)
@@ -5502,7 +5582,9 @@ def main():
               "四条中文标点，校正修职郎‘永乐大典’，并从迪功郎拆回简称与别名字段；"
               "p635-638 恢复节度使等五条中文标点，修正节度州三印《长编》括号，"
               "并从节度观察留后、观察使拆回编制字段；p638-642 恢复正任、遥郡、"
-              "横行诸条中文标点，从横行别名字段拆回内客省使正文并校正词头")
+              "横行诸条中文标点，从横行别名字段拆回内客省使正文并校正词头；"
+              "p642-643 将武功郎伪条续文并回诸司副使简称，将东班末的皇城使"
+              "正文拆回目录占位并校正词头，恢复诸司使副各条中文标点")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
