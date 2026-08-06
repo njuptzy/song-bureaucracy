@@ -5390,6 +5390,58 @@ def main():
             assert digonglang["text"].endswith("‘将仕郎’条。")
             assert digonglang["简称与别名"].startswith("①迪功。")
 
+        # 原书 p635-638 使用中文标点，MinerU 在若干连续块中误成半角；
+        # 仅对逐页核过的正文和字段值恢复，不改 JSON 字段名或其他条目。
+        fullwidth_translation = str.maketrans(
+            {"(": "（", ")": "）", ",": "，", ":": "：", ";": "；"}
+        )
+        for title in ("节度州三印", "山南东道节度使"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            entry["text"] = entry["text"].translate(fullwidth_translation)
+
+        for title in ("节度使", "节度观察留后", "观察使"):
+            entry = next(e for e in all_entries if e["name"] == title)
+            for field_name, value in list(entry.items()):
+                if field_name in {"name", "text", "_placeholder", "__status__"}:
+                    continue
+                if isinstance(value, str):
+                    entry[field_name] = value.translate(fullwidth_translation)
+
+        three_seals = next(e for e in all_entries if e["name"] == "节度州三印")
+        malformed_changbian = "（《长编》）卷87甲寅"
+        corrected_changbian = "（《长编》卷87甲寅"
+        if malformed_changbian in three_seals["text"]:
+            three_seals["text"] = three_seals["text"].replace(
+                malformed_changbian, corrected_changbian, 1
+            )
+        else:
+            assert corrected_changbian in three_seals["text"]
+
+        observation_lieutenant = next(
+            e for e in all_entries if e["name"] == "节度观察留后"
+        )
+        joined_establishment = "\n编制 "
+        if joined_establishment in observation_lieutenant["官品"]:
+            grade, establishment = observation_lieutenant["官品"].split(
+                joined_establishment, 1
+            )
+            observation_lieutenant["官品"] = grade.rstrip()
+            observation_lieutenant["编制"] = establishment.strip()
+        else:
+            assert "编制" in observation_lieutenant
+            assert "\n编制 " not in observation_lieutenant["官品"]
+
+        commissioner = next(e for e in all_entries if e["name"] == "观察使")
+        if joined_establishment in commissioner["品位"]:
+            grade, establishment = commissioner["品位"].split(
+                joined_establishment, 1
+            )
+            commissioner["品位"] = grade.rstrip()
+            commissioner["编制"] = establishment.strip()
+        else:
+            assert "编制" in commissioner
+            assert "\n编制 " not in commissioner["品位"]
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
@@ -5402,7 +5454,9 @@ def main():
               "恢复朝散郎、宣德郎品位括号，并将左、右奉议郎‘北宁’校正为‘北宋’；"
               "p630 校正宣义郎词头；p631-632 恢复选人阶官六条中文标点，并从"
               "防御、团练、军事推官条拆回简称字段；p632-634 继续恢复判司簿尉等"
-              "四条中文标点，校正修职郎‘永乐大典’，并从迪功郎拆回简称与别名字段")
+              "四条中文标点，校正修职郎‘永乐大典’，并从迪功郎拆回简称与别名字段；"
+              "p635-638 恢复节度使等五条中文标点，修正节度州三印《长编》括号，"
+              "并从节度观察留后、观察使拆回编制字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
