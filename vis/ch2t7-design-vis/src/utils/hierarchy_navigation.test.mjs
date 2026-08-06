@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveHierarchyContext } from "./hierarchy_navigation.js";
+import {
+  resolveHierarchyContext,
+  resolveVisibleSelection,
+} from "./hierarchy_navigation.js";
 
 test("跨类别下级定位到当前截面的真实根机构及完整路径", () => {
   const entities = new Map([
@@ -24,4 +27,24 @@ test("循环关系不会让上下文定位无限递归", () => {
     { id: 2, parent: 2, child: 1 },
   ], entities);
   assert.deepEqual(new Set(context.path), new Set([1, 2]));
+});
+
+test("选中机构退出年份后只回退到当前类别的可见根机构", () => {
+  const inactive = { id: 1, title: "旧机构" };
+  const currentCategoryRoot = { id: 2, title: "当前类别根机构" };
+  const unrelatedDefault = { id: 3, title: "尚书省" };
+  assert.equal(
+    resolveVisibleSelection(inactive, new Set([2, 3]), currentCategoryRoot),
+    currentCategoryRoot
+  );
+  assert.equal(resolveVisibleSelection(null, null, currentCategoryRoot), currentCategoryRoot);
+  assert.notEqual(
+    resolveVisibleSelection(inactive, new Set([2, 3]), currentCategoryRoot),
+    unrelatedDefault
+  );
+});
+
+test("当前类别确实为空时不伪造其他类别的选中机构", () => {
+  assert.equal(resolveVisibleSelection({ id: 1 }, new Set(), null), null);
+  assert.equal(resolveVisibleSelection(null, null, null), null);
 });

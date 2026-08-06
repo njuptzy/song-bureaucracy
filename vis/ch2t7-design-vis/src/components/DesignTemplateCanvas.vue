@@ -23,7 +23,10 @@ import {
   panScrollbarGeometry,
   virtualBusRange,
 } from "../utils/hierarchy_layout";
-import { resolveHierarchyContext } from "../utils/hierarchy_navigation";
+import {
+  resolveHierarchyContext,
+  resolveVisibleSelection,
+} from "../utils/hierarchy_navigation";
 import {
   clampCompositionScroll,
   compositionScrollAfterDrag,
@@ -55,6 +58,7 @@ let hierarchyPanX = 0;
 let hierarchyPanY = 0;
 let expandedInstitutionGroupId = null;
 let inlineCompositionScrollOffset = 0;
+let renderRevision = 0;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -153,7 +157,7 @@ function selectLinkedEntity(entityId) {
     const org = affiliation ? entityMap.get(affiliation.org) : null;
     if (org) focusHierarchyContext(org, true);
   }
-  renderTemplate();
+  refreshTemplate({ rebindControls: true });
 }
 
 function renderLinkedTokens(element, tokens, emptyText, charsPerLine = 28, lineHeight = 18) {
@@ -463,13 +467,13 @@ function inlineDetailValues(entity) {
 
 function selectedEntity() {
   const selected = entityMap.get(selectedId.value);
-  if (!currentSnapshot.value || currentSnapshot.value.entityIds.has(selected?.id)) {
-    return selected || titleMap.get("尚书省") || props.data.entities[0];
-  }
-  const fallback = categoryFocus(selectedCategory.value)
-    || null;
-  if (fallback) selectedId.value = fallback.id;
-  return fallback;
+  const activeEntityIds = currentSnapshot.value?.entityIds || null;
+  const fallback = selected && (!activeEntityIds || activeEntityIds.has(selected.id))
+    ? null
+    : categoryFocus(selectedCategory.value);
+  const resolved = resolveVisibleSelection(selected, activeEntityIds, fallback);
+  if (resolved?.id !== selectedId.value) selectedId.value = resolved?.id ?? null;
+  return resolved;
 }
 
 function graphFocusEntity() {
@@ -868,7 +872,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       event.stopPropagation();
       inlineDetailOfficialId.value = isSelected ? null : edge.official;
       inlineDetailField.value = "duty";
-      renderTemplate();
+      refreshTemplate();
     });
     compositionContent.appendChild(group);
   });
@@ -940,7 +944,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
       event.stopPropagation();
       expandedDetailId.value = null;
       inlineDetailOfficialId.value = null;
-      renderTemplate();
+      refreshTemplate();
     });
   }
   layer.appendChild(card);
@@ -1590,7 +1594,7 @@ function renderDynamicHierarchy(svg) {
       }
       hierarchyPanX = 0;
       hierarchyPanY = 0;
-      renderTemplate();
+      refreshTemplate();
     };
     const nodeSelection = d3.select(nodeGroup)
       .on("click.dynamic-tree", (event) => {
@@ -1613,7 +1617,7 @@ function renderDynamicHierarchy(svg) {
           inlineCompositionScrollOffset = 0;
           expandedDetailId.value = node.data.id;
           inlineDetailOfficialId.value = null;
-          renderTemplate();
+          refreshTemplate();
           return;
         }
         lastHierarchyClick = {
@@ -1639,7 +1643,7 @@ function renderDynamicHierarchy(svg) {
               .map((ancestor) => ancestor.data.id);
           }
         }
-        renderTemplate();
+        refreshTemplate();
       })
       .on("dblclick.dynamic-tree-detail", (event) => {
         // 双击已由连续两次 click 跨 SVG 重绘识别；这里只阻止浏览器默认行为。
@@ -2138,7 +2142,7 @@ function updateDetails(svg) {
         event.stopPropagation();
         detailPanelScrollOffset = 0;
         selectedId.value = edge.official;
-        renderTemplate();
+        refreshTemplate();
       });
       const slotPoint = position(slot);
       const quotaSlot = [...svg.querySelectorAll("text")].find((candidate) => {
@@ -2192,6 +2196,7 @@ function replaceCompositionDescriptions(svg) {
 
 function bindTemplateControls(svg) {
   const categoryItems = [...svg.querySelectorAll("text")]
+    .filter((textElement) => !textElement.closest(".dynamic-tree-layer"))
     .map((textElement) => ({
       category: normalizeText(textElement),
       textElement,
@@ -2225,6 +2230,7 @@ function bindTemplateControls(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
+      if (this.closest(".dynamic-tree-layer")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         this.style.cursor = "pointer";
@@ -2252,7 +2258,7 @@ function bindTemplateControls(svg) {
           expandedInstitutionGroupId = focus
             ? institutionGroupId(category, entityInstitutionGroup(focus, category))
             : null;
-          renderTemplate();
+          refreshTemplate({ rebindControls: true });
         };
         this.style.cursor = "pointer";
         d3.select(this).on("click.category", activate);
@@ -2428,7 +2434,7 @@ function bindTimelineRange(svg) {
     timelineSelectionActive.value = true;
     selectedRange.value = nextRange;
     moveBrush(nextRange);
-    renderTemplate();
+    refreshTemplate({ rebindStatic: true });
   });
 
   const cancelSelection = (event) => {
@@ -2438,7 +2444,7 @@ function bindTimelineRange(svg) {
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
-    renderTemplate();
+    refreshTemplate({ rebindStatic: true });
   };
   d3.select(cancelControl)
     .on("click.cancel-selection", cancelSelection)
@@ -2464,7 +2470,9 @@ function installDesignFonts() {
 }
 
 async function renderTemplate() {
-  const url = `/api/design/${viewMode.value}.svg`;
+  const requestedMode = viewMode.value;
+  const revision = ++renderRevision;
+  const url = `/api/design/${requestedMode}.svg`;
   const needsLoad = !svgCache.has(url);
   if (needsLoad) loading.value = true;
   error.value = "";
@@ -2480,12 +2488,14 @@ async function renderTemplate() {
       }
       svgCache.set(url, document.importNode(parsedSvg, true));
     }
+    if (revision !== renderRevision || requestedMode !== viewMode.value) return;
     const svg = svgCache.get(url).cloneNode(true);
     svgMountRef.value.replaceChildren(svg);
     svg.removeAttribute("width");
     svg.removeAttribute("height");
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.classList.add("live-design-svg");
+    selectedEntity();
     populateCenter(svg);
     bindEntityTexts(svg);
     replaceCompositionDescriptions(svg);
@@ -2494,10 +2504,37 @@ async function renderTemplate() {
     setupDetailPanel(svg);
     updateDetails(svg);
   } catch (reason) {
+    if (revision !== renderRevision) return;
     error.value = `SVG 设计稿加载失败：${reason.message}`;
   } finally {
-    if (needsLoad) loading.value = false;
+    if (revision === renderRevision) loading.value = false;
   }
+}
+
+function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) {
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  if (!svg) {
+    renderTemplate();
+    return;
+  }
+
+  if (viewMode.value === "hierarchy") {
+    svg.querySelector(".dynamic-tree-viewport")?.remove();
+    svg.querySelectorAll(
+      "clipPath[id^='dynamic-tree-'], clipPath[id^='inline-composition-']"
+    ).forEach((clipPath) => clipPath.remove());
+  }
+
+  selectedEntity();
+  populateCenter(svg);
+  // 编制画板会复用并改写原 SVG 槽位，槽位对应实体变化后必须同步重绑；
+  // 层级画板的动态节点则在 populateCenter 内自行绑定，可跳过整图扫描。
+  if (rebindStatic || viewMode.value === "composition") {
+    bindEntityTexts(svg);
+    replaceCompositionDescriptions(svg);
+  }
+  if (rebindControls) bindTemplateControls(svg);
+  updateDetails(svg);
 }
 
 watch(viewMode, renderTemplate);
