@@ -5262,6 +5262,55 @@ def main():
         else:
             assert corrected_fengzhi_alias in fengzhi["简称"]
 
+        zhenglang = next(e for e in all_entries if e["name"] == "正郎")
+        chaoginglang_i = next(
+            i for i, (e, m) in enumerate(zip(all_entries, all_meta))
+            if e["name"] == "朝请郎" and str(m.get("page")) == "629"
+        )
+        chaoginglang = all_entries[chaoginglang_i]
+        joined_chaoginglang = (
+            "朝请郎：寄禄官名。北宋神宗元丰三年九月，由前行员外郎、"
+            "侍御史阶改名。为文臣京朝官三十阶之第二十阶。"
+            "“三朝郎”之一。正七品。"
+        )
+        corrected_chaoginglang = joined_chaoginglang.removeprefix("朝请郎：")
+        if zhenglang["text"].endswith(joined_chaoginglang):
+            assert chaoginglang.get("_placeholder") is True
+            zhenglang["text"] = zhenglang["text"].removesuffix(
+                joined_chaoginglang
+            ).rstrip()
+            chaoginglang["text"] = corrected_chaoginglang
+            chaoginglang.pop("_placeholder", None)
+            chaoginglang.pop("__status__", None)
+            all_meta[chaoginglang_i]["status"] = "ok"
+        else:
+            assert not zhenglang["text"].endswith(corrected_chaoginglang)
+            assert chaoginglang["text"] == corrected_chaoginglang
+            assert chaoginglang.get("_placeholder") is not True
+
+        chaosanlang = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "朝散郎" and str(m.get("page")) == "629"
+        )
+        malformed_chaosanlang_grade = "正七品(资料出处参“特进”条)。"
+        corrected_chaosanlang_grade = "正七品（资料出处参“特进”条）。"
+        if malformed_chaosanlang_grade in chaosanlang["text"]:
+            chaosanlang["text"] = chaosanlang["text"].replace(
+                malformed_chaosanlang_grade, corrected_chaosanlang_grade, 1
+            )
+        else:
+            assert corrected_chaosanlang_grade in chaosanlang["text"]
+
+        left_right_fengyilang = next(
+            e for e in all_entries if e["name"] == "左、右奉议郎"
+        )
+        if "北宁哲宗元祐四年十一月" in left_right_fengyilang["text"]:
+            left_right_fengyilang["text"] = left_right_fengyilang["text"].replace(
+                "北宁哲宗元祐四年十一月", "北宋哲宗元祐四年十一月", 1
+            )
+        else:
+            assert "北宋哲宗元祐四年十一月" in left_right_fengyilang["text"]
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
@@ -5270,7 +5319,8 @@ def main():
               "移除太师条误粘节标题，恢复元丰以后寄禄官、开府仪同三司及"
               "宣奉大夫的全角标点和版面断行；p627-628 补回左、右通奉大夫"
               "开头，删除太中大夫重复句，并恢复中大夫、中散大夫及奉直大夫"
-              "引文标点")
+              "引文标点；p629-630 将误粘在正郎条末的朝请郎正文归回正式词条，"
+              "恢复朝散郎品位括号，并将左、右奉议郎‘北宁’校正为‘北宋’")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
