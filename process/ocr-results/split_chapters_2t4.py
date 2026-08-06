@@ -460,6 +460,13 @@ PROFILES = {
         ],
         "catalog_renames": [
             {
+                "from": "宣议郎",
+                "to": "宣议郎",
+                "canonical": "宣义郎",
+                "page": "630",
+                "reason": "核对原书 p630，正式词头为‘宣义郎’，目录及正文 OCR 均误作‘宣议郎’",
+            },
+            {
                 "from": "擎壶正",
                 "to": "挈壶正",
                 "page": "662",
@@ -5311,6 +5318,48 @@ def main():
         else:
             assert "北宋哲宗元祐四年十一月" in left_right_fengyilang["text"]
 
+        xuandelang = next(
+            e for e, m in zip(all_entries, all_meta)
+            if e["name"] == "宣德郎" and str(m.get("page")) == "630"
+        )
+        malformed_xuandelang_grade = "从八品(资料出处参“特进”条)。"
+        corrected_xuandelang_grade = "从八品（资料出处参“特进”条）。"
+        if malformed_xuandelang_grade in xuandelang["text"]:
+            xuandelang["text"] = xuandelang["text"].replace(
+                malformed_xuandelang_grade, corrected_xuandelang_grade, 1
+            )
+        else:
+            assert corrected_xuandelang_grade in xuandelang["text"]
+
+        # 原书 p631-632 这些选人阶官条目均用中文标点；MinerU 在同一版面
+        # 连续误成半角。仅修复已逐页核对的六条，避免泛化改写其他正文。
+        selection_rank_titles = (
+            "三京府判官，留守司判官，节度、观察判官",
+            "节度掌书记、观察支使，防御、团练判官",
+            "军事判官，京府、留守司、节度、观察推官",
+            "防御、团练、军事推官，军、监判官",
+            "县令、录事参军",
+            "试衔知县令、知录事参军",
+        )
+        for title in selection_rank_titles:
+            selection_rank = next(e for e in all_entries if e["name"] == title)
+            selection_rank["text"] = selection_rank["text"].translate(
+                str.maketrans({"(": "（", ")": "）", ",": "，", ":": "：", ";": "；"})
+            )
+
+        junior_office_rank = next(
+            e for e in all_entries
+            if e["name"] == "防御、团练、军事推官，军、监判官"
+        )
+        joined_alias_marker = "\n简称 "
+        if joined_alias_marker in junior_office_rank["text"]:
+            body, alias = junior_office_rank["text"].split(joined_alias_marker, 1)
+            junior_office_rank["text"] = body.rstrip()
+            junior_office_rank["简称"] = alias.strip()
+        else:
+            assert junior_office_rank["text"].endswith("条）。")
+            assert junior_office_rank["简称"].startswith("防、团、军事推官，")
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
@@ -5320,7 +5369,9 @@ def main():
               "宣奉大夫的全角标点和版面断行；p627-628 补回左、右通奉大夫"
               "开头，删除太中大夫重复句，并恢复中大夫、中散大夫及奉直大夫"
               "引文标点；p629-630 将误粘在正郎条末的朝请郎正文归回正式词条，"
-              "恢复朝散郎品位括号，并将左、右奉议郎‘北宁’校正为‘北宋’")
+              "恢复朝散郎、宣德郎品位括号，并将左、右奉议郎‘北宁’校正为‘北宋’；"
+              "p630 校正宣义郎词头；p631-632 恢复选人阶官六条中文标点，并从"
+              "防御、团练、军事推官条拆回简称字段")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
