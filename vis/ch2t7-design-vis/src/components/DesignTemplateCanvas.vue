@@ -19,15 +19,19 @@ import {
 import {
   anchorBranchToGroup,
   fitRangeShift,
+  horizontalRangesFit,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   virtualBusRange,
 } from "../utils/hierarchy_layout";
 import {
+  collapseInstitutionGroups,
   expansionAfterLayout,
   expansionAnchorId,
+  institutionGroupsAfterLayout,
   mergeExpansionPaths,
   removeExpandedSubtree,
+  toggleInstitutionGroupIds,
 } from "../utils/hierarchy_expansion";
 import {
   resolveHierarchyContext,
@@ -65,7 +69,8 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
-let expandedInstitutionGroupId = null;
+let expandedInstitutionGroupIds = [];
+let lastExpandedInstitutionGroupId = null;
 let inlineCompositionScrollOffset = 0;
 let renderRevision = 0;
 let lastExpandedHierarchyId = null;
@@ -99,10 +104,11 @@ for (const entity of props.data.entities) {
 const institutionGroupNames = props.data.meta?.institutionGroupNames || {
   中央机构: CENTRAL_GROUP_NAMES,
 };
-expandedInstitutionGroupId = institutionGroupId(
+lastExpandedInstitutionGroupId = institutionGroupId(
   "中央机构",
   entityInstitutionGroup(titleMap.get("尚书省"), "中央机构")
 );
+expandedInstitutionGroupIds = [lastExpandedInstitutionGroupId];
 function yearSnapshot(year) {
   if (yearSnapshotCache.has(year)) {
     const cached = yearSnapshotCache.get(year);
@@ -400,10 +406,11 @@ function focusHierarchyContext(entity, revealPath = false) {
   const root = context.root || entity;
   const category = entityCategory(root);
   selectedCategory.value = category;
-  expandedInstitutionGroupId = institutionGroupId(
+  lastExpandedInstitutionGroupId = institutionGroupId(
     category,
     entityInstitutionGroup(root, category)
   );
+  expandedInstitutionGroupIds = [lastExpandedInstitutionGroupId];
   if (revealPath) {
     expandedHierarchyPath = context.path.slice(0, -1);
     lastExpandedHierarchyId = expandedHierarchyPath.at(-1) ?? null;
@@ -593,6 +600,24 @@ function renderExpansionCandidate(fallbackPath) {
   refreshTemplate();
 }
 
+function renderInstitutionGroupCandidate(clickedId) {
+  const candidateIds = [...expandedInstitutionGroupIds];
+  refreshTemplate();
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  const resolvedIds = institutionGroupsAfterLayout({
+    candidateIds,
+    clickedId,
+    spaceAware: spaceAwareExpansion.value,
+    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+  });
+  if (
+    resolvedIds.length === candidateIds.length
+    && resolvedIds.every((id, index) => id === candidateIds[index])
+  ) return;
+  expandedInstitutionGroupIds = resolvedIds;
+  refreshTemplate();
+}
+
 function categoryForestData(category) {
   const roots = hierarchyRootEntities(category).map((entity) => entity.id);
   const scoreCache = new Map();
@@ -614,16 +639,15 @@ function categoryForestData(category) {
     const entity = entityMap.get(entityId);
     return institutionGroupId(category, entityInstitutionGroup(entity, category));
   }));
-  if (
-    expandedInstitutionGroupId
-    && !availableGroupIds.has(expandedInstitutionGroupId)
-    && orderedRoots.length
-  ) {
+  const previousExpandedGroupIds = expandedInstitutionGroupIds;
+  expandedInstitutionGroupIds = expandedInstitutionGroupIds.filter((id) => availableGroupIds.has(id));
+  if (previousExpandedGroupIds.length && !expandedInstitutionGroupIds.length && orderedRoots.length) {
     const fallback = entityMap.get(orderedRoots[0]);
-    expandedInstitutionGroupId = institutionGroupId(
+    lastExpandedInstitutionGroupId = institutionGroupId(
       category,
       entityInstitutionGroup(fallback, category)
     );
+    expandedInstitutionGroupIds = [lastExpandedInstitutionGroupId];
   }
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
@@ -633,7 +657,7 @@ function categoryForestData(category) {
         entityMap,
         category,
         groupNames: institutionGroupNames[category] || [],
-        expandedGroupId: expandedInstitutionGroupId,
+        expandedGroupIds: expandedInstitutionGroupIds,
         treeForRoot: (id) => hierarchyTreeData(id, 2),
       })
     : [];
@@ -1117,11 +1141,12 @@ function renderDynamicHierarchy(svg) {
   // 制度组是稳定导航层，必须完整铺在中央区域；下方机构树单独按当前组定位。
   // 不能直接用整棵不对称树的坐标，否则展开某组时会把其他制度组推出画布。
   const areaCenterX = (area.left + area.right) / 2;
-  const expandedInstitutionGroupNode = root.children?.find(
-    (node) => node.data.id === expandedInstitutionGroupId
-  );
   const institutionGroupNodes = (root.children || []).filter(
     (node) => node.data.isInstitutionGroup
+  );
+  const expandedInstitutionGroupIdSet = new Set(expandedInstitutionGroupIds);
+  const expandedInstitutionGroupNodes = institutionGroupNodes.filter(
+    (node) => expandedInstitutionGroupIdSet.has(node.data.id)
   );
   const institutionGroupRowX = new Map();
   if (institutionGroupNodes.length) {
@@ -1139,17 +1164,23 @@ function renderDynamicHierarchy(svg) {
     }
   }
 
-  let expandedBranchCenterX = expandedInstitutionGroupNode
-    ? institutionGroupRowX.get(expandedInstitutionGroupNode.data.id) ?? areaCenterX
-    : areaCenterX;
+  const expandedBranchCenterX = new Map();
+  const expandedBranchRanges = [];
   let focusedBranchNode = null;
-  if (expandedInstitutionGroupNode?.descendants().length > 1) {
+  for (const expandedInstitutionGroupNode of expandedInstitutionGroupNodes) {
+    let branchCenterX = institutionGroupRowX.get(expandedInstitutionGroupNode.data.id)
+      ?? areaCenterX;
+    if (expandedInstitutionGroupNode.descendants().length <= 1) {
+      expandedBranchCenterX.set(expandedInstitutionGroupNode.data.id, branchCenterX);
+      continue;
+    }
     const branchNodes = expandedInstitutionGroupNode.descendants().slice(1);
     const anchorId = expansionAnchorId(
       expandedHierarchyPath,
-      spaceAwareExpansion.value
+      spaceAwareExpansion.value || expandedInstitutionGroupNodes.length > 1
     );
-    focusedBranchNode = branchNodes.find((node) => node.data.id === anchorId);
+    const branchFocus = branchNodes.find((node) => node.data.id === anchorId);
+    if (branchFocus) focusedBranchNode = branchFocus;
     const minOffset = d3.min(
       branchNodes,
       (node) => node.x - expandedInstitutionGroupNode.x - nodeLeftExtent(node)
@@ -1160,23 +1191,31 @@ function renderDynamicHierarchy(svg) {
     );
     const branchWidth = maxOffset - minOffset;
     const viewportWidth = area.right - area.left;
-    if (focusedBranchNode) {
+    if (branchFocus) {
       // 展开大机构时让它仍位于所属制度组正下方；超宽的下级树交给视口拖动，
       // 不能为了塞满画布把父节点漂到相邻制度组下面。
-      expandedBranchCenterX = anchorBranchToGroup(
-        expandedBranchCenterX,
+      branchCenterX = anchorBranchToGroup(
+        branchCenterX,
         expandedInstitutionGroupNode.x,
-        focusedBranchNode.x
+        branchFocus.x
       );
-    } else {
-      expandedBranchCenterX = branchWidth <= viewportWidth
+    } else if (expandedInstitutionGroupNodes.length === 1) {
+      branchCenterX = branchWidth <= viewportWidth
         ? Math.max(
             area.left - minOffset,
-            Math.min(area.right - maxOffset, expandedBranchCenterX)
+            Math.min(area.right - maxOffset, branchCenterX)
           )
         : areaCenterX - (minOffset + maxOffset) / 2;
     }
+    expandedBranchCenterX.set(expandedInstitutionGroupNode.data.id, branchCenterX);
+    expandedBranchRanges.push({
+      id: expandedInstitutionGroupNode.data.id,
+      left: branchCenterX + minOffset,
+      right: branchCenterX + maxOffset,
+    });
   }
+  const expandedGroupBranchesFit = expandedInstitutionGroupNodes.length <= 1
+    || horizontalRangesFit(expandedBranchRanges, area.left, area.right, 24);
 
   const clipId = "dynamic-tree-viewport-clip";
   const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
@@ -1212,10 +1251,14 @@ function renderDynamicHierarchy(svg) {
       x = areaCenterX;
     } else if (node.data.isInstitutionGroup) {
       x = institutionGroupRowX.get(node.data.id) ?? areaCenterX;
-    } else if (expandedInstitutionGroupNode && node.ancestors().includes(expandedInstitutionGroupNode)) {
-      x = expandedBranchCenterX + node.x - expandedInstitutionGroupNode.x;
     } else {
-      x = areaCenterX + node.x - root.x;
+      const institutionGroupAncestor = node.ancestors().find(
+        (ancestor) => expandedInstitutionGroupIdSet.has(ancestor.data.id)
+      );
+      x = institutionGroupAncestor
+        ? (expandedBranchCenterX.get(institutionGroupAncestor.data.id) ?? areaCenterX)
+          + node.x - institutionGroupAncestor.x
+        : areaCenterX + node.x - root.x;
     }
     // 制度组是新增的一层导航，不能再完整占用旧树的一层高度。
     // 一级机构贴近制度组，后续真实上下级仍沿用设计稿的层间距。
@@ -1295,7 +1338,9 @@ function renderDynamicHierarchy(svg) {
   const contentHeight = contentBottom - contentTop;
   const viewportHeight = area.bottom - area.top;
   svg.__dynamicHierarchyFitsViewport = (
-    contentWidth <= viewportWidth && contentHeight <= viewportHeight
+    contentWidth <= viewportWidth
+    && contentHeight <= viewportHeight
+    && expandedGroupBranchesFit
   );
   const minPanY = contentHeight <= viewportHeight ? 0 : area.bottom - contentBottom;
   const maxPanY = contentHeight <= viewportHeight ? 0 : area.top - contentTop;
@@ -1624,7 +1669,7 @@ function renderDynamicHierarchy(svg) {
     if (!node.data.isVirtual) setText(label, node.data.title);
     if (label && !node.data.isVirtual) label.dataset.entityId = String(node.data.id);
     const isExpanded = node.data.isInstitutionGroup
-      ? expandedInstitutionGroupId === node.data.id
+      ? expandedInstitutionGroupIds.includes(node.data.id)
       : node.data.isVirtual
         ? !collapsedHierarchyIds.has(node.data.id)
       : expandedHierarchyPath.includes(node.data.id);
@@ -1635,6 +1680,21 @@ function renderDynamicHierarchy(svg) {
 
     const templatePolygon = node.data.isVirtual ? null : nodeGroup.querySelector("polygon");
     const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
+    const hitBounds = node.data.isVirtual
+      ? { x: -layout.width / 2, y: -layout.height / 2, width: layout.width, height: layout.height }
+      : polygonBounds;
+    if (hitBounds) {
+      const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      hitArea.classList.add("dynamic-tree-node-hit-area");
+      hitArea.setAttribute("x", String(hitBounds.x));
+      hitArea.setAttribute("y", String(hitBounds.y));
+      hitArea.setAttribute("width", String(hitBounds.width));
+      hitArea.setAttribute("height", String(hitBounds.height));
+      hitArea.setAttribute("fill", "transparent");
+      hitArea.setAttribute("pointer-events", "all");
+      hitArea.setAttribute("aria-hidden", "true");
+      nodeGroup.insertBefore(hitArea, nodeGroup.firstChild);
+    }
     if (!node.data.isVirtual) fitDynamicNodeLabel(label, node.data.title, polygonBounds);
     if (!node.data.isVirtual && expandedDetailId.value === node.data.id) {
       // 详情 SVG 自带同一根书脊，隐藏基础节点以免两层描边和文字叠在一起。
@@ -1691,9 +1751,21 @@ function renderDynamicHierarchy(svg) {
       event.stopPropagation();
       lastHierarchyClick = null;
       if (node.data.isInstitutionGroup) {
-        expandedInstitutionGroupId = expandedInstitutionGroupId === node.data.id ? null : node.data.id;
+        const wasExpanded = expandedInstitutionGroupIds.includes(node.data.id);
+        expandedInstitutionGroupIds = toggleInstitutionGroupIds(
+          expandedInstitutionGroupIds,
+          node.data.id,
+          spaceAwareExpansion.value
+        );
+        if (!wasExpanded) lastExpandedInstitutionGroupId = node.data.id;
         expandedHierarchyPath = [];
         lastExpandedHierarchyId = null;
+        hierarchyPanX = 0;
+        hierarchyPanY = 0;
+        if (!wasExpanded) {
+          renderInstitutionGroupCandidate(node.data.id);
+          return;
+        }
       } else if (collapsedHierarchyIds.has(node.data.id)) {
         collapsedHierarchyIds.delete(node.data.id);
       } else {
@@ -2385,6 +2457,12 @@ function bindSpaceAwareExpansionControl(svg) {
     event.stopPropagation();
     lastHierarchyClick = null;
     spaceAwareExpansion.value = !spaceAwareExpansion.value;
+    if (!spaceAwareExpansion.value) {
+      expandedInstitutionGroupIds = collapseInstitutionGroups(
+        expandedInstitutionGroupIds,
+        lastExpandedInstitutionGroupId
+      );
+    }
     if (!spaceAwareExpansion.value && expandedHierarchyPath.length > 1) {
       const focusId = lastExpandedHierarchyId ?? expandedHierarchyPath.at(-1);
       expandedHierarchyPath = focusId == null
@@ -2471,9 +2549,12 @@ function bindTemplateControls(svg) {
           selectedCategory.value = category;
           const focus = categoryFocus(category);
           selectedId.value = focus?.id ?? null;
-          expandedInstitutionGroupId = focus
+          lastExpandedInstitutionGroupId = focus
             ? institutionGroupId(category, entityInstitutionGroup(focus, category))
             : null;
+          expandedInstitutionGroupIds = lastExpandedInstitutionGroupId
+            ? [lastExpandedInstitutionGroupId]
+            : [];
           refreshTemplate({ rebindControls: true });
         };
         this.style.cursor = "pointer";

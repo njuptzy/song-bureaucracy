@@ -18,6 +18,16 @@ export function fitRangeShift(contentLeft, contentRight, viewportLeft, viewportR
   return 0;
 }
 
+export function horizontalRangesFit(ranges, viewportLeft, viewportRight, gap = 18) {
+  const ordered = [...ranges].sort((a, b) => a.left - b.left);
+  if (ordered.some((range) => range.left < viewportLeft || range.right > viewportRight)) {
+    return false;
+  }
+  return ordered.every((range, index) => (
+    index === 0 || range.left - ordered[index - 1].right >= gap
+  ));
+}
+
 export function panScrollbarGeometry({
   viewportSize,
   contentSize,

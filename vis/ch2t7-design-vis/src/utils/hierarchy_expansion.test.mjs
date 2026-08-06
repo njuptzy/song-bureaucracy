@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  collapseInstitutionGroups,
   expansionAfterLayout,
   expansionAnchorId,
+  institutionGroupsAfterLayout,
   mergeExpansionPaths,
   removeExpandedSubtree,
+  toggleInstitutionGroupIds,
 } from "./hierarchy_expansion.js";
 
 test("旧模式始终只保留刚点击节点的展开路径", () => {
@@ -47,4 +50,31 @@ test("组合布局在画布内时同时保留两个分支", () => {
 test("空间展开按全部分支整体居中，不再锚定第一个节点", () => {
   assert.equal(expansionAnchorId([1, 2], false), 1);
   assert.equal(expansionAnchorId([1, 2], true), null);
+});
+
+test("旧模式的顶部虚拟分类仍然只展开新点击项", () => {
+  assert.deepEqual(toggleInstitutionGroupIds(["left"], "right", false), ["right"]);
+});
+
+test("空间模式允许同时展开左右两个虚拟分类", () => {
+  assert.deepEqual(toggleInstitutionGroupIds(["left"], "right", true), ["left", "right"]);
+});
+
+test("多个虚拟分类放不下时回退到新点击分类", () => {
+  assert.deepEqual(institutionGroupsAfterLayout({
+    candidateIds: ["left", "right"],
+    clickedId: "right",
+    spaceAware: true,
+    layoutFits: false,
+  }), ["right"]);
+  assert.deepEqual(institutionGroupsAfterLayout({
+    candidateIds: ["right"],
+    clickedId: "right",
+    spaceAware: true,
+    layoutFits: false,
+  }), ["right"]);
+});
+
+test("关闭空间模式后只保留最近展开的虚拟分类", () => {
+  assert.deepEqual(collapseInstitutionGroups(["left", "right"], "right"), ["right"]);
 });

@@ -42,12 +42,14 @@ export function buildInstitutionGroupNodes({
   category,
   groupNames,
   expandedGroupId,
+  expandedGroupIds,
   treeForRoot,
 }) {
+  const expandedIds = new Set(expandedGroupIds ?? (expandedGroupId ? [expandedGroupId] : []));
   return groupInstitutionRootIds(rootIds, entityMap, category, groupNames)
     .map(({ group, rootIds: groupedRootIds }) => {
       const id = institutionGroupId(category, group);
-      const expanded = id === expandedGroupId;
+      const expanded = expandedIds.has(id);
       return {
         id,
         title: group,

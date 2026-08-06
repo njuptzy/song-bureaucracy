@@ -23,3 +23,27 @@ export function expansionAfterLayout({
 export function expansionAnchorId(expandedIds, spaceAware) {
   return spaceAware ? null : expandedIds[0] ?? null;
 }
+
+export function toggleInstitutionGroupIds(currentIds, clickedId, spaceAware) {
+  if (currentIds.includes(clickedId)) {
+    return currentIds.filter((id) => id !== clickedId);
+  }
+  return spaceAware ? [...currentIds, clickedId] : [clickedId];
+}
+
+export function institutionGroupsAfterLayout({
+  candidateIds,
+  clickedId,
+  spaceAware,
+  layoutFits,
+}) {
+  if (!spaceAware || layoutFits || candidateIds.length <= 1) return [...candidateIds];
+  return [clickedId];
+}
+
+export function collapseInstitutionGroups(expandedIds, lastExpandedId) {
+  const focusId = expandedIds.includes(lastExpandedId)
+    ? lastExpandedId
+    : expandedIds.at(-1);
+  return focusId ? [focusId] : [];
+}
