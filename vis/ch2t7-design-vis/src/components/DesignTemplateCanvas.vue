@@ -7,7 +7,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import * as d3 from "d3";
 import { buildYearSnapshot } from "../utils/snapshot";
 import {
@@ -59,6 +59,8 @@ let hierarchyPanY = 0;
 let expandedInstitutionGroupId = null;
 let inlineCompositionScrollOffset = 0;
 let renderRevision = 0;
+let timelineRefreshFrame = null;
+let timelineRefreshNeedsStatic = false;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -2425,8 +2427,16 @@ function bindTimelineRange(svg) {
 
   brush.on("brush", (event) => {
     if (!event.sourceEvent || !event.selection) return;
+    const nextRange = rangeFromPointer(event);
     timelineSelectionActive.value = true;
-    renderRange(rangeFromPointer(event));
+    renderRange(nextRange);
+    if (
+      selectedRange.value[0] !== nextRange[0]
+      || selectedRange.value[1] !== nextRange[1]
+    ) {
+      selectedRange.value = nextRange;
+      scheduleTimelineRefresh();
+    }
   });
   brush.on("end", (event) => {
     if (!event.sourceEvent) return;
@@ -2434,7 +2444,7 @@ function bindTimelineRange(svg) {
     timelineSelectionActive.value = true;
     selectedRange.value = nextRange;
     moveBrush(nextRange);
-    refreshTemplate({ rebindStatic: true });
+    flushTimelineRefresh(true);
   });
 
   const cancelSelection = (event) => {
@@ -2444,7 +2454,7 @@ function bindTimelineRange(svg) {
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
-    refreshTemplate({ rebindStatic: true });
+    flushTimelineRefresh(true);
   };
   d3.select(cancelControl)
     .on("click.cancel-selection", cancelSelection)
@@ -2537,6 +2547,26 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   updateDetails(svg);
 }
 
+function scheduleTimelineRefresh({ rebindStatic = false } = {}) {
+  timelineRefreshNeedsStatic ||= rebindStatic;
+  if (timelineRefreshFrame != null) return;
+  timelineRefreshFrame = window.requestAnimationFrame(() => {
+    const needsStatic = timelineRefreshNeedsStatic;
+    timelineRefreshFrame = null;
+    timelineRefreshNeedsStatic = false;
+    refreshTemplate({ rebindStatic: needsStatic });
+  });
+}
+
+function flushTimelineRefresh(rebindStatic = false) {
+  if (timelineRefreshFrame != null) {
+    window.cancelAnimationFrame(timelineRefreshFrame);
+    timelineRefreshFrame = null;
+  }
+  timelineRefreshNeedsStatic = false;
+  refreshTemplate({ rebindStatic });
+}
+
 watch(viewMode, renderTemplate);
 onMounted(async () => {
   installDesignFonts();
@@ -2546,6 +2576,9 @@ onMounted(async () => {
     // 字体加载失败时仍保留 SVG 自带的回退字体。
   }
   renderTemplate();
+});
+onUnmounted(() => {
+  if (timelineRefreshFrame != null) window.cancelAnimationFrame(timelineRefreshFrame);
 });
 </script>
 
