@@ -424,6 +424,13 @@ PROFILES = {
         ],
         "explicit_title_heads": [
             {
+                "ocr_title": "下班",
+                "name": "下班祗应",
+                "continuation": "祗应",
+                "page": "656",
+                "reason": "原书 p656 正式词头为‘下班祗应’，正文 OCR 将词头在‘下班/祗应’处断块",
+            },
+            {
                 "ocr_title": "诸寺监主簿、秘书省校书郎、正",
                 "name": "诸寺监主簿、秘书省校书郎、正字、助教",
                 "continuation": "字、助教",
@@ -459,6 +466,12 @@ PROFILES = {
             },
         ],
         "catalog_renames": [
+            {
+                "from": "下班祇应",
+                "to": "下班祗应",
+                "page": "656",
+                "reason": "核对原书 p656，正式词头作‘下班祗应’，目录 OCR 字形作‘祇’",
+            },
             {
                 "from": "宣议郎",
                 "to": "宣议郎",
@@ -5617,6 +5630,16 @@ def main():
         else:
             assert "左右班殿直" in right_guard["text"]
 
+        advancing_righteous_deputy = next(
+            e for e in all_entries if e["name"] == "进义副尉"
+        )
+        if "参刑剖选" in advancing_righteous_deputy["text"]:
+            advancing_righteous_deputy["text"] = advancing_righteous_deputy["text"].replace(
+                "参刑剖选", "参刑部选", 1
+            )
+        else:
+            assert "参刑部选" in advancing_righteous_deputy["text"]
+
         for title in ("诸司正使", "诸司副使"):
             entry = next(e for e in all_entries if e["name"] == title)
             for field_name, value in list(entry.items()):
@@ -5652,7 +5675,8 @@ def main():
               "p642-643 将武功郎伪条续文并回诸司副使简称，将东班末的皇城使"
               "正文拆回目录占位并校正词头，恢复诸司使副各条中文标点；"
               "p644-655 继续恢复六宅使至武德郎各条中文标点，校正"
-              "法酒库使、大使臣、西头供奉官、右侍禁四处 OCR 错字")
+              "法酒库使、大使臣、西头供奉官、右侍禁四处 OCR 错字；"
+              "p656 补回下班祗应完整词头并校正进义副尉‘刑部’字样")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
