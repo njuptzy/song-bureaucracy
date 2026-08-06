@@ -333,7 +333,7 @@ def build_payload() -> dict:
         source_catalogs_by_entity[entity["id"]] = sorted(source_catalogs)
         attr_categories_by_entity[entity["id"]] = attr_categories
         category_by_entity[entity["id"]] = classify_institution(
-            attr_categories, sorted(source_catalogs)
+            attr_categories, sorted(source_catalogs), entity["title"]
         )
 
     # Derived instances and renamed successors may have no direct BuildRecord.

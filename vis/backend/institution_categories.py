@@ -186,9 +186,31 @@ _ATTRIBUTE_MARKERS = {
         "后宫",
         "御前",
         "尚书内省",
+        # 德寿宫、重华宫等太上皇宫殿，明确的内廷空间。
+        "宫殿",
     ),
-    "中央机构": ("中央", "中枢"),
+    # 玉清昭应宫、景灵宫等宫观是朝廷礼仪性宗教机构，归中央礼仪系统；
+    # 与祠禄官（第十二编）的差遣性质区分开。
+    "中央机构": ("中央", "中枢", "宫观"),
 }
+
+# 标题兜底标记：仅当时间点类别与辞典目录都无法判定时启用。
+# 规则按类别顺序匹配，命中即返回，判定依据会标注"标题推断（兜底）"。
+_TITLE_FALLBACK_RULES = (
+    ("军队机构", ("宣抚",)),
+    ("中央机构", ("八作司", "榷易院")),
+)
+# “某府”默认是州府级行政单位（州县机构），但下列例外不是。
+_TITLE_FU_EXCLUSIONS = ("都督府", "元帅府", "王府", "都护府", "折冲府")
+
+
+def _title_fallback_category(title: str) -> str | None:
+    for category, markers in _TITLE_FALLBACK_RULES:
+        if any(marker in title for marker in markers):
+            return category
+    if title.endswith("府") and not title.endswith(_TITLE_FU_EXCLUSIONS):
+        return "州县机构"
+    return None
 
 _CHAPTER_CATEGORIES = {
     "第一编": "内廷机构",
@@ -270,7 +292,7 @@ def resolve_source_catalogs(
 
 
 def classify_institution(
-    attr_categories: Iterable[str], source_catalogs: Iterable[str]
+    attr_categories: Iterable[str], source_catalogs: Iterable[str], title: str = ""
 ) -> tuple[str | None, str]:
     """Return a design category and an auditable classification basis."""
     attr_candidates = _attribute_candidates(attr_categories)
@@ -297,6 +319,9 @@ def classify_institution(
             return category, "多重分类证据（按具体类别优先级）"
     if "中央机构" in candidates:
         return "中央机构", "中央机构明确证据"
+    fallback = _title_fallback_category(title)
+    if fallback:
+        return fallback, "标题推断（兜底）"
     return None, "缺少可判定的分类证据"
 
 

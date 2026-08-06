@@ -50,6 +50,28 @@ class InstitutionCategoriesTest(unittest.TestCase):
     def test_missing_evidence_stays_unresolved(self):
         self.assertEqual(classify_institution(["官署名"], [])[0], None)
 
+    def test_palace_and_temple_attributes_map_to_court_categories(self):
+        self.assertEqual(classify_institution(["宫观"], [])[0], "中央机构")
+        self.assertEqual(classify_institution(["宫殿"], [])[0], "内廷机构")
+
+    def test_title_fallback_covers_generic_attributes(self):
+        cases = (
+            ("淮东宣抚使司", "军队机构"),
+            ("真定府", "州县机构"),
+            ("建康府", "州县机构"),
+            ("八作司", "中央机构"),
+            ("香药榷易院", "中央机构"),
+        )
+        for title, expected in cases:
+            with self.subTest(title=title):
+                category, basis = classify_institution(["官署名"], [], title)
+                self.assertEqual(category, expected)
+                self.assertIn("兜底", basis)
+
+    def test_title_fallback_respects_palace_exclusions(self):
+        self.assertEqual(classify_institution(["官署名"], [], "都督府")[0], None)
+        self.assertEqual(classify_institution(["官署名"], [], "王府")[0], None)
+
     def test_road_in_a_common_noun_does_not_mean_circuit_level(self):
         category, _ = classify_institution(
             ["京师道路机构"],
