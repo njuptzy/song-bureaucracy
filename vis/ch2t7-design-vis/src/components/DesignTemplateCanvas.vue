@@ -25,6 +25,7 @@ import {
 } from "../utils/hierarchy_layout";
 import {
   expansionAfterLayout,
+  expansionAnchorId,
   mergeExpansionPaths,
   removeExpandedSubtree,
 } from "../utils/hierarchy_expansion";
@@ -1144,9 +1145,11 @@ function renderDynamicHierarchy(svg) {
   let focusedBranchNode = null;
   if (expandedInstitutionGroupNode?.descendants().length > 1) {
     const branchNodes = expandedInstitutionGroupNode.descendants().slice(1);
-    focusedBranchNode = branchNodes.find((node) => (
-      node.data.id === expandedHierarchyPath[0]
-    ));
+    const anchorId = expansionAnchorId(
+      expandedHierarchyPath,
+      spaceAwareExpansion.value
+    );
+    focusedBranchNode = branchNodes.find((node) => node.data.id === anchorId);
     const minOffset = d3.min(
       branchNodes,
       (node) => node.x - expandedInstitutionGroupNode.x - nodeLeftExtent(node)

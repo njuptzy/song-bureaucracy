@@ -19,3 +19,7 @@ export function expansionAfterLayout({
   const combinesIndependentBranch = candidateIds.some((id) => !fallback.has(id));
   return combinesIndependentBranch ? [...fallbackPath] : [...candidateIds];
 }
+
+export function expansionAnchorId(expandedIds, spaceAware) {
+  return spaceAware ? null : expandedIds[0] ?? null;
+}

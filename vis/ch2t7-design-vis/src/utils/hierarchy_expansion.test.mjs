@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   expansionAfterLayout,
+  expansionAnchorId,
   mergeExpansionPaths,
   removeExpandedSubtree,
 } from "./hierarchy_expansion.js";
@@ -41,4 +42,9 @@ test("组合布局在画布内时同时保留两个分支", () => {
     spaceAware: true,
     layoutFits: true,
   }), [1, 2, 3]);
+});
+
+test("空间展开按全部分支整体居中，不再锚定第一个节点", () => {
+  assert.equal(expansionAnchorId([1, 2], false), 1);
+  assert.equal(expansionAnchorId([1, 2], true), null);
 });
