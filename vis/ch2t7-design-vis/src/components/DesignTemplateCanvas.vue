@@ -984,6 +984,11 @@ function hierarchyTemplates(svg) {
   );
   if (!templateGroup || !emperorText || !emperorRect || !templatePolygonBounds) return null;
 
+  // 缓存必须保存脱离画板的不可变模板。原节点随后会被状态绑定调整透明度，
+  // 若直接缓存引用，下一次局部重绘会把变淡后的样式复制到虚拟分类标题。
+  const emperorTextTemplate = emperorText.cloneNode(true);
+  const emperorRectTemplate = emperorRect.cloneNode(true);
+
   // 原稿的“皇帝”只作为横排分类根的样式模板，不在动态机构树中重复显示。
   emperorText.style.display = "none";
   emperorRect.style.display = "none";
@@ -1005,8 +1010,8 @@ function hierarchyTemplates(svg) {
     templateGroup,
     inlineDetailTemplate,
     templatePolygonBounds,
-    emperorText,
-    emperorRect,
+    emperorText: emperorTextTemplate,
+    emperorRect: emperorRectTemplate,
   };
   hierarchyTemplateCache.set(svg, templates);
   return templates;
@@ -1540,8 +1545,12 @@ function renderDynamicHierarchy(svg) {
       rootRect.setAttribute("y", String(-layout.height / 2));
       rootRect.setAttribute("width", String(layout.width));
       rootRect.setAttribute("height", String(layout.height));
+      rootRect.removeAttribute("opacity");
+      rootRect.style.removeProperty("opacity");
       const rootLabel = emperorText.cloneNode(true);
       rootLabel.style.removeProperty("display");
+      rootLabel.removeAttribute("opacity");
+      rootLabel.style.removeProperty("opacity");
       rootLabel.removeAttribute("transform");
       rootLabel.setAttribute("x", "0");
       rootLabel.setAttribute("y", "0");
