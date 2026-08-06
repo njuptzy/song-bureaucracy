@@ -5132,11 +5132,79 @@ def main():
         else:
             assert vice_ministers["text"].startswith(full_prefix)
 
+        crown_prince_tutor = next(e for e in all_entries if e["name"] == "太子太傅")
+        if not crown_prince_tutor["text"].startswith(full_prefix):
+            crown_prince_tutor["text"] = full_prefix + crown_prince_tutor["text"]
+
+        grand_preceptor = next(e for e in all_entries if e["name"] == "太师")
+        leaked_section_title = "三、文官阶门之二——元丰新制文臣寄禄官阶"
+        if leaked_section_title in grand_preceptor["text"]:
+            grand_preceptor["text"] = grand_preceptor["text"].replace(
+                leaked_section_title, "", 1
+            ).rstrip()
+        else:
+            assert grand_preceptor["text"].endswith("并参“三师·太师”条。")
+
+        post_yuanfeng_stipend_ranks = next(
+            e for e in all_entries if e["name"] == "元丰以后寄禄官"
+        )
+        if "," in post_yuanfeng_stipend_ranks["text"] or ":" in post_yuanfeng_stipend_ranks["text"]:
+            post_yuanfeng_stipend_ranks["text"] = (
+                post_yuanfeng_stipend_ranks["text"].replace(",", "，").replace(":", "：")
+            )
+        else:
+            assert "自北宋元丰三年九月制订《元丰寄禄格》之后，迄南宋，" in post_yuanfeng_stipend_ranks["text"]
+            assert "多次变动：①" in post_yuanfeng_stipend_ranks["text"]
+
+        grand_commandant = next(
+            e for e in all_entries
+            if e["name"] == "开府仪同三司"
+            and e["text"].startswith("寄禄官名。")
+        )
+        grand_commandant["text"] = grand_commandant["text"].replace(
+            "使相(节度使兼侍中、中书令,或兼同中书门下平章事)",
+            "使相（节度使兼侍中、中书令，或兼同中书门下平章事）",
+            1,
+        ).replace(
+            "使相（节度使兼侍中、中书令,或兼同中书门下平章事）",
+            "使相（节度使兼侍中、中书令，或兼同中书门下平章事）",
+            1,
+        ).replace(
+            "从一品(《玉海》卷119《元丰新定官制》、《宋史·职官志》9"
+            "《绍兴后阶官·文阶》、《宋会要·职官》8之3)。",
+            "从一品（《玉海》卷119《元丰新定官制》、《宋史·职官志》9"
+            "《绍兴后阶官·文阶》、《宋会要·职官》8之3）。",
+            1,
+        )
+        assert "使相（节度使兼侍中、中书令，或兼同中书门下平章事）" in grand_commandant["text"]
+        assert "从一品（《玉海》卷119《元丰新定官制》" in grand_commandant["text"]
+
+        xuanfeng = next(e for e in all_entries if e["name"] == "宣奉大夫")
+        malformed_xuanfeng = (
+            "正三品(资料出处参“特进”条)。\n"
+            "简称 宣奉。《编年备要》卷27：“(大观二年六月)\n"
+            "宣奉易左光禄。”《宋会要·职官》56之28：“(大\n"
+            "观二年六月)宣奉大夫,旧系左光禄大夫。”"
+        )
+        corrected_xuanfeng = (
+            "正三品（资料出处参“特进”条）。简称 宣奉。《编年备要》卷27："
+            "“（大观二年六月）宣奉易左光禄。”《宋会要·职官》56之28："
+            "“（大观二年六月）宣奉大夫，旧系左光禄大夫。”"
+        )
+        if malformed_xuanfeng in xuanfeng["text"]:
+            xuanfeng["text"] = xuanfeng["text"].replace(
+                malformed_xuanfeng, corrected_xuanfeng, 1
+            )
+        else:
+            assert corrected_xuanfeng in xuanfeng["text"]
+
         print("  [正文OCR归位] p616-619：恢复特进参见条、通奉大夫标点，"
               "修正文散官阶数、承务郎标点、辅国大将军日期及忠武、壮武"
               "将军品位括号；p622-623 修复中书舍人元丰寄禄格标点，并去除"
               "给事中、礼部尚书正文重复词头，恢复卫尉少卿、司农少卿条括号；"
-              "据 p622-624 原页补回八条词头同行的文阶分类说明")
+              "据 p622-624 原页补回九条词头同行的文阶分类说明；p624-626 "
+              "移除太师条误粘节标题，恢复元丰以后寄禄官、开府仪同三司及"
+              "宣奉大夫的全角标点和版面断行")
 
     # 个别目录与正文 OCR 错字不同：用正文 OCR 形态完成切分后，再恢复规范条目名。
     for rename in PROFILE.get("catalog_renames", []):
