@@ -218,11 +218,14 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   label.style.textOrientation = "mixed";
   label.setAttribute("text-anchor", "middle");
   // 不使用浏览器竖排流：每个字独立放在本格中心，避免标题串到相邻书脊。
-  const bodyHeight = height - 29;
-  const fontSize = Math.min(9.2, bodyHeight / Math.max(1, displayTitle.length));
+  const bodyHeight = height - 38;
+  const fontSize = Math.min(
+    INLINE_COMPOSITION.titleFontSize,
+    bodyHeight / Math.max(1, displayTitle.length)
+  );
   label.style.fontSize = `${fontSize}px`;
   const centerX = x + width / 2;
-  const top = y + 7;
+  const top = y + 9;
   [...displayTitle].forEach((character, index) => {
     const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
     tspan.setAttribute("x", String(centerX));
@@ -245,7 +248,10 @@ function fitQuotaLabel(quota, person, edge, rect) {
   quota.style.writingMode = "horizontal-tb";
   quota.setAttribute("text-anchor", "middle");
   quota.removeAttribute("dominant-baseline");
-  quota.style.fontSize = `${Math.min(5.01, 16 / Math.max(2, text.length))}px`;
+  quota.style.fontSize = `${Math.min(
+    INLINE_COMPOSITION.quotaFontSize,
+    24 / Math.max(2, text.length)
+  )}px`;
   quota.setAttribute("x", String(x + width / 2));
   quota.setAttribute("y", String(y + height - 7));
   if (person) {
@@ -253,8 +259,9 @@ function fitQuotaLabel(quota, person, edge, rect) {
     person.removeAttribute("transform");
     person.style.writingMode = "horizontal-tb";
     person.setAttribute("text-anchor", "middle");
+    person.style.fontSize = `${INLINE_COMPOSITION.personFontSize}px`;
     person.setAttribute("x", String(x + width / 2));
-    person.setAttribute("y", String(y + height - 1.5));
+    person.setAttribute("y", String(y + height - 2));
   }
 }
 
@@ -532,20 +539,28 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
 }
 
 const INLINE_DETAIL_BOUNDS = {
-  left: 614.19 - 763.56,
-  top: 143.72 - 196.11,
-  bottom: 288.41 - 196.11,
+  left: 747.3 - 763.56,
+  top: 153 - 196.11,
+  bottom: 334 - 196.11,
 };
 const INLINE_COMPOSITION = {
   spineX: 763.56,
   panelX: 786.04,
   barX: 794.72,
-  barWidth: 15.42,
-  barPitch: 21.11,
-  pageXOffset: 17.8,
-  pageWidth: 62.96,
-  pageShift: 65.7,
-  panelRightPadding: 7.53,
+  panelY: 153,
+  panelHeight: 181,
+  barY: 166,
+  barHeight: 158,
+  barWidth: 24,
+  barPitch: 32,
+  titleFontSize: 13.2,
+  quotaFontSize: 7.5,
+  personFontSize: 8,
+  pageXOffset: 29,
+  pageWidth: 110,
+  pageShift: 116,
+  panelRightPadding: 12,
+  trackY: 329,
 };
 const INLINE_TITLE_POLYGON_BOUNDS = {
   x: 747.3,
@@ -553,12 +568,6 @@ const INLINE_TITLE_POLYGON_BOUNDS = {
   width: 33.22,
   height: 126.85,
 };
-const INLINE_DETAIL_COLUMN_EDGES = [
-  614.19, 633.3, 650.92, 668.55, 686.17, 703.79, 721.41, 740.72,
-];
-const INLINE_DETAIL_COLUMN_TOP = 161.01;
-const INLINE_DETAIL_COLUMN_HEIGHT = 127.4;
-
 function displayStaffFor(entityId) {
   const byOfficial = new Map();
   for (const edge of staffFor(entityId)) {
@@ -627,11 +636,17 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   officialGroups.forEach((group) => group.remove());
   pageGroup?.remove();
 
+  // 设计稿中的七栏摘要在机构详情页重复信息且挤压核心编制视图，整体移除。
+  const directoryLabel = [...card.querySelectorAll("text.cls-67")][0];
+  directoryLabel?.parentElement?.remove();
+
   const panelRect = [...card.children].find((element) => (
     element.tagName.toLowerCase() === "rect"
       && Math.abs(Number(element.getAttribute("x")) - INLINE_COMPOSITION.panelX) < 0.1
   ));
   if (panelRect) {
+    panelRect.setAttribute("y", String(INLINE_COMPOSITION.panelY));
+    panelRect.setAttribute("height", String(INLINE_COMPOSITION.panelHeight));
     panelRect.setAttribute("width", String(geometry.panelRight - INLINE_COMPOSITION.panelX));
   }
   const panelBorder = [...card.children].find((element) => (
@@ -641,6 +656,8 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (panelBorder) {
     panelBorder.setAttribute("x1", String(geometry.panelRight + 2.42));
     panelBorder.setAttribute("x2", String(geometry.panelRight + 2.42));
+    panelBorder.setAttribute("y1", String(INLINE_COMPOSITION.panelY));
+    panelBorder.setAttribute("y2", String(INLINE_COMPOSITION.panelY + INLINE_COMPOSITION.panelHeight));
   }
   const panelTrack = [...card.children].find((element) => (
     element.tagName.toLowerCase() === "rect" && element.classList.contains("cls-79")
@@ -656,78 +673,26 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
     if (!element) continue;
     element.removeAttribute("transform");
     element.setAttribute("x", String(INLINE_COMPOSITION.panelX));
-    element.setAttribute("y", "284.6");
+    element.setAttribute("y", String(INLINE_COMPOSITION.trackY));
     element.setAttribute("width", String(width));
-    element.setAttribute("height", "2.77");
+    element.setAttribute("height", "3.6");
   }
 
   const selectedOfficial = geometry.selectedIndex >= 0
     ? entityMap.get(geometry.staff[geometry.selectedIndex].official)
     : null;
   const values = selectedOfficial ? inlineDetailValues(selectedOfficial) : null;
-  let detailDirectoryGroup = null;
-
-  for (const [fieldIndex, field] of INLINE_DETAIL_FIELDS.entries()) {
-    const label = [...card.querySelectorAll("text.cls-67")]
-      .find((element) => normalizeText(element) === field.label.replace(/\s+/g, ""));
-    if (!label) continue;
-    detailDirectoryGroup ||= label.parentElement;
-    const active = inlineDetailField.value === field.key;
-    label.style.pointerEvents = "none";
-    label.style.fontWeight = active ? "700" : "400";
-    label.style.fill = active ? "#866d6d" : "#351704";
-
-    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    hitArea.classList.add("inline-detail-directory-entry");
-    hitArea.dataset.detailField = field.key;
-    hitArea.setAttribute("x", String(INLINE_DETAIL_COLUMN_EDGES[fieldIndex]));
-    hitArea.setAttribute("y", String(INLINE_DETAIL_COLUMN_TOP));
-    hitArea.setAttribute(
-      "width",
-      String(INLINE_DETAIL_COLUMN_EDGES[fieldIndex + 1] - INLINE_DETAIL_COLUMN_EDGES[fieldIndex])
-    );
-    hitArea.setAttribute("height", String(INLINE_DETAIL_COLUMN_HEIGHT));
-    hitArea.setAttribute("fill", active ? "#866d6d" : "transparent");
-    hitArea.setAttribute("fill-opacity", active ? "0.08" : "0");
-    hitArea.setAttribute("pointer-events", "all");
-    hitArea.style.cursor = "pointer";
-    const jumpTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    jumpTitle.textContent = `跳转到左侧详情的${field.label.replace("：", "")}段落`;
-    hitArea.appendChild(jumpTitle);
-
-    const jumpToSection = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const detailEntity = selectedOfficial || entity;
-      selectedId.value = detailEntity.id;
-      if (detailEntity.type === "机构") {
-        selectedCategory.value = entityCategory(detailEntity);
-      } else {
-        selectedCategory.value = entityCategory(entity);
-      }
-      inlineDetailField.value = field.key;
-      pendingDetailSectionKey = field.key;
-      renderTemplate();
-    };
-    d3.select(hitArea)
-      .on("mouseenter.inline-detail-field", () => {
-        hitArea.setAttribute("fill", "#866d6d");
-        hitArea.setAttribute("fill-opacity", active ? "0.13" : "0.08");
-      })
-      .on("mouseleave.inline-detail-field", () => {
-        hitArea.setAttribute("fill", active ? "#866d6d" : "transparent");
-        hitArea.setAttribute("fill-opacity", active ? "0.08" : "0");
-      })
-      .on("click.inline-detail-field", jumpToSection);
-    detailDirectoryGroup?.appendChild(hitArea);
-  }
-
   geometry.staff.forEach((edge, index) => {
     if (!officialTemplate) return;
     const group = officialTemplate.cloneNode(true);
     const label = group.querySelector("text.cls-64");
     const offsetX = geometry.barX(index) - INLINE_COMPOSITION.barX;
     group.setAttribute("transform", `translate(${offsetX} 0)`);
+    for (const bar of group.querySelectorAll("rect")) {
+      bar.setAttribute("y", String(INLINE_COMPOSITION.barY));
+      bar.setAttribute("width", String(INLINE_COMPOSITION.barWidth));
+      bar.setAttribute("height", String(INLINE_COMPOSITION.barHeight));
+    }
     const officialTitleText = titleOf(edge.official);
     fitVerticalBarLabel(label, officialTitleText, group.querySelector("rect.cls-15"));
     const quota = group.querySelector("text.cls-72");
@@ -749,8 +714,18 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   if (selectedOfficial && pageTemplate && values) {
     const pageX = geometry.barX(geometry.selectedIndex) + INLINE_COMPOSITION.pageXOffset;
     pageTemplate.setAttribute("transform", `translate(${pageX - 812.52} 0)`);
+    for (const [index, pageRect] of [...pageTemplate.querySelectorAll("rect")].entries()) {
+      pageRect.setAttribute("y", String(INLINE_COMPOSITION.barY + (index ? 4 : 0)));
+      pageRect.setAttribute("width", String(INLINE_COMPOSITION.pageWidth));
+      pageRect.setAttribute("height", String(INLINE_COMPOSITION.barHeight - (index ? 8 : 0)));
+    }
     const description = pageTemplate.querySelector("text.cls-66");
-    wrapVerticalText(description, values[inlineDetailField.value], 15, 6, 9.81);
+    description.setAttribute(
+      "transform",
+      `translate(${812.52 + INLINE_COMPOSITION.pageWidth - 12} ${INLINE_COMPOSITION.barY + 10})`
+    );
+    description.style.fontSize = "9px";
+    wrapVerticalText(description, values[inlineDetailField.value], 15, 10, 10.2);
     const descriptionTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
     descriptionTitle.textContent = `${selectedOfficial.title}：${values[inlineDetailField.value]}`;
     pageTemplate.appendChild(descriptionTitle);
@@ -811,7 +786,8 @@ function renderDynamicHierarchy(svg) {
   if (!data) return;
   const root = d3.hierarchy(data);
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
-  const depthGap = 145;
+  // 放大的编制书页需要更大的层间净空，避免与下级机构及连接总线重叠。
+  const depthGap = expandedDetailId.value != null ? 190 : 145;
   const expandedComposition = expandedDetailId.value != null
     ? inlineCompositionGeometry(expandedDetailId.value)
     : null;
