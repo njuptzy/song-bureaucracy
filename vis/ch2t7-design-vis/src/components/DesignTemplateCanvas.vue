@@ -24,6 +24,11 @@ import {
   virtualBusRange,
 } from "../utils/hierarchy_layout";
 import {
+  expansionAfterLayout,
+  mergeExpansionPaths,
+  removeExpandedSubtree,
+} from "../utils/hierarchy_expansion";
+import {
   resolveHierarchyContext,
   resolveVisibleSelection,
 } from "../utils/hierarchy_navigation";
@@ -47,6 +52,7 @@ const selectedCategory = ref("中央机构");
 const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
 const inlineDetailOfficialId = ref(null);
+const spaceAwareExpansion = ref(false);
 const svgCache = new Map();
 const hierarchyTemplateCache = new WeakMap();
 const yearSnapshotCache = new Map();
@@ -61,6 +67,7 @@ let hierarchyPanY = 0;
 let expandedInstitutionGroupId = null;
 let inlineCompositionScrollOffset = 0;
 let renderRevision = 0;
+let lastExpandedHierarchyId = null;
 let timelineRefreshFrame = null;
 let timelineRefreshNeedsStatic = false;
 
@@ -396,7 +403,10 @@ function focusHierarchyContext(entity, revealPath = false) {
     category,
     entityInstitutionGroup(root, category)
   );
-  if (revealPath) expandedHierarchyPath = context.path.slice(0, -1);
+  if (revealPath) {
+    expandedHierarchyPath = context.path.slice(0, -1);
+    lastExpandedHierarchyId = expandedHierarchyPath.at(-1) ?? null;
+  }
   return context;
 }
 
@@ -541,6 +551,45 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
       .map((id) => hierarchyTreeData(id, depth + 1, nextVisiting))
       .filter(Boolean),
   };
+}
+
+function hierarchyExpansionPath(node) {
+  return node.ancestors()
+    .reverse()
+    .filter((ancestor) => !ancestor.data.isVirtual)
+    .map((ancestor) => ancestor.data.id);
+}
+
+function hierarchySubtreeIds(rootId) {
+  const result = [];
+  const queue = [rootId];
+  const visited = new Set();
+  while (queue.length) {
+    const entityId = queue.shift();
+    if (visited.has(entityId)) continue;
+    visited.add(entityId);
+    result.push(entityId);
+    childrenFor(entityId).forEach((edge) => queue.push(edge.child));
+  }
+  return result;
+}
+
+function renderExpansionCandidate(fallbackPath) {
+  const candidateIds = [...expandedHierarchyPath];
+  refreshTemplate();
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  const resolvedIds = expansionAfterLayout({
+    candidateIds,
+    fallbackPath,
+    spaceAware: spaceAwareExpansion.value,
+    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+  });
+  if (
+    resolvedIds.length === candidateIds.length
+    && resolvedIds.every((id, index) => id === candidateIds[index])
+  ) return;
+  expandedHierarchyPath = resolvedIds;
+  refreshTemplate();
 }
 
 function categoryForestData(category) {
@@ -1018,6 +1067,7 @@ function hierarchyTemplates(svg) {
 }
 
 function renderDynamicHierarchy(svg) {
+  svg.__dynamicHierarchyFitsViewport = true;
   const templates = hierarchyTemplates(svg);
   if (!templates) return;
   const {
@@ -1200,7 +1250,7 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  if (focusedBranchNode?.children?.length) {
+  if (!spaceAwareExpansion.value && focusedBranchNode?.children?.length) {
     const descendantLayouts = focusedBranchNode.descendants()
       .slice(1)
       .map((node) => nodeLayout.get(node));
@@ -1241,6 +1291,9 @@ function renderDynamicHierarchy(svg) {
   const contentBottom = d3.max([...nodeLayout.values()], (layout) => layout.bottom) ?? area.bottom;
   const contentHeight = contentBottom - contentTop;
   const viewportHeight = area.bottom - area.top;
+  svg.__dynamicHierarchyFitsViewport = (
+    contentWidth <= viewportWidth && contentHeight <= viewportHeight
+  );
   const minPanY = contentHeight <= viewportHeight ? 0 : area.bottom - contentBottom;
   const maxPanY = contentHeight <= viewportHeight ? 0 : area.top - contentTop;
   const panControls = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -1637,11 +1690,13 @@ function renderDynamicHierarchy(svg) {
       if (node.data.isInstitutionGroup) {
         expandedInstitutionGroupId = expandedInstitutionGroupId === node.data.id ? null : node.data.id;
         expandedHierarchyPath = [];
+        lastExpandedHierarchyId = null;
       } else if (collapsedHierarchyIds.has(node.data.id)) {
         collapsedHierarchyIds.delete(node.data.id);
       } else {
         collapsedHierarchyIds.add(node.data.id);
         expandedHierarchyPath = [];
+        lastExpandedHierarchyId = null;
       }
       hierarchyPanX = 0;
       hierarchyPanY = 0;
@@ -1659,6 +1714,7 @@ function renderDynamicHierarchy(svg) {
           && event.timeStamp - lastHierarchyClick.timeStamp <= 360;
         if (repeatedClick) {
           expandedHierarchyPath = lastHierarchyClick.expandedHierarchyPath;
+          lastExpandedHierarchyId = lastHierarchyClick.lastExpandedHierarchyId;
           hierarchyPanX = lastHierarchyClick.panX;
           hierarchyPanY = lastHierarchyClick.panY;
           lastHierarchyClick = null;
@@ -1675,6 +1731,7 @@ function renderDynamicHierarchy(svg) {
           id: node.data.id,
           timeStamp: event.timeStamp,
           expandedHierarchyPath: [...expandedHierarchyPath],
+          lastExpandedHierarchyId,
           panX: hierarchyPanX,
           panY: hierarchyPanY,
         };
@@ -1686,12 +1743,21 @@ function renderDynamicHierarchy(svg) {
         if (node.data.childCount) {
           const expandedIndex = expandedHierarchyPath.indexOf(node.data.id);
           if (expandedIndex >= 0) {
-            expandedHierarchyPath = expandedHierarchyPath.slice(0, expandedIndex);
+            expandedHierarchyPath = removeExpandedSubtree(
+              expandedHierarchyPath,
+              hierarchySubtreeIds(node.data.id)
+            );
+            lastExpandedHierarchyId = expandedHierarchyPath.at(-1) ?? null;
           } else {
-            expandedHierarchyPath = node.ancestors()
-              .reverse()
-              .filter((ancestor) => !ancestor.data.isVirtual)
-              .map((ancestor) => ancestor.data.id);
+            const fallbackPath = hierarchyExpansionPath(node);
+            expandedHierarchyPath = mergeExpansionPaths(
+              expandedHierarchyPath,
+              fallbackPath,
+              spaceAwareExpansion.value
+            );
+            lastExpandedHierarchyId = node.data.id;
+            renderExpansionCandidate(fallbackPath);
+            return;
           }
         }
         refreshTemplate();
@@ -2245,6 +2311,101 @@ function replaceCompositionDescriptions(svg) {
   }
 }
 
+function bindSpaceAwareExpansionControl(svg) {
+  let control = svg.querySelector(".space-aware-expansion-control");
+  if (!control) {
+    const ns = "http://www.w3.org/2000/svg";
+    control = document.createElementNS(ns, "g");
+    control.classList.add("space-aware-expansion-control");
+    control.setAttribute("transform", "translate(1392 73)");
+    control.setAttribute("role", "switch");
+    control.setAttribute("tabindex", "0");
+    control.style.cursor = "pointer";
+
+    const outline = document.createElementNS(ns, "rect");
+    outline.dataset.controlPart = "outline";
+    outline.setAttribute("x", "0");
+    outline.setAttribute("y", "0");
+    outline.setAttribute("width", "126");
+    outline.setAttribute("height", "36");
+    outline.setAttribute("fill", "#563905");
+    outline.setAttribute("stroke", "#563905");
+
+    const backPage = document.createElementNS(ns, "rect");
+    backPage.dataset.controlPart = "back-page";
+    backPage.setAttribute("x", "12");
+    backPage.setAttribute("y", "9");
+    backPage.setAttribute("width", "11");
+    backPage.setAttribute("height", "16");
+    backPage.setAttribute("fill", "none");
+    backPage.setAttribute("stroke", "#563905");
+    backPage.setAttribute("stroke-width", "0.9");
+
+    const frontPage = backPage.cloneNode(false);
+    frontPage.dataset.controlPart = "front-page";
+    frontPage.setAttribute("x", "18");
+    frontPage.setAttribute("y", "12");
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", "cls-49");
+    label.setAttribute("x", "38");
+    label.setAttribute("y", "18");
+    label.setAttribute("dominant-baseline", "central");
+    label.textContent = "空间展开";
+
+    const title = document.createElementNS(ns, "title");
+    control.append(outline, backPage, frontPage, label, title);
+    svg.appendChild(control);
+  }
+
+  const sync = () => {
+    const enabled = spaceAwareExpansion.value;
+    const outline = control.querySelector("[data-control-part='outline']");
+    const frontPage = control.querySelector("[data-control-part='front-page']");
+    control.style.display = viewMode.value === "hierarchy" ? "" : "none";
+    control.setAttribute("aria-checked", String(enabled));
+    control.setAttribute(
+      "aria-label",
+      enabled ? "关闭空间展开，恢复单节点展开" : "开启空间展开，空间足够时保留多个节点"
+    );
+    outline.setAttribute("fill-opacity", enabled ? "0.12" : "0");
+    outline.setAttribute("stroke-width", enabled ? "1.35" : "0.8");
+    frontPage.setAttribute("fill", enabled ? "#563905" : "none");
+    frontPage.setAttribute("fill-opacity", enabled ? "0.16" : "0");
+    control.querySelector("title").textContent = enabled
+      ? "空间展开已开启：空间足够时保留多个机构分支"
+      : "空间展开已关闭：点击新节点时收起旧分支";
+  };
+
+  const toggle = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    lastHierarchyClick = null;
+    spaceAwareExpansion.value = !spaceAwareExpansion.value;
+    if (!spaceAwareExpansion.value && expandedHierarchyPath.length > 1) {
+      const focusId = lastExpandedHierarchyId ?? expandedHierarchyPath.at(-1);
+      expandedHierarchyPath = focusId == null
+        ? []
+        : resolveHierarchyContext(focusId, hierarchyEdgesForView(), entityMap).path;
+    }
+    hierarchyPanX = 0;
+    hierarchyPanY = 0;
+    sync();
+    refreshTemplate();
+  };
+  d3.select(control)
+    .on("click.space-aware-expansion", toggle)
+    .on("keydown.space-aware-expansion", (event) => {
+      if (event.key === "Enter" || event.key === " ") toggle(event);
+    })
+    .on("mouseenter.space-aware-expansion", () => {
+      control.querySelector("[data-control-part='outline']")?.setAttribute("stroke-width", "1.35");
+    })
+    .on("mouseleave.space-aware-expansion", sync);
+  svg.__syncSpaceAwareExpansionControl = sync;
+  sync();
+}
+
 function bindTemplateControls(svg) {
   const categoryItems = [...svg.querySelectorAll("text")]
     .filter((textElement) => !textElement.closest(".dynamic-tree-layer"))
@@ -2301,6 +2462,7 @@ function bindTemplateControls(svg) {
           detailPanelScrollOffset = 0;
           collapsedHierarchyIds.clear();
           expandedHierarchyPath = [];
+          lastExpandedHierarchyId = null;
           hierarchyPanX = 0;
           hierarchyPanY = 0;
           selectedCategory.value = category;
@@ -2320,6 +2482,8 @@ function bindTemplateControls(svg) {
         }
       }
     });
+
+  bindSpaceAwareExpansionControl(svg);
 
 }
 
@@ -2596,6 +2760,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   if (rebindControls) bindTemplateControls(svg);
   updateDetails(svg);
   svg.__syncTimelineSelectionStyle?.();
+  svg.__syncSpaceAwareExpansionControl?.();
 }
 
 function scheduleTimelineRefresh({ rebindStatic = false } = {}) {
