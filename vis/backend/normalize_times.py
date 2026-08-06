@@ -21,7 +21,7 @@ DEFAULT_SOURCE = ROOT / "vis/data/song_bureaucracy_best.db"
 DEFAULT_OUTPUT = ROOT / "vis/data/song_bureaucracy_visualization.db"
 DEFAULT_REPORT = ROOT / "vis/reports/time-normalization-report.md"
 
-NORMALIZATION_VERSION = "1.5.0"
+NORMALIZATION_VERSION = "1.5.1"
 REFERENCE_SOURCES = {
     "year_era_table": (
         "教育部《重编国语辞典修订本》附录：中国历代年号表（宋，960—1279）",
@@ -70,6 +70,7 @@ ERA_YEARS: dict[str, tuple[int, int]] = {
     "天宝": (742, 756),
     "至德": (756, 758),
     "乾元": (758, 760),
+    "永泰": (765, 766),
     "大历": (766, 779),
     "建中": (780, 783),
     "兴元": (784, 784),

@@ -143,6 +143,7 @@ class NormalizeTimesTest(unittest.TestCase):
             "后周显德初": 954,
             "西周（前593）": -593,
             "唐天宝七载": 748,
+            "唐代宗永泰二年八月二十一日": 766,
             "唐末": 875,
         }
         for raw, year in expected.items():
