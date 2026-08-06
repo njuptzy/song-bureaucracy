@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   collapseInstitutionGroups,
+  compositionDetailButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
@@ -10,6 +11,24 @@ import {
   removeExpandedSubtree,
   toggleInstitutionGroupIds,
 } from "./hierarchy_expansion.js";
+
+test("编制按钮显示在所有已展开机构以及当前选中机构上", () => {
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: true, isSelected: false, isDetailOpen: false,
+  }), true);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: false, isSelected: true, isDetailOpen: false,
+  }), true);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: false, isSelected: false, isDetailOpen: false,
+  }), false);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: true, isExpanded: true, isSelected: true, isDetailOpen: false,
+  }), false);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: true, isSelected: true, isDetailOpen: true,
+  }), false);
+});
 
 test("旧模式始终只保留刚点击节点的展开路径", () => {
   assert.deepEqual(mergeExpansionPaths([1, 2], [1, 3], false), [1, 3]);

@@ -34,6 +34,7 @@ import {
 } from "../utils/hierarchy_layout";
 import {
   collapseInstitutionGroups,
+  compositionDetailButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
@@ -1792,7 +1793,7 @@ function renderDynamicHierarchy(svg) {
     const interactionHint = node.data.childCount
       ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
       : "";
-    const detailHint = node.data.isVirtual ? "" : "；选中后点击开书按钮展开编制关系";
+    const detailHint = node.data.isVirtual ? "" : "；点击右上角开书按钮展开编制关系";
     title.textContent = hiddenCount
       ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
       : `${node.data.title}${interactionHint}${detailHint}`;
@@ -1802,12 +1803,12 @@ function renderDynamicHierarchy(svg) {
     nodeGroup.style.cursor = "pointer";
     if (!node.data.isVirtual && expandedDetailId.value === node.data.id) expandedDetailNode = node;
 
-    if (
-      !node.data.isVirtual
-      && node.data.id === selectedId.value
-      && expandedDetailId.value !== node.data.id
-      && polygonBounds
-    ) {
+    if (compositionDetailButtonVisible({
+      isVirtual: node.data.isVirtual,
+      isExpanded,
+      isSelected: node.data.id === selectedId.value,
+      isDetailOpen: expandedDetailId.value === node.data.id,
+    }) && polygonBounds) {
       const buttonSize = 11;
       const buttonX = polygonBounds.x + polygonBounds.width - buttonSize - 3;
       const buttonY = polygonBounds.y + 3;

@@ -47,3 +47,12 @@ export function collapseInstitutionGroups(expandedIds, lastExpandedId) {
     : expandedIds.at(-1);
   return focusId ? [focusId] : [];
 }
+
+export function compositionDetailButtonVisible({
+  isVirtual,
+  isExpanded,
+  isSelected,
+  isDetailOpen,
+}) {
+  return !isVirtual && !isDetailOpen && (isExpanded || isSelected);
+}
