@@ -208,14 +208,16 @@ function selectLinkedEntity(entityId) {
   expandedDetailId.value = null;
   inlineDetailOfficialId.value = null;
   selectedId.value = target.id;
-  if (target.type === "机构") {
-    focusHierarchyContext(target, true);
-  } else {
-    const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
-    const org = affiliation ? entityMap.get(affiliation.org) : null;
-    if (org) focusHierarchyContext(org, true);
+  if (viewMode.value !== "composition") {
+    if (target.type === "机构") {
+      focusHierarchyContext(target, true);
+    } else {
+      const affiliation = staffEdgesForView().find((edge) => edge.official === target.id);
+      const org = affiliation ? entityMap.get(affiliation.org) : null;
+      if (org) focusHierarchyContext(org, true);
+    }
   }
-  refreshTemplate({ rebindControls: true });
+  refreshTemplate({ rebindControls: viewMode.value !== "composition" });
 }
 
 function renderLinkedTokens(element, tokens, emptyText, charsPerLine = 28, lineHeight = 18) {
@@ -424,9 +426,104 @@ function titleOf(entityId) {
 }
 
 const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
+const HIERARCHY_DESIGN_URL = "/api/design/hierarchy.svg";
+
+function templateCategoryItems(svg) {
+  const sharedItems = [...svg.querySelectorAll(
+    ".shared-category-navigation > .shared-category-item"
+  )].map((group) => ({
+    category: group.dataset.category || "",
+    textElement: [...group.children].find(
+      (child) => child.tagName.toLowerCase() === "text"
+    ),
+    group,
+  })).filter(({ category, textElement }) => (
+    CATEGORY_NAMES.includes(category) && textElement
+  ));
+  if (sharedItems.length) return sharedItems;
+
+  return [...svg.children]
+    .filter((group) => group.tagName.toLowerCase() === "g")
+    .map((group) => {
+      const textElement = [...group.children].find((child) => (
+        child.tagName.toLowerCase() === "text"
+          && CATEGORY_NAMES.includes(normalizeText(child))
+      ));
+      return textElement
+        ? { category: normalizeText(textElement), textElement, group }
+        : null;
+    })
+    .filter(Boolean);
+}
+
+function prepareSharedCategoryGroup(group, category) {
+  [group, ...group.querySelectorAll("[class]")].forEach((element) => {
+    element.removeAttribute("class");
+  });
+  group.classList.add("shared-category-item");
+  group.dataset.category = category;
+
+  const label = [...group.children].find(
+    (child) => child.tagName.toLowerCase() === "text"
+  );
+  label?.classList.add("shared-category-label");
+
+  const outline = [...group.children].find(
+    (child) => child.tagName.toLowerCase() === "polygon"
+  );
+  outline?.classList.add("shared-category-outline");
+
+  const selection = [...group.children].find((child) => (
+    child.tagName.toLowerCase() === "g" && child.querySelector("polygon")
+  ));
+  if (selection) {
+    selection.classList.add("shared-category-selection");
+    selection.querySelector("polygon")?.classList.add("shared-category-selection-shape");
+  }
+  return group;
+}
+
+// 4-02 原稿把路级四司嵌进分类栏；完整编制画板只需沿用层级画板的
+// 五大类导航。直接克隆 4-01 的五个原始 group，避免维护第二套坐标。
+function alignCompositionCategoryNavigation(svg) {
+  const hierarchyTemplate = svgCache.get(HIERARCHY_DESIGN_URL);
+  if (!hierarchyTemplate) throw new Error("层级视图分类栏模板未加载");
+  const sourceItems = templateCategoryItems(hierarchyTemplate);
+  const targetItems = templateCategoryItems(svg);
+  if (sourceItems.length !== CATEGORY_NAMES.length || targetItems.length !== CATEGORY_NAMES.length) {
+    throw new Error("机构分类栏槽位不完整");
+  }
+
+  const sourceByCategory = new Map(sourceItems.map((item) => [item.category, item]));
+  const targetGroups = [...new Set(targetItems.map((item) => item.group))];
+  const insertionPoint = targetGroups[0];
+  const parent = insertionPoint?.parentNode;
+  if (!parent) throw new Error("机构分类栏挂载点缺失");
+
+  const navigation = svgElement("g", { class: "shared-category-navigation" });
+  for (const category of CATEGORY_NAMES) {
+    const source = sourceByCategory.get(category);
+    if (!source) throw new Error(`层级视图缺少${category}槽位`);
+    navigation.appendChild(
+      prepareSharedCategoryGroup(source.group.cloneNode(true), category)
+    );
+  }
+  parent.insertBefore(navigation, insertionPoint);
+  targetGroups.forEach((group) => group.remove());
+}
 
 function entityCategory(entity) {
   return entity.category || "中央机构";
+}
+
+function templateSelectionCategory() {
+  if (viewMode.value !== "composition" || compositionFocusId.value == null) {
+    return selectedCategory.value;
+  }
+  const focus = entityMap.get(compositionFocusId.value);
+  if (!focus) return selectedCategory.value;
+  const context = resolveHierarchyContext(focus.id, hierarchyEdgesForView(), entityMap);
+  return entityCategory(context.root || focus);
 }
 
 function focusHierarchyContext(entity, revealPath = false) {
@@ -2764,29 +2861,32 @@ function bindSpaceAwareExpansionControl(svg) {
 
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
-  const categoryItems = [...svg.querySelectorAll("text")]
-    .filter((textElement) => !textElement.closest(".dynamic-tree-layer"))
-    .map((textElement) => ({
-      category: normalizeText(textElement),
-      textElement,
-      group: textElement.parentElement,
-    }))
-    .filter(({ category, group }) => CATEGORY_NAMES.includes(category) && group?.tagName.toLowerCase() === "g");
+  const categoryItems = templateCategoryItems(svg);
   const selectionTemplate = categoryItems
     .map(({ group }) => [...group.children].find(
       (child) => child.tagName.toLowerCase() === "g"
-        && (child.classList.contains("cls-81") || child.classList.contains("cls-59"))
+        && (
+          child.classList.contains("cls-81")
+          || child.classList.contains("cls-59")
+          || child.classList.contains("shared-category-selection")
+        )
     ))
     .find(Boolean)?.cloneNode(true);
 
   for (const { group } of categoryItems) {
     [...group.children]
       .filter((child) => child.tagName.toLowerCase() === "g"
-        && (child.classList.contains("cls-81") || child.classList.contains("cls-59")))
+        && (
+          child.classList.contains("cls-81")
+          || child.classList.contains("cls-59")
+          || child.classList.contains("shared-category-selection")
+        ))
       .forEach((child) => child.remove());
   }
 
-  const selectedItem = categoryItems.find(({ category }) => category === selectedCategory.value);
+  const selectedItem = categoryItems.find(
+    ({ category }) => category === templateSelectionCategory()
+  );
   const selectedOutline = selectedItem
     ? [...selectedItem.group.children].find((child) => child.tagName.toLowerCase() === "polygon")
     : null;
@@ -2808,7 +2908,13 @@ function bindTemplateControls(svg) {
         const activateView = (event) => {
           event.stopPropagation();
           if (!canActivate) return;
-          if (compositionFocusId.value != null) selectedId.value = compositionFocusId.value;
+          if (compositionFocusId.value != null) {
+            const focus = entityMap.get(compositionFocusId.value);
+            if (focus) {
+              selectedId.value = focus.id;
+              focusHierarchyContext(focus, true);
+            }
+          }
           viewMode.value = "hierarchy";
         };
         this.style.cursor = canActivate ? "pointer" : "default";
@@ -3087,27 +3193,34 @@ function installDesignFonts() {
   document.head.appendChild(style);
 }
 
+async function loadSvgTemplate(url) {
+  if (svgCache.has(url)) return;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const source = await response.text();
+  const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
+  const parsedSvg = parsed.documentElement;
+  if (parsedSvg.localName !== "svg" || parsed.querySelector("parsererror")) {
+    throw new Error("原 SVG 无法解析");
+  }
+  svgCache.set(url, document.importNode(parsedSvg, true));
+}
+
 async function renderTemplate() {
   const requestedMode = viewMode.value;
   const revision = ++renderRevision;
   const url = `/api/design/${requestedMode}.svg`;
-  const needsLoad = !svgCache.has(url);
+  const requiredUrls = requestedMode === "composition"
+    ? [url, HIERARCHY_DESIGN_URL]
+    : [url];
+  const needsLoad = requiredUrls.some((requiredUrl) => !svgCache.has(requiredUrl));
   if (needsLoad) loading.value = true;
   error.value = "";
   try {
-    if (needsLoad) {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const source = await response.text();
-      const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
-      const parsedSvg = parsed.documentElement;
-      if (parsedSvg.localName !== "svg" || parsed.querySelector("parsererror")) {
-        throw new Error("原 SVG 无法解析");
-      }
-      svgCache.set(url, document.importNode(parsedSvg, true));
-    }
+    await Promise.all(requiredUrls.map(loadSvgTemplate));
     if (revision !== renderRevision || requestedMode !== viewMode.value) return;
     const svg = svgCache.get(url).cloneNode(true);
+    if (requestedMode === "composition") alignCompositionCategoryNavigation(svg);
     svgMountRef.value.replaceChildren(svg);
     svg.removeAttribute("width");
     svg.removeAttribute("height");
@@ -3194,6 +3307,26 @@ onUnmounted(() => {
 .design-template { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f5f3ec; }
 .svg-mount { width: 100%; height: 100%; }
 .svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
+.svg-mount :deep(.shared-category-label) {
+  fill: #351704;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;
+  font-size: 19.34px;
+  glyph-orientation-vertical: 0deg;
+  text-orientation: upright;
+  writing-mode: tb;
+}
+.svg-mount :deep(.shared-category-outline) {
+  fill: none;
+  stroke: #563905;
+  stroke-miterlimit: 10;
+}
+.svg-mount :deep(.shared-category-selection) { opacity: 0.4; }
+.svg-mount :deep(.shared-category-selection-shape) {
+  fill: #351704;
+  stroke: #563905;
+  stroke-miterlimit: 10;
+  stroke-width: 0.75px;
+}
 .svg-mount :deep(.dynamic-tree-node:focus) { outline: none; }
 .svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) { stroke: #563905; stroke-width: 1.2; stroke-dasharray: 3 2; }
 .svg-mount :deep(.composition-detail-button:focus) { outline: none; }
