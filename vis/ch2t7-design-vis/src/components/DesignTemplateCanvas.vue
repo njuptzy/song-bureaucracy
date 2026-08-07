@@ -35,6 +35,7 @@ import {
 import {
   collapseInstitutionGroups,
   compositionDetailButtonVisible,
+  compositionViewButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
@@ -749,6 +750,71 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
     "transform",
     `translate(${polygonBounds.x + polygonBounds.width / 2} ${polygonBounds.y + polygonBounds.height / 2})`
   );
+}
+
+function appendCompositionNodeButton(nodeGroup, {
+  className,
+  x,
+  y,
+  ariaLabel,
+  titleText,
+  onActivate,
+}) {
+  const buttonSize = 11;
+  const button = document.createElementNS(SVG_NS, "g");
+  button.classList.add("composition-detail-button", className);
+  button.setAttribute("transform", `translate(${x} ${y})`);
+  button.setAttribute("role", "button");
+  button.setAttribute("tabindex", "0");
+  button.setAttribute("aria-label", ariaLabel);
+  button.style.cursor = "pointer";
+
+  const hitArea = document.createElementNS(SVG_NS, "rect");
+  hitArea.setAttribute("x", "-4");
+  hitArea.setAttribute("y", "-4");
+  hitArea.setAttribute("width", "19");
+  hitArea.setAttribute("height", "19");
+  hitArea.setAttribute("fill", "transparent");
+  hitArea.setAttribute("pointer-events", "all");
+
+  const surface = document.createElementNS(SVG_NS, "rect");
+  surface.classList.add("composition-detail-button-surface");
+  surface.setAttribute("width", String(buttonSize));
+  surface.setAttribute("height", String(buttonSize));
+  surface.setAttribute("rx", "1.5");
+  surface.setAttribute("fill", "#563905");
+  surface.setAttribute("fill-opacity", "0");
+  surface.setAttribute("stroke", "none");
+
+  const bookIcon = document.createElementNS(SVG_NS, "path");
+  bookIcon.setAttribute(
+    "d",
+    "M4 5.5c2.15-.7 4.02-.28 5.5 1.05v8.05C8 13.32 6.15 12.9 4 13.55V5.5Zm11 0c-2.15-.7-4.02-.28-5.5 1.05v8.05c1.5-1.28 3.35-1.7 5.5-1.05V5.5Z"
+  );
+  bookIcon.setAttribute("fill", "none");
+  bookIcon.setAttribute("stroke", "#563905");
+  bookIcon.setAttribute("stroke-width", "1.15");
+  bookIcon.setAttribute("stroke-linecap", "round");
+  bookIcon.setAttribute("stroke-linejoin", "round");
+  bookIcon.setAttribute("transform", "scale(0.62)");
+  bookIcon.setAttribute("opacity", "0.9");
+
+  const title = document.createElementNS(SVG_NS, "title");
+  title.textContent = titleText;
+  button.append(hitArea, surface, bookIcon, title);
+  d3.select(button)
+    .on("pointerdown.composition-action", (event) => event.stopPropagation())
+    .on("click.composition-action", onActivate)
+    .on("keydown.composition-action", (event) => {
+      if (event.key === "Enter" || event.key === " ") onActivate(event);
+    })
+    .on("mouseenter.composition-action", () => {
+      surface.setAttribute("fill-opacity", "0.12");
+    })
+    .on("mouseleave.composition-action", () => {
+      surface.setAttribute("fill-opacity", "0");
+    });
+  nodeGroup.appendChild(button);
 }
 
 const INLINE_DETAIL_BOUNDS = {
@@ -1782,12 +1848,13 @@ function renderDynamicHierarchy(svg) {
     }
     if (!node.data.isVirtual && polygonBounds && hiddenCount > 0) {
       const bounds = polygonBounds;
+      const entryReserve = node.data.id === selectedId.value ? 14 : 0;
       const barCount = Math.min(5, Math.max(1, Math.ceil(Math.log2(hiddenCount + 1))));
       for (let index = 0; index < barCount; index += 1) {
         const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         bar.setAttribute("x", String(bounds.x + 1));
         bar.setAttribute("y", String(bounds.y + bounds.height - 4 - index * 3));
-        bar.setAttribute("width", String(bounds.width - 2));
+        bar.setAttribute("width", String(bounds.width - 2 - entryReserve));
         bar.setAttribute("height", "1.8");
         bar.setAttribute("fill", "#563905");
         bar.setAttribute("opacity", ".55");
@@ -1799,7 +1866,9 @@ function renderDynamicHierarchy(svg) {
     const interactionHint = node.data.childCount
       ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
       : "";
-    const detailHint = node.data.isVirtual ? "" : "；选中后点击右下角开书按钮进入编制视图";
+    const detailHint = node.data.isVirtual
+      ? ""
+      : "；右上角开书按钮就地展开编制关系，选中后点击右下角按钮进入编制视图";
     title.textContent = hiddenCount
       ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
       : `${node.data.title}${interactionHint}${detailHint}`;
@@ -1811,77 +1880,55 @@ function renderDynamicHierarchy(svg) {
 
     if (compositionDetailButtonVisible({
       isVirtual: node.data.isVirtual,
+      isExpanded,
       isSelected: node.data.id === selectedId.value,
+      isDetailOpen: expandedDetailId.value === node.data.id,
     }) && polygonBounds) {
       const buttonSize = 11;
       const buttonX = polygonBounds.x + polygonBounds.width - buttonSize - 3;
-      const buttonY = polygonBounds.y + polygonBounds.height - buttonSize - 3;
-      const detailButton = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      detailButton.classList.add("composition-detail-button");
-      detailButton.setAttribute("transform", `translate(${buttonX} ${buttonY})`);
-      detailButton.setAttribute("role", "button");
-      detailButton.setAttribute("tabindex", "0");
-      detailButton.setAttribute("aria-label", `进入${node.data.title}的编制视图`);
-      detailButton.style.cursor = "pointer";
+      appendCompositionNodeButton(nodeGroup, {
+        className: "inline-composition-button",
+        x: buttonX,
+        y: polygonBounds.y + 3,
+        ariaLabel: `展开${node.data.title}的编制关系`,
+        titleText: "就地展开编制关系",
+        onActivate: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          detailPanelScrollOffset = 0;
+          inlineDetailField.value = "duty";
+          inlineCompositionScrollOffset = 0;
+          expandedDetailId.value = node.data.id;
+          inlineDetailOfficialId.value = null;
+          refreshTemplate();
+        },
+      });
+    }
 
-      const buttonHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      buttonHitArea.setAttribute("x", "-4");
-      buttonHitArea.setAttribute("y", "-4");
-      buttonHitArea.setAttribute("width", "19");
-      buttonHitArea.setAttribute("height", "19");
-      buttonHitArea.setAttribute("fill", "transparent");
-      buttonHitArea.setAttribute("pointer-events", "all");
-
-      const buttonSurface = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      buttonSurface.classList.add("composition-detail-button-surface");
-      buttonSurface.setAttribute("width", String(buttonSize));
-      buttonSurface.setAttribute("height", String(buttonSize));
-      buttonSurface.setAttribute("rx", "1.5");
-      buttonSurface.setAttribute("fill", "#563905");
-      buttonSurface.setAttribute("fill-opacity", "0");
-      buttonSurface.setAttribute("stroke", "none");
-
-      const bookIcon = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      bookIcon.setAttribute(
-        "d",
-        "M4 5.5c2.15-.7 4.02-.28 5.5 1.05v8.05C8 13.32 6.15 12.9 4 13.55V5.5Zm11 0c-2.15-.7-4.02-.28-5.5 1.05v8.05c1.5-1.28 3.35-1.7 5.5-1.05V5.5Z"
-      );
-      bookIcon.setAttribute("fill", "none");
-      bookIcon.setAttribute("stroke", "#563905");
-      bookIcon.setAttribute("stroke-width", "1.15");
-      bookIcon.setAttribute("stroke-linecap", "round");
-      bookIcon.setAttribute("stroke-linejoin", "round");
-      bookIcon.setAttribute("transform", "scale(0.62)");
-      bookIcon.setAttribute("opacity", "0.9");
-
-      const buttonTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      buttonTitle.textContent = "进入编制视图";
-      detailButton.append(buttonHitArea, buttonSurface, bookIcon, buttonTitle);
-      const openComposition = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        detailPanelScrollOffset = 0;
-        inlineDetailField.value = "duty";
-        inlineCompositionScrollOffset = 0;
-        expandedDetailId.value = null;
-        inlineDetailOfficialId.value = null;
-        selectedId.value = node.data.id;
-        compositionFocusId.value = node.data.id;
-        viewMode.value = "composition";
-      };
-      d3.select(detailButton)
-        .on("pointerdown.composition-detail", (event) => event.stopPropagation())
-        .on("click.composition-detail", openComposition)
-        .on("keydown.composition-detail", (event) => {
-          if (event.key === "Enter" || event.key === " ") openComposition(event);
-        })
-        .on("mouseenter.composition-detail", () => {
-          buttonSurface.setAttribute("fill-opacity", "0.12");
-        })
-        .on("mouseleave.composition-detail", () => {
-          buttonSurface.setAttribute("fill-opacity", "0");
-        });
-      nodeGroup.appendChild(detailButton);
+    if (compositionViewButtonVisible({
+      isVirtual: node.data.isVirtual,
+      isSelected: node.data.id === selectedId.value,
+    }) && polygonBounds) {
+      const buttonSize = 11;
+      appendCompositionNodeButton(nodeGroup, {
+        className: "composition-view-button",
+        x: polygonBounds.x + polygonBounds.width - buttonSize - 3,
+        y: polygonBounds.y + polygonBounds.height - buttonSize - 3,
+        ariaLabel: `进入${node.data.title}的编制视图`,
+        titleText: "进入编制视图",
+        onActivate: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          detailPanelScrollOffset = 0;
+          inlineDetailField.value = "duty";
+          inlineCompositionScrollOffset = 0;
+          expandedDetailId.value = null;
+          inlineDetailOfficialId.value = null;
+          selectedId.value = node.data.id;
+          compositionFocusId.value = node.data.id;
+          viewMode.value = "composition";
+        },
+      });
     }
 
     const toggleVirtualNode = (event) => {

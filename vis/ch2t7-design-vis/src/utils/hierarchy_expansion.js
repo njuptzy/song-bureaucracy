@@ -50,6 +50,15 @@ export function collapseInstitutionGroups(expandedIds, lastExpandedId) {
 
 export function compositionDetailButtonVisible({
   isVirtual,
+  isExpanded,
+  isSelected,
+  isDetailOpen,
+}) {
+  return !isVirtual && !isDetailOpen && (isExpanded || isSelected);
+}
+
+export function compositionViewButtonVisible({
+  isVirtual,
   isSelected,
 }) {
   return !isVirtual && isSelected;

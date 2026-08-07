@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   collapseInstitutionGroups,
   compositionDetailButtonVisible,
+  compositionViewButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
   institutionGroupsAfterLayout,
@@ -12,14 +13,32 @@ import {
   toggleInstitutionGroupIds,
 } from "./hierarchy_expansion.js";
 
-test("编制入口只显示在层级视图当前选中的具体机构上", () => {
+test("右上角编制按钮保留原有就地展开逻辑", () => {
   assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isSelected: true,
+    isVirtual: false, isExpanded: true, isSelected: false, isDetailOpen: false,
   }), true);
   assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isSelected: false,
+    isVirtual: false, isExpanded: false, isSelected: true, isDetailOpen: false,
+  }), true);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: false, isSelected: false, isDetailOpen: false,
   }), false);
   assert.equal(compositionDetailButtonVisible({
+    isVirtual: true, isExpanded: true, isSelected: true, isDetailOpen: false,
+  }), false);
+  assert.equal(compositionDetailButtonVisible({
+    isVirtual: false, isExpanded: true, isSelected: true, isDetailOpen: true,
+  }), false);
+});
+
+test("右下角编制视图入口只显示在当前选中的具体机构上", () => {
+  assert.equal(compositionViewButtonVisible({
+    isVirtual: false, isSelected: true,
+  }), true);
+  assert.equal(compositionViewButtonVisible({
+    isVirtual: false, isSelected: false,
+  }), false);
+  assert.equal(compositionViewButtonVisible({
     isVirtual: true, isSelected: true,
   }), false);
 });
