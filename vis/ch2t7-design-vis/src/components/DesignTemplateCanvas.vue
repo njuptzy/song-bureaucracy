@@ -53,7 +53,11 @@ import {
   compositionSliderGeometry,
 } from "../utils/composition_scroll";
 import { buildCompositionModel } from "../utils/composition_model";
-import { layoutComposition, COMPOSITION_GEOMETRY } from "../utils/composition_layout";
+import {
+  fitCompositionBlock,
+  layoutComposition,
+  COMPOSITION_GEOMETRY,
+} from "../utils/composition_layout";
 
 const props = defineProps({ data: { type: Object, required: true } });
 
@@ -106,6 +110,14 @@ const DETAIL_PANEL_BOUNDS = {
   y: 497.57,
   width: 393.72,
   height: 380.1,
+};
+
+// 原设计稿4-02中动态编制块的完整预留区域：所有真实数据都在此框内等比适配。
+const COMPOSITION_CONTENT_BOUNDS = {
+  x: 558.34,
+  y: 150.84,
+  width: 1251.77,
+  height: 711.8,
 };
 
 const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
@@ -2205,19 +2217,21 @@ function renderDynamicComposition(svg) {
     titleOf,
   });
   const layout = model && layoutComposition(model, {
-    origin: { x: 505, y: 138 },
-    maxWidth: 1320,
+    origin: {
+      x: COMPOSITION_CONTENT_BOUNDS.x,
+      y: COMPOSITION_CONTENT_BOUNDS.y,
+    },
+    maxWidth: COMPOSITION_CONTENT_BOUNDS.width,
   });
   if (!layout) return;
   const { geometry } = layout;
-  // 内容超高时整体向顶部缩放，保持设计稿比例不变形。
-  const fit = Math.min(1, 745 / layout.block.height);
-  const content = fit < 1
-    ? svgElement("g", {
-      transform: `translate(${layout.origin.x} 0) scale(${fit}) translate(${-layout.origin.x} 0)`,
-    })
-    : layer;
-  if (content !== layer) layer.appendChild(content);
+  const fitted = fitCompositionBlock(layout.block, COMPOSITION_CONTENT_BOUNDS);
+  if (!fitted) return;
+  const content = svgElement("g", {
+    class: "dynamic-composition-fitted-content",
+    transform: `translate(${fitted.translateX} ${fitted.translateY}) scale(${fitted.scale})`,
+  });
+  layer.appendChild(content);
 
   content.appendChild(svgElement("rect", {
     class: "cls-17",

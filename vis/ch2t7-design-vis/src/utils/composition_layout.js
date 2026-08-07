@@ -26,6 +26,26 @@ export const COMPOSITION_GEOMETRY = {
   titleColGap: 1, // 多列标题之间的额外间隙
 };
 
+export function fitCompositionBlock(block, bounds, { maxScale = 2.4 } = {}) {
+  if (!block || !bounds || block.width <= 0 || block.height <= 0) return null;
+  const scale = Math.min(
+    maxScale,
+    bounds.width / block.width,
+    bounds.height / block.height
+  );
+  const renderedWidth = block.width * scale;
+  const renderedHeight = block.height * scale;
+  return {
+    scale,
+    x: bounds.x + (bounds.width - renderedWidth) / 2,
+    y: bounds.y + (bounds.height - renderedHeight) / 2,
+    translateX: bounds.x + (bounds.width - renderedWidth) / 2 - block.x * scale,
+    translateY: bounds.y + (bounds.height - renderedHeight) / 2 - block.y * scale,
+    width: renderedWidth,
+    height: renderedHeight,
+  };
+}
+
 function titleMetrics(title, fontSize, geometry) {
   const capacity = Math.max(4, Math.floor(
     (geometry.columnHeight - geometry.titleYOffset * 2) / fontSize

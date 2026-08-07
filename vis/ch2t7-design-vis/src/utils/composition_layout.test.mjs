@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   COMPOSITION_GEOMETRY,
+  fitCompositionBlock,
   layoutComposition,
   staffTextCols,
 } from "./composition_layout.js";
@@ -29,6 +30,41 @@ describe("staffTextCols", () => {
     assert.equal(staffTextCols("郎中一人"), 1);
     assert.equal(staffTextCols("x".repeat(29)), 2);
     assert.equal(staffTextCols(""), 0);
+  });
+});
+
+describe("fitCompositionBlock", () => {
+  const bounds = { x: 558.34, y: 150.84, width: 1251.77, height: 711.8 };
+
+  it("小数据块按原设计区域等比放大并居中", () => {
+    const fitted = fitCompositionBlock(
+      { x: 505, y: 138, width: 544.94, height: 215.85 },
+      bounds
+    );
+    assert.ok(fitted.scale > 2.2 && fitted.scale < 2.4);
+    assert.ok(Math.abs(fitted.width - bounds.width) < 1e-6);
+    assert.ok(fitted.height < bounds.height);
+    assert.ok(Math.abs(fitted.x - bounds.x) < 1e-6);
+    assert.ok(fitted.y > bounds.y);
+  });
+
+  it("内容过高时按高度缩小且不越出设计区域", () => {
+    const fitted = fitCompositionBlock(
+      { x: 558.34, y: 150.84, width: 900, height: 1200 },
+      bounds
+    );
+    assert.ok(fitted.scale < 1);
+    assert.ok(Math.abs(fitted.height - bounds.height) < 1e-6);
+    assert.ok(fitted.width <= bounds.width);
+    assert.ok(fitted.x >= bounds.x && fitted.y >= bounds.y);
+  });
+
+  it("极少内容限制最大放大倍数，避免单列异常巨大", () => {
+    const fitted = fitCompositionBlock(
+      { x: 0, y: 0, width: 80, height: 210 },
+      bounds
+    );
+    assert.equal(fitted.scale, 2.4);
   });
 });
 
