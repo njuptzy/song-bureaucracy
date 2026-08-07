@@ -12,21 +12,15 @@ import {
   toggleInstitutionGroupIds,
 } from "./hierarchy_expansion.js";
 
-test("编制按钮显示在所有已展开机构以及当前选中机构上", () => {
+test("编制入口只显示在层级视图当前选中的具体机构上", () => {
   assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isExpanded: true, isSelected: false, isDetailOpen: false,
+    isVirtual: false, isSelected: true,
   }), true);
   assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isExpanded: false, isSelected: true, isDetailOpen: false,
-  }), true);
-  assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isExpanded: false, isSelected: false, isDetailOpen: false,
+    isVirtual: false, isSelected: false,
   }), false);
   assert.equal(compositionDetailButtonVisible({
-    isVirtual: true, isExpanded: true, isSelected: true, isDetailOpen: false,
-  }), false);
-  assert.equal(compositionDetailButtonVisible({
-    isVirtual: false, isExpanded: true, isSelected: true, isDetailOpen: true,
+    isVirtual: true, isSelected: true,
   }), false);
 });
 

@@ -64,6 +64,7 @@ const viewMode = ref("hierarchy");
 const selectedRange = ref([1080, 1080]);
 const timelineSelectionActive = ref(true);
 const selectedId = ref(null);
+const compositionFocusId = ref(null);
 const selectedCategory = ref("中央机构");
 const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
@@ -536,6 +537,10 @@ function selectedEntity() {
 }
 
 function graphFocusEntity() {
+  if (viewMode.value === "composition" && compositionFocusId.value != null) {
+    const compositionFocus = entityMap.get(compositionFocusId.value);
+    if (compositionFocus?.type === "机构") return compositionFocus;
+  }
   const selected = selectedEntity();
   if (selected?.type === "机构") return selected;
   const affiliation = staffEdgesForView().find((edge) => edge.official === selected?.id);
@@ -1794,7 +1799,7 @@ function renderDynamicHierarchy(svg) {
     const interactionHint = node.data.childCount
       ? (isExpanded ? "；再次点击收起下级机构" : "；点击展开下级机构")
       : "";
-    const detailHint = node.data.isVirtual ? "" : "；点击右上角开书按钮展开编制关系";
+    const detailHint = node.data.isVirtual ? "" : "；选中后点击右下角开书按钮进入编制视图";
     title.textContent = hiddenCount
       ? `${node.data.title}；尚有 ${hiddenCount} 个下级机构未展开${interactionHint}${detailHint}`
       : `${node.data.title}${interactionHint}${detailHint}`;
@@ -1806,19 +1811,17 @@ function renderDynamicHierarchy(svg) {
 
     if (compositionDetailButtonVisible({
       isVirtual: node.data.isVirtual,
-      isExpanded,
       isSelected: node.data.id === selectedId.value,
-      isDetailOpen: expandedDetailId.value === node.data.id,
     }) && polygonBounds) {
       const buttonSize = 11;
       const buttonX = polygonBounds.x + polygonBounds.width - buttonSize - 3;
-      const buttonY = polygonBounds.y + 3;
+      const buttonY = polygonBounds.y + polygonBounds.height - buttonSize - 3;
       const detailButton = document.createElementNS("http://www.w3.org/2000/svg", "g");
       detailButton.classList.add("composition-detail-button");
       detailButton.setAttribute("transform", `translate(${buttonX} ${buttonY})`);
       detailButton.setAttribute("role", "button");
       detailButton.setAttribute("tabindex", "0");
-      detailButton.setAttribute("aria-label", `展开${node.data.title}的编制关系`);
+      detailButton.setAttribute("aria-label", `进入${node.data.title}的编制视图`);
       detailButton.style.cursor = "pointer";
 
       const buttonHitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -1852,7 +1855,7 @@ function renderDynamicHierarchy(svg) {
       bookIcon.setAttribute("opacity", "0.9");
 
       const buttonTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      buttonTitle.textContent = "展开编制关系";
+      buttonTitle.textContent = "进入编制视图";
       detailButton.append(buttonHitArea, buttonSurface, bookIcon, buttonTitle);
       const openComposition = (event) => {
         event.preventDefault();
@@ -1860,9 +1863,11 @@ function renderDynamicHierarchy(svg) {
         detailPanelScrollOffset = 0;
         inlineDetailField.value = "duty";
         inlineCompositionScrollOffset = 0;
-        expandedDetailId.value = node.data.id;
+        expandedDetailId.value = null;
         inlineDetailOfficialId.value = null;
-        refreshTemplate();
+        selectedId.value = node.data.id;
+        compositionFocusId.value = node.data.id;
+        viewMode.value = "composition";
       };
       d3.select(detailButton)
         .on("pointerdown.composition-detail", (event) => event.stopPropagation())
@@ -2686,15 +2691,20 @@ function bindTemplateControls(svg) {
       if (this.closest(".dynamic-tree-layer")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
+        const targetMode = text === "层级视图" ? "hierarchy" : "composition";
+        // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
+        const canActivate = viewMode.value === "composition" && targetMode === "hierarchy";
         const activateView = (event) => {
           event.stopPropagation();
-          viewMode.value = text === "层级视图" ? "hierarchy" : "composition";
+          if (!canActivate) return;
+          if (compositionFocusId.value != null) selectedId.value = compositionFocusId.value;
+          viewMode.value = "hierarchy";
         };
-        this.style.cursor = "pointer";
+        this.style.cursor = canActivate ? "pointer" : "default";
         this.style.fontWeight = (text === "层级视图") === (viewMode.value === "hierarchy") ? "700" : "400";
-        d3.select(this).on("click.view-mode", activateView);
+        d3.select(this).on("click.view-mode", canActivate ? activateView : null);
         const bounds = elementBounds(this);
-        if (bounds && this.parentNode) {
+        if (canActivate && bounds && this.parentNode) {
           const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
           hitArea.classList.add("view-mode-hit-area");
           hitArea.setAttribute("x", String(bounds.x - 12));
@@ -2714,6 +2724,17 @@ function bindTemplateControls(svg) {
       if (CATEGORY_NAMES.includes(text)) {
         const category = text;
         const group = this.parentElement;
+        const categoryInteractive = viewMode.value === "hierarchy";
+        if (!categoryInteractive) {
+          this.style.cursor = "default";
+          d3.select(this).on("click.category", null);
+          if (group?.tagName.toLowerCase() === "g") {
+            group.style.cursor = "default";
+            group.style.pointerEvents = "none";
+            d3.select(group).on("click.category", null);
+          }
+          return;
+        }
         const activate = (event) => {
           event.stopPropagation();
           detailPanelScrollOffset = 0;
