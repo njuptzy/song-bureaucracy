@@ -2225,7 +2225,7 @@ function renderDynamicComposition(svg) {
   });
   if (!layout) return;
   const { geometry } = layout;
-  const fitted = fitCompositionBlock(layout.block, COMPOSITION_CONTENT_BOUNDS);
+  const fitted = fitCompositionBlock(layout.bounds, COMPOSITION_CONTENT_BOUNDS);
   if (!fitted) return;
   const content = svgElement("g", {
     class: "dynamic-composition-fitted-content",
@@ -2233,23 +2233,17 @@ function renderDynamicComposition(svg) {
   });
   layer.appendChild(content);
 
-  content.appendChild(svgElement("rect", {
-    class: "cls-17",
-    x: layout.block.x,
-    y: layout.block.y,
-    width: layout.block.width,
-    height: layout.block.height,
-  }));
-  stampVerticalText(content, {
-    x: layout.label.x,
-    y: layout.label.y,
-    text: layout.label.title,
-    cls: "cls-28",
-    charsPerCol: geometry.blockLabelCharsPerCol,
-    pitch: geometry.blockLabelFontSize + geometry.titleColGap,
-    entityId: layout.focus.id,
-  });
-  for (const item of layout.items) stampCompositionItem(content, item, geometry);
+  for (const block of layout.blocks) {
+    content.appendChild(svgElement("rect", {
+      class: "cls-17",
+      x: block.rect.x,
+      y: block.rect.y,
+      width: block.rect.width,
+      height: block.rect.height,
+    }));
+    stampCompositionItem(content, block.label, geometry);
+    for (const item of block.items) stampCompositionItem(content, item, geometry);
+  }
 }
 
 function populateCenter(svg) {

@@ -74,25 +74,27 @@ describe("layoutComposition", () => {
     maxWidth: 980,
   });
 
-  it("块标签位于块内左端", () => {
-    assert.equal(layout.label.title, "尚书省");
-    assert.ok(layout.label.x > 558.34 && layout.label.x < 610);
-    assert.ok(layout.label.y > 150.94);
+  it("焦点直属编制与每个下级分节各自生成独立外框", () => {
+    assert.deepEqual(layout.blocks.map((block) => block.id), [1, 3]);
+    assert.equal(layout.blocks[0].label.title, "尚书省");
+    assert.equal(layout.blocks[1].label.title, "尚书省吏部");
+    assert.equal(layout.blocks[0].items[0].title, "尚书都省");
   });
 
-  it("排版项顺序：自身列 → 松散列 → 分节 → 分节列", () => {
-    assert.deepEqual(layout.items.map((item) => item.id), [1, 2, 3, 5, 6]);
-    assert.equal(layout.items[2].kind, "section");
+  it("分节标题不再混入共享列，分节内只包含所属机构", () => {
+    assert.deepEqual(layout.items.map((item) => item.id), [2, 5, 6]);
+    assert.deepEqual(layout.blocks[1].items.map((item) => item.id), [5, 6]);
   });
 
-  it("列横向依次排开且不超过行宽上限", () => {
-    const row1 = layout.items.filter((item) => item.rect.y === layout.items[0].rect.y);
-    for (let i = 1; i < row1.length; i += 1) {
-      const prevRight = row1[i - 1].rect.x + row1[i - 1].rect.width;
-      assert.ok(Math.abs(row1[i].rect.x - prevRight) < 1e-9);
-    }
-    for (const item of row1) {
-      assert.ok(item.rect.x + item.rect.width <= 558.34 + 980);
+  it("每个分块内部的机构列横向紧邻排列", () => {
+    for (const block of layout.blocks) {
+      const firstRow = block.items.filter(
+        (item) => item.rect.y === block.items[0]?.rect.y
+      );
+      for (let i = 1; i < firstRow.length; i += 1) {
+        const prevRight = firstRow[i - 1].rect.x + firstRow[i - 1].rect.width;
+        assert.ok(Math.abs(firstRow[i].rect.x - prevRight) < 1e-9);
+      }
     }
   });
 
@@ -103,22 +105,24 @@ describe("layoutComposition", () => {
     assert.equal(narrow.rect.height, COMPOSITION_GEOMETRY.columnHeight);
   });
 
-  it("块矩形包住全部内容", () => {
-    for (const item of layout.items) {
-      assert.ok(item.rect.x >= layout.block.x);
-      assert.ok(item.rect.x + item.rect.width <= layout.block.x + layout.block.width + 1e-9);
-      assert.ok(item.rect.y + item.rect.height <= layout.block.y + layout.block.height + 1e-9);
+  it("每个独立外框包住自己的标签与全部机构列", () => {
+    for (const block of layout.blocks) {
+      for (const item of [block.label, ...block.items]) {
+        assert.ok(item.rect.x >= block.rect.x);
+        assert.ok(item.rect.x + item.rect.width <= block.rect.x + block.rect.width + 1e-9);
+        assert.ok(item.rect.y >= block.rect.y);
+        assert.ok(item.rect.y + item.rect.height <= block.rect.y + block.rect.height + 1e-9);
+      }
     }
   });
 
-  it("行宽不足时换行", () => {
+  it("画板行宽不足时将完整机构分块换到下一排", () => {
     const narrowLayout = layoutComposition(model, {
       origin: { x: 0, y: 0 },
       maxWidth: 200,
     });
-    const rows = new Set(narrowLayout.items.map((item) => item.rect.y));
-    assert.ok(rows.size > 1);
-    assert.ok(narrowLayout.rowCount === rows.size);
+    assert.equal(narrowLayout.shelfCount, 2);
+    assert.ok(narrowLayout.blocks[1].rect.y > narrowLayout.blocks[0].rect.y);
   });
 
   it("空模型返回 null", () => {
