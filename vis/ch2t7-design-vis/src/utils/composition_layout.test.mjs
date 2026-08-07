@@ -225,7 +225,7 @@ describe("layoutComposition", () => {
     const li = layout.blocks.find((block) => block.id === 12);
     const gongyuan = li.items.find((item) => item.id === 5);
     assert.equal(gongyuan.staffMode, "below");
-    assert.equal(gongyuan.staffTrackPitch, COMPOSITION_GEOMETRY.staffColPitch);
+    assert.equal(gongyuan.staffTrackPitch, gongyuan.staffFontSize * 1.2);
     assert.ok(gongyuan.staffTracks.length >= 3);
     assert.equal(gongyuan.staffTracks.length, gongyuan.staffTrackCount);
     const trackCenter = gongyuan.staffRightmostXOffset
@@ -327,7 +327,7 @@ describe("layoutComposition", () => {
 });
 
 describe("编制文字自适应", () => {
-  it("稀疏工部四格利用大面积放大，密集尚书省仍保持原稿字号", () => {
+  it("稀疏视图利用空间放大，密集视图正文仍保持可读基准", () => {
     const sparse = layoutComposition(sparseMinistryModel);
     const sparseLeaves = sparse.items.filter((item) => item.kind === "column");
     assert.equal(sparse.typographyScale, COMPOSITION_GEOMETRY.typographyMaxScale);
@@ -348,6 +348,8 @@ describe("编制文字自适应", () => {
     assert.equal(dense.typographyScale, 1);
     assert.equal(denseDirect.fontSize, COMPOSITION_GEOMETRY.columnTitleFontSize);
     assert.equal(denseDirect.staffFontSize, COMPOSITION_GEOMETRY.staffFontSize);
+    assert.ok(denseDirect.staffFontSize >= 10);
+    assertMetricsInside(denseDirect, denseDirect.labelRect, denseDirect.title);
     assert.equal(denseGongyuan.staffTracks.length, denseGongyuan.staffTrackCount);
     assert.equal(denseNested.fontSize, 13.5);
   });

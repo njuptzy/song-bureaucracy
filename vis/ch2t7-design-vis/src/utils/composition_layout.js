@@ -36,10 +36,13 @@ export const COMPOSITION_GEOMETRY = {
   columnTitleYOffset: 5,
   nestedTitleYOffset: 5,
   titleColGap: 1,
-  staffFontSize: 7,
-  summaryStaffFontSize: 8,
-  staffColPitch: 8.4,
-  summaryStaffColPitch: 9.6,
+  // 编制说明是正文而不是脚注。密集态也从可读字号起算；窄格仍由
+  // solveLabelTypography 按实际宽高回缩，稀疏态则封顶以免压过机构名。
+  staffFontSize: 10,
+  summaryStaffFontSize: 11,
+  staffMaxFontSize: 13,
+  staffColPitch: 12,
+  summaryStaffColPitch: 13.2,
   focusStaffGap: 7,
   sectionStaffGap: 6,
   columnStaffGap: 8,
@@ -199,7 +202,10 @@ function adaptiveRole(role, rect, typeScale, targetScale, globalProgress, geomet
     + (sparseTopPadding - role.titleYOffset) * localGrowth;
   const compression = Math.min(1, typeScale);
   const growth = Math.max(0, typeScale - 1);
-  const staffFontSize = role.staffFontSize * typeScale;
+  const staffFontSize = Math.min(
+    geometry.staffMaxFontSize,
+    role.staffFontSize * typeScale,
+  );
   return {
     ...role,
     titleYOffset: titleYOffset * compression,
