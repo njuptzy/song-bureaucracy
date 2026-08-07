@@ -1,0 +1,310 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { buildEvolutionModel } from "./evolution_model.js";
+
+function entity(id, title = `实体${id}`, type = "机构") {
+  return { id, title, type };
+}
+
+function timepoint(id, year, event, overrides = {}) {
+  const timeType = overrides.time_type || (year == null ? "undated" : "exact");
+  return {
+    id,
+    time: year == null ? "未知" : String(year),
+    event,
+    prev_id: null,
+    succ_id: null,
+    time_type: timeType,
+    year_start: year,
+    year_end: year,
+    ...overrides,
+  };
+}
+
+function link(items) {
+  return items.map((item, index) => ({
+    ...item,
+    prev_id: index ? items[index - 1].id : null,
+    succ_id: index < items.length - 1 ? items[index + 1].id : null,
+  }));
+}
+
+describe("buildEvolutionModel lifecycle", () => {
+  it("罢废后的普通记载不复活，明确复置才重开，bounded 在上界生效", () => {
+    const points = link([
+      timepoint(11, 970, "始置"),
+      timepoint(12, 980, "罢甲司"),
+      timepoint(13, 990, "普通记载"),
+      timepoint(14, 1000, "复置"),
+      timepoint(15, 1008, "罢甲司", {
+        time: "1008至1010年间",
+        time_type: "bounded",
+        year_start: 1008,
+        year_end: 1010,
+      }),
+      timepoint(16, 1020, "又有记载"),
+    ]);
+    const model = buildEvolutionModel({
+      entities: [entity(1, "甲司")],
+      timepoints: { 1: points },
+      changeRelations: [],
+    }, [1]);
+
+    const lane = model.lanes[0];
+    assert.deepEqual(
+      lane.segments.map(({ startYear, endYear, openEnd }) => ({ startYear, endYear, openEnd })),
+      [
+        { startYear: 970, endYear: 980, openEnd: false },
+        { startYear: 1000, endYear: 1010, openEnd: false },
+      ],
+    );
+    assert.equal(lane.events.length, 6);
+    assert.equal(lane.events.find((item) => item.id === 15).effectiveYear, 1010);
+    assert.equal(lane.events.find((item) => item.id === 13).expanded, false);
+    assert.equal(lane.events.find((item) => item.id === 14).expanded, true);
+    assert.equal(lane.events.find((item) => item.id === 15).expanded, true);
+  });
+
+  it("宋前点不进入主轴，undated 与 unresolved 分桶且数据仍保留", () => {
+    const points = link([
+      timepoint(21, 900, "沿置", { time_type: "pre_song" }),
+      timepoint(22, null, "年代未明记载", { time_type: "undated" }),
+      timepoint(23, null, "时间待核查", { time_type: "unresolved" }),
+      timepoint(24, 1000, "宋代记载"),
+    ]);
+    const model = buildEvolutionModel({
+      entities: [entity(1)],
+      timepoints: { 1: points.slice(1) },
+      preSongTimepoints: { 1: points.slice(0, 1) },
+      changeRelations: [],
+    }, [1]);
+
+    assert.deepEqual(model.lanes[0].events.map((item) => item.id), [24]);
+    assert.deepEqual(model.offAxis.preSong.map((item) => item.id), [21]);
+    assert.deepEqual(model.offAxis.undated.map((item) => item.id), [22]);
+    assert.deepEqual(model.offAxis.unresolved.map((item) => item.id), [23]);
+    assert.equal(model.lanes[0].segments[0].startYear, 960);
+    assert.equal(model.lanes[0].segments[0].openStart, true);
+    assert.equal(model.anomalies.some((item) => item.type === "dangling_chain_link"), false);
+  });
+
+  it("多个链头保持为断开的子链并报告异常", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "断链司")],
+      timepoints: {
+        1: [
+          ...link([timepoint(31, 970, "始置"), timepoint(32, 980, "罢断链司")]),
+          ...link([timepoint(33, 990, "复置"), timepoint(34, 1000, "罢断链司")]),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+
+    assert.equal(model.lanes[0].chains.length, 2);
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear }) => [startYear, endYear]),
+      [[970, 980], [990, 1000]],
+    );
+    const anomaly = model.anomalies.find((item) => item.type === "multiple_chain_heads");
+    assert.deepEqual(anomaly.headIds, [31, 33]);
+  });
+});
+
+describe("buildEvolutionModel relations", () => {
+  it("changeRelations 优先，不猜关系子型，只对显式事件组字段分组", () => {
+    const entities = Array.from({ length: 7 }, (_, index) => entity(index + 1));
+    const timepoints = Object.fromEntries(entities.map(({ id }) => [
+      id,
+      link([
+        timepoint(id * 10 + 1, 970, "始置"),
+        timepoint(id * 10 + 2, 1100, "普通记载"),
+      ]),
+    ]));
+    const model = buildEvolutionModel({
+      entities,
+      timepoints,
+      changeRelations: [
+        {
+          id: 101,
+          relation_type: "职掌·移交",
+          source: 1,
+          target: 5,
+          source_timepoint_id: 12,
+          target_timepoint_id: 52,
+          quotation: "文字中即使出现改称，也不能据此改写子型",
+        },
+        {
+          id: 102,
+          relation_type: "演变·分拆",
+          relation_group_id: "group-a",
+          source: 2,
+          target: 6,
+          source_timepoint_id: 22,
+          target_timepoint_id: 62,
+        },
+        {
+          id: 103,
+          relation_type: "演变·分拆",
+          relation_group_id: "group-a",
+          source: 2,
+          target: 7,
+          source_timepoint_id: 22,
+          target_timepoint_id: 72,
+        },
+      ],
+      evolutionEdges: [{ id: 999, source: 1, target: 3 }],
+    }, [1, 2, 3, 4, 5]);
+
+    assert.deepEqual(model.focusEntityIds, [1, 2, 3, 4]);
+    assert.deepEqual(model.visibleEntityIds, [1, 2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(model.relations.map((item) => item.id), [101, 102, 103]);
+    assert.equal(model.relations[0].relationType, "职掌·移交");
+    assert.equal(model.relations[0].label, "职掌·移交");
+    assert.equal(model.relationGroups.length, 1);
+    assert.equal(model.relationGroups[0].groupId, "group-a");
+    assert.deepEqual(model.relationGroups[0].relationIds, [102, 103]);
+    assert.equal(model.relationGroups[0].targetMembers.length, 2);
+    assert.equal(model.lanes.find((lane) => lane.entityId === 1).segments[0].openEnd, true);
+    assert.equal(model.lanes.find((lane) => lane.entityId === 1).events.find((item) => item.id === 12).expanded, true);
+  });
+
+  it("缺少 relation_group_id 时使用显式 change_event_id 合成同一事件组", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1), entity(2), entity(3)],
+      timepoints: {
+        1: [timepoint(11, 1000, "始置")],
+        2: [timepoint(21, 1000, "始置")],
+        3: [timepoint(31, 1000, "始置")],
+      },
+      changeRelations: [
+        {
+          id: 201,
+          relation_type: "演变·分拆",
+          change_event_id: 88,
+          source: 1,
+          target: 2,
+          source_timepoint_id: 11,
+          target_timepoint_id: 21,
+        },
+        {
+          id: 202,
+          relation_type: "演变·分拆",
+          change_event_id: 88,
+          source: 1,
+          target: 3,
+          source_timepoint_id: 11,
+          target_timepoint_id: 31,
+        },
+        {
+          id: 203,
+          relation_type: "演变·改置",
+          change_event_id: 99,
+          source: 2,
+          target: 3,
+          source_timepoint_id: 21,
+          target_timepoint_id: 31,
+        },
+      ],
+    }, [1, 2]);
+
+    assert.equal(model.relationGroups.length, 1);
+    assert.equal(model.relationGroups[0].groupId, 88);
+    assert.deepEqual(model.relationGroups[0].relationIds, [201, 202]);
+    assert.equal(model.relations.find((relation) => relation.id === 203).groupId, null);
+  });
+
+  it("缺少 changeRelations 时旧 evolutionEdges 仅作为未分类前后演变", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1), entity(2)],
+      timepoints: {
+        1: [timepoint(11, 980, "始置")],
+        2: [timepoint(21, 990, "始置")],
+      },
+      evolutionEdges: [{
+        id: 88,
+        source: 1,
+        target: 2,
+        states: [{ id: 88, subject_timepoint_id: 11, object_timepoint_id: 21 }],
+      }],
+    }, [1]);
+
+    assert.equal(model.relations.length, 1);
+    assert.equal(model.relations[0].relationType, "前后演变");
+    assert.equal(model.relations[0].label, "前后演变（未分类）");
+    assert.equal(model.relationGroups.length, 0);
+    assert.deepEqual(model.visibleEntityIds, [1, 2]);
+  });
+
+  it("关系两端保留各自年份，无年端进入 offAxis，关系不改变生命周期", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "来源司"), entity(2, "接收司")],
+      timepoints: {
+        1: link([timepoint(11, 970, "始置"), timepoint(12, 980, "普通记载")]),
+        2: [timepoint(21, null, "年代未明", { time_type: "undated" })],
+      },
+      changeRelations: [{
+        id: 77,
+        relation_type: "职掌·移交",
+        source: 1,
+        target: 2,
+        source_timepoint_id: 12,
+        target_timepoint_id: 21,
+      }],
+    }, [1]);
+
+    const relation = model.relations[0];
+    assert.equal(relation.sourceYear, 980);
+    assert.equal(relation.targetYear, null);
+    assert.equal(model.offAxis.relationEndpoints.length, 1);
+    assert.equal(model.offAxis.relationEndpoints[0].role, "target");
+    assert.equal(model.lanes.find((lane) => lane.entityId === 1).segments[0].endYear, 1279);
+    assert.equal(model.lanes.find((lane) => lane.entityId === 1).segments[0].openEnd, true);
+  });
+
+  it("读取后端显式关系子型和被作用域过滤端点的独立时间", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "宋前旧司"), entity(2, "宋代新司")],
+      timepoints: {
+        1: [],
+        2: [],
+      },
+      changeRelations: [{
+        id: 91,
+        relation_type: "前后演变",
+        relation_subtype: "演变·合并",
+        display_relation_type: "合并",
+        classification_status: "classified",
+        evidence_key: "R91",
+        source: 1,
+        target: 2,
+        source_timepoint_id: 11,
+        target_timepoint_id: 21,
+        source_time: {
+          time_type: "pre_song",
+          year_start: 900,
+          year_end: 900,
+          raw_time: "唐末",
+        },
+        target_time: {
+          time_type: "exact",
+          year_start: 980,
+          year_end: 980,
+          raw_time: "太平兴国五年",
+        },
+      }],
+    }, [2]);
+
+    const relation = model.relations[0];
+    assert.equal(relation.relationType, "演变·合并");
+    assert.equal(relation.relationSubtype, "演变·合并");
+    assert.equal(relation.label, "合并");
+    assert.equal(relation.implementationStatus, "classified");
+    assert.equal(relation.evidenceKey, "R91");
+    assert.equal(relation.sourceMembers[0].timeType, "pre_song");
+    assert.equal(relation.sourceMembers[0].yearStart, 900);
+    assert.equal(relation.sourceMembers[0].effectiveYear, null);
+    assert.equal(relation.sourceMembers[0].rawTime, "唐末");
+    assert.equal(relation.targetMembers[0].rawTime, "太平兴国五年");
+    assert.equal(model.offAxis.relationEndpoints[0].timeType, "pre_song");
+  });
+});

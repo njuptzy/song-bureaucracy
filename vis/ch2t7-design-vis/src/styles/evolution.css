@@ -1,0 +1,201 @@
+.dynamic-evolution-layer text {
+  fill: #351704;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS, "Songti SC", serif;
+  letter-spacing: 0;
+}
+
+.dynamic-evolution-layer .evolution-section-heading {
+  font-size: 24.45px;
+  font-weight: 500;
+}
+
+.dynamic-evolution-layer .evolution-selector-copy {
+  font-size: 15px;
+}
+
+.dynamic-evolution-layer .evolution-selector-count,
+.dynamic-evolution-layer .evolution-axis-label,
+.dynamic-evolution-layer .evolution-event-year,
+.dynamic-evolution-layer .evolution-offaxis-heading {
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-selector-node-label {
+  font-size: 12px;
+  dominant-baseline: central;
+}
+
+.dynamic-evolution-layer .evolution-view-heading {
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.dynamic-evolution-layer .evolution-view-subheading {
+  fill: #756156;
+  font-size: 14px;
+}
+
+.dynamic-evolution-layer .evolution-lane-pager-label {
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10.5px;
+}
+
+.dynamic-evolution-layer .evolution-lane-pager-button.is-disabled {
+  pointer-events: none;
+}
+
+.dynamic-evolution-layer .evolution-lane-title {
+  font-size: 11px;
+  dominant-baseline: central;
+}
+
+.dynamic-evolution-layer .evolution-event-label {
+  font-size: 8px;
+  dominant-baseline: central;
+}
+
+.dynamic-evolution-layer .evolution-relation-label {
+  paint-order: stroke;
+  stroke: #f5f3ec;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-empty {
+  fill: #756156;
+  font-size: 15px;
+}
+
+.dynamic-evolution-layer [role="button"]:focus {
+  outline: none;
+}
+
+.dynamic-evolution-layer [role="button"]:focus-visible {
+  filter: drop-shadow(0 0 1.5px rgba(53, 23, 4, 0.72));
+}
+
+.dynamic-evolution-layer .evolution-event:hover,
+.dynamic-evolution-layer .evolution-relation:hover,
+.dynamic-evolution-layer .evolution-relation-group:hover,
+.dynamic-evolution-layer .evolution-lane-label:hover,
+.dynamic-evolution-layer .evolution-selector-node:hover,
+.dynamic-evolution-layer .evolution-selector-add:hover {
+  filter: drop-shadow(0 1px 1.5px rgba(53, 23, 4, 0.34));
+}
+
+.evolution-search-surface {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(86, 57, 5, 0.85);
+  border-radius: 2px;
+  background: rgba(245, 243, 236, 0.98);
+  color: #351704;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS, "Songti SC", serif;
+}
+
+.evolution-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  border-bottom: 1px solid rgba(86, 57, 5, 0.42);
+}
+
+.evolution-search-input {
+  min-width: 0;
+  height: 31px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #351704;
+  padding: 4px 9px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.evolution-search-input::placeholder {
+  color: #756156;
+  opacity: 1;
+}
+
+.evolution-search-input:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(86, 57, 5, 0.55);
+}
+
+.evolution-search-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.evolution-search-close svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: #563905;
+  stroke-linecap: round;
+  stroke-width: 1.2;
+}
+
+.evolution-search-close:focus-visible {
+  outline: 1px dashed #563905;
+  outline-offset: -3px;
+}
+
+.evolution-search-results {
+  height: 117px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.evolution-search-result {
+  width: 100%;
+  min-height: 27px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid rgba(145, 128, 105, 0.22);
+  background: transparent;
+  color: #351704;
+  padding: 4px 9px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.evolution-search-result:hover,
+.evolution-search-result:focus-visible {
+  outline: 0;
+  background: rgba(165, 166, 141, 0.25);
+}
+
+.evolution-search-result small {
+  color: #756156;
+  font-size: 10px;
+}
+
+.evolution-search-empty {
+  margin: 0;
+  padding: 12px 9px;
+  color: #756156;
+  font-size: 12px;
+}
+
+.evolution-view-control:focus {
+  outline: none;
+}
+
+.evolution-view-control:focus-visible rect {
+  stroke-width: 1.35;
+  stroke-dasharray: 3 2;
+}

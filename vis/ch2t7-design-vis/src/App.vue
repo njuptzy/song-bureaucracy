@@ -1,5 +1,11 @@
 <template>
-  <DesignTemplateCanvas v-if="data" :key="dataVersion" :data="data" />
+  <DesignTemplateCanvas
+    v-if="data"
+    :key="dataVersion"
+    :data="data"
+    :initial-state="canvasState"
+    @state-change="canvasState = $event"
+  />
   <div v-else class="loading">{{ loadError || "正在读取 ch2t7 数据…" }}</div>
 </template>
 
@@ -11,6 +17,7 @@ import { filterSongData } from "./utils/song_scope";
 const data = ref(null);
 const dataVersion = ref("");
 const loadError = ref("");
+const canvasState = ref(null);
 let versionTimer = null;
 
 async function fetchJson(url) {

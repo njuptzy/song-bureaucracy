@@ -58,23 +58,47 @@ import {
   layoutComposition,
   COMPOSITION_GEOMETRY,
 } from "../utils/composition_layout";
+import { buildEvolutionModel } from "../utils/evolution_model";
+import { layoutEvolutionModel } from "../utils/evolution_layout";
+import { windowEvolutionModel } from "../utils/evolution_window";
+import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
 
-const props = defineProps({ data: { type: Object, required: true } });
+const props = defineProps({
+  data: { type: Object, required: true },
+  initialState: { type: Object, default: null },
+});
+const emit = defineEmits(["state-change"]);
+const initialState = props.initialState || {};
 
 const hostRef = ref(null);
 const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
-const viewMode = ref("hierarchy");
-const selectedRange = ref([1080, 1080]);
-const timelineSelectionActive = ref(true);
-const selectedId = ref(null);
-const compositionFocusId = ref(null);
-const selectedCategory = ref("中央机构");
+const viewMode = ref(["hierarchy", "composition", "evolution"].includes(initialState.viewMode)
+  ? initialState.viewMode
+  : "hierarchy");
+const evolutionMode = ref(initialState.evolutionMode === "compare" ? "compare" : "single");
+const evolutionEntityIds = ref(Array.isArray(initialState.evolutionEntityIds)
+  ? initialState.evolutionEntityIds.slice(0, 4)
+  : []);
+const selectedEvolutionItem = ref(initialState.selectedEvolutionItem
+  ? { ...initialState.selectedEvolutionItem, item: null }
+  : null);
+const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
+  ? Math.max(1, Math.floor(initialState.evolutionLanePage))
+  : 1);
+const evolutionSearchOpen = ref(false);
+const selectedRange = ref(Array.isArray(initialState.selectedRange)
+  ? initialState.selectedRange.slice(0, 2)
+  : [1080, 1080]);
+const timelineSelectionActive = ref(initialState.timelineSelectionActive ?? true);
+const selectedId = ref(initialState.selectedId ?? null);
+const compositionFocusId = ref(initialState.compositionFocusId ?? null);
+const selectedCategory = ref(initialState.selectedCategory || "中央机构");
 const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
 const inlineDetailOfficialId = ref(null);
-const spaceAwareExpansion = ref(false);
+const spaceAwareExpansion = ref(initialState.spaceAwareExpansion ?? false);
 const svgCache = new Map();
 const hierarchyTemplateCache = new WeakMap();
 const yearSnapshotCache = new Map();
@@ -93,6 +117,10 @@ let renderRevision = 0;
 let lastExpandedHierarchyId = null;
 let timelineRefreshFrame = null;
 let timelineRefreshNeedsStatic = false;
+let evolutionModelCacheKey = "";
+let evolutionModelCache = null;
+let evolutionLayoutCacheKey = "";
+let evolutionLayoutCache = null;
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -153,6 +181,26 @@ function yearSnapshot(year) {
 const currentSnapshot = computed(() => (
   timelineSelectionActive.value ? yearSnapshot(selectedRange.value[0]) : null
 ));
+const persistedCanvasState = computed(() => ({
+  viewMode: viewMode.value,
+  evolutionMode: evolutionMode.value,
+  evolutionEntityIds: [...evolutionEntityIds.value],
+  selectedEvolutionItem: selectedEvolutionItem.value
+    ? { kind: selectedEvolutionItem.value.kind, id: selectedEvolutionItem.value.id }
+    : null,
+  evolutionLanePage: evolutionLanePage.value,
+  selectedRange: [...selectedRange.value],
+  timelineSelectionActive: timelineSelectionActive.value,
+  selectedId: selectedId.value,
+  compositionFocusId: compositionFocusId.value,
+  selectedCategory: selectedCategory.value,
+  spaceAwareExpansion: spaceAwareExpansion.value,
+}));
+
+watch(persistedCanvasState, (state) => emit("state-change", state), {
+  immediate: true,
+  deep: true,
+});
 
 function normalizeText(element) {
   return (element.textContent || "").replace(/\s+/g, "").trim();
@@ -208,6 +256,15 @@ function selectLinkedEntity(entityId) {
   expandedDetailId.value = null;
   inlineDetailOfficialId.value = null;
   selectedId.value = target.id;
+  if (viewMode.value === "evolution") {
+    selectedEvolutionItem.value = null;
+    evolutionEntityIds.value = evolutionMode.value === "single"
+      ? [target.id]
+      : [...new Set([...evolutionEntityIds.value, target.id])].slice(0, 4);
+    evolutionLanePage.value = 1;
+    refreshTemplate();
+    return;
+  }
   if (viewMode.value !== "composition") {
     if (target.type === "机构") {
       focusHierarchyContext(target, true);
@@ -427,6 +484,11 @@ function titleOf(entityId) {
 
 const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
 const HIERARCHY_DESIGN_URL = "/api/design/hierarchy.svg";
+const DESIGN_URL_BY_MODE = {
+  hierarchy: HIERARCHY_DESIGN_URL,
+  composition: "/api/design/composition.svg",
+  evolution: HIERARCHY_DESIGN_URL,
+};
 
 function templateCategoryItems(svg) {
   const sharedItems = [...svg.querySelectorAll(
@@ -637,6 +699,14 @@ function inlineDetailValues(entity) {
 }
 
 function selectedEntity() {
+  if (viewMode.value === "evolution") {
+    const evolutionSelection = entityMap.get(selectedId.value)
+      || entityMap.get(evolutionEntityIds.value[0]);
+    if (evolutionSelection?.id !== selectedId.value) {
+      selectedId.value = evolutionSelection?.id ?? null;
+    }
+    return evolutionSelection || null;
+  }
   const selected = entityMap.get(selectedId.value);
   const activeEntityIds = currentSnapshot.value?.entityIds || null;
   const fallback = selected && (!activeEntityIds || activeEntityIds.has(selected.id))
@@ -2399,9 +2469,192 @@ function renderDynamicComposition(svg) {
   }
 }
 
+const evolutionTemplateCache = new WeakMap();
+
+function hideEvolutionExamples(svg) {
+  hierarchyTemplates(svg);
+  if (evolutionTemplateCache.has(svg)) return;
+  [...svg.children].forEach((element) => {
+    if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return;
+    const point = position(element);
+    const bounds = elementBounds(element);
+    const x = point?.x ?? bounds?.x;
+    const y = point?.y ?? bounds?.y;
+    if (x == null || y == null) return;
+    if (x >= 58 && x <= 480 && y >= 270 && y <= 478) {
+      element.style.display = "none";
+    }
+  });
+  evolutionTemplateCache.set(svg, true);
+}
+
+function evolutionFocusEntities() {
+  return evolutionEntityIds.value
+    .map((entityId) => entityMap.get(entityId))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function ensureEvolutionFocus() {
+  let focusEntities = evolutionFocusEntities();
+  if (!focusEntities.length) {
+    const fallback = entityMap.get(selectedId.value) || categoryFocus(selectedCategory.value);
+    if (fallback) {
+      evolutionEntityIds.value = [fallback.id];
+      selectedId.value = fallback.id;
+      focusEntities = [fallback];
+    }
+  }
+  if (evolutionMode.value === "single" && focusEntities.length > 1) {
+    const activeId = focusEntities.some((entity) => entity.id === selectedId.value)
+      ? selectedId.value
+      : focusEntities[0].id;
+    evolutionEntityIds.value = [activeId];
+    focusEntities = [entityMap.get(activeId)].filter(Boolean);
+  }
+  return focusEntities;
+}
+
+function renderDynamicEvolution(svg) {
+  hideEvolutionExamples(svg);
+  const focusEntities = ensureEvolutionFocus();
+  const focusIds = focusEntities.map((entity) => entity.id);
+  const modelKey = focusIds.join(":");
+  if (!evolutionModelCache || evolutionModelCacheKey !== modelKey) {
+    evolutionModelCache = buildEvolutionModel(
+      props.data,
+      focusIds,
+      { yearMin: YEAR_MIN, yearMax: YEAR_MAX },
+    );
+    evolutionModelCacheKey = modelKey;
+    evolutionLayoutCacheKey = "";
+    evolutionLayoutCache = null;
+  }
+  const windowedModel = windowEvolutionModel(evolutionModelCache, evolutionLanePage.value, 8);
+  if (windowedModel.laneWindow.page !== evolutionLanePage.value) {
+    evolutionLanePage.value = windowedModel.laneWindow.page;
+  }
+  const layoutKey = `${modelKey}:${windowedModel.laneWindow.page}`;
+  if (!evolutionLayoutCache || evolutionLayoutCacheKey !== layoutKey) {
+    evolutionLayoutCache = layoutEvolutionModel(windowedModel, {
+      x: 520,
+      y: 258,
+      width: 1278,
+      height: 568,
+    });
+    evolutionLayoutCacheKey = layoutKey;
+  }
+  const model = windowedModel;
+  const layout = evolutionLayoutCache;
+  if (selectedEvolutionItem.value) {
+    const { kind, id } = selectedEvolutionItem.value;
+    const item = kind === "relation"
+      ? layout.relations.find((relation) => relation.id === id)
+      : model.lanes
+        .flatMap((lane) => [...(lane.events || []), ...(lane.offAxisEvents || [])])
+        .find((event) => event.id === id);
+    selectedEvolutionItem.value = item ? { kind, id, item } : null;
+  }
+  svg.__evolutionModel = model;
+  svg.__evolutionLayout = layout;
+
+  const handlers = {
+    onSelectEntity(entityId) {
+      selectedId.value = entityId;
+      selectedEvolutionItem.value = null;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onRemoveEntity(entityId) {
+      const remaining = evolutionEntityIds.value.filter((id) => id !== entityId);
+      if (!remaining.length) return;
+      evolutionEntityIds.value = remaining;
+      if (selectedId.value === entityId) selectedId.value = remaining[0];
+      selectedEvolutionItem.value = null;
+      evolutionLanePage.value = 1;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onAddEntity(entityId) {
+      evolutionEntityIds.value = evolutionMode.value === "single"
+        ? [entityId]
+        : [...new Set([...evolutionEntityIds.value, entityId])].slice(0, 4);
+      selectedId.value = entityId;
+      selectedEvolutionItem.value = null;
+      evolutionLanePage.value = 1;
+      evolutionSearchOpen.value = false;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onModeChange(mode) {
+      if (mode === evolutionMode.value) return;
+      evolutionMode.value = mode;
+      evolutionSearchOpen.value = false;
+      selectedEvolutionItem.value = null;
+      evolutionLanePage.value = 1;
+      if (mode === "single") {
+        const activeId = evolutionEntityIds.value.includes(selectedId.value)
+          ? selectedId.value
+          : evolutionEntityIds.value[0];
+        evolutionEntityIds.value = activeId == null ? [] : [activeId];
+      }
+      refreshTemplate();
+    },
+    onSearchOpenChange(open) {
+      evolutionSearchOpen.value = Boolean(open);
+      refreshTemplate();
+    },
+    onLanePageChange(page) {
+      const nextPage = Math.max(1, Math.min(model.laneWindow.pageCount, Math.floor(page)));
+      if (nextPage === evolutionLanePage.value) return;
+      evolutionLanePage.value = nextPage;
+      selectedEvolutionItem.value = null;
+      if (!focusIds.includes(selectedId.value)) selectedId.value = focusIds[0] ?? null;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onSelectEvent(event) {
+      selectedId.value = event.entityId;
+      selectedEvolutionItem.value = { kind: "timepoint", id: event.id, item: event };
+      detailPanelScrollOffset = 0;
+      if (Number.isFinite(event.effectiveYear)) {
+        timelineSelectionActive.value = true;
+        selectedRange.value = [event.effectiveYear, event.effectiveYear];
+      }
+      refreshTemplate();
+    },
+    onSelectRelation(relation) {
+      selectedEvolutionItem.value = { kind: "relation", id: relation.id, item: relation };
+      detailPanelScrollOffset = 0;
+      const years = [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
+        .map((member) => member.effectiveYear)
+        .filter(Number.isFinite);
+      if (years.length) {
+        timelineSelectionActive.value = true;
+        selectedRange.value = [Math.min(...years), Math.max(...years)];
+      }
+      refreshTemplate();
+    },
+  };
+
+  renderEvolutionOverlay(svg, {
+    layout,
+    entities: props.data.entities,
+    focusEntities,
+    activeEntityId: selectedId.value,
+    selectedItem: selectedEvolutionItem.value,
+    selectedRange: selectedRange.value,
+    selectionActive: timelineSelectionActive.value,
+    mode: evolutionMode.value,
+    searchOpen: evolutionSearchOpen.value,
+    handlers,
+  });
+}
+
 function populateCenter(svg) {
   if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
-  else renderDynamicComposition(svg);
+  else if (viewMode.value === "composition") renderDynamicComposition(svg);
+  else renderDynamicEvolution(svg);
 }
 
 function bindEntityTexts(svg) {
@@ -2418,7 +2671,7 @@ function bindEntityTexts(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
-      if (this.closest(".dynamic-tree-layer")) return;
+      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer")) return;
       const entity = this.dataset.entityId
         ? entityMap.get(Number(this.dataset.entityId))
         : titleMap.get(normalizeText(this));
@@ -2612,7 +2865,200 @@ function setupDetailPanel(svg) {
 
 }
 
+const EVOLUTION_EFFECT_LABELS = {
+  activate: "启用",
+  preserve: "普通记载",
+  deactivate: "罢废",
+  ignore: "拟议未行",
+};
+
+const EVOLUTION_TIME_TYPE_LABELS = {
+  exact: "明确时间点",
+  range: "明确连续区间",
+  bounded: "模糊时间边界",
+  undated: "年代未明",
+  unresolved: "时间待核查",
+  pre_song: "宋前资料",
+};
+
+function evidenceLines(key, fallbackQuotation = "") {
+  const citations = props.data.citations?.[key] || [];
+  const quotation = fallbackQuotation
+    || citations.map((item) => item.quotation).filter(Boolean).join("；");
+  const source = citations.map((item) => item.citation).filter(Boolean).join("；");
+  const note = citations.map((item) => item.note).filter(Boolean).join("；");
+  return {
+    quotation: quotation || "当前记录没有可展示的逐字引文。",
+    source: source || "当前记录没有单列出处。",
+    note: note || "无补充校勘说明。",
+  };
+}
+
+function relationEndpointLabel(member) {
+  const entity = entityMap.get(member?.entityId);
+  const time = member?.rawTime || (member?.effectiveYear != null ? `${member.effectiveYear}年` : "年代未明");
+  return `${entity?.title || `#${member?.entityId}`}（${time}）`;
+}
+
+function evolutionDetailPayload(svg) {
+  const model = svg.__evolutionModel;
+  const selected = selectedEvolutionItem.value;
+  if (selected?.kind === "timepoint") {
+    const event = selected.item;
+    const entity = entityMap.get(event.entityId) || selectedEntity();
+    const evidence = evidenceLines(`T${event.id}`, event.quotation);
+    const related = (model?.relations || []).filter((relation) => (
+      relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
+    ));
+    return {
+      title: entity?.title || "时间节点",
+      year: event.rawTime || (event.effectiveYear != null ? `公元${event.effectiveYear}年` : "年代未明"),
+      sections: [
+        { label: "事件：", value: event.event || "原文未单列事件名。" },
+        {
+          label: "存废判定：",
+          value: `${EVOLUTION_EFFECT_LABELS[event.effect] || event.effect || "普通记载"}。关系箭头不参与这一判定。`,
+        },
+        {
+          label: "时间精度：",
+          value: `${EVOLUTION_TIME_TYPE_LABELS[event.timeType] || event.timeType || "未标注"}${event.parse_note ? `；${event.parse_note}` : ""}`,
+        },
+        {
+          label: "相关关系：",
+          value: related.length
+            ? related.map((relation) => relation.label).join("；")
+            : "当前时间点没有结构化演变关系。",
+        },
+        { label: "原文引文：", value: evidence.quotation },
+        { label: "出处：", value: evidence.source },
+        { label: "校勘说明：", value: evidence.note },
+      ],
+    };
+  }
+
+  if (selected?.kind === "relation") {
+    const relation = selected.item;
+    const evidence = evidenceLines(relation.evidenceKey || `R${relation.id}`, relation.quotation);
+    const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
+    const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
+    const endpointYears = [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
+      .map((member) => member.rawTime || member.effectiveYear)
+      .filter((value) => value != null);
+    return {
+      title: relation.label,
+      year: endpointYears.length ? endpointYears.join(" → ") : "年代未明",
+      sections: [
+        { label: "关系：", value: relation.label },
+        { label: "来源：", value: sources || "来源端点未完整记录。" },
+        { label: "目标：", value: targets || "目标端点未完整记录。" },
+        {
+          label: "编码状态：",
+          value: relation.implementationStatus === "unclassified"
+            ? "旧前后演变关系，尚未结构化细分；界面不依据自由文本猜测。"
+            : `结构化关系${relation.groupId ? `；事件组 ${relation.groupId}` : "；未设置事件组"}。`,
+        },
+        { label: "原文引文：", value: evidence.quotation },
+        { label: "出处：", value: evidence.source },
+        { label: "校勘说明：", value: evidence.note },
+      ],
+    };
+  }
+
+  const entity = selectedEntity();
+  if (!entity) return null;
+  const lane = model?.lanes?.find((item) => item.entityId === entity.id);
+  const relations = (model?.relations || []).filter((relation) => (
+    relation.sourceEntityId === entity.id || relation.targetEntityId === entity.id
+  ));
+  const timepoints = props.data.timepoints[String(entity.id)] || [];
+  const dictionary = props.data.dictionary?.[entity.title] || {};
+  const segmentLabel = lane?.segments?.length
+    ? lane.segments.map((segment) => `${segment.startYear}—${segment.endYear}`).join("；")
+    : "当前算法未确认宋代存续段。";
+  return {
+    title: entity.title,
+    year: `${timepoints.length} 个时间点`,
+    sections: [
+      { label: "实体类型：", value: entity.type },
+      { label: "确认存续段：", value: segmentLabel },
+      {
+        label: "时间节点：",
+        value: timepoints.length
+          ? timepoints.map((item) => `${item.time || "时间未明"}：${item.event || item.quotation || "未载事件"}`).join("；")
+          : "没有时间节点。",
+      },
+      {
+        label: "结构化关系：",
+        value: relations.length
+          ? relations.map((relation) => relation.label).join("；")
+          : "没有直接演变关系。",
+      },
+      {
+        label: "数据异常：",
+        value: lane?.anomalies?.length
+          ? `${lane.anomalies.length} 项时间链异常；各链按断开的轨道展示，不自动补线。`
+          : "未发现多链头、悬空链接或环。",
+      },
+      { label: "职源与沿革：", value: dictionary.origin || dictionary.text || "原文未单列职源与沿革。" },
+      { label: "出处：", value: dictionary.source || dictionary.catalog || dictionary.page || "当前实体未匹配到独立出处。" },
+    ],
+  };
+}
+
+function updateEvolutionDetails(svg) {
+  const payload = evolutionDetailPayload(svg);
+  if (!payload) return;
+  const title = findTextAt(svg, 99.85, 505.87);
+  const year = findTextAt(svg, 189.74, 502.91);
+  setText(title, payload.title);
+  setText(year, payload.year);
+  constrainTextWidth(title, 78);
+  constrainTextWidth(year, 270);
+
+  const panelGroup = svg.querySelector(".detail-panel-group");
+  const topRightBorder = panelGroup?.__topRightBorder;
+  if (topRightBorder && year) {
+    const yearX = position(year)?.x ?? 189.74;
+    const lineStart = Math.max(308.55, Math.min(468, yearX + year.getComputedTextLength() + 8));
+    topRightBorder.setAttribute(
+      "points",
+      `229.27 877.67 475.49 877.67 475.49 497.57 ${lineStart} 497.57`,
+    );
+  }
+
+  let cursorY = 536.92;
+  INLINE_DETAIL_FIELDS.forEach((field, index) => {
+    const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
+    const section = payload.sections[index];
+    if (!label || !content) return;
+    if (!section) {
+      label.style.display = "none";
+      content.style.display = "none";
+      return;
+    }
+    label.style.display = "";
+    content.style.display = "";
+    label.setAttribute("transform", `translate(100.33 ${cursorY})`);
+    label.style.fill = "#351704";
+    label.style.cursor = "default";
+    d3.select(label).on("click.detail-field-link", null);
+    setText(label, section.label);
+    cursorY += 25;
+    content.setAttribute("transform", `translate(101.29 ${cursorY})`);
+    const lines = wrapText(content, section.value, 28, 18, Infinity);
+    cursorY += Math.max(1, lines) * 18 + 13;
+  });
+  const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+  if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY + 2);
+  panelGroup?.__updateDetailScroll?.();
+}
+
 function updateDetails(svg) {
+  if (viewMode.value === "evolution") {
+    updateEvolutionDetails(svg);
+    return;
+  }
   const entity = selectedEntity();
   if (!entity) {
     const title = findTextAt(svg, 99.85, 505.87);
@@ -2859,8 +3305,87 @@ function bindSpaceAwareExpansionControl(svg) {
   sync();
 }
 
+function enterEvolutionView() {
+  const compositionFocus = entityMap.get(compositionFocusId.value);
+  const focus = compositionFocus || entityMap.get(selectedId.value) || graphFocusEntity();
+  if (focus) {
+    selectedId.value = focus.id;
+    evolutionEntityIds.value = [focus.id];
+  }
+  evolutionMode.value = "single";
+  selectedEvolutionItem.value = null;
+  evolutionLanePage.value = 1;
+  evolutionSearchOpen.value = false;
+  detailPanelScrollOffset = 0;
+  viewMode.value = "evolution";
+}
+
+function restoreHierarchyFocus() {
+  const selected = entityMap.get(selectedId.value) || entityMap.get(evolutionEntityIds.value[0]);
+  if (!selected) return;
+  selectedId.value = selected.id;
+  if (selected.type === "机构") {
+    focusHierarchyContext(selected, true);
+    return;
+  }
+  const affiliation = props.data.staffEdges?.find((edge) => edge.official === selected.id);
+  const institution = affiliation ? entityMap.get(affiliation.org) : null;
+  if (institution) focusHierarchyContext(institution, true);
+}
+
+function ensureEvolutionViewControl(svg) {
+  let control = svg.querySelector(".evolution-view-control");
+  if (!control) {
+    control = svgElement("g", { class: "evolution-view-control" });
+    const surface = svgElement("rect", {
+      x: 1248.5,
+      y: 80,
+      width: 125.8,
+      height: 26,
+      rx: 2.7,
+      fill: "#a5a68d",
+      "fill-opacity": 0,
+      stroke: "#563905",
+      "stroke-width": 0.78,
+      "stroke-opacity": 0.42,
+    });
+    const template = findTextAt(svg, 1570.42, 98.84, 2);
+    const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
+    label.setAttribute("transform", "translate(1311.4 98.84)");
+    label.setAttribute("text-anchor", "middle");
+    setText(label, "演变视图");
+    control.append(surface, label);
+    svg.appendChild(control);
+  }
+  const active = viewMode.value === "evolution";
+  const surface = control.querySelector("rect");
+  const label = control.querySelector("text");
+  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
+  if (label) label.style.fontWeight = active ? "700" : "400";
+  makeEvolutionControlInteractive(control, active);
+}
+
+function makeEvolutionControlInteractive(control, active) {
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!active) enterEvolutionView();
+  };
+  control.setAttribute("role", "button");
+  control.setAttribute("tabindex", active ? "-1" : "0");
+  control.setAttribute("aria-label", active ? "当前为演变视图" : "打开演变视图");
+  control.style.cursor = active ? "default" : "pointer";
+  d3.select(control)
+    .on("click.evolution-view", active ? null : activate)
+    .on("keydown.evolution-view", active ? null : (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
+}
+
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
+  ensureEvolutionViewControl(svg);
   const categoryItems = templateCategoryItems(svg);
   const selectionTemplate = categoryItems
     .map(({ group }) => [...group.children].find(
@@ -2899,12 +3424,13 @@ function bindTemplateControls(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
-      if (this.closest(".dynamic-tree-layer")) return;
+      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer, .evolution-view-control")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
-        const canActivate = viewMode.value === "composition" && targetMode === "hierarchy";
+        const canActivate = targetMode === "hierarchy"
+          && (viewMode.value === "composition" || viewMode.value === "evolution");
         const activateView = (event) => {
           event.stopPropagation();
           if (!canActivate) return;
@@ -2915,10 +3441,11 @@ function bindTemplateControls(svg) {
               focusHierarchyContext(focus, true);
             }
           }
+          if (viewMode.value === "evolution") restoreHierarchyFocus();
           viewMode.value = "hierarchy";
         };
         this.style.cursor = canActivate ? "pointer" : "default";
-        this.style.fontWeight = (text === "层级视图") === (viewMode.value === "hierarchy") ? "700" : "400";
+        this.style.fontWeight = targetMode === viewMode.value ? "700" : "400";
         d3.select(this).on("click.view-mode", canActivate ? activateView : null);
         const bounds = elementBounds(this);
         if (canActivate && bounds && this.parentNode) {
@@ -3165,6 +3692,7 @@ function bindTimelineRange(svg) {
     event.stopPropagation();
     timelineSelectionActive.value = false;
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
+    if (viewMode.value === "evolution") selectedEvolutionItem.value = null;
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
     flushTimelineRefresh();
@@ -3176,6 +3704,10 @@ function bindTimelineRange(svg) {
     });
 
   svg.__syncTimelineSelectionStyle = () => renderRange(selectedRange.value);
+  svg.__moveTimelineSelection = () => {
+    if (timelineSelectionActive.value) moveBrush(selectedRange.value);
+    else brushLayer.call(brush.move, null);
+  };
   renderRange(selectedRange.value);
   if (timelineSelectionActive.value) moveBrush(selectedRange.value);
 }
@@ -3209,7 +3741,7 @@ async function loadSvgTemplate(url) {
 async function renderTemplate() {
   const requestedMode = viewMode.value;
   const revision = ++renderRevision;
-  const url = `/api/design/${requestedMode}.svg`;
+  const url = DESIGN_URL_BY_MODE[requestedMode] || HIERARCHY_DESIGN_URL;
   const requiredUrls = requestedMode === "composition"
     ? [url, HIERARCHY_DESIGN_URL]
     : [url];
@@ -3254,6 +3786,10 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
       "clipPath[id^='dynamic-tree-'], clipPath[id^='inline-composition-']"
     ).forEach((clipPath) => clipPath.remove());
   }
+  if (viewMode.value === "evolution") {
+    svg.querySelector(".dynamic-evolution-layer")?.remove();
+    svg.querySelectorAll("[data-evolution-def]").forEach((element) => element.remove());
+  }
 
   selectedEntity();
   populateCenter(svg);
@@ -3265,6 +3801,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   if (rebindControls) bindTemplateControls(svg);
   updateDetails(svg);
   svg.__syncTimelineSelectionStyle?.();
+  svg.__moveTimelineSelection?.();
   svg.__syncSpaceAwareExpansionControl?.();
 }
 

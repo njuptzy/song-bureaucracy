@@ -46,6 +46,12 @@ DESIGN_ADOBE_SONG_FONT = REPO_ROOT / "vis/宋代职官体系可视化打包文�
 
 SUMMARY_LEN = 400
 SECTION_LEN = 300
+CHANGE_RELATION_OPTIONAL_COLUMNS = (
+    "relation_subtype",
+    "change_event_id",
+    "relation_group_id",
+    "relation_scope",
+)
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -84,6 +90,87 @@ def _dict_section(fields: dict, keys) -> str:
     return ""
 
 
+def _normalized_time_payload(raw_time: str) -> dict:
+    normalized = normalize_time(raw_time or "")
+    return {
+        "raw_time": raw_time or "",
+        "year_start": normalized.year_start,
+        "year_end": normalized.year_end,
+        "month": normalized.month,
+        "is_leap_month": normalized.is_leap_month,
+        "day": normalized.day,
+        "end_month": normalized.end_month,
+        "end_is_leap_month": normalized.end_is_leap_month,
+        "end_day": normalized.end_day,
+        "month_text": normalized.month_text or "",
+        "day_text": normalized.day_text or "",
+        "end_month_text": normalized.end_month_text or "",
+        "end_day_text": normalized.end_day_text or "",
+        "sort_order": normalized.sort_order,
+        "time_type": normalized.time_type,
+        "parse_note": normalized.parse_note or "",
+    }
+
+
+def _relationship_columns(entries: sqlite3.Connection) -> set[str]:
+    return {row["name"] for row in entries.execute("PRAGMA table_info(Relationships)")}
+
+
+def _build_change_relations(
+    entries: sqlite3.Connection,
+    normalized_by_id: dict[int, dict],
+) -> list[dict]:
+    """Return atomic evolution/transfer edges without inferring time or grouping."""
+    columns = _relationship_columns(entries)
+    optional_selects = [
+        f"r.{column} AS {column}" if column in columns else f"NULL AS {column}"
+        for column in CHANGE_RELATION_OPTIONAL_COLUMNS
+    ]
+    rows = entries.execute(
+        f"""
+        SELECT r.id AS rid, r.subject_id, r.object_id, r.relation_type,
+               r.quotation, s.entity_id AS subj, o.entity_id AS obj,
+               {", ".join(optional_selects)}
+        FROM Relationships r
+        JOIN Timepoints s ON r.subject_id = s.id
+        JOIN Timepoints o ON r.object_id = o.id
+        WHERE r.relation_type = ?
+           OR r.relation_type LIKE ?
+           OR r.relation_type = ?
+        ORDER BY r.id
+        """,
+        ("前后演变", "演变·%", "职掌·移交"),
+    )
+
+    relations = []
+    for row in rows:
+        subtype = row["relation_subtype"] or None
+        is_unclassified = row["relation_type"] == "前后演变" and subtype is None
+        relations.append(
+            {
+                "id": row["rid"],
+                "relation_type": row["relation_type"],
+                "relation_subtype": subtype,
+                "classification_status": "unclassified" if is_unclassified else "classified",
+                "display_relation_type": (
+                    "前后演变（未分类）" if is_unclassified else subtype or row["relation_type"]
+                ),
+                "source": row["subj"],
+                "target": row["obj"],
+                "source_timepoint_id": row["subject_id"],
+                "target_timepoint_id": row["object_id"],
+                "source_time": dict(normalized_by_id.get(row["subject_id"]) or {}),
+                "target_time": dict(normalized_by_id.get(row["object_id"]) or {}),
+                "evidence_key": f"R{row['rid']}",
+                "quotation": row["quotation"] or "",
+                "change_event_id": row["change_event_id"],
+                "relation_group_id": row["relation_group_id"],
+                "relation_scope": row["relation_scope"] or None,
+            }
+        )
+    return relations
+
+
 def build_payload() -> dict:
     entries = _connect(ENTRIES_DB)
     dictionary = _connect(DICT_DB)
@@ -99,13 +186,7 @@ def build_payload() -> dict:
         "SELECT id, entity_id, time, event, prev_id, succ_id, attr_category,"
         " attr_officer_type, attr_grade, quotation FROM Timepoints ORDER BY entity_id, id"
     ):
-        normalized = normalize_time(r["time"] or "")
-        normalized_payload = {
-            "year_start": normalized.year_start,
-            "year_end": normalized.year_end,
-            "time_type": normalized.time_type,
-            "parse_note": normalized.parse_note or "",
-        }
+        normalized_payload = _normalized_time_payload(r["time"] or "")
         normalized_by_id[r["id"]] = normalized_payload
         timepoints.setdefault(r["entity_id"], []).append(
             {
@@ -248,6 +329,11 @@ def build_payload() -> dict:
                 ],
             }
         )
+
+    # 演变视图读取逐条关系，不借用 periods_for() 将两端时间合并，也不从
+    # 自由文本推断子类型或关系组。旧“前后演变”明确标为未分类；将来数据库
+    # 增加结构化子类型和组字段后，接口会通过 PRAGMA 自动透传。
+    change_relations = _build_change_relations(entries, normalized_by_id)
 
     citations = {}
     for r in entries.execute(
@@ -452,6 +538,7 @@ def build_payload() -> dict:
         "hierarchyEdges": hierarchy_edges,
         "staffEdges": staff_edges,
         "evolutionEdges": evolution_edges,
+        "changeRelations": change_relations,
         "collectiveEntityIds": sorted(collective_entity_ids),
         "collectiveInstanceEdges": collective_instance_edges,
         "citations": citations,
@@ -461,6 +548,7 @@ def build_payload() -> dict:
             "hierarchyEdges": len(hierarchy_edges),
             "staffEdges": len(staff_edges),
             "evolutionEdges": len(evolution_edges),
+            "changeRelations": len(change_relations),
             "collectiveEntities": len(collective_entity_ids),
             "collectiveInstanceEdges": len(collective_instance_edges),
             "dictionaryMatched": len(dictionary_payload),

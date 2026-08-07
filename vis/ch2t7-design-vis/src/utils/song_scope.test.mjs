@@ -42,13 +42,33 @@ test("8050只向界面保留宋代时间点及有宋代证据的关系", () => {
         periods: [],
       },
     ],
+    changeRelations: [
+      {
+        id: 50,
+        source: 1,
+        target: 3,
+        source_timepoint_id: 10,
+        target_timepoint_id: 30,
+      },
+      {
+        id: 51,
+        source: 1,
+        target: 2,
+        source_timepoint_id: 10,
+        target_timepoint_id: 20,
+      },
+    ],
   });
   assert.deepEqual(data.entities.map((entity) => entity.id), [1, 2]);
   assert.equal(data.timepoints[1].length, 0);
+  assert.deepEqual(data.preSongTimepoints[1].map((item) => item.id), [10]);
   assert.equal(data.hierarchyEdges.length, 1);
   assert.equal(data.collectiveInstanceEdges.length, 1);
   assert.deepEqual(data.evolutionEdges.map((edge) => edge.id), [41]);
   assert.equal(data.evolutionEdges[0].states.length, 1);
+  assert.deepEqual(data.changeRelations.map((relation) => relation.id), [51]);
+  assert.equal(data.changeRelations[0].source_time_visible, false);
+  assert.equal(data.changeRelations[0].target_time_visible, true);
 });
 
 test("8051排除纯宋前事件和纯宋前实体", () => {
