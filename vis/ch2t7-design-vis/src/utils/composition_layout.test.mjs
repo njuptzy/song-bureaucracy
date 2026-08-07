@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   COMPOSITION_GEOMETRY,
+  compositionDensityScale,
   fitCompositionBlock,
   layoutComposition,
+  nestedRowCountFor,
+  solveLabelTypography,
   staffTextCols,
 } from "./composition_layout.js";
 
@@ -98,6 +101,44 @@ const model = {
   ],
 };
 
+const sparseMinistryModel = {
+  focus: { id: 1185, title: "尚书省工部" },
+  selfColumn: staffed(
+    { ...leaf(1185, "尚书省工部", -1, null), depth: -1 },
+    "判尚书省工部事一人",
+  ),
+  focusDirectLeaves: [
+    staffed(leaf(1186, "工部司", 1, 1185), "工部郎中一人，工部员外郎一人"),
+    staffed(leaf(1187, "屯田司", 1, 1185), "屯田郎中一人，屯田员外郎一人"),
+    staffed(leaf(1188, "虞部司", 1, 1185), "虞部郎中一人，虞部员外郎一人"),
+    staffed(leaf(1189, "水部司", 1, 1185), "水部郎中一人，水部员外郎一人"),
+  ],
+  sections: [],
+};
+
+function assertMetricsInside(metrics, rect, title) {
+  const titleLeft = metrics.titleXOffset - metrics.fontSize / 2;
+  const titleRight = metrics.titleXOffset
+    + (metrics.titleCols - 1) * metrics.titlePitch
+    + metrics.fontSize / 2;
+  assert.ok(titleLeft >= -1e-9, `${title} 标题越过左边界`);
+  assert.ok(titleRight <= rect.width + 1e-9, `${title} 标题越过右边界`);
+  for (const track of metrics.staffTracks) {
+    assert.ok(
+      metrics.staffYOffset + Array.from(track.text).length * metrics.staffFontSize
+        <= rect.height - metrics.staffBottomPadding + 1e-9,
+      `${title} 编制越过下边界`,
+    );
+  }
+  if (!metrics.staffTracks.length) return;
+  const staffLeft = metrics.staffRightmostXOffset
+    - (metrics.staffTracks.length - 1) * metrics.staffTrackPitch
+    - metrics.staffFontSize / 2;
+  const staffRight = metrics.staffRightmostXOffset + metrics.staffFontSize / 2;
+  assert.ok(staffLeft >= -1e-9, `${title} 编制越过左边界`);
+  assert.ok(staffRight <= rect.width + 1e-9, `${title} 编制越过右边界`);
+}
+
 describe("staffTextCols", () => {
   it("按每列字数折算文本列数", () => {
     assert.equal(staffTextCols("郎中一人", COMPOSITION_GEOMETRY, 26), 1);
@@ -113,6 +154,16 @@ describe("fitCompositionBlock", () => {
     assert.equal(fitted.scale, 1);
     assert.equal(fitted.translateX, 0);
     assert.equal(fitted.translateY, 0);
+  });
+});
+
+describe("nestedRowCountFor", () => {
+  it("九个深层机构在 116px 高区域分两行，避免压成 6px 极窄列", () => {
+    const children = Array.from({ length: 9 }, (_, index) => leaf(950 + index, `医科${index}`));
+    assert.equal(nestedRowCountFor(children, { width: 74.58, height: 116.54 }), 2);
+    assert.equal(nestedRowCountFor(children, { width: 74.58, height: 40 }), 1);
+    const caseChildren = Array.from({ length: 18 }, (_, index) => leaf(970 + index, `考功案${index}`));
+    assert.equal(nestedRowCountFor(caseChildren, { width: 74.58, height: 116.54 }), 4);
   });
 });
 
@@ -272,5 +323,117 @@ describe("layoutComposition", () => {
 
   it("空模型返回 null", () => {
     assert.equal(layoutComposition(null), null);
+  });
+});
+
+describe("编制文字自适应", () => {
+  it("稀疏工部四格利用大面积放大，密集尚书省仍保持原稿字号", () => {
+    const sparse = layoutComposition(sparseMinistryModel);
+    const sparseLeaves = sparse.items.filter((item) => item.kind === "column");
+    assert.equal(sparse.typographyScale, COMPOSITION_GEOMETRY.typographyMaxScale);
+    assert.equal(sparseLeaves.length, 4);
+    for (const item of sparseLeaves) {
+      assert.ok(item.fontSize >= 29.5 && item.fontSize <= 29.6 + 1e-9);
+      assert.ok(item.staffFontSize >= 12.9 && item.staffFontSize <= 13 + 1e-9);
+      assert.equal(item.truncated, false);
+      assert.equal(item.staffTracks.map((track) => track.text).join(""), item.staffText);
+      assertMetricsInside(item, item.labelRect, item.title);
+    }
+
+    const dense = layoutComposition(model);
+    const denseDirect = dense.blocks.find((block) => block.id === 12).items[0];
+    const denseGongyuan = dense.blocks.find((block) => block.id === 12)
+      .items.find((item) => item.id === 5);
+    const denseNested = denseGongyuan.children.find((item) => item.id === 52);
+    assert.equal(dense.typographyScale, 1);
+    assert.equal(denseDirect.fontSize, COMPOSITION_GEOMETRY.columnTitleFontSize);
+    assert.equal(denseDirect.staffFontSize, COMPOSITION_GEOMETRY.staffFontSize);
+    assert.equal(denseGongyuan.staffTracks.length, denseGongyuan.staffTrackCount);
+    assert.equal(denseNested.fontSize, 13.5);
+  });
+
+  it("同一全文随可用宽高增加只会保持或放大", () => {
+    const source = staffed(
+      leaf(901, "提举都大仓草场司", 1, 1),
+      "提举一人，同提举一人，干办公事二人，勾当公事二人",
+    );
+    const smallRect = { x: 0, y: 0, width: 58, height: 150 };
+    const wideRect = { ...smallRect, width: 180 };
+    const largeRect = { ...wideRect, height: 520 };
+    const small = solveLabelTypography(source, { rect: smallRect, globalScale: 1.85 });
+    const wide = solveLabelTypography(source, { rect: wideRect, globalScale: 1.85 });
+    const large = solveLabelTypography(source, { rect: largeRect, globalScale: 1.85 });
+    assert.ok(wide.fontSize >= small.fontSize);
+    assert.ok(wide.staffFontSize >= small.staffFontSize);
+    assert.ok(large.fontSize >= wide.fontSize);
+    assert.ok(large.staffFontSize >= wide.staffFontSize);
+    assertMetricsInside(small, smallRect, source.title);
+    assertMetricsInside(wide, wideRect, source.title);
+    assertMetricsInside(large, largeRect, source.title);
+  });
+
+  it("窄而高的长标题仍受横向边界约束，不会只按高度盲目放大", () => {
+    const source = staffed(
+      leaf(902, "特别长的机构标题测试", 1, 1),
+      "郎中一人，员外郎一人，主事二人",
+    );
+    const rect = { x: 0, y: 0, width: 25, height: 700 };
+    const metrics = solveLabelTypography(source, { rect, globalScale: 1.85 });
+    assert.ok(metrics.fontSize < COMPOSITION_GEOMETRY.columnTitleFontSize * 1.85);
+    assert.equal(metrics.truncated, false);
+    assert.equal(metrics.staffTracks.map((track) => track.text).join(""), source.staffText);
+    assertMetricsInside(metrics, rect, source.title);
+  });
+
+  it("只有极端狭小格才显式截断，普通完整适配不产生省略号", () => {
+    const ordinary = staffed(
+      leaf(903, "都司", 1, 1),
+      "郎中一人，员外郎一人，主事二人",
+    );
+    const fullRect = { x: 0, y: 0, width: 80, height: 180 };
+    const full = solveLabelTypography(ordinary, { rect: fullRect, globalScale: 1.85 });
+    assert.equal(full.truncated, false);
+    assert.equal(full.staffTracks.map((track) => track.text).join(""), ordinary.staffText);
+
+    const extreme = staffed(
+      leaf(904, "都司", 1, 1),
+      "郎中一人，员外郎一人，主事二人，提举一人，同提举一人".repeat(5),
+    );
+    const tinyRect = { x: 0, y: 0, width: 18, height: 72 };
+    const tiny = solveLabelTypography(extreme, { rect: tinyRect, globalScale: 1.85 });
+    assert.equal(tiny.truncated, true);
+    assert.ok(tiny.staffTracks.at(-1)?.text.endsWith("…"));
+    assert.ok(tiny.staffTracks.every((track) => (
+      Array.from(track.text).length <= tiny.charsPerStaffCol
+    )));
+    assertMetricsInside(tiny, tinyRect, extreme.title);
+
+    const irreducible = solveLabelTypography(extreme, {
+      rect: { x: 0, y: 0, width: 8, height: 16 },
+      globalScale: 1.85,
+    });
+    assert.ok(irreducible);
+    assert.equal(irreducible.truncated, true);
+
+    const narrowCaseRect = { x: 0, y: 0, width: 2.88, height: 27 };
+    const narrowCase = solveLabelTypography(
+      leaf(905, "考功司五品案", 2, 1),
+      { rect: narrowCaseRect, depth: 2, globalScale: 1 },
+    );
+    assert.ok(narrowCase);
+    assert.ok(Number.isFinite(narrowCase.titleXOffset));
+    assert.ok(Number.isFinite(narrowCase.titleYOffset));
+    assertMetricsInside(narrowCase, narrowCaseRect, "考功司五品案");
+  });
+
+  it("整图密度上限同时受机构数量和格子面积约束", () => {
+    const sparse = layoutComposition(sparseMinistryModel);
+    assert.equal(compositionDensityScale(sparse.items), 1.85);
+    const artificiallyCrowded = Array.from({ length: 12 }, (_, index) => ({
+      kind: "column",
+      depth: 1,
+      labelRect: { x: index * 30, y: 0, width: 30, height: 100 },
+    }));
+    assert.equal(compositionDensityScale(artificiallyCrowded), 1);
   });
 });
