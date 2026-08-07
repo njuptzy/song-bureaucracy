@@ -112,12 +112,13 @@ const DETAIL_PANEL_BOUNDS = {
   height: 380.1,
 };
 
-// 原设计稿4-02中动态编制块的完整预留区域：所有真实数据都在此框内等比适配。
+// 原画板4-02右侧完整制度构成区域。进入具体机构后，该机构按原稿“省级总框”
+// 语法使用整块空间，不再把中书/门下示例区当成独立静态内容保留。
 const COMPOSITION_CONTENT_BOUNDS = {
-  x: 558.34,
-  y: 150.84,
-  width: 1251.77,
-  height: 711.8,
+  x: 503.48,
+  y: 147.58,
+  width: 1309.84,
+  height: 717.85,
 };
 
 const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
@@ -2164,44 +2165,20 @@ function stampVerticalText(parent, {
 
 function stampStaffTracks(group, item, geometry) {
   const tracks = item.staffTracks || [];
+  const labelRect = item.labelRect || item.rect;
   tracks.forEach((track, index) => {
     const x = item.staffMode === "below"
-      ? item.rect.x + geometry.titleXOffset + index * geometry.staffColPitch
-      : item.rect.x + geometry.titleXOffset + item.titleWidth
+      ? labelRect.x + geometry.titleXOffset + index * geometry.staffColPitch
+      : labelRect.x + geometry.titleXOffset + item.titleWidth
         + geometry.staffTextPad + index * geometry.staffColPitch;
     const markerY = item.staffMode === "below"
-      ? item.rect.y + item.staffYOffset
-      : item.rect.y + geometry.titleYOffset;
-    if (!track.continuation) {
-      const markerWidths = {
-        dispatch: 10,
-        duty: 8.5,
-        rank: 7,
-        clerk: 5.5,
-        neutral: 7.5,
-        empty: 5.5,
-      };
-      const width = markerWidths[track.kind] || markerWidths.neutral;
-      const left = x - width / 2 + geometry.staffFontSize / 2;
-      const right = left + width;
-      const shoulder = Math.min(1.5, width / 4);
-      group.appendChild(svgElement("polygon", {
-        class: `composition-staff-marker composition-staff-kind-${track.kind}`,
-        points: [
-          `${left},${markerY + shoulder}`,
-          `${left + shoulder},${markerY}`,
-          `${right - shoulder},${markerY}`,
-          `${right},${markerY + shoulder}`,
-          `${right},${markerY + geometry.staffMarkerHeight}`,
-          `${left},${markerY + geometry.staffMarkerHeight}`,
-        ].join(" "),
-      }));
-    }
+      ? labelRect.y + item.staffYOffset
+      : labelRect.y + geometry.titleYOffset;
     stampVerticalText(group, {
       x,
-      y: markerY + geometry.staffMarkerHeight + geometry.staffMarkerGap,
+      y: markerY,
       text: track.text,
-      cls: "cls-31 composition-staff-text",
+      cls: `${item.staffClass || "cls-31"} composition-staff-text`,
       charsPerCol: Math.max(1, track.text.length),
       pitch: geometry.staffColPitch,
       maxCols: 1,
@@ -2211,8 +2188,18 @@ function stampStaffTracks(group, item, geometry) {
 
 function stampCompositionItem(layer, item, geometry) {
   const { rect } = item;
+  const labelRect = item.labelRect || rect;
   const group = svgElement("g", { class: `composition-item composition-${item.kind}` });
   group.style.cursor = "pointer";
+  if (item.titlePlateRect) {
+    group.appendChild(svgElement("rect", {
+      class: "cls-8 composition-focus-title-plate",
+      x: item.titlePlateRect.x,
+      y: item.titlePlateRect.y,
+      width: item.titlePlateRect.width,
+      height: item.titlePlateRect.height,
+    }));
+  }
   if (item.kind === "column") {
     const level = Math.min(4, Math.max(3, Number(item.depth || 1) + 2));
     group.appendChild(svgElement("rect", {
@@ -2240,14 +2227,14 @@ function stampCompositionItem(layer, item, geometry) {
     : item.kind === "section"
       ? "cls-38"
       : "cls-50";
-  const titleFontSize = item.kind === "focus"
+  const titleFontSize = item.fontSize || (item.kind === "focus"
     ? geometry.focusTitleFontSize
     : item.kind === "section"
       ? geometry.sectionTitleFontSize
-      : geometry.columnTitleFontSize;
+      : geometry.columnTitleFontSize);
   stampVerticalText(group, {
-    x: rect.x + geometry.titleXOffset,
-    y: rect.y + geometry.titleYOffset,
+    x: labelRect.x + geometry.titleXOffset,
+    y: labelRect.y + geometry.titleYOffset,
     text: item.title,
     cls: titleClass,
     charsPerCol: item.titleCapacity,
@@ -2256,6 +2243,7 @@ function stampCompositionItem(layer, item, geometry) {
   });
   stampStaffTracks(group, item, geometry);
   layer.appendChild(group);
+  for (const child of item.children || []) stampCompositionItem(layer, child, geometry);
 }
 
 function renderDynamicComposition(svg) {
@@ -2277,6 +2265,7 @@ function renderDynamicComposition(svg) {
       y: COMPOSITION_CONTENT_BOUNDS.y,
     },
     maxWidth: COMPOSITION_CONTENT_BOUNDS.width,
+    maxHeight: COMPOSITION_CONTENT_BOUNDS.height,
   });
   if (!layout) return;
   const { geometry } = layout;
@@ -2288,16 +2277,23 @@ function renderDynamicComposition(svg) {
   });
   layer.appendChild(content);
 
+  content.appendChild(svgElement("rect", {
+    class: "cls-3 composition-institution-border composition-level-1",
+    x: layout.parentRect.x,
+    y: layout.parentRect.y,
+    width: layout.parentRect.width,
+    height: layout.parentRect.height,
+  }));
   stampCompositionItem(content, layout.focusLabel, geometry);
   for (const block of layout.blocks) {
     content.appendChild(svgElement("rect", {
-      class: "cls-17 composition-institution-border composition-level-2",
+      class: `cls-17 composition-institution-border composition-level-2${block.kind === "attachments" ? " composition-attachments-frame" : ""}`,
       x: block.rect.x,
       y: block.rect.y,
       width: block.rect.width,
       height: block.rect.height,
     }));
-    stampCompositionItem(content, block.label, geometry);
+    if (block.label) stampCompositionItem(content, block.label, geometry);
     for (const item of block.items) stampCompositionItem(content, item, geometry);
   }
 }
@@ -3200,16 +3196,10 @@ onUnmounted(() => {
 .svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) { fill-opacity: 0.08; stroke: #563905; stroke-width: 0.8; stroke-dasharray: 1.5 1; }
 .svg-mount :deep(.composition-item-hit-area) { fill: transparent; stroke: none; pointer-events: all; }
 .svg-mount :deep(.composition-institution-border) { fill: none; stroke: #563905; }
+.svg-mount :deep(.composition-level-1) { stroke-width: 3px; }
 .svg-mount :deep(.composition-level-2) { stroke-width: 2px; }
 .svg-mount :deep(.composition-level-3) { stroke-width: 1.15px; }
 .svg-mount :deep(.composition-level-4) { stroke-width: 0.51px; }
-.svg-mount :deep(.composition-staff-marker) { stroke: #563905; stroke-width: 0.45px; }
-.svg-mount :deep(.composition-staff-kind-dispatch) { fill: #878089; fill-opacity: 0.62; }
-.svg-mount :deep(.composition-staff-kind-duty) { fill: #866d6d; fill-opacity: 0.62; }
-.svg-mount :deep(.composition-staff-kind-rank) { fill: #a5a68d; fill-opacity: 0.62; }
-.svg-mount :deep(.composition-staff-kind-clerk) { fill: none; stroke-dasharray: 1.2 1; }
-.svg-mount :deep(.composition-staff-kind-neutral) { fill: #563905; fill-opacity: 0.16; }
-.svg-mount :deep(.composition-staff-kind-empty) { fill: none; stroke-opacity: 0.45; stroke-dasharray: 0.8 1.2; }
 .svg-mount :deep(.space-aware-expansion-control:focus) { outline: none; }
 .svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) { stroke-width: 1.35; stroke-dasharray: 3 2; }
 .svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }

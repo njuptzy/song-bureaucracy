@@ -5,7 +5,8 @@
 // 本模块只做纯数据组装，不碰 DOM、不算坐标（坐标见 composition_layout.js）。
 
 // 分节的制度次序：吏户礼兵刑工优先，其余按中文标题排序。
-const SECTION_ORDER_HINTS = ["吏部", "户部", "礼部", "兵部", "刑部", "工部"];
+// 画板 4-02 的空间阅读顺序：上排吏、户、礼、工，下排兵、刑。
+const SECTION_ORDER_HINTS = ["吏部", "户部", "礼部", "工部", "兵部", "刑部"];
 
 // staff_type 中属于"吏"序列的值，排序时排在官序列之后（设计稿先官额后吏额）。
 const CLERK_TYPES = new Set(["吏", "公吏"]);
@@ -91,9 +92,10 @@ export function staffTextOf(edges, entityMap, titleOf, emptyText = "编制未载
 
 // focus 机构的编制视图模型：
 // - selfColumn：focus 自身的直属编制（有编制才出现，设计稿里紧随大号标题）；
-// - looseColumns：没有下级的直接下级机构，各自成为最小完整机构块；
-// - sections：有下级的直接下级机构，每个分节内含其全部后代（先根 DFS 展平）。
-// 同一实体只进入第一个命中的列（与 hierarchyLevels 的去重规则一致）。
+// - focusDirectLeaves：没有下级的直属机构，进入焦点主体的附属列带；
+// - sections：有下级的直属机构，每个分节只把直接孩子作为 columns；
+// - column.children：更深后代递归保留在直接父列内部，绝不 DFS 展平为同层列。
+// 同一实体只进入第一个命中的层级位置（与 hierarchyLevels 的去重规则一致）。
 export function buildCompositionModel({
   focusId,
   entityMap,
@@ -112,49 +114,54 @@ export function buildCompositionModel({
     return { id, title: titleOf(id), staff, staffItems: items, staffText: text };
   };
 
-  const childIdsOf = (id) => (childrenFor(id) || []).map((edge) => edge.child);
+  const childEdgesOf = (id) => {
+    const byChild = new Map();
+    for (const edge of childrenFor(id) || []) {
+      const child = entityMap.get(edge.child);
+      if (child?.type !== "机构" || byChild.has(edge.child)) continue;
+      byChild.set(edge.child, edge);
+    }
+    return [...byChild.values()];
+  };
 
-  const visited = new Set([focusId]);
   const sections = [];
-  const looseColumns = [];
+  const focusDirectLeaves = [];
 
-  const directChildren = childIdsOf(focusId)
-    .filter((id) => !visited.has(id) && visited.add(id))
-    .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
+  const buildInstitutionNode = (edge, depth, parentId, parentPathKey, ancestors) => {
+    const id = edge.child;
+    if (ancestors.has(id)) return null;
+    const pathKey = `${parentPathKey}/${edge.id ?? `${parentId}-${id}`}`;
+    const node = {
+      ...columnOf(id),
+      edgeId: edge.id ?? null,
+      depth,
+      parentId,
+      parentPathKey,
+      pathKey,
+      children: [],
+    };
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(id);
+    for (const childEdge of childEdgesOf(id)) {
+      const child = buildInstitutionNode(childEdge, depth + 1, id, pathKey, nextAncestors);
+      if (child) node.children.push(child);
+    }
+    return node;
+  };
 
-  for (const childId of directChildren) {
-    const grandChildren = childIdsOf(childId);
-    if (!grandChildren.length) {
-      looseColumns.push(columnOf(childId));
+  const focusPathKey = `focus:${focusId}`;
+  for (const childEdge of childEdgesOf(focusId)) {
+    const node = buildInstitutionNode(
+      childEdge, 0, focusId, focusPathKey, new Set([focusId])
+    );
+    if (!node) continue;
+    if (!node.children.length) {
+      focusDirectLeaves.push(node);
       continue;
     }
-    // 分节：先根 DFS 展平全部后代为列。
-    const columns = [];
-    const stack = [...grandChildren].reverse().map((id) => ({
-      id,
-      depth: 1,
-      parentId: childId,
-    }));
-    while (stack.length) {
-      const { id, depth, parentId } = stack.pop();
-      if (visited.has(id)) continue;
-      visited.add(id);
-      columns.push({ ...columnOf(id), depth, parentId });
-      const next = childIdsOf(id);
-      for (let i = next.length - 1; i >= 0; i -= 1) {
-        stack.push({ id: next[i], depth: depth + 1, parentId: id });
-      }
-    }
-    const { staff, items, text } = staffTextOf(
-      staffFor(childId), entityMap, titleOf, emptyStaffText
-    );
     sections.push({
-      id: childId,
-      title: titleOf(childId),
-      staff,
-      staffItems: items,
-      staffText: text,
-      columns,
+      ...node,
+      columns: node.children,
     });
   }
 
@@ -177,7 +184,9 @@ export function buildCompositionModel({
   return {
     focus: { id: focusId, title: focus.title },
     selfColumn,
-    looseColumns,
+    focusDirectLeaves,
+    // 兼容旧调用方读取；语义已改为焦点附属列，不再各自生成机构块。
+    looseColumns: focusDirectLeaves,
     sections,
   };
 }

@@ -1,39 +1,34 @@
-// 编制视图布局：把 composition_model.js 的数据映射回原画板 4-02 的语义。
+// 编制画板 4-02 的递归语义布局。
 //
-// 视觉层次不是“所有机构一律生成卡片”：
-//   1. 焦点机构是整组内容的自由竖排标题，不带外框；
-//   2. 焦点的直属下级各自成为机构块；
-//   3. 机构块内部的后代成为所属机构列，边线随深度递减；
-//   4. 官职类型用原稿图例的窄帽标记，员额仍由文字表达。
-//
-// 布局会在多个候选行宽中选择最接近画板宽高比的语义拼版，避免固定 shelf
-// 把所有块挤在上方，也避免用统一高度制造大片空白。
+// 原稿不是卡片流，而是一个连续填满的机构总框：左侧为焦点机构标题与直属
+// 编制，右侧每一块只表示焦点的直接下级；块内只排列该机构的直接孩子，
+// 更深节点嵌套在自己的父列内部。每一行都重新分配列宽并填满可用区域，
+// 因而不会出现“末行只有两列、右侧仍保留整块空白”的错误。
 
 export const COMPOSITION_GEOMETRY = {
-  columnHeight: 211.61,
-  rowGap: 2.29,
-  blockPaddingX: 2.12,
-  blockPaddingY: 2.12,
-  focusTitleWidth: 44,
+  outerPadding: 3,
+  focusLaneMin: 58,
+  focusLaneMax: 108,
   focusTitleFontSize: 32,
-  focusGapX: 8,
-  sectionLabelWidth: 40,
   sectionTitleFontSize: 24,
-  columnPaddingX: 7,
   columnTitleFontSize: 16,
+  nestedTitleFontSize: 14,
   titleXOffset: 5.4,
   titleYOffset: 5,
   titleColGap: 1,
   staffFontSize: 7,
+  summaryStaffFontSize: 8,
   staffColPitch: 11,
   staffTextPad: 5,
   staffMarkerHeight: 5,
   staffMarkerGap: 3,
-  staffCharsPerCol: 26,
-  blockGapX: 5,
-  blockGapY: 10,
-  maxBlockWidth: 500,
-  minContentWidth: 56,
+  sectionGapX: 3,
+  sectionGapY: 3,
+  columnGap: 2.2,
+  nestedGap: 2,
+  sectionLabelMin: 40,
+  sectionLabelMax: 72,
+  branchLabelMin: 25,
 };
 
 export function fitCompositionBlock(block, bounds, { maxScale = 2.4 } = {}) {
@@ -56,284 +51,358 @@ export function fitCompositionBlock(block, bounds, { maxScale = 2.4 } = {}) {
   };
 }
 
-function titleMetrics(title, fontSize, geometry) {
-  const capacity = Math.max(4, Math.floor(
-    (geometry.columnHeight - geometry.titleYOffset * 2) / fontSize
-  ));
-  const cols = Math.max(1, Math.ceil(String(title).length / capacity));
-  return {
-    capacity,
-    cols,
-    width: cols * fontSize + (cols - 1) * geometry.titleColGap,
-    lines: Math.min(String(title).length, capacity),
-  };
-}
-
-export function staffTextCols(staffText, geometry = COMPOSITION_GEOMETRY, charsPerCol = null) {
+export function staffTextCols(staffText, _geometry = COMPOSITION_GEOMETRY, charsPerCol = 26) {
   if (!staffText) return 0;
-  const perCol = charsPerCol ?? geometry.staffCharsPerCol;
-  return Math.max(1, Math.ceil(staffText.length / perCol));
+  return Math.max(1, Math.ceil(String(staffText).length / charsPerCol));
 }
 
-function staffTracks(staffItems, fallbackText, charsPerCol) {
-  const source = [];
-  if (staffItems?.length) {
-    const groups = new Map();
-    for (const item of staffItems) {
-      const kind = item.kind || "neutral";
-      if (!groups.has(kind)) groups.set(kind, []);
-      groups.get(kind).push(item.text);
-    }
-    for (const [kind, pieces] of groups) {
-      source.push({ text: pieces.join("，"), kind, staffType: kind });
-    }
-  } else if (fallbackText) {
-    source.push({ text: fallbackText, kind: "empty", staffType: "" });
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function groupedStaffSources(staffItems, fallbackText) {
+  if (!staffItems?.length) {
+    return fallbackText ? [{ text: fallbackText, kind: "empty", staffType: "" }] : [];
   }
+  const groups = new Map();
+  for (const item of staffItems) {
+    const kind = item.kind || "neutral";
+    if (!groups.has(kind)) groups.set(kind, []);
+    groups.get(kind).push(item.text);
+  }
+  return [...groups].map(([kind, pieces]) => ({
+    text: pieces.join("，"),
+    kind,
+    staffType: kind,
+  }));
+}
+
+function staffTracksFor(source, rect, title, fontSize, staffMode, geometry) {
+  const titleCapacity = Math.max(1, Math.floor(
+    (rect.height - geometry.titleYOffset * 2) / fontSize
+  ));
+  const titleCols = Math.max(1, Math.ceil(String(title || "").length / titleCapacity));
+  const titleWidth = titleCols * fontSize + Math.max(0, titleCols - 1) * geometry.titleColGap;
+  const titleLines = Math.min(String(title || "").length, titleCapacity);
+  const staffYOffset = staffMode === "below"
+    ? geometry.titleYOffset + titleLines * fontSize + geometry.staffTextPad
+    : geometry.titleYOffset;
+  const staffFontSize = staffMode === "below"
+    ? geometry.summaryStaffFontSize
+    : geometry.staffFontSize;
+  const availableHeight = Math.max(
+    staffFontSize * 4,
+    rect.height
+      - staffYOffset
+      - geometry.titleYOffset
+  );
+  const charsPerCol = Math.max(4, Math.floor(availableHeight / staffFontSize));
+  const horizontalStart = staffMode === "below"
+    ? geometry.titleXOffset
+    : geometry.titleXOffset + titleWidth + geometry.staffTextPad;
+  const maxTracks = Math.max(1, Math.floor(
+    (rect.width - horizontalStart) / geometry.staffColPitch
+  ));
   const tracks = [];
-  for (const item of source) {
+  for (const item of groupedStaffSources(source.staffItems, source.staffText)) {
     const text = String(item.text || "").trim();
-    if (!text) continue;
     for (let offset = 0; offset < text.length; offset += charsPerCol) {
       tracks.push({
         text: text.slice(offset, offset + charsPerCol),
-        kind: item.kind || "neutral",
-        staffType: item.staffType || "",
+        kind: item.kind,
+        staffType: item.staffType,
         continuation: offset > 0,
       });
     }
   }
-  return tracks;
-}
-
-function columnItem(column, geometry) {
-  const title = titleMetrics(column.title, geometry.columnTitleFontSize, geometry);
-  const tracks = staffTracks(
-    column.staffItems,
-    column.staffText,
-    geometry.staffCharsPerCol
-  );
-  return {
-    kind: "column",
-    ...column,
-    titleCols: title.cols,
-    titleCapacity: title.capacity,
-    titleWidth: title.width,
-    staffTracks: tracks,
-    staffMode: "side",
-    width: geometry.columnPaddingX
-      + title.width
-      + (tracks.length ? geometry.staffTextPad + tracks.length * geometry.staffColPitch : 0),
-  };
-}
-
-function institutionLabelItem(institution, geometry, {
-  kind = "section",
-  fontSize = geometry.sectionTitleFontSize,
-  minWidth = geometry.sectionLabelWidth,
-} = {}) {
-  const title = titleMetrics(institution.title, fontSize, geometry);
-  const usedByTitle = title.lines * fontSize + geometry.staffTextPad;
-  const trackY = geometry.titleYOffset + usedByTitle;
-  const available = geometry.columnHeight
-    - trackY
-    - geometry.staffMarkerHeight
-    - geometry.staffMarkerGap
-    - geometry.titleYOffset;
-  const charsPerCol = Math.max(5, Math.floor(available / geometry.staffFontSize));
-  const tracks = staffTracks(institution.staffItems, institution.staffText, charsPerCol);
-  const tracksWidth = tracks.length * geometry.staffColPitch;
-  return {
-    kind,
-    ...institution,
-    titleCols: title.cols,
-    titleCapacity: title.capacity,
-    titleWidth: title.width,
-    fontSize,
-    staffTracks: tracks,
-    staffMode: "below",
-    staffYOffset: trackY,
-    width: Math.max(
-      minWidth,
-      geometry.columnPaddingX + title.width,
-      geometry.columnPaddingX + tracksWidth
-    ),
-  };
-}
-
-function layoutBlock(block, geometry) {
-  const label = institutionLabelItem(block, geometry);
-  const columns = (block.columns || []).map((column) => columnItem(column, geometry));
-  const labelWidth = label.width;
-  const contentLimit = Math.max(
-    geometry.minContentWidth,
-    geometry.maxBlockWidth - labelWidth - geometry.blockPaddingX * 2
-  );
-  const rows = [];
-  let row = [];
-  let rowWidth = 0;
-  for (const item of columns) {
-    if (row.length && rowWidth + item.width > contentLimit) {
-      rows.push({ items: row, width: rowWidth });
-      row = [];
-      rowWidth = 0;
-    }
-    row.push(item);
-    rowWidth += item.width;
+  const result = tracks.length > maxTracks ? tracks.slice(0, maxTracks) : tracks;
+  if (tracks.length > maxTracks) {
+    const last = result[result.length - 1];
+    last.text = `${last.text.slice(0, Math.max(1, charsPerCol - 1))}…`;
   }
-  if (row.length) rows.push({ items: row, width: rowWidth });
+  return {
+    titleCapacity,
+    titleWidth,
+    staffYOffset,
+    staffTracks: result,
+    staffMode,
+    staffClass: staffMode === "below" ? "cls-30" : "cls-31",
+  };
+}
 
-  // 无下级的直属机构仍是完整的机构块，但只显示自身名称与直属编制。
-  const contentWidth = rows.length
-    ? Math.max(...rows.map((item) => item.width))
-    : 0;
-  const rowCount = Math.max(1, rows.length);
-  const width = geometry.blockPaddingX * 2
-    + labelWidth
-    + Math.max(columns.length ? geometry.minContentWidth : 0, contentWidth);
-  const height = geometry.blockPaddingY * 2
-    + rowCount * geometry.columnHeight
-    + Math.max(0, rowCount - 1) * geometry.rowGap;
-  const placedItems = [];
-  rows.forEach((rowItem, rowIndex) => {
-    let x = geometry.blockPaddingX + labelWidth;
-    const y = geometry.blockPaddingY
-      + rowIndex * (geometry.columnHeight + geometry.rowGap);
-    rowItem.items.forEach((item) => {
-      placedItems.push({
-        ...item,
-        rect: { x, y, width: item.width, height: geometry.columnHeight },
-      });
-      x += item.width;
+function placedLabel(source, {
+  kind,
+  rect,
+  labelRect = rect,
+  fontSize,
+  geometry,
+  depth = source.depth ?? 0,
+  children = [],
+}) {
+  const staffMode = kind === "column" ? "side" : "below";
+  const placed = {
+    kind,
+    ...source,
+    depth,
+    rect,
+    labelRect,
+    fontSize,
+    children,
+    ...staffTracksFor(source, labelRect, source.title, fontSize, staffMode, geometry),
+  };
+  if (kind === "focus") {
+    placed.titlePlateRect = {
+      x: rect.x + 0.24,
+      y: rect.y + 1.32,
+      width: Math.min(40.67, Math.max(0, rect.width - 1)),
+      height: Math.min(
+        rect.height - 2,
+        String(source.title || "").length * fontSize + 14.81
+      ),
+    };
+  }
+  return placed;
+}
+
+function nodeWeight(node) {
+  const own = 1
+    + Math.min(1.2, String(node.title || "").length * 0.09)
+    + Math.min(1.4, String(node.staffText || "").length * 0.012);
+  if (!node.children?.length) return own;
+  return own + node.children.reduce((sum, child) => sum + nodeWeight(child) * 0.28, 0);
+}
+
+function sectionWeight(section) {
+  return 1.4 + (section.columns || []).reduce((sum, child) => sum + Math.sqrt(nodeWeight(child)), 0);
+}
+
+function preferredInternalRows(section) {
+  const columns = section.columns || [];
+  const demand = columns.reduce((sum, child) => sum + nodeWeight(child), 0);
+  return columns.length >= 6 || demand >= 11 ? 2 : 1;
+}
+
+function allocateWidths(items, totalWidth, gap, weightOf) {
+  if (!items.length) return [];
+  const available = Math.max(0, totalWidth - gap * Math.max(0, items.length - 1));
+  const weights = items.map((item) => Math.max(0.35, Math.sqrt(weightOf(item))));
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+  let used = 0;
+  return items.map((item, index) => {
+    const width = index === items.length - 1
+      ? Math.max(0, available - used)
+      : available * (weights[index] / totalWeight);
+    used += width;
+    return width;
+  });
+}
+
+function balancedGroups(items, rowCount, weightOf) {
+  if (!items.length) return [];
+  const rows = Math.max(1, Math.min(rowCount, items.length));
+  const total = items.reduce((sum, item) => sum + weightOf(item), 0);
+  const target = total / rows;
+  const result = [];
+  let start = 0;
+  let remainingRows = rows;
+  while (remainingRows > 0) {
+    if (remainingRows === 1) {
+      result.push(items.slice(start));
+      break;
+    }
+    const maxEnd = items.length - (remainingRows - 1);
+    let bestEnd = start + 1;
+    let weight = 0;
+    let bestDistance = Infinity;
+    for (let end = start + 1; end <= maxEnd; end += 1) {
+      weight += weightOf(items[end - 1]);
+      const distance = Math.abs(weight - target);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        bestEnd = end;
+      } else if (weight > target) {
+        break;
+      }
+    }
+    result.push(items.slice(start, bestEnd));
+    start = bestEnd;
+    remainingRows -= 1;
+  }
+  return result;
+}
+
+function layoutBranch(node, rect, geometry) {
+  const depth = node.depth ?? 1;
+  if (!node.children?.length) {
+    return placedLabel(node, {
+      kind: "column",
+      rect,
+      fontSize: depth > 1 ? geometry.nestedTitleFontSize : geometry.columnTitleFontSize,
+      geometry,
+      depth,
+    });
+  }
+
+  const desiredLane = geometry.branchLabelMin
+    + Math.min(18, groupedStaffSources(node.staffItems, node.staffText).length * 5);
+  const labelWidth = clamp(
+    desiredLane,
+    geometry.branchLabelMin,
+    Math.max(geometry.branchLabelMin, rect.width * 0.42)
+  );
+  const labelRect = {
+    x: rect.x,
+    y: rect.y,
+    width: Math.min(labelWidth, rect.width),
+    height: rect.height,
+  };
+  const childArea = {
+    x: labelRect.x + labelRect.width + geometry.nestedGap,
+    y: rect.y,
+    width: Math.max(0, rect.width - labelRect.width - geometry.nestedGap),
+    height: rect.height,
+  };
+  const nestedRowCount = node.children.length >= 6 && childArea.height >= 130 ? 2 : 1;
+  const groups = balancedGroups(node.children, nestedRowCount, nodeWeight);
+  const rowHeight = groups.length
+    ? (childArea.height - geometry.nestedGap * (groups.length - 1)) / groups.length
+    : childArea.height;
+  const children = [];
+  groups.forEach((group, rowIndex) => {
+    const widths = allocateWidths(group, childArea.width, geometry.nestedGap, nodeWeight);
+    let x = childArea.x;
+    group.forEach((child, index) => {
+      const childRect = {
+        x,
+        y: childArea.y + rowIndex * (rowHeight + geometry.nestedGap),
+        width: widths[index],
+        height: rowHeight,
+      };
+      children.push(layoutBranch(child, childRect, geometry));
+      x += widths[index] + geometry.nestedGap;
     });
   });
-  return {
-    id: block.id,
-    title: block.title,
-    width,
-    height,
-    label: {
-      ...label,
-      rect: {
-        x: geometry.blockPaddingX,
-        y: geometry.blockPaddingY,
-        width: labelWidth,
-        height: height - geometry.blockPaddingY * 2,
-      },
-    },
-    items: placedItems,
-    rowCount,
+  return placedLabel(node, {
+    kind: "column",
+    rect,
+    labelRect,
+    fontSize: depth > 1 ? geometry.nestedTitleFontSize : geometry.columnTitleFontSize,
+    geometry,
+    depth,
+    children,
+  });
+}
+
+function layoutSection(block, rect, geometry) {
+  if (block.kind === "attachments") {
+    const widths = allocateWidths(block.columns, rect.width, geometry.columnGap, nodeWeight);
+    let x = rect.x;
+    const items = block.columns.map((node, index) => {
+      const item = layoutBranch({ ...node, depth: 1 }, {
+        x,
+        y: rect.y,
+        width: widths[index],
+        height: rect.height,
+      }, geometry);
+      x += widths[index] + geometry.columnGap;
+      return item;
+    });
+    return { ...block, rect, label: null, items };
+  }
+
+  const labelWidth = clamp(
+    rect.width * 0.15,
+    geometry.sectionLabelMin,
+    Math.min(geometry.sectionLabelMax, rect.width * 0.28)
+  );
+  const labelRect = { x: rect.x, y: rect.y, width: labelWidth, height: rect.height };
+  const label = placedLabel(block.section, {
+    kind: "section",
+    rect: labelRect,
+    fontSize: geometry.sectionTitleFontSize,
+    geometry,
+    depth: 0,
+  });
+  const content = {
+    x: labelRect.x + labelRect.width + geometry.columnGap,
+    y: rect.y,
+    width: Math.max(0, rect.width - labelRect.width - geometry.columnGap),
+    height: rect.height,
   };
-}
-
-function compositionBlocks(model) {
-  return [
-    ...model.sections,
-    ...model.looseColumns.map((column) => ({
-      ...column,
-      columns: [],
-      solo: true,
-    })),
-  ];
-}
-
-function partitionRows(blocks, maxRowWidth, geometry) {
-  const count = blocks.length;
-  if (!count) return [];
-  const best = Array(count + 1).fill(null);
-  best[count] = { cost: 0, rows: [] };
-  for (let start = count - 1; start >= 0; start -= 1) {
-    let width = 0;
-    let height = 0;
-    for (let end = start; end < count; end += 1) {
-      const block = blocks[end];
-      width += (end === start ? 0 : geometry.blockGapX) + block.width;
-      height = Math.max(height, block.height);
-      if (width > maxRowWidth && end > start) break;
-      const fill = Math.min(1, width / maxRowWidth);
-      const isLast = end === count - 1;
-      const raggedness = (1 - fill) ** 2 * (isLast ? 0.35 : 1);
-      const next = best[end + 1];
-      if (!next) continue;
-      const candidate = {
-        cost: raggedness + next.cost,
-        rows: [{ blocks: blocks.slice(start, end + 1), width, height }, ...next.rows],
+  const groups = balancedGroups(block.columns, block.internalRows, nodeWeight);
+  const rowHeight = groups.length
+    ? (content.height - geometry.columnGap * (groups.length - 1)) / groups.length
+    : content.height;
+  const items = [];
+  groups.forEach((group, rowIndex) => {
+    const widths = allocateWidths(group, content.width, geometry.columnGap, nodeWeight);
+    let x = content.x;
+    group.forEach((node, index) => {
+      const nodeRect = {
+        x,
+        y: content.y + rowIndex * (rowHeight + geometry.columnGap),
+        width: widths[index],
+        height: rowHeight,
       };
-      if (!best[start] || candidate.cost < best[start].cost) best[start] = candidate;
-    }
-  }
-  return best[0]?.rows || [];
+      items.push(layoutBranch(node, nodeRect, geometry));
+      x += widths[index] + geometry.columnGap;
+    });
+  });
+  return { ...block, rect, label, items };
 }
 
-function placeRows(rows, origin, geometry) {
-  const placedBlocks = [];
-  let y = origin.y;
-  let right = origin.x;
-  for (const row of rows) {
-    let x = origin.x;
-    for (const block of row.blocks) {
-      placedBlocks.push({
-        ...block,
-        rect: { x, y, width: block.width, height: block.height },
-        label: {
-          ...block.label,
-          rect: {
-            ...block.label.rect,
-            x: block.label.rect.x + x,
-            y: block.label.rect.y + y,
-          },
-        },
-        items: block.items.map((item) => ({
-          ...item,
-          rect: {
-            ...item.rect,
-            x: item.rect.x + x,
-            y: item.rect.y + y,
-          },
-        })),
-      });
-      x += block.width + geometry.blockGapX;
-      right = Math.max(right, x - geometry.blockGapX);
-    }
-    y += row.height + geometry.blockGapY;
+function departmentRank(title) {
+  const hints = ["吏部", "户部", "礼部", "工部", "兵部", "刑部"];
+  const index = hints.findIndex((hint) => String(title).includes(hint));
+  return index < 0 ? hints.length : index;
+}
+
+function genericOuterRows(blocks) {
+  if (blocks.length <= 4) return [blocks];
+  const rowCount = blocks.length <= 8 ? 2 : 3;
+  return balancedGroups(blocks, rowCount, (block) => block.weight);
+}
+
+function outerRows(blocks) {
+  const sectionBlocks = blocks.filter((block) => block.kind === "section");
+  const attachment = blocks.find((block) => block.kind === "attachments");
+  const six = ["吏部", "户部", "礼部", "工部", "兵部", "刑部"].map((hint) => (
+    sectionBlocks.find((block) => String(block.section.title).includes(hint))
+  ));
+  if (six.every(Boolean)) {
+    const used = new Set(six);
+    const extra = sectionBlocks.filter((block) => !used.has(block));
+    const rows = [six.slice(0, 4), [...six.slice(4), ...(attachment ? [attachment] : [])]];
+    if (extra.length) rows.push(...genericOuterRows(extra));
+    return rows.filter((row) => row.length);
   }
-  return {
-    blocks: placedBlocks,
-    width: Math.max(0, right - origin.x),
-    height: Math.max(0, y - origin.y - geometry.blockGapY),
+  return genericOuterRows(blocks);
+}
+
+function flattenItems(items) {
+  const result = [];
+  const visit = (item) => {
+    result.push(item);
+    for (const child of item.children || []) visit(child);
   };
-}
-
-function bestPackedRows(blocks, availableWidth, availableHeight, geometry) {
-  if (!blocks.length) return { blocks: [], width: 0, height: geometry.columnHeight };
-  const widest = Math.max(...blocks.map((block) => block.width));
-  const total = blocks.reduce((sum, block) => sum + block.width, 0)
-    + geometry.blockGapX * Math.max(0, blocks.length - 1);
-  const targetAspect = availableWidth / Math.max(1, availableHeight);
-  let winner = null;
-  const steps = 18;
-  for (let index = 0; index <= steps; index += 1) {
-    const candidateWidth = widest + (Math.max(widest, total) - widest) * (index / steps);
-    const rows = partitionRows(blocks, candidateWidth, geometry);
-    const placed = placeRows(rows, { x: 0, y: 0 }, geometry);
-    if (!placed.width || !placed.height) continue;
-    const aspect = placed.width / placed.height;
-    const usedArea = blocks.reduce((sum, block) => sum + block.width * block.height, 0);
-    const waste = 1 - Math.min(1, usedArea / (placed.width * placed.height));
-    const score = Math.abs(Math.log(aspect / targetAspect)) + waste * 0.12;
-    if (!winner || score < winner.score) winner = { ...placed, rows, score };
-  }
-  return winner || placeRows(partitionRows(blocks, availableWidth, geometry), { x: 0, y: 0 }, geometry);
+  for (const item of items) visit(item);
+  return result;
 }
 
 export function layoutComposition(model, {
-  origin = { x: 558.34, y: 150.94 },
-  maxWidth = 1251.77,
-  maxHeight = 711.8,
+  origin = { x: 503.48, y: 147.58 },
+  maxWidth = 1309.84,
+  maxHeight = 717.85,
   geometry = COMPOSITION_GEOMETRY,
 } = {}) {
   if (!model) return null;
-
+  const parentRect = { x: origin.x, y: origin.y, width: maxWidth, height: maxHeight };
+  const inner = {
+    x: parentRect.x + geometry.outerPadding,
+    y: parentRect.y + geometry.outerPadding,
+    width: parentRect.width - geometry.outerPadding * 2,
+    height: parentRect.height - geometry.outerPadding * 2,
+  };
   const focusSource = model.selfColumn || {
     id: model.focus.id,
     title: model.focus.title,
@@ -341,39 +410,82 @@ export function layoutComposition(model, {
     staffItems: [],
     staffText: "",
   };
-  const focusLabel = institutionLabelItem(focusSource, geometry, {
-    kind: "focus",
-    fontSize: geometry.focusTitleFontSize,
-    minWidth: geometry.focusTitleWidth,
-  });
-  focusLabel.rect = {
-    x: origin.x,
-    y: origin.y,
-    width: focusLabel.width,
-    height: geometry.columnHeight,
-  };
-
-  const intrinsicBlocks = compositionBlocks(model).map((block) => layoutBlock(block, geometry));
-  const blockOriginX = origin.x + focusLabel.width + geometry.focusGapX;
-  const blockAvailableWidth = Math.max(geometry.minContentWidth, maxWidth - focusLabel.width - geometry.focusGapX);
-  const packed = bestPackedRows(
-    intrinsicBlocks,
-    blockAvailableWidth,
-    maxHeight,
-    geometry
+  const focusStaffGroups = groupedStaffSources(focusSource.staffItems, focusSource.staffText).length;
+  const focusLaneWidth = clamp(
+    geometry.focusLaneMin + Math.max(0, focusStaffGroups - 1) * geometry.staffColPitch,
+    geometry.focusLaneMin,
+    geometry.focusLaneMax
   );
-  const placed = placeRows(packed.rows || [], { x: blockOriginX, y: origin.y }, geometry);
-  const width = focusLabel.width + geometry.focusGapX + placed.width;
-  const height = Math.max(geometry.columnHeight, placed.height);
+  const focusRect = { x: inner.x, y: inner.y, width: focusLaneWidth, height: inner.height };
+  const focusLabel = placedLabel(focusSource, {
+    kind: "focus",
+    rect: focusRect,
+    fontSize: geometry.focusTitleFontSize,
+    geometry,
+    depth: -1,
+  });
 
+  const blocks = [...model.sections]
+    .sort((a, b) => departmentRank(a.title) - departmentRank(b.title)
+      || a.title.localeCompare(b.title, "zh"))
+    .map((section) => ({
+      kind: "section",
+      id: section.id,
+      section,
+      columns: section.columns || section.children || [],
+      internalRows: preferredInternalRows(section),
+      weight: sectionWeight(section),
+    }));
+  if (model.focusDirectLeaves?.length) {
+    blocks.push({
+      kind: "attachments",
+      id: `attachments:${model.focus.id}`,
+      columns: model.focusDirectLeaves,
+      internalRows: 1,
+      weight: Math.max(1.2, model.focusDirectLeaves.reduce((sum, node) => sum + nodeWeight(node), 0) * 0.65),
+    });
+  }
+
+  const grid = {
+    x: focusRect.x + focusRect.width + geometry.sectionGapX,
+    y: inner.y,
+    width: Math.max(0, inner.width - focusRect.width - geometry.sectionGapX),
+    height: inner.height,
+  };
+  const rows = outerRows(blocks);
+  const rowUnits = rows.map((row) => (
+    1 + Math.max(0, ...row.map((block) => block.internalRows - 1)) * 0.55
+  ));
+  const totalUnits = rowUnits.reduce((sum, unit) => sum + unit, 0) || 1;
+  const availableHeight = grid.height - geometry.sectionGapY * Math.max(0, rows.length - 1);
+  const placedBlocks = [];
+  let y = grid.y;
+  rows.forEach((row, rowIndex) => {
+    const height = availableHeight * (rowUnits[rowIndex] / totalUnits);
+    const widths = allocateWidths(row, grid.width, geometry.sectionGapX, (block) => block.weight);
+    let x = grid.x;
+    row.forEach((block, index) => {
+      const rect = { x, y, width: widths[index], height };
+      placedBlocks.push(layoutSection(block, rect, geometry));
+      x += widths[index] + geometry.sectionGapX;
+    });
+    y += height + geometry.sectionGapY;
+  });
+
+  const allItems = [focusLabel];
+  for (const block of placedBlocks) {
+    if (block.label) allItems.push(block.label);
+    allItems.push(...flattenItems(block.items));
+  }
   return {
     origin,
     geometry,
     focus: model.focus,
+    parentRect,
     focusLabel,
-    blocks: placed.blocks,
-    items: placed.blocks.flatMap((block) => block.items),
-    bounds: { x: origin.x, y: origin.y, width, height },
-    rowCount: packed.rows?.length || 0,
+    blocks: placedBlocks,
+    items: allItems,
+    bounds: parentRect,
+    rowCount: rows.length,
   };
 }
