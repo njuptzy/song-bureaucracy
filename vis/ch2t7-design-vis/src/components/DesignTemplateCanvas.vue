@@ -2142,16 +2142,20 @@ function svgElement(tag, attrs = {}) {
 // 竖排文字：首列落在 (x, y)，后续列向右 +pitch（CSS writing-mode: tb 负责竖排）。
 function stampVerticalText(parent, {
   x, y, text, cls, charsPerCol, pitch, maxCols = 4, entityId = null,
+  fontSize = null,
 }) {
   const element = svgElement("text", { class: cls, transform: `translate(${x} ${y})` });
-  const content = String(text || "");
+  // 原 SVG 的 class 自带固定字号；动态嵌套标题必须用布局计算后的字号覆盖它，
+  // 否则 14/13.5px 的几何仍会以 16px 绘制并发生列间碰撞。
+  if (Number.isFinite(fontSize)) element.style.fontSize = `${fontSize}px`;
+  const content = Array.from(String(text || ""));
   const cols = [];
   for (let offset = 0; offset < content.length && cols.length < maxCols; offset += charsPerCol) {
     let column = content.slice(offset, offset + charsPerCol);
     if (offset + charsPerCol < content.length && cols.length === maxCols - 1) {
-      column = `${column.slice(0, -1)}…`;
+      column = [...column.slice(0, -1), "…"];
     }
-    cols.push(column);
+    cols.push(column.join(""));
   }
   cols.forEach((column, index) => {
     const tspan = svgElement("tspan", { x: String(index * pitch), y: "0" });
@@ -2163,25 +2167,23 @@ function stampVerticalText(parent, {
   return element;
 }
 
-function stampStaffTracks(group, item, geometry) {
+function stampStaffTracks(group, item) {
   const tracks = item.staffTracks || [];
   const labelRect = item.labelRect || item.rect;
   tracks.forEach((track, index) => {
-    const x = item.staffMode === "below"
-      ? labelRect.x + geometry.titleXOffset + index * geometry.staffColPitch
-      : labelRect.x + geometry.titleXOffset + item.titleWidth
-        + geometry.staffTextPad + index * geometry.staffColPitch;
-    const markerY = item.staffMode === "below"
-      ? labelRect.y + item.staffYOffset
-      : labelRect.y + geometry.titleYOffset;
+    // 原稿的编制始终接在机构名下方，多列以标题基线为中心向左展开。
+    const x = labelRect.x
+      + item.staffRightmostXOffset
+      - index * item.staffTrackPitch;
     stampVerticalText(group, {
       x,
-      y: markerY,
+      y: labelRect.y + item.staffYOffset,
       text: track.text,
       cls: `${item.staffClass || "cls-31"} composition-staff-text`,
-      charsPerCol: Math.max(1, track.text.length),
-      pitch: geometry.staffColPitch,
+      charsPerCol: Math.max(1, Array.from(track.text).length),
+      pitch: item.staffTrackPitch,
       maxCols: 1,
+      fontSize: item.staffFontSize,
     });
   });
 }
@@ -2233,15 +2235,17 @@ function stampCompositionItem(layer, item, geometry) {
       ? geometry.sectionTitleFontSize
       : geometry.columnTitleFontSize);
   stampVerticalText(group, {
-    x: labelRect.x + geometry.titleXOffset,
-    y: labelRect.y + geometry.titleYOffset,
+    x: labelRect.x + item.titleXOffset,
+    y: labelRect.y + item.titleYOffset,
     text: item.title,
     cls: titleClass,
     charsPerCol: item.titleCapacity,
-    pitch: titleFontSize + geometry.titleColGap,
+    pitch: item.titlePitch || titleFontSize + geometry.titleColGap,
+    maxCols: item.titleCols || 1,
     entityId: item.id,
+    fontSize: titleFontSize,
   });
-  stampStaffTracks(group, item, geometry);
+  stampStaffTracks(group, item);
   layer.appendChild(group);
   for (const child of item.children || []) stampCompositionItem(layer, child, geometry);
 }

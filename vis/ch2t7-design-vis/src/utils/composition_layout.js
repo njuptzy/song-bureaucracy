@@ -10,18 +10,33 @@ export const COMPOSITION_GEOMETRY = {
   focusLaneMin: 58,
   focusLaneMax: 108,
   focusTitleFontSize: 32,
+  focusTitleMinFontSize: 24,
   sectionTitleFontSize: 24,
+  sectionTitleMinFontSize: 18,
   columnTitleFontSize: 16,
+  columnTitleMinFontSize: 13,
   nestedTitleFontSize: 14,
-  titleXOffset: 5.4,
-  titleYOffset: 5,
+  nestedTitleMinFontSize: 11,
+  // 原稿中的 x 是竖排文字基线，不是字形左边缘。焦点基线相对当前
+  // inner rect 为 17.62px；部门和子机构分别约为 15.52px、11.8px。
+  focusTitleXOffset: 17.62,
+  sectionTitleXOffset: 15.52,
+  columnTitleXOffset: 11.8,
+  nestedTitleXOffset: 9.5,
+  focusTitleYOffset: 7.1,
+  sectionTitleYOffset: 7.2,
+  columnTitleYOffset: 5,
+  nestedTitleYOffset: 5,
   titleColGap: 1,
   staffFontSize: 7,
   summaryStaffFontSize: 8,
-  staffColPitch: 11,
-  staffTextPad: 5,
-  staffMarkerHeight: 5,
-  staffMarkerGap: 3,
+  staffColPitch: 8.4,
+  summaryStaffColPitch: 9.6,
+  focusStaffGap: 7,
+  sectionStaffGap: 6,
+  columnStaffGap: 8,
+  staffBottomPadding: 5,
+  textSidePadding: 3,
   sectionGapX: 3,
   sectionGapY: 3,
   columnGap: 2.2,
@@ -60,73 +75,188 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function groupedStaffSources(staffItems, fallbackText) {
-  if (!staffItems?.length) {
-    return fallbackText ? [{ text: fallbackText, kind: "empty", staffType: "" }] : [];
-  }
-  const groups = new Map();
-  for (const item of staffItems) {
-    const kind = item.kind || "neutral";
-    if (!groups.has(kind)) groups.set(kind, []);
-    groups.get(kind).push(item.text);
-  }
-  return [...groups].map(([kind, pieces]) => ({
-    text: pieces.join("，"),
-    kind,
-    staffType: kind,
-  }));
+function characters(value) {
+  return Array.from(String(value || ""));
 }
 
-function staffTracksFor(source, rect, title, fontSize, staffMode, geometry) {
-  const titleCapacity = Math.max(1, Math.floor(
-    (rect.height - geometry.titleYOffset * 2) / fontSize
-  ));
-  const titleCols = Math.max(1, Math.ceil(String(title || "").length / titleCapacity));
-  const titleWidth = titleCols * fontSize + Math.max(0, titleCols - 1) * geometry.titleColGap;
-  const titleLines = Math.min(String(title || "").length, titleCapacity);
-  const staffYOffset = staffMode === "below"
-    ? geometry.titleYOffset + titleLines * fontSize + geometry.staffTextPad
-    : geometry.titleYOffset;
-  const staffFontSize = staffMode === "below"
-    ? geometry.summaryStaffFontSize
-    : geometry.staffFontSize;
-  const availableHeight = Math.max(
-    staffFontSize * 4,
-    rect.height
-      - staffYOffset
-      - geometry.titleYOffset
+function isMissingStaffText(value) {
+  return /^(?:编制|员额)?未载[。.]?$/.test(String(value || "").trim());
+}
+
+// 原稿没有“编制未载”占位，也不按官/吏类型拆成左右并列轨道。模型已经把
+// 官职排成阅读顺序，这里保持该顺序合为一段，随后只按可用高度切列。
+function continuousStaffText(source) {
+  const pieces = (source.staffItems || [])
+    .map((item) => String(item.text || "").trim())
+    .filter(Boolean);
+  if (pieces.length) return pieces.join("，");
+  const fallback = String(source.staffText || "").trim();
+  return source.staff?.length && fallback && !isMissingStaffText(fallback) ? fallback : "";
+}
+
+function textRole(kind, depth, geometry) {
+  if (kind === "focus") {
+    return {
+      titleXOffset: geometry.focusTitleXOffset,
+      titleYOffset: geometry.focusTitleYOffset,
+      titleMinFontSize: geometry.focusTitleMinFontSize,
+      staffFontSize: geometry.summaryStaffFontSize,
+      staffTrackPitch: geometry.summaryStaffColPitch,
+      staffGap: geometry.focusStaffGap,
+      staffClass: "cls-30",
+    };
+  }
+  if (kind === "section") {
+    return {
+      titleXOffset: geometry.sectionTitleXOffset,
+      titleYOffset: geometry.sectionTitleYOffset,
+      titleMinFontSize: geometry.sectionTitleMinFontSize,
+      staffFontSize: geometry.summaryStaffFontSize,
+      staffTrackPitch: geometry.summaryStaffColPitch,
+      staffGap: geometry.sectionStaffGap,
+      staffClass: "cls-30",
+    };
+  }
+  const nested = depth > 1;
+  return {
+    titleXOffset: nested ? geometry.nestedTitleXOffset : geometry.columnTitleXOffset,
+    titleYOffset: nested ? geometry.nestedTitleYOffset : geometry.columnTitleYOffset,
+    titleMinFontSize: nested
+      ? geometry.nestedTitleMinFontSize
+      : geometry.columnTitleMinFontSize,
+    staffFontSize: geometry.staffFontSize,
+    staffTrackPitch: geometry.staffColPitch,
+    staffGap: geometry.columnStaffGap,
+    staffClass: "cls-31",
+  };
+}
+
+function fittedTitleFontSize(title, rect, baseFontSize, role) {
+  const length = Math.max(1, characters(title).length);
+  const availableHeight = Math.max(1, rect.height - role.titleYOffset * 2);
+  const singleColumnFit = Math.floor((availableHeight / length) * 2) / 2;
+  return clamp(
+    Math.min(baseFontSize, singleColumnFit),
+    role.titleMinFontSize,
+    baseFontSize,
   );
-  const charsPerCol = Math.max(4, Math.floor(availableHeight / staffFontSize));
-  const horizontalStart = staffMode === "below"
-    ? geometry.titleXOffset
-    : geometry.titleXOffset + titleWidth + geometry.staffTextPad;
-  const maxTracks = Math.max(1, Math.floor(
-    (rect.width - horizontalStart) / geometry.staffColPitch
+}
+
+function horizontalTextMetrics({
+  role,
+  fontSize,
+  titleCols,
+  titlePitch,
+  staffTrackCount,
+  geometry,
+}) {
+  const staffHalfSpan = staffTrackCount
+    ? (staffTrackCount - 1) * role.staffTrackPitch / 2 + role.staffFontSize / 2
+    : 0;
+  // 多列编制围绕标题基线居中，列数较多时只把整组向右平移到安全边距内。
+  const titleXOffset = Math.max(
+    role.titleXOffset,
+    staffTrackCount ? geometry.textSidePadding + staffHalfSpan : role.titleXOffset,
+  );
+  const titleRight = titleXOffset
+    + Math.max(0, titleCols - 1) * titlePitch
+    + fontSize / 2;
+  const staffRight = staffTrackCount ? titleXOffset + staffHalfSpan : 0;
+  return {
+    titleXOffset,
+    staffRightmostXOffset: titleXOffset
+      + Math.max(0, staffTrackCount - 1) * role.staffTrackPitch / 2,
+    requiredWidth: Math.max(titleRight, staffRight) + geometry.textSidePadding,
+  };
+}
+
+function labelMetrics(source, {
+  kind,
+  rect,
+  fontSize,
+  geometry,
+  depth,
+}) {
+  const role = textRole(kind, depth, geometry);
+  const resolvedFontSize = fittedTitleFontSize(source.title, rect, fontSize, role);
+  const titleChars = characters(source.title);
+  const titleCapacity = Math.max(1, Math.floor(
+    (rect.height - role.titleYOffset * 2) / resolvedFontSize
   ));
-  const tracks = [];
-  for (const item of groupedStaffSources(source.staffItems, source.staffText)) {
-    const text = String(item.text || "").trim();
-    for (let offset = 0; offset < text.length; offset += charsPerCol) {
-      tracks.push({
-        text: text.slice(offset, offset + charsPerCol),
-        kind: item.kind,
-        staffType: item.staffType,
+  const titleCols = Math.max(1, Math.ceil(titleChars.length / titleCapacity));
+  const titlePitch = resolvedFontSize + geometry.titleColGap;
+  const titleWidth = titleCols * resolvedFontSize
+    + Math.max(0, titleCols - 1) * geometry.titleColGap;
+  const titleLines = Math.min(titleChars.length, titleCapacity);
+  const staffYOffset = role.titleYOffset
+    + titleLines * resolvedFontSize
+    + role.staffGap;
+  const availableStaffHeight = Math.max(
+    0,
+    rect.height - staffYOffset - geometry.staffBottomPadding,
+  );
+  const charsPerCol = Math.floor(availableStaffHeight / role.staffFontSize);
+  const staffChars = characters(continuousStaffText(source));
+  const allTracks = [];
+  if (charsPerCol > 0) {
+    for (let offset = 0; offset < staffChars.length; offset += charsPerCol) {
+      allTracks.push({
+        text: staffChars.slice(offset, offset + charsPerCol).join(""),
+        kind: "neutral",
+        staffType: "",
         continuation: offset > 0,
       });
     }
   }
-  const result = tracks.length > maxTracks ? tracks.slice(0, maxTracks) : tracks;
-  if (tracks.length > maxTracks) {
-    const last = result[result.length - 1];
-    last.text = `${last.text.slice(0, Math.max(1, charsPerCol - 1))}…`;
+
+  const fullHorizontal = horizontalTextMetrics({
+    role,
+    fontSize: resolvedFontSize,
+    titleCols,
+    titlePitch,
+    staffTrackCount: allTracks.length,
+    geometry,
+  });
+  let visibleTrackCount = allTracks.length;
+  let horizontal = fullHorizontal;
+  while (visibleTrackCount > 0 && horizontal.requiredWidth > rect.width) {
+    visibleTrackCount -= 1;
+    horizontal = horizontalTextMetrics({
+      role,
+      fontSize: resolvedFontSize,
+      titleCols,
+      titlePitch,
+      staffTrackCount: visibleTrackCount,
+      geometry,
+    });
+  }
+  const staffTracks = allTracks.slice(0, visibleTrackCount).map((track) => ({ ...track }));
+  if (visibleTrackCount < allTracks.length && staffTracks.length) {
+    const last = staffTracks.at(-1);
+    const lastChars = characters(last.text);
+    last.text = `${lastChars.slice(0, Math.max(1, charsPerCol - 1)).join("")}…`;
   }
   return {
+    fontSize: resolvedFontSize,
     titleCapacity,
+    titleCols,
+    titleLines,
+    titlePitch,
     titleWidth,
+    titleXOffset: horizontal.titleXOffset,
+    titleYOffset: role.titleYOffset,
     staffYOffset,
-    staffTracks: result,
-    staffMode,
-    staffClass: staffMode === "below" ? "cls-30" : "cls-31",
+    staffTracks,
+    staffTrackCount: allTracks.length,
+    staffRightmostXOffset: horizontal.staffRightmostXOffset,
+    staffTrackPitch: role.staffTrackPitch,
+    staffFontSize: role.staffFontSize,
+    staffGap: role.staffGap,
+    staffMode: "below",
+    staffClass: role.staffClass,
+    fullRequiredWidth: fullHorizontal.requiredWidth,
+    requiredWidth: horizontal.requiredWidth,
+    charsPerStaffCol: charsPerCol,
   };
 }
 
@@ -139,25 +269,30 @@ function placedLabel(source, {
   depth = source.depth ?? 0,
   children = [],
 }) {
-  const staffMode = kind === "column" ? "side" : "below";
+  const metrics = labelMetrics(source, {
+    kind,
+    rect: labelRect,
+    fontSize,
+    geometry,
+    depth,
+  });
   const placed = {
     kind,
     ...source,
     depth,
     rect,
     labelRect,
-    fontSize,
     children,
-    ...staffTracksFor(source, labelRect, source.title, fontSize, staffMode, geometry),
+    ...metrics,
   };
   if (kind === "focus") {
     placed.titlePlateRect = {
-      x: rect.x + 0.24,
-      y: rect.y + 1.32,
-      width: Math.min(40.67, Math.max(0, rect.width - 1)),
+      x: rect.x - geometry.outerPadding + 0.24,
+      y: rect.y - geometry.outerPadding + 1.32,
+      width: Math.min(40.67, Math.max(0, rect.width + geometry.outerPadding - 1)),
       height: Math.min(
-        rect.height - 2,
-        String(source.title || "").length * fontSize + 14.81
+        rect.height + geometry.outerPadding - 2,
+        characters(source.title).length * metrics.fontSize + 14.81
       ),
     };
   }
@@ -243,8 +378,19 @@ function layoutBranch(node, rect, geometry) {
     });
   }
 
-  const desiredLane = geometry.branchLabelMin
-    + Math.min(18, groupedStaffSources(node.staffItems, node.staffText).length * 5);
+  const baseFontSize = depth > 1
+    ? geometry.nestedTitleFontSize
+    : geometry.columnTitleFontSize;
+  const probe = labelMetrics(node, {
+    kind: "column",
+    rect,
+    fontSize: baseFontSize,
+    geometry,
+    depth,
+  });
+  // 分支标题栏必须按真实文字轨数留宽；只按 staff_type 组数估宽会让贡院
+  // 等长编制穿过父栏，压到右侧嵌套机构标题上。
+  const desiredLane = Math.max(geometry.branchLabelMin, probe.fullRequiredWidth);
   const labelWidth = clamp(
     desiredLane,
     geometry.branchLabelMin,
@@ -286,7 +432,7 @@ function layoutBranch(node, rect, geometry) {
     kind: "column",
     rect,
     labelRect,
-    fontSize: depth > 1 ? geometry.nestedTitleFontSize : geometry.columnTitleFontSize,
+    fontSize: baseFontSize,
     geometry,
     depth,
     children,
@@ -310,8 +456,15 @@ function layoutSection(block, rect, geometry) {
     return { ...block, rect, label: null, items };
   }
 
+  const sectionProbe = labelMetrics(block.section, {
+    kind: "section",
+    rect,
+    fontSize: geometry.sectionTitleFontSize,
+    geometry,
+    depth: 0,
+  });
   const labelWidth = clamp(
-    rect.width * 0.15,
+    Math.max(rect.width * 0.15, sectionProbe.fullRequiredWidth),
     geometry.sectionLabelMin,
     Math.min(geometry.sectionLabelMax, rect.width * 0.28)
   );
@@ -410,9 +563,15 @@ export function layoutComposition(model, {
     staffItems: [],
     staffText: "",
   };
-  const focusStaffGroups = groupedStaffSources(focusSource.staffItems, focusSource.staffText).length;
+  const focusProbe = labelMetrics(focusSource, {
+    kind: "focus",
+    rect: inner,
+    fontSize: geometry.focusTitleFontSize,
+    geometry,
+    depth: -1,
+  });
   const focusLaneWidth = clamp(
-    geometry.focusLaneMin + Math.max(0, focusStaffGroups - 1) * geometry.staffColPitch,
+    Math.max(geometry.focusLaneMin, focusProbe.fullRequiredWidth),
     geometry.focusLaneMin,
     geometry.focusLaneMax
   );

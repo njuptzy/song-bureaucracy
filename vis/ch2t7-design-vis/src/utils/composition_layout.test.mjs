@@ -20,6 +20,18 @@ const leaf = (id, title, depth = 1, parentId = 3) => ({
 });
 
 const nested = leaf(5, "礼部贡院", 1, 3);
+const gongyuanStaffTitles = [
+  "编排官", "点检试卷官", "对读官", "封弥官", "覆考官", "监门官", "考官",
+  "历程官", "判贡院事", "权知礼部贡举事", "誊录官", "同知礼部贡举事",
+  "详定官", "巡捕官", "知礼部贡举事",
+];
+nested.staff = [{}];
+nested.staffItems = gongyuanStaffTitles.map((text) => ({
+  text,
+  kind: "neutral",
+  staffType: "",
+}));
+nested.staffText = gongyuanStaffTitles.join("，");
 nested.children = [
   leaf(51, "礼部贡院试院", 2, 5),
   leaf(52, "礼部贡院封弥院", 2, 5),
@@ -41,6 +53,13 @@ const section = (id, title, columns) => ({
   staffText: "编制未载",
   children: columns,
   columns,
+});
+
+const staffed = (node, text) => ({
+  ...node,
+  staff: [{}],
+  staffItems: [{ text, kind: "neutral", staffType: "" }],
+  staffText: text,
 });
 
 const groupBy = (items, keyOf) => {
@@ -66,7 +85,13 @@ const model = {
   sections: [
     section(10, "尚书省吏部", [1, 2, 3, 4, 5, 6, 7].map((id) => leaf(100 + id, `吏部司${id}`, 1, 10))),
     section(11, "尚书省户部", [leaf(201, "度支司", 1, 11), leaf(202, "金部司", 1, 11), leaf(203, "仓部司", 1, 11)]),
-    section(12, "尚书省礼部", [leaf(301, "礼部司", 1, 12), leaf(302, "祠部司", 1, 12), leaf(303, "主客司", 1, 12), leaf(304, "膳部司", 1, 12), { ...nested, parentId: 12 }]),
+    section(12, "尚书省礼部", [
+      staffed(leaf(301, "礼部司", 1, 12), "礼部郎中一人，礼部员外郎一人"),
+      staffed(leaf(302, "祠部司", 1, 12), "判祠部司事一人，祠部司郎中一人"),
+      staffed(leaf(303, "主客司", 1, 12), "主客司郎中一人，主客司员外郎一人"),
+      staffed(leaf(304, "膳部司", 1, 12), "膳部司郎中一人，膳部司员外郎一人"),
+      { ...nested, parentId: 12 },
+    ]),
     section(13, "尚书省工部", [leaf(401, "工部司", 1, 13), leaf(402, "屯田司", 1, 13), leaf(403, "虞部司", 1, 13), leaf(404, "水部司", 1, 13)]),
     section(14, "尚书省兵部", [1, 2, 3, 4, 5].map((id) => leaf(500 + id, `兵部司${id}`, 1, 14))),
     section(15, "尚书省刑部", [1, 2, 3, 4].map((id) => leaf(600 + id, `刑部司${id}`, 1, 15))),
@@ -123,6 +148,93 @@ describe("layoutComposition", () => {
       assert.ok(child.rect.y >= gongyuan.rect.y);
       assert.ok(child.rect.x + child.rect.width <= gongyuan.rect.x + gongyuan.rect.width + 1e-7);
       assert.ok(child.rect.y + child.rect.height <= gongyuan.rect.y + gongyuan.rect.height + 1e-7);
+    }
+  });
+
+  it("四级标题使用原稿基线偏移，深层七字标题缩至单列安全字号", () => {
+    const li = layout.blocks.find((block) => block.id === 12);
+    const direct = li.items.find((item) => item.id === 301);
+    const gongyuan = li.items.find((item) => item.id === 5);
+    const longNested = gongyuan.children.find((item) => item.id === 52);
+    assert.equal(layout.focusLabel.titleXOffset, COMPOSITION_GEOMETRY.focusTitleXOffset);
+    assert.equal(li.label.titleXOffset, COMPOSITION_GEOMETRY.sectionTitleXOffset);
+    assert.equal(direct.titleXOffset, COMPOSITION_GEOMETRY.columnTitleXOffset);
+    assert.equal(longNested.titleXOffset, COMPOSITION_GEOMETRY.nestedTitleXOffset);
+    assert.equal(longNested.fontSize, 13.5);
+    assert.equal(longNested.titleCols, 1);
+    assert.ok(
+      longNested.titleYOffset
+        + Array.from(longNested.title).length * longNested.fontSize
+        + longNested.titleYOffset
+      <= longNested.labelRect.height
+    );
+  });
+
+  it("机构编制接在名称下方并围绕标题基线向左换列", () => {
+    const li = layout.blocks.find((block) => block.id === 12);
+    const gongyuan = li.items.find((item) => item.id === 5);
+    assert.equal(gongyuan.staffMode, "below");
+    assert.equal(gongyuan.staffTrackPitch, COMPOSITION_GEOMETRY.staffColPitch);
+    assert.ok(gongyuan.staffTracks.length >= 3);
+    assert.equal(gongyuan.staffTracks.length, gongyuan.staffTrackCount);
+    const trackCenter = gongyuan.staffRightmostXOffset
+      - (gongyuan.staffTracks.length - 1) * gongyuan.staffTrackPitch / 2;
+    assert.ok(Math.abs(trackCenter - gongyuan.titleXOffset) < 1e-9);
+    assert.equal(
+      gongyuan.staffYOffset,
+      gongyuan.titleYOffset
+        + gongyuan.titleLines * gongyuan.fontSize
+        + COMPOSITION_GEOMETRY.columnStaffGap
+    );
+  });
+
+  it("长编制按真实轨数扩宽父栏，不侵入右侧嵌套机构", () => {
+    const li = layout.blocks.find((block) => block.id === 12);
+    const gongyuan = li.items.find((item) => item.id === 5);
+    assert.ok(gongyuan.labelRect.width > COMPOSITION_GEOMETRY.branchLabelMin);
+    assert.ok(gongyuan.labelRect.width >= gongyuan.fullRequiredWidth - 1e-9);
+    assert.equal(gongyuan.staffTracks.some((track) => track.text.endsWith("…")), false);
+    const childLeft = Math.min(...gongyuan.children.map((child) => child.rect.x));
+    assert.ok(
+      childLeft >= gongyuan.labelRect.x
+        + gongyuan.labelRect.width
+        + COMPOSITION_GEOMETRY.nestedGap
+        - 1e-9
+    );
+  });
+
+  it("缺少编制时只显示机构名，不重复绘制占位文字", () => {
+    const li = layout.blocks.find((block) => block.id === 12);
+    const hu = layout.blocks.find((block) => block.id === 11);
+    const directWithoutStaff = hu.items.find((item) => item.id === 201);
+    const nestedWithoutStaff = li.items.find((item) => item.id === 5).children[0];
+    assert.equal(directWithoutStaff.staffText, "编制未载");
+    assert.equal(directWithoutStaff.staffTracks.length, 0);
+    assert.equal(nestedWithoutStaff.staffTracks.length, 0);
+  });
+
+  it("标题与编制的测量边界都留在各自 labelRect 内", () => {
+    for (const item of layout.items) {
+      const titleLeft = item.titleXOffset - item.fontSize / 2;
+      const titleRight = item.titleXOffset
+        + (item.titleCols - 1) * item.titlePitch
+        + item.fontSize / 2;
+      assert.ok(titleLeft >= -1e-9, `${item.title} 标题越过左边界`);
+      assert.ok(titleRight <= item.labelRect.width + 1e-9, `${item.title} 标题越过右边界`);
+      for (const track of item.staffTracks) {
+        assert.ok(
+          item.staffYOffset + Array.from(track.text).length * item.staffFontSize
+            <= item.labelRect.height - COMPOSITION_GEOMETRY.staffBottomPadding + 1e-9,
+          `${item.title} 编制越过下边界`
+        );
+      }
+      if (!item.staffTracks.length) continue;
+      const staffLeft = item.staffRightmostXOffset
+        - (item.staffTracks.length - 1) * item.staffTrackPitch
+        - item.staffFontSize / 2;
+      const staffRight = item.staffRightmostXOffset + item.staffFontSize / 2;
+      assert.ok(staffLeft >= -1e-9, `${item.title} 编制越过左边界`);
+      assert.ok(staffRight <= item.labelRect.width + 1e-9, `${item.title} 编制越过右边界`);
     }
   });
 
