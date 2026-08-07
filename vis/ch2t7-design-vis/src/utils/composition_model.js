@@ -1,7 +1,7 @@
 // 编制视图（画板 4-02）的数据 join 模型。
-// 设计稿语义：一个 cls-17 大框 = 一个具体机构分块；焦点机构的直属机构
-// 分节（如尚书省吏部）各自成框，每列 cls-18 描边框 = 一个所属机构，列内
-// cls-50 竖排机构名 + cls-31 小号竖排编制文本（如"郎中一人，分案十二，吏人五十六"）。
+// 设计稿语义：焦点机构只作为全图大号标题，不生成重复外框；它的直属机构
+// （如尚书省吏部）各自成框，每列描边框 = 一个更下级机构，列内是竖排
+// 机构名与按官职类型分轨的编制文本（如“郎中一人，书令史三十五人”）。
 // 本模块只做纯数据组装，不碰 DOM、不算坐标（坐标见 composition_layout.js）。
 
 // 分节的制度次序：吏户礼兵刑工优先，其余按中文标题排序。
@@ -20,6 +20,19 @@ export function quotaLabel(quota) {
   const text = String(quota).trim();
   if (!text) return "";
   return /员|人$/.test(text) ? text : `${text}人`;
+}
+
+// 原设计稿右下角只定义了四种官职视觉编码。数据库里大量 staff_type 仅写作
+// “官”或直接写具体差遣名称，不能擅自把它们归为职事官；无法从原值确认时
+// 使用 neutral，仍显示原始文字，但不冒充四类中的任何一类。
+export function officialKindOf(staffType) {
+  const value = String(staffType || "").trim();
+  if (!value) return "neutral";
+  if (/胥|吏/.test(value)) return "clerk";
+  if (/差遣/.test(value)) return "dispatch";
+  if (/阶官|散官|寄禄/.test(value)) return "rank";
+  if (/职事官/.test(value)) return "duty";
+  return "neutral";
 }
 
 function sectionOrderKey(title) {
@@ -58,16 +71,27 @@ function compareStaffEdges(entityMap, titleOf) {
 
 export function staffTextOf(edges, entityMap, titleOf, emptyText = "编制未载") {
   const staff = dedupeStaffEdges(edges, entityMap).sort(compareStaffEdges(entityMap, titleOf));
-  const pieces = staff.map((edge) => {
+  const items = staff.map((edge) => {
     const quota = quotaLabel(edge.staff_quota);
-    return `${titleOf(edge.official)}${quota}`;
+    return {
+      officialId: edge.official,
+      title: titleOf(edge.official),
+      quota,
+      text: `${titleOf(edge.official)}${quota}`,
+      kind: officialKindOf(edge.staff_type),
+      staffType: edge.staff_type || "",
+    };
   });
-  return { staff, text: pieces.length ? pieces.join("，") : emptyText };
+  return {
+    staff,
+    items,
+    text: items.length ? items.map((item) => item.text).join("，") : emptyText,
+  };
 }
 
 // focus 机构的编制视图模型：
-// - selfColumn：focus 自身的编制列（有编制才出现，设计稿里紧随大框标题）；
-// - looseColumns：没有下级的直接下级机构，紧随 selfColumn 之后（如尚书都省）；
+// - selfColumn：focus 自身的直属编制（有编制才出现，设计稿里紧随大号标题）；
+// - looseColumns：没有下级的直接下级机构，各自成为最小完整机构块；
 // - sections：有下级的直接下级机构，每个分节内含其全部后代（先根 DFS 展平）。
 // 同一实体只进入第一个命中的列（与 hierarchyLevels 的去重规则一致）。
 export function buildCompositionModel({
@@ -82,8 +106,10 @@ export function buildCompositionModel({
   if (!focus) return null;
 
   const columnOf = (id) => {
-    const { staff, text } = staffTextOf(staffFor(id), entityMap, titleOf, emptyStaffText);
-    return { id, title: titleOf(id), staff, staffText: text };
+    const { staff, items, text } = staffTextOf(
+      staffFor(id), entityMap, titleOf, emptyStaffText
+    );
+    return { id, title: titleOf(id), staff, staffItems: items, staffText: text };
   };
 
   const childIdsOf = (id) => (childrenFor(id) || []).map((edge) => edge.child);
@@ -104,17 +130,32 @@ export function buildCompositionModel({
     }
     // 分节：先根 DFS 展平全部后代为列。
     const columns = [];
-    const stack = [...grandChildren].reverse();
+    const stack = [...grandChildren].reverse().map((id) => ({
+      id,
+      depth: 1,
+      parentId: childId,
+    }));
     while (stack.length) {
-      const id = stack.pop();
+      const { id, depth, parentId } = stack.pop();
       if (visited.has(id)) continue;
       visited.add(id);
-      columns.push(columnOf(id));
+      columns.push({ ...columnOf(id), depth, parentId });
       const next = childIdsOf(id);
-      for (let i = next.length - 1; i >= 0; i -= 1) stack.push(next[i]);
+      for (let i = next.length - 1; i >= 0; i -= 1) {
+        stack.push({ id: next[i], depth: depth + 1, parentId: id });
+      }
     }
-    const { staff, text } = staffTextOf(staffFor(childId), entityMap, titleOf, emptyStaffText);
-    sections.push({ id: childId, title: titleOf(childId), staff, staffText: text, columns });
+    const { staff, items, text } = staffTextOf(
+      staffFor(childId), entityMap, titleOf, emptyStaffText
+    );
+    sections.push({
+      id: childId,
+      title: titleOf(childId),
+      staff,
+      staffItems: items,
+      staffText: text,
+      columns,
+    });
   }
 
   sections.sort((a, b) => (
@@ -124,7 +165,13 @@ export function buildCompositionModel({
 
   const selfStaff = staffTextOf(staffFor(focusId), entityMap, titleOf, emptyStaffText);
   const selfColumn = selfStaff.staff.length
-    ? { id: focusId, title: focus.title, staff: selfStaff.staff, staffText: selfStaff.text }
+    ? {
+      id: focusId,
+      title: focus.title,
+      staff: selfStaff.staff,
+      staffItems: selfStaff.items,
+      staffText: selfStaff.text,
+    }
     : null;
 
   return {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildCompositionModel,
   dedupeStaffEdges,
+  officialKindOf,
   quotaLabel,
   staffTextOf,
 } from "./composition_model.js";
@@ -60,6 +61,19 @@ describe("quotaLabel", () => {
   });
 });
 
+describe("officialKindOf", () => {
+  it("只把数据库明确写出的类型映射到设计稿四类", () => {
+    assert.equal(officialKindOf("差遣官"), "dispatch");
+    assert.equal(officialKindOf("职事官"), "duty");
+    assert.equal(officialKindOf("寄禄官"), "rank");
+    assert.equal(officialKindOf("吏"), "clerk");
+  });
+  it("泛称官不擅自归入职事官", () => {
+    assert.equal(officialKindOf("官"), "neutral");
+    assert.equal(officialKindOf(""), "neutral");
+  });
+});
+
 describe("staffTextOf", () => {
   it("官序列在前、吏序列在后，员额从大到小", () => {
     const { text } = staffTextOf(staff[3], entityMap, titleOf);
@@ -110,6 +124,14 @@ describe("buildCompositionModel", () => {
 
   it("分节标题自带编制文本", () => {
     assert.equal(model.sections[0].staffText, "郎中一人，书令史35人，令史14人");
+    assert.deepEqual(model.sections[0].staffItems.map((item) => item.kind), ["neutral", "clerk", "clerk"]);
+  });
+
+  it("分节后代保留相对深度和父机构", () => {
+    assert.deepEqual(
+      model.sections[0].columns.map((column) => [column.id, column.depth, column.parentId]),
+      [[5, 1, 3], [6, 1, 3]]
+    );
   });
 
   it("focus 不存在时返回 null", () => {

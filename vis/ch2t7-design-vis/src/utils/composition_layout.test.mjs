@@ -9,7 +9,13 @@ import {
 
 const model = {
   focus: { id: 1, title: "尚书省" },
-  selfColumn: { id: 1, title: "尚书省", staff: [{}], staffText: "主事六人" },
+  selfColumn: {
+    id: 1,
+    title: "尚书省",
+    staff: [{}],
+    staffItems: [{ text: "主事六人", kind: "clerk", staffType: "吏" }],
+    staffText: "主事六人",
+  },
   looseColumns: [{ id: 2, title: "尚书都省", staff: [], staffText: "编制未载" }],
   sections: [
     {
@@ -17,9 +23,21 @@ const model = {
       title: "尚书省吏部",
       staff: [{}, {}],
       staffText: "郎中一人，书令史35人，令史14人",
+      staffItems: [
+        { text: "郎中一人", kind: "duty", staffType: "职事官" },
+        { text: "书令史35人", kind: "clerk", staffType: "吏" },
+        { text: "令史14人", kind: "clerk", staffType: "吏" },
+      ],
       columns: [
-        { id: 5, title: "吏部尚书左选", staff: [{}], staffText: "郎中一人，令史十四人，书令史三十五人，守当官六人，守阙守当官一百五十人" },
-        { id: 6, title: "司封司", staff: [], staffText: "编制未载" },
+        {
+          id: 5,
+          title: "吏部尚书左选",
+          depth: 1,
+          staff: [{}],
+          staffItems: [{ text: "郎中一人", kind: "duty", staffType: "职事官" }],
+          staffText: "郎中一人，令史十四人，书令史三十五人，守当官六人，守阙守当官一百五十人",
+        },
+        { id: 6, title: "司封司", depth: 2, staff: [], staffText: "编制未载" },
       ],
     },
   ],
@@ -74,16 +92,30 @@ describe("layoutComposition", () => {
     maxWidth: 980,
   });
 
-  it("焦点直属编制与每个下级分节各自生成独立外框", () => {
-    assert.deepEqual(layout.blocks.map((block) => block.id), [1, 3]);
-    assert.equal(layout.blocks[0].label.title, "尚书省");
-    assert.equal(layout.blocks[1].label.title, "尚书省吏部");
-    assert.equal(layout.blocks[0].items[0].title, "尚书都省");
+  it("焦点机构是自由标题，直属机构才生成独立外框", () => {
+    assert.equal(layout.focusLabel.id, 1);
+    assert.equal(layout.focusLabel.kind, "focus");
+    assert.deepEqual(layout.blocks.map((block) => block.id), [3, 2]);
+    assert.equal(layout.blocks[0].label.title, "尚书省吏部");
+    assert.equal(layout.blocks[1].label.title, "尚书都省");
   });
 
   it("分节标题不再混入共享列，分节内只包含所属机构", () => {
-    assert.deepEqual(layout.items.map((item) => item.id), [2, 5, 6]);
-    assert.deepEqual(layout.blocks[1].items.map((item) => item.id), [5, 6]);
+    assert.deepEqual(layout.items.map((item) => item.id), [5, 6]);
+    assert.deepEqual(layout.blocks[0].items.map((item) => item.id), [5, 6]);
+  });
+
+  it("所属机构保留相对深度供边线粗细编码", () => {
+    assert.deepEqual(layout.blocks[0].items.map((item) => item.depth), [1, 2]);
+  });
+
+  it("官职类型按图例分轨，同类官职合并以控制信息密度", () => {
+    assert.deepEqual(
+      layout.blocks[0].label.staffTracks.map((track) => track.kind),
+      ["duty", "clerk", "clerk"]
+    );
+    assert.equal(layout.blocks[0].label.staffTracks[2].continuation, true);
+    assert.equal(layout.focusLabel.staffTracks[0].kind, "clerk");
   });
 
   it("每个分块内部的机构列横向紧邻排列", () => {
@@ -98,11 +130,11 @@ describe("layoutComposition", () => {
     }
   });
 
-  it("无编制列比带编制列窄", () => {
-    const narrow = layout.items.find((item) => item.id === 6);
-    const wide = layout.items.find((item) => item.id === 5);
-    assert.ok(narrow.rect.width < wide.rect.width);
-    assert.equal(narrow.rect.height, COMPOSITION_GEOMETRY.columnHeight);
+  it("无编制机构只生成一个未载轨道，不制造空官职槽", () => {
+    const empty = layout.items.find((item) => item.id === 6);
+    assert.equal(empty.staffTracks.length, 1);
+    assert.equal(empty.staffTracks[0].kind, "empty");
+    assert.equal(empty.rect.height, COMPOSITION_GEOMETRY.columnHeight);
   });
 
   it("每个独立外框包住自己的标签与全部机构列", () => {
@@ -121,7 +153,7 @@ describe("layoutComposition", () => {
       origin: { x: 0, y: 0 },
       maxWidth: 200,
     });
-    assert.equal(narrowLayout.shelfCount, 2);
+    assert.equal(narrowLayout.rowCount, 2);
     assert.ok(narrowLayout.blocks[1].rect.y > narrowLayout.blocks[0].rect.y);
   });
 

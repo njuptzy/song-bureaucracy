@@ -1,34 +1,39 @@
-// 编制视图布局：把 composition_model.js 的模型映射成画板 4-02 的多机构分块。
-// 几何常量取自原设计稿（SVG viewBox 1920×1080）：
-//   列高 211.61，行距 2.29；列框 y 比大框顶部低 2.12；
-//   列内左侧竖排机构名（cls-50 16px），右侧小号竖排编制文本（cls-31 7px）；
-//   每个直属机构分节各有独立 cls-17 外框，竖排分节名（cls-38 24px）
-//   位于框内左端，所属机构列在框内换行。
-// 输出全部是数据坐标，渲染层只负责盖章和整体缩放适配。
+// 编制视图布局：把 composition_model.js 的数据映射回原画板 4-02 的语义。
+//
+// 视觉层次不是“所有机构一律生成卡片”：
+//   1. 焦点机构是整组内容的自由竖排标题，不带外框；
+//   2. 焦点的直属下级各自成为机构块；
+//   3. 机构块内部的后代成为所属机构列，边线随深度递减；
+//   4. 官职类型用原稿图例的窄帽标记，员额仍由文字表达。
+//
+// 布局会在多个候选行宽中选择最接近画板宽高比的语义拼版，避免固定 shelf
+// 把所有块挤在上方，也避免用统一高度制造大片空白。
 
 export const COMPOSITION_GEOMETRY = {
   columnHeight: 211.61,
   rowGap: 2.29,
   blockPaddingX: 2.12,
   blockPaddingY: 2.12,
-  blockLabelWidth: 40, // cls-28（32px 竖排大标题）占位
-  blockLabelFontSize: 32,
-  blockLabelCharsPerCol: 12,
-  columnPaddingX: 8.3,
-  columnTitleFontSize: 16, // cls-50 竖排机构名
-  sectionTitleFontSize: 24, // cls-38 竖排分节名
-  sectionGap: 10, // 分节之间的额外间距
-  blockGapX: 4,
-  blockGapY: 4,
-  // 原稿单块最宽约432，动态文本较长时放宽到500，优先保持同机构列在一排。
-  maxBlockWidth: 500,
-  staffFontSize: 7, // cls-31
+  focusTitleWidth: 44,
+  focusTitleFontSize: 32,
+  focusGapX: 8,
+  sectionLabelWidth: 40,
+  sectionTitleFontSize: 24,
+  columnPaddingX: 7,
+  columnTitleFontSize: 16,
+  titleXOffset: 5.4,
+  titleYOffset: 5,
+  titleColGap: 1,
+  staffFontSize: 7,
   staffColPitch: 11,
-  staffTextPad: 6,
-  staffCharsPerCol: 28,
-  titleXOffset: 5.4, // 标题文字相对列框左边的偏移
-  titleYOffset: 5.0, // 标题文字相对列框顶部的偏移
-  titleColGap: 1, // 多列标题之间的额外间隙
+  staffTextPad: 5,
+  staffMarkerHeight: 5,
+  staffMarkerGap: 3,
+  staffCharsPerCol: 26,
+  blockGapX: 5,
+  blockGapY: 10,
+  maxBlockWidth: 500,
+  minContentWidth: 56,
 };
 
 export function fitCompositionBlock(block, bounds, { maxScale = 2.4 } = {}) {
@@ -70,74 +75,98 @@ export function staffTextCols(staffText, geometry = COMPOSITION_GEOMETRY, charsP
   return Math.max(1, Math.ceil(staffText.length / perCol));
 }
 
-function columnItem(column, geometry, fontSize) {
-  const title = titleMetrics(column.title, fontSize, geometry);
-  const staffCols = staffTextCols(column.staffText, geometry);
+function staffTracks(staffItems, fallbackText, charsPerCol) {
+  const source = [];
+  if (staffItems?.length) {
+    const groups = new Map();
+    for (const item of staffItems) {
+      const kind = item.kind || "neutral";
+      if (!groups.has(kind)) groups.set(kind, []);
+      groups.get(kind).push(item.text);
+    }
+    for (const [kind, pieces] of groups) {
+      source.push({ text: pieces.join("，"), kind, staffType: kind });
+    }
+  } else if (fallbackText) {
+    source.push({ text: fallbackText, kind: "empty", staffType: "" });
+  }
+  const tracks = [];
+  for (const item of source) {
+    const text = String(item.text || "").trim();
+    if (!text) continue;
+    for (let offset = 0; offset < text.length; offset += charsPerCol) {
+      tracks.push({
+        text: text.slice(offset, offset + charsPerCol),
+        kind: item.kind || "neutral",
+        staffType: item.staffType || "",
+        continuation: offset > 0,
+      });
+    }
+  }
+  return tracks;
+}
+
+function columnItem(column, geometry) {
+  const title = titleMetrics(column.title, geometry.columnTitleFontSize, geometry);
+  const tracks = staffTracks(
+    column.staffItems,
+    column.staffText,
+    geometry.staffCharsPerCol
+  );
   return {
+    kind: "column",
     ...column,
     titleCols: title.cols,
     titleCapacity: title.capacity,
     titleWidth: title.width,
-    staffCols,
-    staffCharsPerCol: geometry.staffCharsPerCol,
-    staffMode: "side", // 编制文本排在标题右侧
+    staffTracks: tracks,
+    staffMode: "side",
     width: geometry.columnPaddingX
       + title.width
-      + (staffCols > 0 ? staffCols * geometry.staffColPitch + geometry.staffTextPad : 0),
+      + (tracks.length ? geometry.staffTextPad + tracks.length * geometry.staffColPitch : 0),
   };
 }
 
-function sectionItem(section, geometry) {
-  const title = titleMetrics(section.title, geometry.sectionTitleFontSize, geometry);
-  // 分节编制文本接在标题下方：标题占去的竖向空间先扣除。
-  const usedByTitle = title.lines * geometry.sectionTitleFontSize + geometry.staffTextPad;
-  const underChars = Math.max(6, Math.floor(
-    (geometry.columnHeight - geometry.titleYOffset * 2 - usedByTitle) / geometry.staffFontSize
-  ));
-  const staffCols = staffTextCols(section.staffText, geometry, underChars);
+function institutionLabelItem(institution, geometry, {
+  kind = "section",
+  fontSize = geometry.sectionTitleFontSize,
+  minWidth = geometry.sectionLabelWidth,
+} = {}) {
+  const title = titleMetrics(institution.title, fontSize, geometry);
+  const usedByTitle = title.lines * fontSize + geometry.staffTextPad;
+  const trackY = geometry.titleYOffset + usedByTitle;
+  const available = geometry.columnHeight
+    - trackY
+    - geometry.staffMarkerHeight
+    - geometry.staffMarkerGap
+    - geometry.titleYOffset;
+  const charsPerCol = Math.max(5, Math.floor(available / geometry.staffFontSize));
+  const tracks = staffTracks(institution.staffItems, institution.staffText, charsPerCol);
+  const tracksWidth = tracks.length * geometry.staffColPitch;
   return {
-    kind: "section",
-    id: section.id,
-    title: section.title,
-    staff: section.staff,
-    staffText: section.staffText,
+    kind,
+    ...institution,
     titleCols: title.cols,
     titleCapacity: title.capacity,
     titleWidth: title.width,
-    staffCols,
-    staffCharsPerCol: underChars,
-    staffMode: "below", // 编制文本接在标题正下方，溢出列向右排
-    staffYOffset: geometry.titleYOffset + usedByTitle,
-    width: geometry.columnPaddingX
-      + title.width
-      + (staffCols > 1 ? (staffCols - 1) * geometry.staffColPitch + geometry.staffTextPad : 0),
+    fontSize,
+    staffTracks: tracks,
+    staffMode: "below",
+    staffYOffset: trackY,
+    width: Math.max(
+      minWidth,
+      geometry.columnPaddingX + title.width,
+      geometry.columnPaddingX + tracksWidth
+    ),
   };
 }
 
-function compositionBlocks(model) {
-  const blocks = [];
-  if (model.selfColumn || model.looseColumns.length || !model.sections.length) {
-    blocks.push({
-      id: model.focus.id,
-      title: model.focus.title,
-      staff: model.selfColumn?.staff || [],
-      staffText: model.selfColumn?.staffText || "",
-      columns: model.looseColumns,
-    });
-  }
-  blocks.push(...model.sections);
-  return blocks;
-}
-
 function layoutBlock(block, geometry) {
-  const label = sectionItem(block, geometry);
-  const columns = block.columns.map((column) => ({
-    kind: "column",
-    ...columnItem(column, geometry, geometry.columnTitleFontSize),
-  }));
-  const labelWidth = Math.max(geometry.blockLabelWidth, label.width);
+  const label = institutionLabelItem(block, geometry);
+  const columns = (block.columns || []).map((column) => columnItem(column, geometry));
+  const labelWidth = label.width;
   const contentLimit = Math.max(
-    geometry.columnPaddingX + geometry.columnTitleFontSize,
+    geometry.minContentWidth,
     geometry.maxBlockWidth - labelWidth - geometry.blockPaddingX * 2
   );
   const rows = [];
@@ -152,13 +181,19 @@ function layoutBlock(block, geometry) {
     row.push(item);
     rowWidth += item.width;
   }
-  if (row.length || !rows.length) rows.push({ items: row, width: rowWidth });
+  if (row.length) rows.push({ items: row, width: rowWidth });
 
-  const contentWidth = Math.max(60, ...rows.map((item) => item.width));
-  const width = geometry.blockPaddingX * 2 + labelWidth + contentWidth;
+  // 无下级的直属机构仍是完整的机构块，但只显示自身名称与直属编制。
+  const contentWidth = rows.length
+    ? Math.max(...rows.map((item) => item.width))
+    : 0;
+  const rowCount = Math.max(1, rows.length);
+  const width = geometry.blockPaddingX * 2
+    + labelWidth
+    + Math.max(columns.length ? geometry.minContentWidth : 0, contentWidth);
   const height = geometry.blockPaddingY * 2
-    + rows.length * geometry.columnHeight
-    + Math.max(0, rows.length - 1) * geometry.rowGap;
+    + rowCount * geometry.columnHeight
+    + Math.max(0, rowCount - 1) * geometry.rowGap;
   const placedItems = [];
   rows.forEach((rowItem, rowIndex) => {
     let x = geometry.blockPaddingX + labelWidth;
@@ -187,72 +222,158 @@ function layoutBlock(block, geometry) {
       },
     },
     items: placedItems,
-    rowCount: rows.length,
+    rowCount,
   };
 }
 
-// 每个直属机构独立成框，再按原画板区域从左到右、从上到下拼排。
+function compositionBlocks(model) {
+  return [
+    ...model.sections,
+    ...model.looseColumns.map((column) => ({
+      ...column,
+      columns: [],
+      solo: true,
+    })),
+  ];
+}
+
+function partitionRows(blocks, maxRowWidth, geometry) {
+  const count = blocks.length;
+  if (!count) return [];
+  const best = Array(count + 1).fill(null);
+  best[count] = { cost: 0, rows: [] };
+  for (let start = count - 1; start >= 0; start -= 1) {
+    let width = 0;
+    let height = 0;
+    for (let end = start; end < count; end += 1) {
+      const block = blocks[end];
+      width += (end === start ? 0 : geometry.blockGapX) + block.width;
+      height = Math.max(height, block.height);
+      if (width > maxRowWidth && end > start) break;
+      const fill = Math.min(1, width / maxRowWidth);
+      const isLast = end === count - 1;
+      const raggedness = (1 - fill) ** 2 * (isLast ? 0.35 : 1);
+      const next = best[end + 1];
+      if (!next) continue;
+      const candidate = {
+        cost: raggedness + next.cost,
+        rows: [{ blocks: blocks.slice(start, end + 1), width, height }, ...next.rows],
+      };
+      if (!best[start] || candidate.cost < best[start].cost) best[start] = candidate;
+    }
+  }
+  return best[0]?.rows || [];
+}
+
+function placeRows(rows, origin, geometry) {
+  const placedBlocks = [];
+  let y = origin.y;
+  let right = origin.x;
+  for (const row of rows) {
+    let x = origin.x;
+    for (const block of row.blocks) {
+      placedBlocks.push({
+        ...block,
+        rect: { x, y, width: block.width, height: block.height },
+        label: {
+          ...block.label,
+          rect: {
+            ...block.label.rect,
+            x: block.label.rect.x + x,
+            y: block.label.rect.y + y,
+          },
+        },
+        items: block.items.map((item) => ({
+          ...item,
+          rect: {
+            ...item.rect,
+            x: item.rect.x + x,
+            y: item.rect.y + y,
+          },
+        })),
+      });
+      x += block.width + geometry.blockGapX;
+      right = Math.max(right, x - geometry.blockGapX);
+    }
+    y += row.height + geometry.blockGapY;
+  }
+  return {
+    blocks: placedBlocks,
+    width: Math.max(0, right - origin.x),
+    height: Math.max(0, y - origin.y - geometry.blockGapY),
+  };
+}
+
+function bestPackedRows(blocks, availableWidth, availableHeight, geometry) {
+  if (!blocks.length) return { blocks: [], width: 0, height: geometry.columnHeight };
+  const widest = Math.max(...blocks.map((block) => block.width));
+  const total = blocks.reduce((sum, block) => sum + block.width, 0)
+    + geometry.blockGapX * Math.max(0, blocks.length - 1);
+  const targetAspect = availableWidth / Math.max(1, availableHeight);
+  let winner = null;
+  const steps = 18;
+  for (let index = 0; index <= steps; index += 1) {
+    const candidateWidth = widest + (Math.max(widest, total) - widest) * (index / steps);
+    const rows = partitionRows(blocks, candidateWidth, geometry);
+    const placed = placeRows(rows, { x: 0, y: 0 }, geometry);
+    if (!placed.width || !placed.height) continue;
+    const aspect = placed.width / placed.height;
+    const usedArea = blocks.reduce((sum, block) => sum + block.width * block.height, 0);
+    const waste = 1 - Math.min(1, usedArea / (placed.width * placed.height));
+    const score = Math.abs(Math.log(aspect / targetAspect)) + waste * 0.12;
+    if (!winner || score < winner.score) winner = { ...placed, rows, score };
+  }
+  return winner || placeRows(partitionRows(blocks, availableWidth, geometry), { x: 0, y: 0 }, geometry);
+}
+
 export function layoutComposition(model, {
   origin = { x: 558.34, y: 150.94 },
-  maxWidth = 980,
+  maxWidth = 1251.77,
+  maxHeight = 711.8,
   geometry = COMPOSITION_GEOMETRY,
 } = {}) {
   if (!model) return null;
-  const intrinsicBlocks = compositionBlocks(model).map((block) => layoutBlock(block, geometry));
-  const placedBlocks = [];
-  let cursorX = origin.x;
-  let cursorY = origin.y;
-  let shelfHeight = 0;
-  let right = origin.x;
-  let shelfCount = 1;
 
-  for (const block of intrinsicBlocks) {
-    if (cursorX > origin.x && cursorX + block.width > origin.x + maxWidth) {
-      cursorX = origin.x;
-      cursorY += shelfHeight + geometry.blockGapY;
-      shelfHeight = 0;
-      shelfCount += 1;
-    }
-    const dx = cursorX;
-    const dy = cursorY;
-    placedBlocks.push({
-      ...block,
-      rect: { x: dx, y: dy, width: block.width, height: block.height },
-      label: {
-        ...block.label,
-        rect: {
-          ...block.label.rect,
-          x: block.label.rect.x + dx,
-          y: block.label.rect.y + dy,
-        },
-      },
-      items: block.items.map((item) => ({
-        ...item,
-        rect: {
-          ...item.rect,
-          x: item.rect.x + dx,
-          y: item.rect.y + dy,
-        },
-      })),
-    });
-    cursorX += block.width + geometry.blockGapX;
-    shelfHeight = Math.max(shelfHeight, block.height);
-    right = Math.max(right, cursorX - geometry.blockGapX);
-  }
-  const bottom = cursorY + shelfHeight;
+  const focusSource = model.selfColumn || {
+    id: model.focus.id,
+    title: model.focus.title,
+    staff: [],
+    staffItems: [],
+    staffText: "",
+  };
+  const focusLabel = institutionLabelItem(focusSource, geometry, {
+    kind: "focus",
+    fontSize: geometry.focusTitleFontSize,
+    minWidth: geometry.focusTitleWidth,
+  });
+  focusLabel.rect = {
+    x: origin.x,
+    y: origin.y,
+    width: focusLabel.width,
+    height: geometry.columnHeight,
+  };
+
+  const intrinsicBlocks = compositionBlocks(model).map((block) => layoutBlock(block, geometry));
+  const blockOriginX = origin.x + focusLabel.width + geometry.focusGapX;
+  const blockAvailableWidth = Math.max(geometry.minContentWidth, maxWidth - focusLabel.width - geometry.focusGapX);
+  const packed = bestPackedRows(
+    intrinsicBlocks,
+    blockAvailableWidth,
+    maxHeight,
+    geometry
+  );
+  const placed = placeRows(packed.rows || [], { x: blockOriginX, y: origin.y }, geometry);
+  const width = focusLabel.width + geometry.focusGapX + placed.width;
+  const height = Math.max(geometry.columnHeight, placed.height);
 
   return {
     origin,
     geometry,
     focus: model.focus,
-    blocks: placedBlocks,
-    items: placedBlocks.flatMap((block) => block.items),
-    bounds: {
-      x: origin.x,
-      y: origin.y,
-      width: Math.max(60, right - origin.x),
-      height: Math.max(geometry.columnHeight, bottom - origin.y),
-    },
-    shelfCount,
+    focusLabel,
+    blocks: placed.blocks,
+    items: placed.blocks.flatMap((block) => block.items),
+    bounds: { x: origin.x, y: origin.y, width, height },
+    rowCount: packed.rows?.length || 0,
   };
 }
