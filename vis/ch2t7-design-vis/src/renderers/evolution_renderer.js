@@ -431,6 +431,19 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
   });
   const x = event.displayX;
   const y = event.y;
+  const baseY = event.baseY ?? y;
+  if (event.displaced) {
+    group.appendChild(svgElement("line", {
+      class: "evolution-event-stem",
+      x1: event.baseX, y1: baseY, x2: x, y2: y,
+      stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.74,
+    }));
+    group.appendChild(svgElement("circle", {
+      class: "evolution-event-anchor",
+      cx: event.baseX, cy: baseY, r: 1.65,
+      fill: COLORS.line,
+    }));
+  }
   if (event.timeType === "bounded" && event.yearStart != null && event.yearEnd != null) {
     const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     const endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
@@ -447,12 +460,6 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
       fill: "none", stroke: COLORS.olive, "stroke-width": 0.8,
     }));
   }
-  if (event.offsetX) {
-    group.appendChild(svgElement("line", {
-      x1: event.baseX, y1: y, x2: x, y2: y,
-      stroke: COLORS.olive, "stroke-width": 0.65,
-    }));
-  }
   if (event.effect === "ignore") {
     group.appendChild(svgElement("path", {
       d: `M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`,
@@ -460,8 +467,9 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
       "stroke-width": 1,
     }));
   } else if (event.effect === "activate" || event.effect === "deactivate") {
+    const tickHalfHeight = event.displaced ? 6.5 : 9;
     group.appendChild(svgElement("line", {
-      x1: x, y1: y - 9, x2: x, y2: y + 9,
+      x1: x, y1: y - tickHalfHeight, x2: x, y2: y + tickHalfHeight,
       stroke: selected ? COLORS.selected : COLORS.line,
       "stroke-width": 1.2,
     }));
@@ -513,7 +521,8 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     });
   }
   group.appendChild(svgElement("circle", {
-    cx: x, cy: y, r: 10, fill: "transparent", "pointer-events": "all",
+    cx: x, cy: y, r: event.displaced ? 5.5 : 10,
+    fill: "transparent", "pointer-events": "all",
   }));
   addTitle(group, eventDescription(event));
   makeInteractive(group, `查看${eventDescription(event)}`, () => handlers.onSelectEvent?.(event));
@@ -549,6 +558,7 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
         "stroke-width": selected ? 1.7 : 1.05,
+        "stroke-opacity": selected ? 1 : 0.68,
         "marker-end": "url(#evolution-relation-arrow)",
       }));
     }

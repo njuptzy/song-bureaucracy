@@ -2,6 +2,9 @@ const DEFAULT_BOUNDS = { x: 560, y: 190, width: 1228, height: 630 };
 const RELATION_LABEL_HEIGHT = 18;
 const RELATION_LABEL_ASCENT = 14;
 const RELATION_LABEL_LAYER_GAP = 22;
+const EVENT_MARK_GAP = 12;
+const EVENT_VERTICAL_LIMIT = 30;
+const EVENT_HORIZONTAL_LIMIT = 48;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -151,6 +154,95 @@ function steppedCandidates(preferred, minimum, maximum, step, count) {
   return result;
 }
 
+function symmetricOffsets(step, limit) {
+  const result = [0];
+  const levels = Math.max(0, Math.floor(limit / step));
+  for (let level = 1; level <= levels; level += 1) {
+    result.push(-level * step, level * step);
+  }
+  return result;
+}
+
+function eventOrder(first, second) {
+  return first.baseX - second.baseX
+    || (first.chainIndex ?? 0) - (second.chainIndex ?? 0)
+    || (first.eventIndex ?? 0) - (second.eventIndex ?? 0)
+    || String(first.id).localeCompare(String(second.id), "zh", { numeric: true });
+}
+
+function eventMarksOverlap(first, second, gap = EVENT_MARK_GAP) {
+  return Math.abs(first.displayX - second.displayX) < gap
+    && Math.abs(first.displayY - second.displayY) < gap;
+}
+
+function layoutLaneEvents(events, options) {
+  const {
+    laneY,
+    lanePitch,
+    laneCount,
+    bounds,
+    plotLeft,
+    plotRight,
+    yearToX,
+  } = options;
+  const ordered = (events || []).map((event) => ({
+    ...event,
+    baseX: yearToX(event.effectiveYear),
+  })).sort(eventOrder);
+  const boundaryAllowance = Math.max(0, Math.min(
+    laneY - bounds.y - 5,
+    bounds.bottom - laneY - 5,
+  ));
+  const laneAllowance = laneCount > 1
+    ? Math.max(0, lanePitch / 2 - 4)
+    : boundaryAllowance;
+  const verticalLimit = Math.min(EVENT_VERTICAL_LIMIT, boundaryAllowance, laneAllowance);
+  const verticalOffsets = symmetricOffsets(EVENT_MARK_GAP, verticalLimit);
+  const horizontalLimit = Math.min(EVENT_HORIZONTAL_LIMIT, Math.max(0, plotRight - plotLeft));
+  const horizontalOffsets = symmetricOffsets(EVENT_MARK_GAP, horizontalLimit);
+  const placed = [];
+
+  for (const event of ordered) {
+    const candidates = [];
+    const seen = new Set();
+    for (const offsetX of horizontalOffsets) {
+      for (const offsetY of verticalOffsets) {
+        const displayX = clamp(event.baseX + offsetX, plotLeft, plotRight);
+        const displayY = laneY + offsetY;
+        const key = `${displayX.toFixed(6)}:${displayY.toFixed(6)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ displayX, displayY });
+      }
+    }
+    const collisionFree = candidates.find((candidate) => (
+      placed.every((item) => !eventMarksOverlap(candidate, item))
+    ));
+    const selected = collisionFree || candidates.reduce((best, candidate) => {
+      const minimumDistance = placed.reduce((minimum, item) => Math.min(
+        minimum,
+        Math.hypot(candidate.displayX - item.displayX, candidate.displayY - item.displayY),
+      ), Infinity);
+      if (!best || minimumDistance > best.minimumDistance) {
+        return { ...candidate, minimumDistance };
+      }
+      return best;
+    }, null) || { displayX: event.baseX, displayY: laneY };
+    const laidOut = {
+      ...event,
+      baseY: laneY,
+      displayX: selected.displayX,
+      displayY: selected.displayY,
+      offsetX: selected.displayX - event.baseX,
+      offsetY: selected.displayY - laneY,
+      y: selected.displayY,
+      displaced: selected.displayX !== event.baseX || selected.displayY !== laneY,
+    };
+    placed.push(laidOut);
+  }
+  return placed.sort(eventOrder);
+}
+
 function leaderToBox(anchor, box) {
   let x2 = clamp(anchor.x, box.x, box.right);
   let y2 = clamp(anchor.y, box.y, box.bottom);
@@ -266,8 +358,8 @@ function layoutEvolutionLabels(labelItems, bounds, plotBounds) {
 
 /**
  * Lay out the rendering-neutral evolution model in SVG user-space coordinates.
- * `baseX` is always the exact time coordinate; `displayX` only adds collision
- * avoidance and therefore must never be read back as a historical date.
+ * `baseX`/`baseY` are always the exact timeline anchors. `displayX`/`displayY`
+ * only add collision avoidance and must never be read back as historical data.
  */
 export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
   const bounds = normalizeBounds(requestedBounds);
@@ -314,7 +406,7 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
     + (clamp(finite(year, yearMin), yearMin, yearMax) - yearMin) / yearSpan
       * (plotRight - plotLeft);
 
-  const verticalPadding = Math.min(34, bounds.height * 0.075);
+  const verticalPadding = Math.min(42, bounds.height * 0.09);
   const laneTop = bounds.y + verticalPadding;
   const laneBottom = bounds.bottom - verticalPadding;
   const lanePitch = laneCount > 1 ? (laneBottom - laneTop) / (laneCount - 1) : 0;
@@ -326,54 +418,16 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
 
   const lanes = lanesSource.map((lane, index) => {
     const y = clamp(laneY(index), bounds.y, bounds.bottom);
-    const sameYear = new Map();
-    for (const event of lane.events || []) {
-      const key = event.effectiveYear;
-      if (!sameYear.has(key)) sameYear.set(key, []);
-      sameYear.get(key).push(event);
-    }
-    const laidOutEvents = [];
-    for (const [year, events] of sameYear) {
-      const ordered = [...events].sort((a, b) => (
-        (a.chainIndex ?? 0) - (b.chainIndex ?? 0)
-        || (a.eventIndex ?? 0) - (b.eventIndex ?? 0)
-        || String(a.id).localeCompare(String(b.id), "zh", { numeric: true })
-      ));
-      const baseX = yearToX(year);
-      const availableSpacing = ordered.length > 1
-        ? (plotRight - plotLeft) / Math.max(ordered.length + 1, 2)
-        : 0;
-      const spacing = Math.min(
-        ordered.some((event) => event.expanded) ? 24 : 10,
-        availableSpacing,
-      );
-      let offsets = ordered.map((_, itemIndex) => (
-        (itemIndex - (ordered.length - 1) / 2) * spacing
-      ));
-      const minimumX = baseX + Math.min(...offsets, 0);
-      const maximumX = baseX + Math.max(...offsets, 0);
-      const shift = minimumX < plotLeft
-        ? plotLeft - minimumX
-        : maximumX > plotRight
-          ? plotRight - maximumX
-          : 0;
-      offsets = offsets.map((offset) => offset + shift);
-      ordered.forEach((event, itemIndex) => {
-        const offsetX = offsets[itemIndex];
-        const laidOut = {
-          ...event,
-          baseX,
-          displayX: clamp(baseX + offsetX, plotLeft, plotRight),
-          offsetX,
-          y,
-        };
-        laidOutEvents.push(laidOut);
-        eventByTimepoint.set(event.id, laidOut);
-      });
-    }
-    laidOutEvents.sort((a, b) => a.baseX - b.baseX
-      || a.displayX - b.displayX
-      || (a.chainIndex ?? 0) - (b.chainIndex ?? 0));
+    const laidOutEvents = layoutLaneEvents(lane.events, {
+      laneY: y,
+      lanePitch,
+      laneCount,
+      bounds,
+      plotLeft,
+      plotRight,
+      yearToX,
+    });
+    laidOutEvents.forEach((event) => eventByTimepoint.set(event.id, event));
     const laidOut = {
       ...lane,
       index,
@@ -464,9 +518,11 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
       return {
         ...member,
         baseX: event.baseX,
+        baseY: event.baseY,
         x: event.displayX,
         y: event.y,
         offsetX: event.offsetX,
+        offsetY: event.offsetY,
         offAxis: false,
         detailOnly: false,
       };

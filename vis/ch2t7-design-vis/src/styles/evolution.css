@@ -55,6 +55,11 @@
   dominant-baseline: central;
 }
 
+.dynamic-evolution-layer .evolution-event-stem,
+.dynamic-evolution-layer .evolution-event-anchor {
+  pointer-events: none;
+}
+
 .dynamic-evolution-layer .evolution-relation-label {
   paint-order: stroke;
   stroke: #f5f3ec;

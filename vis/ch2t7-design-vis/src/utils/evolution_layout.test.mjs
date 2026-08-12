@@ -43,6 +43,7 @@ describe("layoutEvolutionModel", () => {
       for (const event of lane.events) {
         assert.ok(event.baseX >= layout.plotBounds.x && event.baseX <= layout.plotBounds.right);
         assert.ok(event.displayX >= layout.plotBounds.x && event.displayX <= layout.plotBounds.right);
+        assert.ok(event.y >= bounds.y && event.y <= bounds.y + bounds.height);
       }
       for (const segment of lane.segments) {
         assert.ok(segment.startX >= layout.plotBounds.x);
@@ -51,7 +52,7 @@ describe("layoutEvolutionModel", () => {
     }
   });
 
-  it("同年事件共享 baseX，只用 displayX/offsetX 避让", () => {
+  it("同年事件保留共同时间锚点，并在锚点周围二维错层", () => {
     const model = buildEvolutionModel({
       entities: [entity(1)],
       timepoints: {
@@ -67,13 +68,50 @@ describe("layoutEvolutionModel", () => {
     const events = layout.lanes[0].events;
 
     assert.equal(new Set(events.map((item) => item.baseX)).size, 1);
-    assert.equal(new Set(events.map((item) => item.displayX)).size, 3);
-    assert.ok(events.some((item) => item.offsetX !== 0));
-    const displayXs = events.map((item) => item.displayX).sort((a, b) => a - b);
-    assert.ok(displayXs.every((x, index) => index === 0 || x - displayXs[index - 1] >= 20));
+    assert.equal(new Set(events.map((item) => `${item.displayX}:${item.displayY}`)).size, 3);
+    assert.ok(events.some((item) => item.offsetY !== 0));
     for (const event of events) {
       assert.equal(event.displayX, event.baseX + event.offsetX);
+      assert.equal(event.displayY, event.baseY + event.offsetY);
     }
+    for (let index = 0; index < events.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < events.length; otherIndex += 1) {
+        const deltaX = Math.abs(events[index].displayX - events[otherIndex].displayX);
+        const deltaY = Math.abs(events[index].displayY - events[otherIndex].displayY);
+        assert.ok(deltaX >= 12 || deltaY >= 12);
+      }
+    }
+  });
+
+  it("邻近年份像素距离不足时也会错层，稀疏年份仍留在基线", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1)],
+      timepoints: {
+        1: [
+          timepoint(11, 1000, "始置", { succ_id: 12 }),
+          timepoint(12, 1001, "普通记载", { prev_id: 11, succ_id: 13 }),
+          timepoint(13, 1002, "又一记载", { prev_id: 12, succ_id: 14 }),
+          timepoint(14, 1100, "远期记载", { prev_id: 13 }),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+    const layout = layoutEvolutionModel(model);
+    const events = layout.lanes[0].events;
+    const denseEvents = events.filter((event) => event.effectiveYear <= 1002);
+    const sparseEvent = events.find((event) => event.effectiveYear === 1100);
+
+    assert.ok(denseEvents.some((event) => event.displaced));
+    for (let index = 0; index < denseEvents.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < denseEvents.length; otherIndex += 1) {
+        const deltaX = Math.abs(denseEvents[index].displayX - denseEvents[otherIndex].displayX);
+        const deltaY = Math.abs(denseEvents[index].displayY - denseEvents[otherIndex].displayY);
+        assert.ok(deltaX >= 12 || deltaY >= 12);
+      }
+    }
+    assert.equal(sparseEvent.displayX, sparseEvent.baseX);
+    assert.equal(sparseEvent.displayY, sparseEvent.baseY);
+    assert.equal(sparseEvent.displaced, false);
   });
 
   it("关系端点按各自年份落位，异年显式关系组没有伪造共同时间", () => {
