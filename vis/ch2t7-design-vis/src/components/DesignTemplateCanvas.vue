@@ -149,15 +149,24 @@ const COMPOSITION_CONTENT_BOUNDS = {
   height: 717.85,
 };
 
-const entityMap = new Map(props.data.entities.map((entity) => [entity.id, entity]));
-const collectiveEntityIds = new Set(props.data.collectiveEntityIds || []);
-const titleMap = new Map();
-for (const entity of props.data.entities) {
-  if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
+let entityMap = new Map();
+let collectiveEntityIds = new Set();
+let titleMap = new Map();
+let institutionGroupNames = { 中央机构: CENTRAL_GROUP_NAMES };
+
+function rebuildDataIndexes(data) {
+  entityMap = new Map((data?.entities || []).map((entity) => [entity.id, entity]));
+  collectiveEntityIds = new Set(data?.collectiveEntityIds || []);
+  titleMap = new Map();
+  for (const entity of data?.entities || []) {
+    if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
+  }
+  institutionGroupNames = data?.meta?.institutionGroupNames || {
+    中央机构: CENTRAL_GROUP_NAMES,
+  };
 }
-const institutionGroupNames = props.data.meta?.institutionGroupNames || {
-  中央机构: CENTRAL_GROUP_NAMES,
-};
+
+rebuildDataIndexes(props.data);
 lastExpandedInstitutionGroupId = institutionGroupId(
   "中央机构",
   entityInstitutionGroup(titleMap.get("尚书省"), "中央机构")
@@ -201,6 +210,16 @@ watch(persistedCanvasState, (state) => emit("state-change", state), {
   immediate: true,
   deep: true,
 });
+
+watch(() => props.data, (data) => {
+  rebuildDataIndexes(data);
+  yearSnapshotCache.clear();
+  evolutionModelCacheKey = "";
+  evolutionModelCache = null;
+  evolutionLayoutCacheKey = "";
+  evolutionLayoutCache = null;
+  if (svgMountRef.value) refreshTemplate({ rebindStatic: true, rebindControls: true });
+}, { flush: "post" });
 
 function normalizeText(element) {
   return (element.textContent || "").replace(/\s+/g, "").trim();

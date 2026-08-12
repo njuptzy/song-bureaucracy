@@ -437,11 +437,18 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     .sort((a, b) => a.effectiveYear - b.effectiveYear || a.chainIndex - b.chainIndex);
 
   let active = null;
+  let inferredStart = false;
   for (const timepoint of chain.timepoints) {
     if (timepoint.timeType !== "pre_song") continue;
-    if (timepoint.effect === "activate") active = true;
+    if (timepoint.effect === "activate") {
+      active = true;
+      inferredStart = false;
+    }
     else if (timepoint.effect === "deactivate") active = false;
-    else if (timepoint.effect === "preserve" && active == null) active = true;
+    else if (timepoint.effect === "preserve" && active == null) {
+      active = true;
+      inferredStart = true;
+    }
   }
 
   let startYear = active ? yearMin : null;
@@ -450,9 +457,15 @@ function lifecycleSegments(chain, yearMin, yearMax) {
   for (const event of chronological) {
     const year = event.effectiveYear;
     if (year < yearMin) {
-      if (event.effect === "activate") active = true;
+      if (event.effect === "activate") {
+        active = true;
+        inferredStart = false;
+      }
       else if (event.effect === "deactivate") active = false;
-      else if (event.effect === "preserve" && active == null) active = true;
+      else if (event.effect === "preserve" && active == null) {
+        active = true;
+        inferredStart = true;
+      }
       startYear = active ? yearMin : null;
       openStart = Boolean(active);
       continue;
@@ -460,6 +473,7 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     if (year > yearMax) break;
     if (event.effect === "ignore") continue;
     if (event.effect === "activate") {
+      inferredStart = false;
       if (active !== true) {
         active = true;
         startYear = year;
@@ -479,6 +493,7 @@ function lifecycleSegments(chain, yearMin, yearMax) {
           endEventId: event.id,
           openStart,
           openEnd: false,
+          inferredStart,
         });
       } else if (active == null) {
         segments.push({
@@ -496,13 +511,15 @@ function lifecycleSegments(chain, yearMin, yearMax) {
       startYear = null;
       startEventId = null;
       openStart = false;
+      inferredStart = false;
       continue;
     }
     if (event.effect === "preserve" && active == null) {
       active = true;
       startYear = year;
       startEventId = event.id;
-      openStart = false;
+      openStart = true;
+      inferredStart = true;
     }
     // preserve after an explicit deactivation deliberately does nothing.
   }
@@ -516,6 +533,7 @@ function lifecycleSegments(chain, yearMin, yearMax) {
       endEventId: null,
       openStart,
       openEnd: true,
+      inferredStart,
     });
   }
   return segments;

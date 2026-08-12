@@ -63,6 +63,17 @@
   font-size: 10px;
 }
 
+.dynamic-evolution-layer .evolution-relation-overflow-marker {
+  pointer-events: none;
+}
+
+.dynamic-evolution-layer .evolution-relation-overflow-glyph {
+  fill: #756156;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10px;
+  pointer-events: none;
+}
+
 .dynamic-evolution-layer .evolution-empty {
   fill: #756156;
   font-size: 15px;

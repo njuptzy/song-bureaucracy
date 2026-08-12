@@ -30,6 +30,46 @@ function link(items) {
 }
 
 describe("buildEvolutionModel lifecycle", () => {
+  it("首次普通记载只作为推定存续起点，不伪装成明确建置", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "无始置记录司")],
+      timepoints: {
+        1: [timepoint(11, 1000, "元丰三年见于制度记载")],
+      },
+      changeRelations: [],
+    }, [1], { yearMin: 960, yearMax: 1279 });
+
+    const segment = model.lanes[0].segments[0];
+    assert.deepEqual(
+      {
+        startYear: segment.startYear,
+        endYear: segment.endYear,
+        openStart: segment.openStart,
+        inferredStart: segment.inferredStart,
+      },
+      { startYear: 1000, endYear: 1279, openStart: true, inferredStart: true },
+    );
+  });
+
+  it("范围外的明确建置会把推定存续线恢复为确定起点", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "后置司")],
+      timepoints: {
+        1: link([
+          timepoint(11, 900, "沿革记载", { time_type: "pre_song" }),
+          timepoint(12, 950, "始置"),
+          timepoint(13, 1000, "普通记载"),
+        ]),
+      },
+      changeRelations: [],
+    }, [1], { yearMin: 960, yearMax: 1279 });
+
+    const segment = model.lanes[0].segments[0];
+    assert.equal(segment.startYear, 960);
+    assert.equal(segment.openStart, true);
+    assert.equal(segment.inferredStart, false);
+  });
+
   it("罢废后的普通记载不复活，明确复置才重开，bounded 在上界生效", () => {
     const points = link([
       timepoint(11, 970, "始置"),

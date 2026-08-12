@@ -1,7 +1,6 @@
 <template>
   <DesignTemplateCanvas
     v-if="data"
-    :key="dataVersion"
     :data="data"
     :initial-state="canvasState"
     @state-change="canvasState = $event"

@@ -578,6 +578,26 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
       class: "evolution-relation-label",
       "text-anchor": "middle",
     });
+  } else if (!suppressLabel && relation.labelOverflow) {
+    const source = sources[0];
+    const target = targets[0];
+    const x = relation.labelAnchorX ?? (source.x + target.x) / 2;
+    const y = relation.labelAnchorY ?? (source.y + target.y) / 2;
+    group.appendChild(svgElement("circle", {
+      class: "evolution-relation-overflow-marker",
+      cx: x,
+      cy: y,
+      r: 3.2,
+      fill: COLORS.paper,
+      stroke: COLORS.olive,
+      "stroke-width": 0.8,
+    }));
+    appendText(group, "…", {
+      x,
+      y: y + 3.2,
+      class: "evolution-relation-overflow-glyph",
+      "text-anchor": "middle",
+    });
   }
   const all = [...sources, ...targets];
   const hit = svgElement("path", {
@@ -652,6 +672,22 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
       y: hasLayout ? relationGroup.labelY : centerY - 8,
       class: "evolution-relation-label",
       "text-anchor": hasLayout ? "middle" : "start",
+    });
+  } else if (relationGroup.labelOverflow) {
+    group.appendChild(svgElement("circle", {
+      class: "evolution-relation-overflow-marker",
+      cx: junctionX,
+      cy: centerY,
+      r: 3.2,
+      fill: COLORS.paper,
+      stroke: COLORS.olive,
+      "stroke-width": 0.8,
+    }));
+    appendText(group, "…", {
+      x: junctionX,
+      y: centerY + 3.2,
+      class: "evolution-relation-overflow-glyph",
+      "text-anchor": "middle",
     });
   }
   relationGroup.relations.forEach((relation) => {
@@ -800,6 +836,8 @@ function renderMain(layer, layout, options) {
       group.appendChild(svgElement("line", {
         x1: segment.startX, y1: segment.y, x2: segment.endX, y2: segment.y,
         stroke: COLORS.line, "stroke-width": 2.1,
+        "stroke-dasharray": segment.inferredStart ? "5 3" : null,
+        opacity: segment.inferredStart ? 0.68 : 1,
       }));
       if (!segment.openStart) {
         group.appendChild(svgElement("line", {
