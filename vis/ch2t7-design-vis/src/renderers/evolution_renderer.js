@@ -531,7 +531,7 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   parent.appendChild(group);
 }
 
-function renderEventMark(parent, event, selected, handlers, plotBounds) {
+function renderEventMark(parent, event, selected, handlers) {
   const group = svgElement("g", {
     class: `evolution-event evolution-event-${event.effect}${selected ? " is-selected" : ""}`,
     "data-timepoint-id": event.id,
@@ -612,38 +612,8 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     }));
   }
 
-  const showCallout = selected;
-  if (showCallout) {
-    let direction = ((event.eventIndex || 0) + (event.chainIndex || 0)) % 2 ? 1 : -1;
-    if (y - 88 < plotBounds.y) direction = 1;
-    if (y + 88 > plotBounds.bottom) direction = -1;
-    const bookHeight = 64;
-    const bookWidth = 22;
-    const bookY = direction < 0 ? y - (bookHeight + 20) : y + 20;
-    group.appendChild(svgElement("line", {
-      x1: x, y1: y + direction * 6, x2: x, y2: direction < 0 ? bookY + bookHeight : bookY,
-      stroke: COLORS.line, "stroke-width": 0.75,
-    }));
-    group.appendChild(svgElement("path", {
-      d: `M${x - bookWidth / 2} ${bookY + 5}H${x - bookWidth / 2 + 3}V${bookY}H${x + bookWidth / 2 - 3}V${bookY + 5}H${x + bookWidth / 2}V${bookY + bookHeight}H${x - bookWidth / 2}Z`,
-      fill: COLORS.paper,
-      "fill-opacity": 0.96,
-      stroke: selected ? COLORS.selected : COLORS.line,
-      "stroke-width": 0.8,
-    }));
-    appendVerticalText(group, event.event || event.quotation, {
-      x, y: bookY + 6, class: "evolution-event-label", "text-anchor": "middle",
-    }, {
-      maxChars: 8,
-      pitch: 8.2,
-    });
-    appendText(group, event.rawTime || String(event.effectiveYear ?? ""), {
-      x,
-      y: direction < 0 ? bookY - 5 : bookY + bookHeight + 12,
-      class: "evolution-event-year",
-      "text-anchor": "middle",
-    });
-  }
+  // Selection feedback stays on the mark itself (filled ink + emphasis);
+  // event details live in the left panel, so no on-canvas callout is drawn.
   group.appendChild(svgElement("circle", {
     cx: x, cy: y, r: event.displaced ? 5.5 : 10,
     fill: "transparent", "pointer-events": "all",
@@ -1054,7 +1024,7 @@ function renderMain(layer, layout, options) {
   for (const relationGroup of layout.relationGroups) {
     renderRelationGroup(group, relationGroup, selected, options.handlers);
   }
-  // Render the selected event last so its callout tag stays on top of
+  // Render the selected event last so its emphasis stays on top of
   // neighbouring marks instead of being painted over by them.
   const orderedEvents = [
     ...eventsToRender.filter((event) => selected !== `timepoint:${event.id}`),
@@ -1066,7 +1036,6 @@ function renderMain(layer, layout, options) {
       event,
       selected === `timepoint:${event.id}`,
       options.handlers,
-      layout.plotBounds,
     );
   }
   renderOffAxis(group, layout, options.selectedItem, options.handlers);
