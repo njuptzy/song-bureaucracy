@@ -615,11 +615,11 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
   const showCallout = selected;
   if (showCallout) {
     let direction = ((event.eventIndex || 0) + (event.chainIndex || 0)) % 2 ? 1 : -1;
-    if (y - 68 < plotBounds.y) direction = 1;
-    if (y + 68 > plotBounds.bottom) direction = -1;
-    const bookHeight = 48;
+    if (y - 88 < plotBounds.y) direction = 1;
+    if (y + 88 > plotBounds.bottom) direction = -1;
+    const bookHeight = 64;
     const bookWidth = 22;
-    const bookY = direction < 0 ? y - 68 : y + 20;
+    const bookY = direction < 0 ? y - (bookHeight + 20) : y + 20;
     group.appendChild(svgElement("line", {
       x1: x, y1: y + direction * 6, x2: x, y2: direction < 0 ? bookY + bookHeight : bookY,
       stroke: COLORS.line, "stroke-width": 0.75,
@@ -632,10 +632,10 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
       "stroke-width": 0.8,
     }));
     appendVerticalText(group, event.event || event.quotation, {
-      x, y: bookY + 7, class: "evolution-event-label", "text-anchor": "middle",
+      x, y: bookY + 6, class: "evolution-event-label", "text-anchor": "middle",
     }, {
-      maxChars: 5,
-      pitch: 8.5,
+      maxChars: 8,
+      pitch: 8.2,
     });
     appendText(group, event.rawTime || String(event.effectiveYear ?? ""), {
       x,
