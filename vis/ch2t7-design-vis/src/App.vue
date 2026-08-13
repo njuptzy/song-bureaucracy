@@ -3,7 +3,7 @@
     v-if="data"
     :data="data"
     :initial-state="canvasState"
-    @state-change="canvasState = $event"
+    @state-change="handleCanvasStateChange"
   />
   <div v-else class="loading">{{ loadError || "正在读取 ch2t7 数据…" }}</div>
 </template>
@@ -11,13 +11,19 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import DesignTemplateCanvas from "./components/DesignTemplateCanvas.vue";
+import { readCanvasState, writeCanvasState } from "./utils/canvas_state";
 import { filterSongData } from "./utils/song_scope";
 
 const data = ref(null);
 const dataVersion = ref("");
 const loadError = ref("");
-const canvasState = ref(null);
+const canvasState = ref(readCanvasState());
 let versionTimer = null;
+
+function handleCanvasStateChange(state) {
+  canvasState.value = state;
+  writeCanvasState(state);
+}
 
 async function fetchJson(url) {
   const response = await fetch(url, { cache: "no-store" });
