@@ -863,6 +863,95 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
   }
 }
 
+/**
+ * StoryFlow-style braid prototype: cross-lane relations whose endpoints sit in
+ * the same year cluster share one vertical trunk instead of each sweeping its
+ * own S-curve across the canvas. Singles keep the classic path.
+ */
+function bundleRelations(relations) {
+  const items = [];
+  const singles = [];
+  for (const relation of relations) {
+    const source = relation.sourcePoints.find((point) => point.x != null);
+    const target = relation.targetPoints.find((point) => point.x != null);
+    if (!source || !target || relation.hasOffAxisEndpoint || Math.abs(target.y - source.y) < 1) {
+      singles.push(relation);
+      continue;
+    }
+    items.push({ relation, source, target, cx: (source.x + target.x) / 2 });
+  }
+  items.sort((first, second) => first.cx - second.cx);
+  const bundles = [];
+  const claimed = new Set();
+  for (const item of items) {
+    if (claimed.has(item)) continue;
+    const cluster = [item];
+    claimed.add(item);
+    for (const other of items) {
+      if (claimed.has(other)) continue;
+      if (Math.abs(other.cx - item.cx) <= 70) {
+        cluster.push(other);
+        claimed.add(other);
+      }
+    }
+    if (cluster.length > 1) bundles.push(cluster);
+    else singles.push(item.relation);
+  }
+  return { bundles, singles };
+}
+
+function renderRelationBundle(parent, bundle, selectedKey, handlers) {
+  const group = svgElement("g", { class: "evolution-relation-bundle" });
+  const trunkX = bundle.reduce((sum, item) => sum + item.cx, 0) / bundle.length;
+  const ys = bundle.flatMap((item) => [item.source.y, item.target.y]);
+  const trunkTop = Math.min(...ys);
+  const trunkBottom = Math.max(...ys);
+  group.appendChild(svgElement("line", {
+    class: "evolution-relation-trunk",
+    x1: trunkX, y1: trunkTop, x2: trunkX, y2: trunkBottom,
+    stroke: COLORS.line, "stroke-width": 1.9, "stroke-opacity": 0.5,
+    "stroke-linecap": "round", "pointer-events": "none",
+  }));
+  for (const item of bundle) {
+    const { relation, source, target } = item;
+    const isSelected = selectedKey === `relation:${relation.id}`;
+    const color = isSelected ? COLORS.selected : COLORS.line;
+    const width = isSelected ? 1.7 : 1.05;
+    const opacity = isSelected ? 1 : 0.68;
+    const sub = svgElement("g", {
+      class: `evolution-relation${isSelected ? " is-selected" : ""}`,
+      "data-relation-id": relation.id,
+    });
+    const entry = Math.max(-9, Math.min(9, (target.y - source.y) * 0.06));
+    const into = `M${source.x} ${source.y}Q${trunkX} ${source.y} ${trunkX} ${source.y + entry}`;
+    const outFromY = target.y - entry;
+    const out = `M${trunkX} ${outFromY}Q${trunkX} ${target.y} ${target.x} ${target.y}`;
+    sub.appendChild(svgElement("path", {
+      d: into, fill: "none", stroke: color, "stroke-width": width, "stroke-opacity": opacity,
+    }));
+    sub.appendChild(svgElement("path", {
+      d: out, fill: "none", stroke: color, "stroke-width": width, "stroke-opacity": opacity,
+      "marker-end": "url(#evolution-relation-arrow)",
+    }));
+    if (relation.labelVisible !== false) {
+      appendText(sub, compactRelationLabel(relation.label), {
+        x: relation.labelX ?? trunkX,
+        y: relation.labelY ?? (source.y + target.y) / 2 - 7,
+        class: "evolution-relation-label",
+        "text-anchor": "middle",
+      });
+    }
+    sub.appendChild(svgElement("path", {
+      d: `${into}L${trunkX} ${outFromY}${out.slice(1)}`,
+      fill: "none", stroke: "transparent", "stroke-width": 12, "pointer-events": "stroke",
+    }));
+    addTitle(sub, `${relation.label}：${[source, target].map((point) => point.rawTime || point.effectiveYear || "年代未明").join(" → ")}`);
+    makeInteractive(sub, `查看关系${relation.label}`, () => handlers.onSelectRelation?.(relation));
+    group.appendChild(sub);
+  }
+  parent.appendChild(group);
+}
+
 function renderLanePagerButton(parent, { x, direction, disabled, onActivate }) {
   const label = direction < 0 ? "上一组关联轨道" : "下一组关联轨道";
   const group = svgElement("g", {
@@ -1016,8 +1105,12 @@ function renderMain(layer, layout, options) {
   }
 
   const groupedRelationIds = new Set(layout.relationGroups.flatMap((item) => item.relationIds || []));
-  for (const relation of layout.relations) {
-    if (groupedRelationIds.has(relation.id)) continue;
+  const ungrouped = layout.relations.filter((relation) => !groupedRelationIds.has(relation.id));
+  const { bundles, singles } = bundleRelations(ungrouped);
+  for (const bundle of bundles) {
+    renderRelationBundle(group, bundle, selected, options.handlers);
+  }
+  for (const relation of singles) {
     renderRelation(
       group,
       relation,
