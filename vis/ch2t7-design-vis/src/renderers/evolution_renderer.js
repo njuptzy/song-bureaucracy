@@ -384,10 +384,11 @@ function renderEvolutionLegend(parent, layout) {
   const plot = layout?.plotBounds;
   if (!plot || plot.width < 260) return;
   const group = svgElement("g", { class: "evolution-legend" });
-  const x = Math.max(plot.x + 420, plot.right - 356);
-  const titleY = plot.y - 43;
-  const rowOneY = plot.y - 29;
-  const rowTwoY = plot.y - 15;
+  // The design reserves the clear band above the main heading for metadata.
+  // Keep the legend there so it does not compete with the year axis below.
+  const x = Math.max(plot.x + 420, plot.right - 730);
+  const titleY = 145;
+  const rowY = 162;
   appendText(group, "图例", {
     x,
     y: titleY,
@@ -399,7 +400,7 @@ function renderEvolutionLegend(parent, layout) {
     draw(sample, itemX);
     appendText(sample, label, {
       x: itemX + 13,
-      y: rowOneY + 3,
+      y: rowY + 3,
       class: "evolution-legend-label",
     });
     group.appendChild(sample);
@@ -407,7 +408,7 @@ function renderEvolutionLegend(parent, layout) {
   item(x + 30, "普通记载", (sample, itemX) => {
     sample.appendChild(svgElement("circle", {
       cx: itemX,
-      cy: rowOneY,
+      cy: rowY,
       r: 3.2,
       fill: COLORS.paper,
       stroke: COLORS.line,
@@ -417,15 +418,15 @@ function renderEvolutionLegend(parent, layout) {
   item(x + 101, "建置/罢置", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX,
-      y1: rowOneY - 6,
+      y1: rowY - 6,
       x2: itemX,
-      y2: rowOneY + 6,
+      y2: rowY + 6,
       stroke: COLORS.line,
       "stroke-width": 1,
     }));
     sample.appendChild(svgElement("rect", {
       x: itemX - 3.5,
-      y: rowOneY - 3.5,
+      y: rowY - 3.5,
       width: 7,
       height: 7,
       fill: COLORS.paper,
@@ -435,56 +436,45 @@ function renderEvolutionLegend(parent, layout) {
   });
   item(x + 186, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
-      d: `M${itemX - 6} ${rowOneY + 3}V${rowOneY - 4}H${itemX + 6}V${rowOneY + 3}`,
+      d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
       stroke: COLORS.olive,
       "stroke-width": 0.9,
     }));
   });
-
-  const secondRowItem = (itemX, label, draw) => {
-    const sample = svgElement("g", { class: "evolution-legend-item" });
-    draw(sample, itemX);
-    appendText(sample, label, {
-      x: itemX + 13,
-      y: rowTwoY + 3,
-      class: "evolution-legend-label",
-    });
-    group.appendChild(sample);
-  };
-  secondRowItem(x + 30, "演变关系", (sample, itemX) => {
+  item(x + 285, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
-      y1: rowTwoY,
+      y1: rowY,
       x2: itemX + 6,
-      y2: rowTwoY,
+      y2: rowY,
       stroke: COLORS.line,
       "stroke-width": 0.95,
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  secondRowItem(x + 101, "存续段", (sample, itemX) => {
+  item(x + 385, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
-      y1: rowTwoY,
+      y1: rowY,
       x2: itemX + 7,
-      y2: rowTwoY,
+      y2: rowY,
       stroke: COLORS.line,
       "stroke-width": 2,
     }));
   });
-  secondRowItem(x + 186, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 485, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
-      y1: rowTwoY + 3,
+      y1: rowY + 3,
       x2: itemX + 5,
-      y2: rowTwoY - 3,
+      y2: rowY - 3,
       stroke: COLORS.olive,
       "stroke-width": 0.7,
     }));
     sample.appendChild(svgElement("circle", {
       cx: itemX - 7,
-      cy: rowTwoY + 3,
+      cy: rowY + 3,
       r: 1.4,
       fill: COLORS.line,
     }));
