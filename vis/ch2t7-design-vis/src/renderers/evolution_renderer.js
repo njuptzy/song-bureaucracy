@@ -102,18 +102,6 @@ function ensureDefs(svg) {
   });
   clip.appendChild(svgElement("rect", { x: 503, y: 128, width: 1311, height: 738 }));
 
-  const hatch = svgElement("pattern", {
-    id: "evolution-bounded-hatch",
-    width: 7,
-    height: 7,
-    patternUnits: "userSpaceOnUse",
-    patternTransform: "rotate(45)",
-    "data-evolution-def": "pattern",
-  });
-  hatch.appendChild(svgElement("line", {
-    x1: 0, y1: 0, x2: 0, y2: 7, stroke: COLORS.olive, "stroke-width": 1,
-  }));
-
   const arrow = svgElement("marker", {
     id: "evolution-relation-arrow",
     markerWidth: 8,
@@ -130,7 +118,7 @@ function ensureDefs(svg) {
     stroke: COLORS.line,
     "stroke-width": 1.15,
   }));
-  defs.append(clip, hatch, arrow);
+  defs.append(clip, arrow);
 }
 
 function renderModeChoice(parent, { x, label, active, onActivate }) {
@@ -445,23 +433,17 @@ function renderEvolutionLegend(parent, layout) {
     }));
   });
   item(x + 232, "模糊纪年区间", (sample, itemX) => {
-    sample.appendChild(svgElement("rect", {
-      x: itemX - 7,
-      y: rowY - 4,
-      width: 14,
-      height: 8,
-      fill: "url(#evolution-bounded-hatch)",
-      opacity: 0.55,
+    sample.appendChild(svgElement("line", {
+      x1: itemX - 7, y1: rowY + 2, x2: itemX + 7, y2: rowY + 2,
+      stroke: COLORS.olive,
+      "stroke-width": 1.1,
+      "stroke-dasharray": "3 2",
     }));
-    sample.appendChild(svgElement("rect", {
-      x: itemX - 7,
-      y: rowY - 4,
-      width: 14,
-      height: 8,
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX - 7} ${rowY - 1.5}V${rowY + 2}M${itemX + 7} ${rowY - 1.5}V${rowY + 2}`,
       fill: "none",
       stroke: COLORS.olive,
-      "stroke-width": 0.5,
-      "stroke-opacity": 0.6,
+      "stroke-width": 1.1,
     }));
   });
   item(x + 316, "演变关系", (sample, itemX) => {
@@ -572,15 +554,25 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
   if (event.timeType === "bounded" && event.yearStart != null && event.yearEnd != null) {
     const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     const endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
-    group.appendChild(svgElement("rect", {
-      class: "evolution-event-bounded-band",
-      x: startX, y: y - 6, width: Math.max(2, endX - startX), height: 12,
-      fill: "url(#evolution-bounded-hatch)", opacity: 0.32,
+    // Fuzzy intervals hang below the lane as a dashed span with solid end
+    // ticks — the mirror of the solid "range" bracket above it. The lane
+    // itself stays clear, so marks on it remain visible and clickable.
+    group.appendChild(svgElement("line", {
+      class: "evolution-event-bounded-span",
+      x1: startX, y1: y + 8.5, x2: endX, y2: y + 8.5,
+      stroke: COLORS.olive,
+      "stroke-width": 1.1,
+      "stroke-dasharray": "3 2",
     }));
-    // The visible band is only 12px tall; give it a wider invisible hit area
-    // so clicking the fuzzy interval reliably selects the event.
+    group.appendChild(svgElement("path", {
+      class: "evolution-event-bounded-span",
+      d: `M${startX} ${y + 5}V${y + 8.5}M${endX} ${y + 5}V${y + 8.5}`,
+      fill: "none",
+      stroke: COLORS.olive,
+      "stroke-width": 1.1,
+    }));
     group.appendChild(svgElement("rect", {
-      x: startX, y: y - 10, width: Math.max(2, endX - startX), height: 20,
+      x: Math.min(startX, endX), y: y + 4, width: Math.max(3, Math.abs(endX - startX)), height: 5.5,
       fill: "transparent", "pointer-events": "all",
     }));
   }

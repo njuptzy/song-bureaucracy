@@ -115,19 +115,20 @@
   filter: drop-shadow(0 1px 1.5px rgba(53, 23, 4, 0.34));
 }
 
-/* Make the fuzzy-interval band discoverable: hovering its event lifts the
-   band out of the background with an ink outline and stronger hatch. */
-.dynamic-evolution-layer .evolution-event:hover .evolution-event-bounded-band {
-  opacity: 0.55;
-  stroke: #563905;
-  stroke-width: 0.9;
-  stroke-opacity: 0.75;
+/* Make the fuzzy-interval bracket discoverable: hovering its event darkens
+   the dashed bracket below the lane. */
+.dynamic-evolution-layer .evolution-event-bounded-span {
+  pointer-events: none;
 }
 
-.dynamic-evolution-layer .evolution-event.is-selected .evolution-event-bounded-band {
+.dynamic-evolution-layer .evolution-event:hover .evolution-event-bounded-span {
+  stroke: #563905;
+  stroke-width: 1.2;
+}
+
+.dynamic-evolution-layer .evolution-event.is-selected .evolution-event-bounded-span {
   stroke: #866d6d;
-  stroke-width: 1;
-  stroke-opacity: 0.85;
+  stroke-width: 1.3;
 }
 
 .evolution-search-surface {
