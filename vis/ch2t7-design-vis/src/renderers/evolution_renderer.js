@@ -389,7 +389,7 @@ function renderEvolutionLegend(parent, layout) {
   // The legend shares the title band with the view heading; the year axis
   // immediately above keeps the top edge busy, so the legend must sit below it
   // and left of the lane pager to avoid colliding with either.
-  const x = Math.max(plot.x + 300, plot.right - 950);
+  const x = Math.max(plot.x + 260, plot.right - 990);
   const rowY = 185;
   appendText(group, "图例", {
     x,
@@ -417,7 +417,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 135, "建置/罢置", (sample, itemX) => {
+  item(x + 99, "建置/罢置", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX,
       y1: rowY - 6,
@@ -436,7 +436,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 220, "时间范围", (sample, itemX) => {
+  item(x + 167, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -444,7 +444,27 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 313, "演变关系", (sample, itemX) => {
+  item(x + 232, "模糊纪年区间", (sample, itemX) => {
+    sample.appendChild(svgElement("rect", {
+      x: itemX - 7,
+      y: rowY - 4,
+      width: 14,
+      height: 8,
+      fill: "url(#evolution-bounded-hatch)",
+      opacity: 0.55,
+    }));
+    sample.appendChild(svgElement("rect", {
+      x: itemX - 7,
+      y: rowY - 4,
+      width: 14,
+      height: 8,
+      fill: "none",
+      stroke: COLORS.olive,
+      "stroke-width": 0.5,
+      "stroke-opacity": 0.6,
+    }));
+  });
+  item(x + 316, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -455,7 +475,7 @@ function renderEvolutionLegend(parent, layout) {
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  item(x + 407, "存续段", (sample, itemX) => {
+  item(x + 379, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -465,7 +485,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 2,
     }));
   });
-  item(x + 501, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 437, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY + 3,
@@ -553,8 +573,8 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     const endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     group.appendChild(svgElement("rect", {
-      x: startX, y: y - 8, width: Math.max(2, endX - startX), height: 16,
-      fill: "url(#evolution-bounded-hatch)", opacity: 0.5,
+      x: startX, y: y - 6, width: Math.max(2, endX - startX), height: 12,
+      fill: "url(#evolution-bounded-hatch)", opacity: 0.32,
     }));
   }
   if (event.timeType === "range" && event.yearStart != null && event.yearEnd != null) {
