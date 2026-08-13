@@ -584,36 +584,40 @@ function renderEventMark(parent, event, selected, handlers) {
       fill: "none", stroke: COLORS.olive, "stroke-width": 0.8,
     }));
   }
+  // For fuzzy (bounded) events the anchor dot only positions the record on the
+  // axis — filling it on selection would falsely assert a definite year, so
+  // selection highlights the dashed span below the lane instead.
+  const markSelected = selected && event.timeType !== "bounded";
   if (event.effect === "ignore") {
     group.appendChild(svgElement("path", {
       d: `M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`,
-      stroke: selected ? COLORS.selected : COLORS.line,
+      stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
     }));
   } else if (event.effect === "activate" || event.effect === "deactivate") {
     const tickHalfHeight = event.displaced ? 6.5 : 9;
     group.appendChild(svgElement("line", {
       x1: x, y1: y - tickHalfHeight, x2: x, y2: y + tickHalfHeight,
-      stroke: selected ? COLORS.selected : COLORS.line,
+      stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1.2,
     }));
     group.appendChild(svgElement("rect", {
       x: x - 4, y: y - 4, width: 8, height: 8,
-      fill: selected ? COLORS.selected : COLORS.paper,
-      stroke: selected ? COLORS.selected : COLORS.line,
+      fill: markSelected ? COLORS.selected : COLORS.paper,
+      stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
     }));
   } else {
     group.appendChild(svgElement("circle", {
-      cx: x, cy: y, r: selected ? 4.6 : 3.3,
-      fill: selected ? COLORS.selected : COLORS.paper,
-      stroke: selected ? COLORS.selected : COLORS.line,
+      cx: x, cy: y, r: markSelected ? 4.6 : 3.3,
+      fill: markSelected ? COLORS.selected : COLORS.paper,
+      stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
     }));
   }
 
-  // Selection feedback stays on the mark itself (filled ink + emphasis);
-  // event details live in the left panel, so no on-canvas callout is drawn.
+  // Selection feedback stays on the mark itself (or, for bounded events, on
+  // the dashed span); details live in the left panel, no on-canvas callout.
   group.appendChild(svgElement("circle", {
     cx: x, cy: y, r: event.displaced ? 5.5 : 10,
     fill: "transparent", "pointer-events": "all",
