@@ -576,6 +576,12 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
       x: startX, y: y - 6, width: Math.max(2, endX - startX), height: 12,
       fill: "url(#evolution-bounded-hatch)", opacity: 0.32,
     }));
+    // The visible band is only 12px tall; give it a wider invisible hit area
+    // so clicking the fuzzy interval reliably selects the event.
+    group.appendChild(svgElement("rect", {
+      x: startX, y: y - 10, width: Math.max(2, endX - startX), height: 20,
+      fill: "transparent", "pointer-events": "all",
+    }));
   }
   if (event.timeType === "range" && event.yearStart != null && event.yearEnd != null) {
     const startX = event.rangeStartX ?? event.baseX;
