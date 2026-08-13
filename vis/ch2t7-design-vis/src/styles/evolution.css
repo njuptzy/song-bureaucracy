@@ -123,12 +123,12 @@
 
 .dynamic-evolution-layer .evolution-event:hover .evolution-event-bounded-span {
   stroke: #563905;
-  stroke-width: 1.2;
+  stroke-width: 1.5;
 }
 
 .dynamic-evolution-layer .evolution-event.is-selected .evolution-event-bounded-span {
   stroke: #866d6d;
-  stroke-width: 1.6;
+  stroke-width: 2.4;
 }
 
 .evolution-search-surface {
