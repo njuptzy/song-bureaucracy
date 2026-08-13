@@ -573,6 +573,7 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     const endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     group.appendChild(svgElement("rect", {
+      class: "evolution-event-bounded-band",
       x: startX, y: y - 6, width: Math.max(2, endX - startX), height: 12,
       fill: "url(#evolution-bounded-hatch)", opacity: 0.32,
     }));
