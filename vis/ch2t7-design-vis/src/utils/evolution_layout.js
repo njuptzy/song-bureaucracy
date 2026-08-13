@@ -3,7 +3,7 @@ const RELATION_LABEL_HEIGHT = 18;
 const RELATION_LABEL_ASCENT = 14;
 const RELATION_LABEL_LAYER_GAP = 22;
 const EVENT_MARK_GAP = 12;
-const EVENT_VERTICAL_LIMIT = 30;
+const EVENT_VERTICAL_LIMIT = 40;
 const EVENT_HORIZONTAL_LIMIT = 48;
 
 function clamp(value, min, max) {
@@ -51,6 +51,15 @@ function pointKey(member) {
     member.yearStart ?? "",
     member.yearEnd ?? "",
   ].join(":");
+}
+
+/**
+ * On-canvas labels drop the "（未分类）" qualifier: it doubles the label width
+ * and turns dense areas into a wall of identical text. The full label stays in
+ * the model and detail panel; only the compact form is measured and drawn.
+ */
+export function compactRelationLabel(label) {
+  return String(label || "").replace(/[（(]未分类[)）]/g, "");
 }
 
 function relationLabelWidth(label) {
@@ -285,7 +294,7 @@ function layoutEvolutionLabels(labelItems, bounds, plotBounds) {
 
   for (const item of prepared) {
     const { anchor } = item;
-    const width = relationLabelWidth(item.label);
+    const width = relationLabelWidth(compactRelationLabel(item.label));
     if (bounds.height < RELATION_LABEL_HEIGHT || width > placementWidth) {
       placements.set(item.key, {
         labelX: null,

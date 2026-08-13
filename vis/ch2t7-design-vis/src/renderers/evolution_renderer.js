@@ -1,3 +1,5 @@
+import { compactRelationLabel } from "../utils/evolution_layout.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
@@ -384,14 +386,14 @@ function renderEvolutionLegend(parent, layout) {
   const plot = layout?.plotBounds;
   if (!plot || plot.width < 260) return;
   const group = svgElement("g", { class: "evolution-legend" });
-  // The design reserves the clear band above the main heading for metadata.
-  // Keep the legend there so it does not compete with the year axis below.
-  const x = Math.max(plot.x + 420, plot.right - 730);
-  const titleY = 145;
-  const rowY = 162;
+  // The legend shares the title band with the view heading; the year axis
+  // immediately above keeps the top edge busy, so the legend must sit below it
+  // and left of the lane pager to avoid colliding with either.
+  const x = Math.max(plot.x + 300, plot.right - 950);
+  const rowY = 185;
   appendText(group, "图例", {
     x,
-    y: titleY,
+    y: rowY + 3,
     class: "evolution-legend-title",
   });
 
@@ -405,7 +407,7 @@ function renderEvolutionLegend(parent, layout) {
     });
     group.appendChild(sample);
   };
-  item(x + 30, "普通记载", (sample, itemX) => {
+  item(x + 34, "普通记载", (sample, itemX) => {
     sample.appendChild(svgElement("circle", {
       cx: itemX,
       cy: rowY,
@@ -415,7 +417,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 101, "建置/罢置", (sample, itemX) => {
+  item(x + 135, "建置/罢置", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX,
       y1: rowY - 6,
@@ -434,7 +436,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 186, "时间范围", (sample, itemX) => {
+  item(x + 220, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -442,7 +444,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 285, "演变关系", (sample, itemX) => {
+  item(x + 313, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -453,7 +455,7 @@ function renderEvolutionLegend(parent, layout) {
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  item(x + 385, "存续段", (sample, itemX) => {
+  item(x + 407, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -463,7 +465,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 2,
     }));
   });
-  item(x + 485, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 501, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY + 3,
@@ -584,7 +586,7 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     }));
   } else {
     group.appendChild(svgElement("circle", {
-      cx: x, cy: y, r: selected ? 5 : 3.7,
+      cx: x, cy: y, r: selected ? 4.6 : 3.3,
       fill: selected ? COLORS.selected : COLORS.paper,
       stroke: selected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
@@ -639,7 +641,9 @@ function relationPath(source, target) {
     const mid = (source.x + target.x) / 2;
     return `M${source.x} ${source.y}C${mid} ${source.y + lift} ${mid} ${target.y + lift} ${target.x} ${target.y}`;
   }
-  const bend = Math.max(24, Math.min(80, Math.abs(deltaY) * 0.42));
+  // Keep cross-lane jumps tight: a wide bend sweeps across empty canvas and
+  // reads as a stray arc when the jump spans several lanes.
+  const bend = Math.max(18, Math.min(56, Math.abs(deltaY) * 0.26));
   const sourceControlX = source.x + Math.sign(target.x - source.x || 1) * bend;
   const targetControlX = target.x - Math.sign(target.x - source.x || 1) * bend;
   return `M${source.x} ${source.y}C${sourceControlX} ${source.y} ${targetControlX} ${target.y} ${target.x} ${target.y}`;
@@ -656,12 +660,15 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
   });
   for (const source of sources) {
     for (const target of targets) {
+      // Long vertical jumps cross several lanes; render them quieter so the
+      // existence segments and event marks stay dominant.
+      const longJump = Math.abs(target.y - source.y) > 200;
       group.appendChild(svgElement("path", {
         d: relationPath(source, target),
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
-        "stroke-width": selected ? 1.7 : 1.05,
-        "stroke-opacity": selected ? 1 : 0.68,
+        "stroke-width": selected ? 1.7 : (longJump ? 0.9 : 1.05),
+        "stroke-opacity": selected ? 1 : (longJump ? 0.4 : 0.68),
         "marker-end": "url(#evolution-relation-arrow)",
       }));
     }
@@ -685,7 +692,7 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
         "pointer-events": "none",
       }));
     }
-    appendText(group, relation.label, {
+    appendText(group, compactRelationLabel(relation.label), {
       x: labelX,
       y: labelY,
       class: "evolution-relation-label",
@@ -780,7 +787,7 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
     }
     const hasLayout = Number.isFinite(relationGroup.labelX)
       && Number.isFinite(relationGroup.labelY);
-    appendText(group, relationGroup.label, {
+    appendText(group, compactRelationLabel(relationGroup.label), {
       x: hasLayout ? relationGroup.labelX : junctionX + 11,
       y: hasLayout ? relationGroup.labelY : centerY - 8,
       class: "evolution-relation-label",
@@ -818,6 +825,21 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
 function renderOffAxis(parent, layout, selectedItem, handlers) {
   const bounds = layout.offAxisBounds;
   if (!bounds) return;
+  // A faint wash ties the floating undated/unresolved marks into a visible zone.
+  parent.appendChild(svgElement("rect", {
+    x: bounds.x + 6,
+    y: bounds.y - 16,
+    width: bounds.width - 12,
+    height: bounds.height + 24,
+    rx: 5,
+    fill: COLORS.olive,
+    "fill-opacity": 0.055,
+    stroke: COLORS.olive,
+    "stroke-width": 0.55,
+    "stroke-opacity": 0.32,
+    "stroke-dasharray": "2 4",
+    "pointer-events": "none",
+  }));
   parent.appendChild(svgElement("line", {
     x1: bounds.x, y1: bounds.y - 4, x2: bounds.x, y2: bounds.bottom + 4,
     stroke: COLORS.olive, "stroke-width": 0.65, "stroke-dasharray": "3 3",
@@ -939,12 +961,22 @@ function renderMain(layer, layout, options) {
   }
   renderAxis(group, layout, options.selectedRange, options.selectionActive);
   renderEvolutionLegend(group, layout);
+  const hasDrawableRelations = (layout.relations || []).some((relation) => relation.drawable)
+    || (layout.relationGroups || []).some((relationGroup) => relationGroup.drawable);
+  if (!hasDrawableRelations) {
+    appendText(group, "当前对象暂无可定位的前后演变关系", {
+      x: (layout.plotBounds.x + layout.plotBounds.right) / 2,
+      y: layout.plotBounds.y + 76,
+      class: "evolution-empty",
+      "text-anchor": "middle",
+    });
+  }
   const selected = selectedKey(options.selectedItem);
   const eventsToRender = [];
   for (const lane of layout.lanes) {
     group.appendChild(svgElement("line", {
       x1: lane.trackStartX, y1: lane.y, x2: lane.trackEndX, y2: lane.y,
-      stroke: COLORS.olive, "stroke-width": 0.65, "stroke-dasharray": "3 4", opacity: 0.7,
+      stroke: COLORS.olive, "stroke-width": 0.65, "stroke-dasharray": "3 4", opacity: 0.45,
     }));
     for (const segment of lane.segments || []) {
       group.appendChild(svgElement("line", {
