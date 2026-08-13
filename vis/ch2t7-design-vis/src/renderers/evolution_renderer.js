@@ -380,6 +380,119 @@ function renderAxis(parent, layout, selectedRange, selectionActive) {
   }
 }
 
+function renderEvolutionLegend(parent, layout) {
+  const plot = layout?.plotBounds;
+  if (!plot || plot.width < 260) return;
+  const group = svgElement("g", { class: "evolution-legend" });
+  const x = Math.max(plot.x + 420, plot.right - 356);
+  const titleY = plot.y - 43;
+  const rowOneY = plot.y - 29;
+  const rowTwoY = plot.y - 15;
+  appendText(group, "图例", {
+    x,
+    y: titleY,
+    class: "evolution-legend-title",
+  });
+
+  const item = (itemX, label, draw) => {
+    const sample = svgElement("g", { class: "evolution-legend-item" });
+    draw(sample, itemX);
+    appendText(sample, label, {
+      x: itemX + 13,
+      y: rowOneY + 3,
+      class: "evolution-legend-label",
+    });
+    group.appendChild(sample);
+  };
+  item(x + 30, "普通记载", (sample, itemX) => {
+    sample.appendChild(svgElement("circle", {
+      cx: itemX,
+      cy: rowOneY,
+      r: 3.2,
+      fill: COLORS.paper,
+      stroke: COLORS.line,
+      "stroke-width": 0.9,
+    }));
+  });
+  item(x + 101, "建置/罢置", (sample, itemX) => {
+    sample.appendChild(svgElement("line", {
+      x1: itemX,
+      y1: rowOneY - 6,
+      x2: itemX,
+      y2: rowOneY + 6,
+      stroke: COLORS.line,
+      "stroke-width": 1,
+    }));
+    sample.appendChild(svgElement("rect", {
+      x: itemX - 3.5,
+      y: rowOneY - 3.5,
+      width: 7,
+      height: 7,
+      fill: COLORS.paper,
+      stroke: COLORS.line,
+      "stroke-width": 0.9,
+    }));
+  });
+  item(x + 186, "时间范围", (sample, itemX) => {
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX - 6} ${rowOneY + 3}V${rowOneY - 4}H${itemX + 6}V${rowOneY + 3}`,
+      fill: "none",
+      stroke: COLORS.olive,
+      "stroke-width": 0.9,
+    }));
+  });
+
+  const secondRowItem = (itemX, label, draw) => {
+    const sample = svgElement("g", { class: "evolution-legend-item" });
+    draw(sample, itemX);
+    appendText(sample, label, {
+      x: itemX + 13,
+      y: rowTwoY + 3,
+      class: "evolution-legend-label",
+    });
+    group.appendChild(sample);
+  };
+  secondRowItem(x + 30, "演变关系", (sample, itemX) => {
+    sample.appendChild(svgElement("line", {
+      x1: itemX - 7,
+      y1: rowTwoY,
+      x2: itemX + 6,
+      y2: rowTwoY,
+      stroke: COLORS.line,
+      "stroke-width": 0.95,
+      "marker-end": "url(#evolution-relation-arrow)",
+    }));
+  });
+  secondRowItem(x + 101, "存续段", (sample, itemX) => {
+    sample.appendChild(svgElement("line", {
+      x1: itemX - 7,
+      y1: rowTwoY,
+      x2: itemX + 7,
+      y2: rowTwoY,
+      stroke: COLORS.line,
+      "stroke-width": 2,
+    }));
+  });
+  secondRowItem(x + 186, "密集点错层回指年份", (sample, itemX) => {
+    sample.appendChild(svgElement("line", {
+      x1: itemX - 7,
+      y1: rowTwoY + 3,
+      x2: itemX + 5,
+      y2: rowTwoY - 3,
+      stroke: COLORS.olive,
+      "stroke-width": 0.7,
+    }));
+    sample.appendChild(svgElement("circle", {
+      cx: itemX - 7,
+      cy: rowTwoY + 3,
+      r: 1.4,
+      fill: COLORS.line,
+    }));
+  });
+  addTitle(group, "时间轴符号说明");
+  parent.appendChild(group);
+}
+
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
   const width = 34;
@@ -835,6 +948,7 @@ function renderMain(layer, layout, options) {
     return;
   }
   renderAxis(group, layout, options.selectedRange, options.selectionActive);
+  renderEvolutionLegend(group, layout);
   const selected = selectedKey(options.selectedItem);
   const eventsToRender = [];
   for (const lane of layout.lanes) {

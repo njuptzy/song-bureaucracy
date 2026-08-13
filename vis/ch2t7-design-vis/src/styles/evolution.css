@@ -21,6 +21,20 @@
   font-size: 10px;
 }
 
+.dynamic-evolution-layer .evolution-legend-title {
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-legend-label {
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 8.5px;
+}
+
+.dynamic-evolution-layer .evolution-legend-item {
+  pointer-events: none;
+}
+
 .dynamic-evolution-layer .evolution-selector-node-label {
   font-size: 12px;
   dominant-baseline: central;
