@@ -634,8 +634,8 @@ function renderEventMark(parent, event, selected, handlers, plotBounds) {
     }));
     group.appendChild(svgElement("path", {
       d: `M${x - bookWidth / 2} ${bookY + 5}H${x - bookWidth / 2 + 3}V${bookY}H${x + bookWidth / 2 - 3}V${bookY + 5}H${x + bookWidth / 2}V${bookY + bookHeight}H${x - bookWidth / 2}Z`,
-      fill: selected ? COLORS.selected : COLORS.paper,
-      "fill-opacity": selected ? 0.2 : 0.9,
+      fill: COLORS.paper,
+      "fill-opacity": 0.96,
       stroke: selected ? COLORS.selected : COLORS.line,
       "stroke-width": 0.8,
     }));
@@ -1062,7 +1062,13 @@ function renderMain(layer, layout, options) {
   for (const relationGroup of layout.relationGroups) {
     renderRelationGroup(group, relationGroup, selected, options.handlers);
   }
-  for (const event of eventsToRender) {
+  // Render the selected event last so its callout tag stays on top of
+  // neighbouring marks instead of being painted over by them.
+  const orderedEvents = [
+    ...eventsToRender.filter((event) => selected !== `timepoint:${event.id}`),
+    ...eventsToRender.filter((event) => selected === `timepoint:${event.id}`),
+  ];
+  for (const event of orderedEvents) {
     renderEventMark(
       group,
       event,
