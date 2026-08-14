@@ -12,6 +12,20 @@ const COLORS = {
   paper: "#f5f3ec",
 };
 
+/**
+ * Single visual weight for every evolution relation stroke — single relations
+ * and fan branches alike. Unselected lines stay very light (0.35) so they
+ * never compete with lanes and event marks; only selection makes a line
+ * bolder and fully opaque. Never introduce per-geometry fade/width
+ * differences: they read as an unintended data encoding.
+ */
+const RELATION_STROKE = {
+  width: 1.1,
+  opacity: 0.35,
+  selectedWidth: 1.7,
+  selectedOpacity: 1,
+};
+
 function svgElement(tag, attrs = {}) {
   const element = document.createElementNS(SVG_NS, tag);
   for (const [name, value] of Object.entries(attrs)) {
@@ -653,14 +667,12 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
   });
   for (const source of sources) {
     for (const target of targets) {
-      // All evolution relations share one visual weight: fade differences
-      // read as an unintended encoding. Only selection changes the style.
       group.appendChild(svgElement("path", {
         d: relationPath(source, target),
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
-        "stroke-width": selected ? 1.7 : 1.1,
-        "stroke-opacity": selected ? 1 : 0.7,
+        "stroke-width": selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width,
+        "stroke-opacity": selected ? RELATION_STROKE.selectedOpacity : RELATION_STROKE.opacity,
         "marker-end": "url(#evolution-relation-arrow)",
       }));
     }
@@ -881,9 +893,8 @@ function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
     "data-fan-key": fan.key,
   });
   const color = selected ? COLORS.selected : COLORS.line;
-  // Same weight as single relations (renderRelation): uniform 1.1 / 0.7.
-  const width = selected ? 1.7 : 1.1;
-  const opacity = selected ? 1 : 0.7;
+  const width = selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width;
+  const opacity = selected ? RELATION_STROKE.selectedOpacity : RELATION_STROKE.opacity;
   const hub = fan.hub;
   const trunkX = hub.x;
   const farY = fan.spokes.reduce((best, point) => (
