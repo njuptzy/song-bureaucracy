@@ -865,10 +865,13 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
 
 /**
  * Fan rendering: relations that share one exact endpoint (laid out in
- * `layout.fanGroups`) collapse into a single trunk along the shared column,
- * with short spoke stubs into each event mark and one label for the whole
- * fan. The trunk never moves an endpoint off its true year — it only removes
- * the duplicated parallel curves between the same two lanes.
+ * `layout.fanGroups`) render as a genuine fork — one emphasized hub mark with
+ * one graduated bezier branch per relation, so a 1→N split / N→1 merge reads
+ * as branching instead of a single ambiguous vertical line. Every branch
+ * still lands exactly on its endpoint's true year; only the curve's mid-body
+ * bows sideways to keep the branches separated. Splits bow rightward (opening
+ * toward the future), merges bow leftward (closing in from the past), so an
+ * adjacent split/merge pair weaves far less.
  */
 function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
   const selected = fan.relations.some((relation) => (
@@ -888,41 +891,69 @@ function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
   ), hub.y);
   const travel = Math.sign(farY - hub.y) || 1;
 
-  // Main trunk: hub -> farthest spoke column position.
-  group.appendChild(svgElement("line", {
-    class: "evolution-fan-trunk",
-    x1: trunkX, y1: hub.y, x2: trunkX, y2: farY,
-    stroke: color, "stroke-width": width, "stroke-opacity": opacity,
-    "stroke-linecap": "round", "pointer-events": "none",
-  }));
+  // Branch path between two points: cubic bezier whose control points are
+  // pushed `bow` pixels sideways so parallel branches stay visually separate.
+  const branchPath = (from, to, bow) => {
+    const dy = to.y - from.y;
+    return `M${from.x} ${from.y}`
+      + ` C ${from.x + bow} ${from.y + dy * 0.42},`
+      + ` ${to.x + bow} ${to.y - dy * 0.42},`
+      + ` ${to.x} ${to.y}`;
+  };
 
-  for (const spoke of fan.spokes) {
+  // Nearest lane gets the smallest bow so branches form a nested fan.
+  // Splits bow right (toward the future), merges bow left (from the past).
+  const bowSign = fan.direction === "out" ? 1 : -1;
+  const spokes = [...fan.spokes].sort((a, b) => (
+    Math.abs(a.y - hub.y) - Math.abs(b.y - hub.y)
+  ));
+  spokes.forEach((spoke, index) => {
+    const bow = bowSign * (7 + index * 5);
     const sameColumn = Math.abs(spoke.x - trunkX) < 1;
     if (fan.direction === "out") {
-      // Relation ends at the spoke: arrow stub into the event mark. When the
-      // spoke sits on another column, bridge horizontally from the trunk.
+      // Split: branch leaves the hub and ends with an arrowhead on each
+      // target event mark — N arrowheads make the 1→N reading explicit.
       const d = sameColumn
-        ? `M${trunkX} ${spoke.y - travel * 8}L${trunkX} ${spoke.y}`
+        ? branchPath(hub, spoke, bow)
         : `M${trunkX} ${spoke.y}L${spoke.x} ${spoke.y}`;
       group.appendChild(svgElement("path", {
         d, fill: "none", stroke: color, "stroke-width": width,
         "stroke-opacity": opacity, "marker-end": "url(#evolution-relation-arrow)",
         "pointer-events": "none",
       }));
-    } else if (sameColumn) {
-      // Fan-in source already lies on the trunk: mark the join with a dot.
-      group.appendChild(svgElement("circle", {
-        cx: trunkX, cy: spoke.y, r: 1.9, fill: color, "fill-opacity": opacity,
-        "pointer-events": "none",
-      }));
+      if (sameColumn) {
+        group.appendChild(svgElement("path", {
+          d, fill: "none", stroke: "transparent", "stroke-width": 10,
+          "pointer-events": "stroke",
+        }));
+      }
     } else {
+      // Merge: one branch per source lane converging into the hub.
+      const d = sameColumn
+        ? branchPath(spoke, hub, bow)
+        : `M${spoke.x} ${spoke.y}L${trunkX} ${spoke.y}`;
       group.appendChild(svgElement("path", {
-        d: `M${spoke.x} ${spoke.y}L${trunkX} ${spoke.y}`,
-        fill: "none", stroke: color, "stroke-width": width,
+        d, fill: "none", stroke: color, "stroke-width": width,
         "stroke-opacity": opacity, "pointer-events": "none",
       }));
+      if (sameColumn) {
+        group.appendChild(svgElement("path", {
+          d, fill: "none", stroke: "transparent", "stroke-width": 10,
+          "pointer-events": "stroke",
+        }));
+      }
     }
-  }
+  });
+
+  // Hub anchor: filled knot marking the single shared endpoint everything
+  // splits from / merges into.
+  group.appendChild(svgElement("circle", {
+    class: "evolution-fan-hub",
+    cx: trunkX, cy: hub.y, r: selected ? 3.1 : 2.5,
+    fill: color, "fill-opacity": Math.min(1, opacity + 0.2),
+    "pointer-events": "none",
+  }));
+
   if (fan.direction === "in") {
     // Fan-in converges into the hub: single arrowhead at the shared target.
     group.appendChild(svgElement("path", {
