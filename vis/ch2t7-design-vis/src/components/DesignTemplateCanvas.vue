@@ -3809,6 +3809,20 @@ async function renderTemplate() {
     svg.removeAttribute("height");
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.classList.add("live-design-svg");
+    // 双击空白画布 = 取消当前选择（演变选中项 + 底部时间线框选），
+    // 效果与时间线"取消选择"控件一致；双击落在交互元素（role=button）
+    // 上时不触发，避免与单击选择冲突。
+    svg.addEventListener("dblclick", (event) => {
+      if (event.target.closest?.('[role="button"]')) return;
+      if (selectedEvolutionItem.value == null && !timelineSelectionActive.value) return;
+      event.preventDefault();
+      selectedEvolutionItem.value = null;
+      timelineSelectionActive.value = false;
+      selectedRange.value = [YEAR_MIN, YEAR_MAX];
+      svg.__moveTimelineSelection?.();
+      svg.__syncTimelineSelectionStyle?.();
+      refreshTemplate();
+    });
     selectedEntity();
     populateCenter(svg);
     bindEntityTexts(svg);
