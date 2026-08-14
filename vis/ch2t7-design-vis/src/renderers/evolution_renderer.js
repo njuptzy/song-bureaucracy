@@ -10,6 +10,7 @@ const COLORS = {
   oliveFill: "#a5a68d",
   selected: "#866d6d",
   paper: "#f5f3ec",
+  abolish: "#a0432e",
 };
 
 /**
@@ -432,7 +433,7 @@ function renderEvolutionLegend(parent, layout) {
     sample.appendChild(svgElement("path", {
       d: `M${itemX} ${rowY + 4.8}L${itemX + 4.8} ${rowY - 3.8}H${itemX - 4.8}Z`,
       fill: COLORS.paper,
-      stroke: COLORS.line,
+      stroke: COLORS.abolish,
       "stroke-width": 1,
       "stroke-linejoin": "round",
     }));
@@ -617,7 +618,7 @@ function renderEventMark(parent, event, selected, handlers) {
     group.appendChild(svgElement("path", {
       d: `M${x} ${apexY}L${x + 4.8} ${baseY}H${x - 4.8}Z`,
       fill: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.paper),
-      stroke: markSelected ? COLORS.selected : COLORS.line,
+      stroke: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish),
       "stroke-width": 1,
       "stroke-linejoin": "round",
     }));
