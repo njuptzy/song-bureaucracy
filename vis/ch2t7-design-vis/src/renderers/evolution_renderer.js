@@ -604,6 +604,14 @@ function renderEventMark(parent, event, selected, handlers) {
       d: `M${startX} ${y - 13}V${y - 20}H${endX}V${y - 13}`,
       fill: "none", stroke: COLORS.olive, "stroke-width": 0.8,
     }));
+    // 归属连接茎：从记载点顶端升到括号下沿，不点开也能看出范围属于哪个点；
+    // 点被错层移出跨度时斜向接入括号最近的一端。
+    const stemTopX = Math.max(Math.min(startX, endX), Math.min(Math.max(startX, endX), x));
+    group.appendChild(svgElement("line", {
+      x1: x, y1: y - 4.2, x2: stemTopX, y2: y - 13,
+      stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.85,
+      "pointer-events": "none",
+    }));
   }
   // For fuzzy (bounded) events the anchor dot only positions the record on the
   // axis — filling it on selection would falsely assert a definite year, so
