@@ -2641,6 +2641,17 @@ function renderDynamicEvolution(svg) {
       refreshTemplate();
     },
     onSelectEvent(event) {
+      const current = selectedEvolutionItem.value;
+      if (current?.kind === "timepoint" && current.id === event.id) {
+        // 再次点击已选中的事件 = 取消选择，并复位联动的时间线框选。
+        selectedEvolutionItem.value = null;
+        timelineSelectionActive.value = false;
+        selectedRange.value = [YEAR_MIN, YEAR_MAX];
+        svg.__moveTimelineSelection?.();
+        svg.__syncTimelineSelectionStyle?.();
+        refreshTemplate();
+        return;
+      }
       selectedId.value = event.entityId;
       selectedEvolutionItem.value = { kind: "timepoint", id: event.id, item: event };
       detailPanelScrollOffset = 0;
@@ -2651,6 +2662,17 @@ function renderDynamicEvolution(svg) {
       refreshTemplate();
     },
     onSelectRelation(relation) {
+      const current = selectedEvolutionItem.value;
+      if (current?.kind === "relation" && current.id === relation.id) {
+        // 再次点击已选中的关系 = 取消选择，并复位联动的时间线框选。
+        selectedEvolutionItem.value = null;
+        timelineSelectionActive.value = false;
+        selectedRange.value = [YEAR_MIN, YEAR_MAX];
+        svg.__moveTimelineSelection?.();
+        svg.__syncTimelineSelectionStyle?.();
+        refreshTemplate();
+        return;
+      }
       selectedEvolutionItem.value = { kind: "relation", id: relation.id, item: relation };
       detailPanelScrollOffset = 0;
       const years = [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
@@ -3809,20 +3831,6 @@ async function renderTemplate() {
     svg.removeAttribute("height");
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.classList.add("live-design-svg");
-    // 双击空白画布 = 取消当前选择（演变选中项 + 底部时间线框选），
-    // 效果与时间线"取消选择"控件一致；双击落在交互元素（role=button）
-    // 上时不触发，避免与单击选择冲突。
-    svg.addEventListener("dblclick", (event) => {
-      if (event.target.closest?.('[role="button"]')) return;
-      if (selectedEvolutionItem.value == null && !timelineSelectionActive.value) return;
-      event.preventDefault();
-      selectedEvolutionItem.value = null;
-      timelineSelectionActive.value = false;
-      selectedRange.value = [YEAR_MIN, YEAR_MAX];
-      svg.__moveTimelineSelection?.();
-      svg.__syncTimelineSelectionStyle?.();
-      refreshTemplate();
-    });
     selectedEntity();
     populateCenter(svg);
     bindEntityTexts(svg);
