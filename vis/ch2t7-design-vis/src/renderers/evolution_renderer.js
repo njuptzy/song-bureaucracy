@@ -870,12 +870,14 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
       x: column.x, y: bounds.y - 10, class: "evolution-offaxis-heading", "text-anchor": "middle",
     });
     for (const event of layout.offAxis[bucket] || []) {
+      const isSelected = selectedKey(selectedItem) === `timepoint:${event.id}`;
       const group = svgElement("g", {
-        class: `evolution-offaxis-event${selectedKey(selectedItem) === `timepoint:${event.id}` ? " is-selected" : ""}`,
+        class: `evolution-offaxis-event${isSelected ? " is-selected" : ""}`,
       });
+      // 与主车道普通记载圆点同尺寸（未选中 2.6 / 选中 4.2）。
       group.appendChild(svgElement("circle", {
-        cx: event.x, cy: event.y, r: 4.5,
-        fill: selectedKey(selectedItem) === `timepoint:${event.id}` ? COLORS.selected : COLORS.paper,
+        cx: event.x, cy: event.y, r: isSelected ? 4.2 : 2.6,
+        fill: isSelected ? COLORS.selected : COLORS.paper,
         stroke: bucket === "unresolved" ? COLORS.selected : COLORS.line,
         "stroke-width": 1,
       }));
