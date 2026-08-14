@@ -62,6 +62,7 @@ import { buildEvolutionModel } from "../utils/evolution_model";
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
+import { formatStandardTime } from "../utils/time_format";
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -152,6 +153,7 @@ const COMPOSITION_CONTENT_BOUNDS = {
 let entityMap = new Map();
 let collectiveEntityIds = new Set();
 let titleMap = new Map();
+let timepointRowById = new Map();
 let institutionGroupNames = { 中央机构: CENTRAL_GROUP_NAMES };
 
 function rebuildDataIndexes(data) {
@@ -160,6 +162,12 @@ function rebuildDataIndexes(data) {
   titleMap = new Map();
   for (const entity of data?.entities || []) {
     if (!titleMap.has(entity.title)) titleMap.set(entity.title, entity);
+  }
+  timepointRowById = new Map();
+  for (const rows of Object.values(data?.timepoints || {})) {
+    for (const row of rows || []) {
+      if (row?.id != null) timepointRowById.set(row.id, row);
+    }
   }
   institutionGroupNames = data?.meta?.institutionGroupNames || {
     中央机构: CENTRAL_GROUP_NAMES,
@@ -2913,10 +2921,33 @@ function evidenceLines(key, fallbackQuotation = "") {
   };
 }
 
+function memberTimeLabel(member) {
+  const row = timepointRowById.get(member?.timepointId) || {};
+  return formatStandardTime({
+    yearStart: member?.yearStart ?? row.year_start,
+    yearEnd: member?.yearEnd ?? row.year_end,
+    month: row.month,
+    day: row.day,
+    isLeapMonth: row.is_leap_month,
+    rawTime: member?.rawTime || row.raw_time,
+  });
+}
+
+function eventTimeLabel(event) {
+  const row = timepointRowById.get(event?.id) || {};
+  return formatStandardTime({
+    yearStart: event?.yearStart ?? row.year_start,
+    yearEnd: event?.yearEnd ?? row.year_end,
+    month: row.month,
+    day: row.day,
+    isLeapMonth: row.is_leap_month,
+    rawTime: event?.rawTime || row.raw_time,
+  });
+}
+
 function relationEndpointLabel(member) {
   const entity = entityMap.get(member?.entityId);
-  const time = member?.rawTime || (member?.effectiveYear != null ? `${member.effectiveYear}年` : "年代未明");
-  return `${entity?.title || `#${member?.entityId}`}（${time}）`;
+  return `${entity?.title || `#${member?.entityId}`}（${memberTimeLabel(member)}）`;
 }
 
 function evolutionDetailPayload(svg) {
@@ -2931,7 +2962,7 @@ function evolutionDetailPayload(svg) {
     ));
     return {
       title: entity?.title || "时间节点",
-      year: event.rawTime || (event.effectiveYear != null ? `公元${event.effectiveYear}年` : "年代未明"),
+      year: eventTimeLabel(event),
       sections: [
         { label: "事件：", value: event.event || "原文未单列事件名。" },
         {
@@ -2960,9 +2991,10 @@ function evolutionDetailPayload(svg) {
     const evidence = evidenceLines(relation.evidenceKey || `R${relation.id}`, relation.quotation);
     const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
     const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
-    const endpointYears = [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
-      .map((member) => member.rawTime || member.effectiveYear)
-      .filter((value) => value != null);
+    const endpointYears = [...new Set(
+      [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
+        .map((member) => memberTimeLabel(member)),
+    )];
     return {
       title: relation.label,
       year: endpointYears.length ? endpointYears.join(" → ") : "年代未明",
@@ -3003,7 +3035,7 @@ function evolutionDetailPayload(svg) {
       {
         label: "时间节点：",
         value: timepoints.length
-          ? timepoints.map((item) => `${item.time || "时间未明"}：${item.event || item.quotation || "未载事件"}`).join("；")
+          ? timepoints.map((item) => `${formatStandardTime(item)}：${item.event || item.quotation || "未载事件"}`).join("；")
           : "没有时间节点。",
       },
       {
