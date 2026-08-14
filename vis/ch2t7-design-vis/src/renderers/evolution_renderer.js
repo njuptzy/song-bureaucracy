@@ -561,16 +561,21 @@ function renderEventMark(parent, event, selected, handlers) {
   const y = event.y;
   const baseY = event.baseY ?? y;
   if (event.displaced) {
-    group.appendChild(svgElement("line", {
-      class: "evolution-event-stem",
-      x1: event.baseX, y1: baseY, x2: x, y2: y,
-      stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.74,
-    }));
-    group.appendChild(svgElement("circle", {
-      class: "evolution-event-anchor",
-      cx: event.baseX, cy: baseY, r: 1.65,
-      fill: COLORS.line,
-    }));
+    // 位移量太小（anchor 几乎落在圆点里）时不画回指茎和定位点：
+    // 圆点自身已经在真实年份上，再叠一粒小芯只会读出"◎"的假复合标记。
+    const displacement = Math.hypot(x - event.baseX, y - baseY);
+    if (displacement > 4) {
+      group.appendChild(svgElement("line", {
+        class: "evolution-event-stem",
+        x1: event.baseX, y1: baseY, x2: x, y2: y,
+        stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.74,
+      }));
+      group.appendChild(svgElement("circle", {
+        class: "evolution-event-anchor",
+        cx: event.baseX, cy: baseY, r: 1.65,
+        fill: COLORS.line,
+      }));
+    }
   }
   if (event.timeType === "bounded" && event.yearStart != null && event.yearEnd != null) {
     const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
