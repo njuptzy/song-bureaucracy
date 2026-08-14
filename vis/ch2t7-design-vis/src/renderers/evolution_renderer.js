@@ -503,38 +503,45 @@ function renderEvolutionLegend(parent, layout) {
 
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
-  const width = 34;
+  // 书脊签条：一条墨色竖杠 + 竖排机构名，无框，给车道让出视觉重量。
+  const width = 20;
   const x = lane.labelX + Math.max(0, lane.labelMaxWidth - width - 8);
   const y = lane.y - height / 2;
   const group = svgElement("g", {
     class: `evolution-lane-label${selected ? " is-selected" : ""}`,
     "data-entity-id": lane.entityId,
   });
-  group.appendChild(svgElement("path", {
-    d: `M${x} ${y + 5}H${x + 4}V${y}H${x + width - 4}V${y + 5}H${x + width}V${y + height}H${x}Z`,
-    fill: selected ? COLORS.ink : COLORS.paper,
-    "fill-opacity": selected ? 0.12 : 0.76,
-    stroke: COLORS.line,
-    "stroke-width": selected ? 1.35 : 0.9,
+  group.appendChild(svgElement("line", {
+    x1: x + 3, y1: y, x2: x + 3, y2: y + height,
+    stroke: selected ? COLORS.selected : COLORS.line,
+    "stroke-width": selected ? 3.4 : 2.4,
+    "stroke-linecap": "round",
+    "stroke-opacity": selected ? 1 : 0.85,
+    "pointer-events": "none",
   }));
-  const maxChars = Math.max(2, Math.floor((height - 15) / 10.5) + 1);
+  const maxChars = Math.max(2, Math.floor((height - 8) / 10.5) + 1);
   appendVerticalText(group, lane.title, {
-    x: x + width / 2,
-    y: y + 10,
+    x: x + 12,
+    y: y + 5,
     class: "evolution-lane-title",
     "text-anchor": "middle",
   }, {
     maxChars,
     pitch: 10.5,
   });
+  // 无框后补一块透明命中区，保证整条签条可点。
+  group.appendChild(svgElement("rect", {
+    x: x - 2, y, width: width + 6, height,
+    fill: "transparent", "pointer-events": "all",
+  }));
   if (lane.anomalies?.length) {
     const alert = svgElement("g", { class: "evolution-lane-anomaly" });
     alert.appendChild(svgElement("path", {
-      d: `M${x + width - 7} ${y - 3}L${x + width + 1} ${y + 11}H${x + width - 15}Z`,
+      d: `M${x + 13} ${y - 4}L${x + 21} ${y + 10}H${x + 5}Z`,
       fill: COLORS.paper, stroke: COLORS.selected, "stroke-width": 0.8,
     }));
     alert.appendChild(svgElement("path", {
-      d: `M${x + width - 7} ${y + 1}V${y + 6}M${x + width - 7} ${y + 8.5}V${y + 9}`,
+      d: `M${x + 13} ${y}V${y + 5}M${x + 13} ${y + 7.5}V${y + 8}`,
       stroke: COLORS.selected, "stroke-width": 1,
     }));
     addTitle(alert, `${lane.anomalies.length} 项时间链异常`);
