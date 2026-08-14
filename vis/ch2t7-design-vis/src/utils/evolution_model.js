@@ -542,13 +542,15 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     if (year > yearMax) break;
     if (event.effect === "ignore") continue;
     if (event.effect === "activate") {
-      inferredStart = false;
-      if (active !== true) {
+      // 明确建置必须重置起点：当前存续若只是由普通记载推定的
+      // （inferredStart），线段要从建置事件起画，而不是从第一条记载起画。
+      if (active !== true || inferredStart) {
         active = true;
         startYear = year;
         startEventId = event.id;
         openStart = false;
       }
+      inferredStart = false;
       continue;
     }
     if (event.effect === "deactivate") {

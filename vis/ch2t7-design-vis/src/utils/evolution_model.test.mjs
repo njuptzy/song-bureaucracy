@@ -70,6 +70,27 @@ describe("buildEvolutionModel lifecycle", () => {
     assert.equal(segment.inferredStart, false);
   });
 
+  it("推定存续后遇到明确建置，线段起点重置到建置年", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "后明置司")],
+      timepoints: {
+        1: link([
+          timepoint(11, 990, "普通记载"),
+          timepoint(12, 1000, "始置"),
+          timepoint(13, 1010, "罢后明置司"),
+        ]),
+      },
+      changeRelations: [],
+    }, [1], { yearMin: 960, yearMax: 1279 });
+
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear, inferredStart }) => ({
+        startYear, endYear, inferredStart,
+      })),
+      [{ startYear: 1000, endYear: 1010, inferredStart: false }],
+    );
+  });
+
   it("罢废后的普通记载不复活，明确复置才重开，bounded 在上界生效", () => {
     const points = link([
       timepoint(11, 970, "始置"),
