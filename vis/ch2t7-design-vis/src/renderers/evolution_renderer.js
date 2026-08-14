@@ -578,8 +578,18 @@ function renderEventMark(parent, event, selected, handlers) {
     }
   }
   if (event.timeType === "bounded" && event.yearStart != null && event.yearEnd != null) {
-    const startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
-    const endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
+    let startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
+    let endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
+    const degenerate = Math.abs(endX - startX) < 1;
+    if (!degenerate && endX - startX < 8) {
+      // 极窄区间的最小可读宽度：虚线短于 8px 时以记载点为中心撑开，
+      // 否则两端刻度重叠、虚线不可见，退化成圆点下方一根孤线。
+      startX = event.baseX - 4;
+      endX = event.baseX + 4;
+    }
+    // 起止同年（"宋初"类锚定到单年）：模糊性由原文纪年表达，塌陷的区间
+    // 装饰只会留下孤立刻度，不画。
+    if (!degenerate) {
     // Fuzzy intervals hang below the lane as a dashed span with solid end
     // ticks — the mirror of the solid "range" bracket above it. The lane
     // itself stays clear, so marks on it remain visible and clickable.
@@ -601,6 +611,7 @@ function renderEventMark(parent, event, selected, handlers) {
       x: Math.min(startX, endX), y: y + 4, width: Math.max(3, Math.abs(endX - startX)), height: 5.5,
       fill: "transparent", "pointer-events": "all",
     }));
+    }
   }
   if (event.timeType === "range" && event.yearStart != null && event.yearEnd != null) {
     const startX = event.rangeStartX ?? event.baseX;
