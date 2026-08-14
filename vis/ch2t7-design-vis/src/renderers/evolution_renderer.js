@@ -446,7 +446,7 @@ function renderEvolutionLegend(parent, layout) {
       fill: COLORS.paper,
       stroke: COLORS.line,
       "stroke-width": 0.9,
-      "stroke-dasharray": "2 1.6",
+      "stroke-dasharray": "1.1 1.2",
     }));
   });
   item(x + 266, "时间范围", (sample, itemX) => {
@@ -677,7 +677,7 @@ function renderEventMark(parent, event, selected, handlers) {
       fill: markSelected ? COLORS.selected : COLORS.paper,
       stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
-      "stroke-dasharray": fuzzyPoint && !markSelected ? "2 1.6" : null,
+      "stroke-dasharray": fuzzyPoint && !markSelected ? "1.1 1.2" : null,
     }));
   }
 
