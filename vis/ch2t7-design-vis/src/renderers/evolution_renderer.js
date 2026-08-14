@@ -438,19 +438,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-linejoin": "round",
     }));
   });
-  item(x + 200, "模糊纪年点", (sample, itemX) => {
-    sample.appendChild(svgElement("circle", {
-      cx: itemX,
-      cy: rowY,
-      r: 2.6,
-      fill: COLORS.paper,
-      stroke: COLORS.line,
-      "stroke-width": 1,
-      "stroke-linecap": "round",
-      "stroke-dasharray": `0.01 ${(2 * Math.PI * 2.6) / 6 - 0.01}`,
-    }));
-  });
-  item(x + 266, "时间范围", (sample, itemX) => {
+  item(x + 214, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -458,7 +446,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 334, "模糊纪年区间", (sample, itemX) => {
+  item(x + 282, "模糊纪年区间", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7, y1: rowY + 2, x2: itemX + 7, y2: rowY + 2,
       stroke: COLORS.olive,
@@ -472,7 +460,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 1.1,
     }));
   });
-  item(x + 424, "演变关系", (sample, itemX) => {
+  item(x + 372, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -483,7 +471,7 @@ function renderEvolutionLegend(parent, layout) {
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  item(x + 492, "存续段", (sample, itemX) => {
+  item(x + 440, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -493,7 +481,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 2,
     }));
   });
-  item(x + 550, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 498, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY + 3,
@@ -643,14 +631,8 @@ function renderEventMark(parent, event, selected, handlers) {
   }
   // For fuzzy (bounded) events the anchor dot only positions the record on the
   // axis — filling it on selection would falsely assert a definite year, so
-  // selection highlights the dashed span below the lane instead. Degenerate
-  // spans (yearStart === yearEnd, e.g. "宋初" anchored to one year) have no
-  // span to highlight: they render as a dashed-outline fuzzy dot and select
-  // like a normal mark.
-  const fuzzyPoint = event.timeType === "bounded"
-    && event.yearStart != null && event.yearEnd != null
-    && event.yearStart === event.yearEnd;
-  const markSelected = selected && (event.timeType !== "bounded" || fuzzyPoint);
+  // selection highlights the dashed span below the lane instead.
+  const markSelected = selected && event.timeType !== "bounded";
   if (event.effect === "ignore") {
     group.appendChild(svgElement("path", {
       d: `M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`,
@@ -671,18 +653,11 @@ function renderEventMark(parent, event, selected, handlers) {
       "stroke-linejoin": "round",
     }));
   } else {
-    // 模糊纪年点（"宋初"类锚定单年）：圆点环 = 轮廓不实、时间不确切。
-    // 标准 dotted circle 画法：圆头端点 + 点长归零 + 间距严格整除圆周
-    // （6 颗，接缝无缝），小圆上不会塌成齿轮。
-    const fuzzyDots = 6;
-    const fuzzyGap = (2 * Math.PI * 2.6) / fuzzyDots - 0.01;
     group.appendChild(svgElement("circle", {
       cx: x, cy: y, r: markSelected ? 4.2 : 2.6,
       fill: markSelected ? COLORS.selected : COLORS.paper,
       stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
-      "stroke-linecap": fuzzyPoint && !markSelected ? "round" : null,
-      "stroke-dasharray": fuzzyPoint && !markSelected ? `0.01 ${fuzzyGap}` : null,
     }));
   }
 
