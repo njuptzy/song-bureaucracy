@@ -28,7 +28,7 @@ test("保存并恢复当前视图、机构和时间状态", () => {
     viewMode: "evolution",
     evolutionMode: "compare",
     evolutionEntityIds: [174, 201],
-    selectedEvolutionItem: { kind: "relation", id: 91, item: { ignored: true } },
+    selectedEvolutionItem: { kind: "timepoint", id: 91, item: { ignored: true } },
     evolutionLanePage: 2,
     selectedRange: [1080, 1090],
     timelineSelectionActive: true,
@@ -43,7 +43,7 @@ test("保存并恢复当前视图、机构和时间状态", () => {
     viewMode: "evolution",
     evolutionMode: "compare",
     evolutionEntityIds: [174, 201],
-    selectedEvolutionItem: { kind: "relation", id: 91 },
+    selectedEvolutionItem: { kind: "timepoint", id: 91 },
     evolutionLanePage: 2,
     selectedRange: [1080, 1090],
     timelineSelectionActive: true,
@@ -61,6 +61,18 @@ test("损坏、过期或不可访问的本地状态不会阻断页面加载", ()
   assert.equal(writeCanvasState({ viewMode: "hierarchy" }, {
     setItem() { throw new Error("full"); },
   }), false);
+});
+
+test("恢复关系选择时不恢复旧版误生成的时间范围框选", () => {
+  assert.deepEqual(sanitizeCanvasState({
+    selectedEvolutionItem: { kind: "relation", id: 91 },
+    selectedRange: [1115, 1121],
+    timelineSelectionActive: true,
+  }), {
+    selectedEvolutionItem: { kind: "relation", id: 91 },
+    selectedRange: [1115, 1121],
+    timelineSelectionActive: false,
+  });
 });
 
 test("恢复前会过滤未知字段并规范非法取值", () => {

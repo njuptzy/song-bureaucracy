@@ -61,6 +61,7 @@ import {
 import { buildEvolutionModel } from "../utils/evolution_model";
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
+import { timelineSelectionForEvolutionItem } from "../utils/evolution_selection";
 import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
 import { formatStandardTime } from "../utils/time_format";
 
@@ -2542,6 +2543,16 @@ function ensureEvolutionFocus() {
   return focusEntities;
 }
 
+function applyEvolutionTimelineSelection(kind, effectiveYear = null) {
+  const next = timelineSelectionForEvolutionItem(
+    kind,
+    effectiveYear,
+    [YEAR_MIN, YEAR_MAX],
+  );
+  timelineSelectionActive.value = next.active;
+  selectedRange.value = next.range;
+}
+
 function renderDynamicEvolution(svg) {
   hideEvolutionExamples(svg);
   const focusEntities = ensureEvolutionFocus();
@@ -2577,7 +2588,7 @@ function renderDynamicEvolution(svg) {
     const { kind, id } = selectedEvolutionItem.value;
     const item = kind === "relation"
       ? layout.relations.find((relation) => relation.id === id)
-      : model.lanes
+      : layout.lanes
         .flatMap((lane) => [...(lane.events || []), ...(lane.offAxisEvents || [])])
         .find((event) => event.id === id);
     selectedEvolutionItem.value = item ? { kind, id, item } : null;
@@ -2645,8 +2656,7 @@ function renderDynamicEvolution(svg) {
       if (current?.kind === "timepoint" && current.id === event.id) {
         // 再次点击已选中的事件 = 取消选择，并复位联动的时间线框选。
         selectedEvolutionItem.value = null;
-        timelineSelectionActive.value = false;
-        selectedRange.value = [YEAR_MIN, YEAR_MAX];
+        applyEvolutionTimelineSelection(null);
         svg.__moveTimelineSelection?.();
         svg.__syncTimelineSelectionStyle?.();
         refreshTemplate();
@@ -2655,10 +2665,7 @@ function renderDynamicEvolution(svg) {
       selectedId.value = event.entityId;
       selectedEvolutionItem.value = { kind: "timepoint", id: event.id, item: event };
       detailPanelScrollOffset = 0;
-      if (Number.isFinite(event.effectiveYear)) {
-        timelineSelectionActive.value = true;
-        selectedRange.value = [event.effectiveYear, event.effectiveYear];
-      }
+      applyEvolutionTimelineSelection("timepoint", event.effectiveYear);
       refreshTemplate();
     },
     onSelectRelation(relation) {
@@ -2666,8 +2673,7 @@ function renderDynamicEvolution(svg) {
       if (current?.kind === "relation" && current.id === relation.id) {
         // 再次点击已选中的关系 = 取消选择，并复位联动的时间线框选。
         selectedEvolutionItem.value = null;
-        timelineSelectionActive.value = false;
-        selectedRange.value = [YEAR_MIN, YEAR_MAX];
+        applyEvolutionTimelineSelection(null);
         svg.__moveTimelineSelection?.();
         svg.__syncTimelineSelectionStyle?.();
         refreshTemplate();
@@ -2675,13 +2681,7 @@ function renderDynamicEvolution(svg) {
       }
       selectedEvolutionItem.value = { kind: "relation", id: relation.id, item: relation };
       detailPanelScrollOffset = 0;
-      const years = [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
-        .map((member) => member.effectiveYear)
-        .filter(Number.isFinite);
-      if (years.length) {
-        timelineSelectionActive.value = true;
-        selectedRange.value = [Math.min(...years), Math.max(...years)];
-      }
+      applyEvolutionTimelineSelection("relation");
       refreshTemplate();
     },
   };

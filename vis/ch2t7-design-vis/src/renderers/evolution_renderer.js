@@ -1,4 +1,8 @@
 import { compactRelationLabel } from "../utils/evolution_layout.js";
+import {
+  evolutionSelectionAnchors,
+  evolutionSelectionFocus,
+} from "../utils/evolution_selection.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
@@ -336,7 +340,7 @@ function renderSelector(layer, options) {
   layer.appendChild(group);
 }
 
-function renderAxis(parent, layout, selectedRange, selectionActive) {
+function renderAxis(parent, layout, selectedRange, selectionActive, selectedItem) {
   const { plotBounds, yearScale } = layout;
   const axisY = plotBounds.y - 25;
   parent.appendChild(svgElement("line", {
@@ -360,29 +364,67 @@ function renderAxis(parent, layout, selectedRange, selectionActive) {
       x, y: axisY - 11, class: "evolution-axis-label", "text-anchor": "middle",
     });
   }
-  if (!selectionActive || !selectedRange?.length) return;
-  const start = scale(selectedRange[0]);
-  const end = scale(selectedRange[1] ?? selectedRange[0]);
-  if (Math.abs(end - start) > 1) {
-    parent.appendChild(svgElement("rect", {
-      class: "evolution-current-range",
-      x: Math.min(start, end),
-      y: plotBounds.y - 10,
-      width: Math.max(1, Math.abs(end - start)),
-      height: plotBounds.height + 20,
-      fill: COLORS.selected,
-      "fill-opacity": 0.055,
-      "pointer-events": "none",
-    }));
+  const anchors = evolutionSelectionAnchors(selectedItem);
+  const anchorYears = new Set(anchors.map((anchor) => anchor.year));
+  if (selectionActive && selectedRange?.length) {
+    const startYear = selectedRange[0];
+    const endYear = selectedRange[1] ?? startYear;
+    const start = scale(startYear);
+    const end = scale(endYear);
+    if (Math.abs(end - start) > 1) {
+      parent.appendChild(svgElement("rect", {
+        class: "evolution-current-range",
+        x: Math.min(start, end),
+        y: plotBounds.y - 10,
+        width: Math.max(1, Math.abs(end - start)),
+        height: plotBounds.height + 20,
+        fill: COLORS.selected,
+        "fill-opacity": 0.055,
+        "pointer-events": "none",
+      }));
+    }
+    for (const year of new Set([startYear, endYear])) {
+      if (anchorYears.has(year)) continue;
+      const x = scale(year);
+      parent.appendChild(svgElement("line", {
+        class: "evolution-current-year",
+        x1: x, y1: plotBounds.y - 11, x2: x, y2: plotBounds.bottom + 11,
+        stroke: COLORS.selected, "stroke-width": 0.9, "stroke-dasharray": "3 3",
+        "pointer-events": "none",
+      }));
+    }
   }
-  for (const x of new Set([start, end])) {
+
+  anchors.forEach((anchor, index) => {
+    const previous = anchors[index - 1];
+    const next = anchors[index + 1];
+    const closePrevious = previous && anchor.x - previous.x < 48;
+    const closeNext = next && next.x - anchor.x < 48;
+    const textAnchor = closeNext && !closePrevious ? "end"
+      : closePrevious ? "start"
+        : "middle";
+    const labelX = textAnchor === "end" ? anchor.x - 5
+      : textAnchor === "start" ? anchor.x + 5
+        : anchor.x;
     parent.appendChild(svgElement("line", {
-      class: "evolution-current-year",
-      x1: x, y1: plotBounds.y - 11, x2: x, y2: plotBounds.bottom + 11,
-      stroke: COLORS.selected, "stroke-width": 0.9, "stroke-dasharray": "3 3",
+      class: "evolution-selected-year-guide",
+      x1: anchor.x,
+      y1: axisY + 1,
+      x2: anchor.x,
+      y2: anchor.y,
+      stroke: COLORS.selected,
+      "stroke-width": 0.9,
+      "stroke-dasharray": "3 3",
       "pointer-events": "none",
     }));
-  }
+    appendText(parent, `${anchor.year}年`, {
+      x: labelX,
+      y: axisY + 16,
+      class: "evolution-selected-year-label",
+      "text-anchor": textAnchor,
+      "pointer-events": "none",
+    });
+  });
 }
 
 function renderEvolutionLegend(parent, layout) {
@@ -552,9 +594,10 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   parent.appendChild(group);
 }
 
-function renderEventMark(parent, event, selected, handlers) {
+function renderEventMark(parent, event, selected, dimmed, handlers) {
   const group = svgElement("g", {
-    class: `evolution-event evolution-event-${event.effect}${selected ? " is-selected" : ""}`,
+    class: `evolution-event evolution-event-${event.effect}`
+      + `${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
     "data-timepoint-id": event.id,
   });
   const x = event.displayX;
@@ -687,13 +730,13 @@ function relationPath(source, target) {
   return `M${source.x} ${source.y}C${sourceControlX} ${source.y} ${targetControlX} ${target.y} ${target.x} ${target.y}`;
 }
 
-function renderRelation(parent, relation, selected, handlers, suppressLabel = false) {
+function renderRelation(parent, relation, selected, dimmed, handlers, suppressLabel = false) {
   if (!relation.drawable) return;
   const sources = relation.sourcePoints.filter((point) => point.x != null);
   const targets = relation.targetPoints.filter((point) => point.x != null);
   if (!sources.length || !targets.length) return;
   const group = svgElement("g", {
-    class: `evolution-relation${selected ? " is-selected" : ""}`,
+    class: `evolution-relation${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
     "data-relation-id": relation.id,
   });
   for (const source of sources) {
@@ -768,19 +811,21 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
   parent.appendChild(group);
 }
 
-function renderRelationGroup(parent, relationGroup, selectedRelationKey, handlers) {
+function renderRelationGroup(parent, relationGroup, selectedRelationKey, focusActive, handlers) {
   if (!relationGroup.drawable) return;
   if (relationGroup.renderMode === "individual" || relationGroup.junctionX == null) {
-    relationGroup.relations.forEach((relation) => renderRelation(
-      parent,
-      relation,
-      `relation:${relation.id}` === selectedRelationKey,
-      handlers,
-    ));
+    relationGroup.relations.forEach((relation) => {
+      const selected = `relation:${relation.id}` === selectedRelationKey;
+      renderRelation(parent, relation, selected, focusActive && !selected, handlers);
+    });
     return;
   }
+  const selected = relationGroup.relations.some((relation) => (
+    `relation:${relation.id}` === selectedRelationKey
+  ));
   const group = svgElement("g", {
-    class: "evolution-relation-group",
+    class: `evolution-relation-group${selected ? " is-selected" : ""}`
+      + `${focusActive && !selected ? " is-dimmed" : ""}`,
     "data-relation-group-id": relationGroup.groupId,
   });
   const points = [...relationGroup.sourcePoints, ...relationGroup.targetPoints]
@@ -790,9 +835,6 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
     : 0;
   const junctionX = relationGroup.junctionX;
   const junction = { x: junctionX, y: centerY };
-  const selected = relationGroup.relations.some((relation) => (
-    `relation:${relation.id}` === selectedRelationKey
-  ));
   const strokeColor = selected ? COLORS.selected : COLORS.line;
   const strokeWidth = selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width;
   const strokeOpacity = selected ? RELATION_STROKE.selectedOpacity : RELATION_STROKE.opacity;
@@ -865,7 +907,7 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
   parent.appendChild(group);
 }
 
-function renderOffAxis(parent, layout, selectedItem, handlers) {
+function renderOffAxis(parent, layout, selectedItem, selectionFocus, handlers) {
   const bounds = layout.offAxisBounds;
   if (!bounds) return;
   // A faint wash ties the floating undated/unresolved marks into a visible zone.
@@ -895,8 +937,10 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
     });
     for (const event of layout.offAxis[bucket] || []) {
       const isSelected = selectedKey(selectedItem) === `timepoint:${event.id}`;
+      const dimmed = selectionFocus.active && !selectionFocus.timepointIds.has(event.id);
       const group = svgElement("g", {
-        class: `evolution-offaxis-event${isSelected ? " is-selected" : ""}`,
+        class: `evolution-offaxis-event${isSelected ? " is-selected" : ""}`
+          + `${dimmed ? " is-dimmed" : ""}`,
       });
       // 与主车道普通记载圆点同尺寸（未选中 2.6 / 选中 4.2）。
       group.appendChild(svgElement("circle", {
@@ -925,12 +969,13 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
  * toward the future), merges bow leftward (closing in from the past), so an
  * adjacent split/merge pair weaves far less.
  */
-function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
+function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers) {
   const selected = fan.relations.some((relation) => (
     `relation:${relation.id}` === selectedRelationKey
   ));
   const group = svgElement("g", {
-    class: `evolution-fan-group${selected ? " is-selected" : ""}`,
+    class: `evolution-fan-group${selected ? " is-selected" : ""}`
+      + `${focusActive && !selected ? " is-dimmed" : ""}`,
     "data-fan-key": fan.key,
   });
   const color = selected ? COLORS.selected : COLORS.line;
@@ -1152,7 +1197,7 @@ function renderMain(layer, layout, options) {
     layer.appendChild(group);
     return;
   }
-  renderAxis(group, layout, options.selectedRange, options.selectionActive);
+  renderAxis(group, layout, options.selectedRange, options.selectionActive, options.selectedItem);
   renderEvolutionLegend(group, layout);
   const hasDrawableRelations = (layout.relations || []).some((relation) => relation.drawable)
     || (layout.relationGroups || []).some((relationGroup) => relationGroup.drawable);
@@ -1165,6 +1210,8 @@ function renderMain(layer, layout, options) {
     });
   }
   const selected = selectedKey(options.selectedItem);
+  const selectionFocus = evolutionSelectionFocus(options.selectedItem);
+  const focusedTimepointIds = new Set(selectionFocus.timepointIds);
   const eventsToRender = [];
   for (const lane of layout.lanes) {
     group.appendChild(svgElement("line", {
@@ -1222,7 +1269,7 @@ function renderMain(layer, layout, options) {
   );
   const ungrouped = layout.relations.filter((relation) => !groupedRelationIds.has(relation.id));
   for (const fan of layout.fanGroups || []) {
-    renderFanGroup(group, fan, selected, options.handlers);
+    renderFanGroup(group, fan, selected, selectionFocus.active, options.handlers);
   }
   for (const relation of ungrouped) {
     if (fanRelationIds.has(relation.id)) continue;
@@ -1230,11 +1277,12 @@ function renderMain(layer, layout, options) {
       group,
       relation,
       selected === `relation:${relation.id}`,
+      selectionFocus.active && selected !== `relation:${relation.id}`,
       options.handlers,
     );
   }
   for (const relationGroup of layout.relationGroups) {
-    renderRelationGroup(group, relationGroup, selected, options.handlers);
+    renderRelationGroup(group, relationGroup, selected, selectionFocus.active, options.handlers);
   }
   // Render the selected event last so its emphasis stays on top of
   // neighbouring marks instead of being painted over by them.
@@ -1247,10 +1295,14 @@ function renderMain(layer, layout, options) {
       group,
       event,
       selected === `timepoint:${event.id}`,
+      selectionFocus.active && !focusedTimepointIds.has(event.id),
       options.handlers,
     );
   }
-  renderOffAxis(group, layout, options.selectedItem, options.handlers);
+  renderOffAxis(group, layout, options.selectedItem, {
+    ...selectionFocus,
+    timepointIds: focusedTimepointIds,
+  }, options.handlers);
   layer.appendChild(group);
 }
 

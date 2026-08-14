@@ -57,6 +57,11 @@ export function sanitizeCanvasState(value) {
   if (typeof value.timelineSelectionActive === "boolean") {
     state.timelineSelectionActive = value.timelineSelectionActive;
   }
+  // Older builds persisted relation endpoint years as a selected interval.
+  // A relation has two event times, not a continuous duration.
+  if (state.selectedEvolutionItem?.kind === "relation") {
+    state.timelineSelectionActive = false;
+  }
 
   for (const key of ["selectedId", "compositionFocusId"]) {
     if (value[key] === null) {

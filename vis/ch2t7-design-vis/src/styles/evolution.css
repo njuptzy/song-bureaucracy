@@ -31,6 +31,16 @@
   font-size: 9.5px;
 }
 
+.dynamic-evolution-layer .evolution-selected-year-label {
+  fill: #866d6d;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10.5px;
+  paint-order: stroke;
+  stroke: #f5f3ec;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 .dynamic-evolution-layer .evolution-legend-item {
   pointer-events: none;
 }
@@ -113,6 +123,22 @@
 .dynamic-evolution-layer .evolution-selector-node:hover,
 .dynamic-evolution-layer .evolution-selector-add:hover {
   filter: drop-shadow(0 1px 1.5px rgba(53, 23, 4, 0.34));
+}
+
+.dynamic-evolution-layer .evolution-event.is-dimmed,
+.dynamic-evolution-layer .evolution-offaxis-event.is-dimmed,
+.dynamic-evolution-layer .evolution-relation.is-dimmed,
+.dynamic-evolution-layer .evolution-relation-group.is-dimmed,
+.dynamic-evolution-layer .evolution-fan-group.is-dimmed {
+  opacity: 0.16;
+}
+
+.dynamic-evolution-layer .evolution-event.is-dimmed:hover,
+.dynamic-evolution-layer .evolution-offaxis-event.is-dimmed:hover,
+.dynamic-evolution-layer .evolution-relation.is-dimmed:hover,
+.dynamic-evolution-layer .evolution-relation-group.is-dimmed:hover,
+.dynamic-evolution-layer .evolution-fan-group.is-dimmed:hover {
+  opacity: 0.52;
 }
 
 /* Make the fuzzy-interval bracket discoverable: hovering its event darkens
