@@ -653,15 +653,14 @@ function renderRelation(parent, relation, selected, handlers, suppressLabel = fa
   });
   for (const source of sources) {
     for (const target of targets) {
-      // Long vertical jumps cross several lanes; render them quieter so the
-      // existence segments and event marks stay dominant.
-      const longJump = Math.abs(target.y - source.y) > 200;
+      // All evolution relations share one visual weight: fade differences
+      // read as an unintended encoding. Only selection changes the style.
       group.appendChild(svgElement("path", {
         d: relationPath(source, target),
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
-        "stroke-width": selected ? 1.7 : (longJump ? 0.9 : 1.05),
-        "stroke-opacity": selected ? 1 : (longJump ? 0.4 : 0.68),
+        "stroke-width": selected ? 1.7 : 1.1,
+        "stroke-opacity": selected ? 1 : 0.7,
         "marker-end": "url(#evolution-relation-arrow)",
       }));
     }
@@ -882,8 +881,9 @@ function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
     "data-fan-key": fan.key,
   });
   const color = selected ? COLORS.selected : COLORS.line;
-  const width = selected ? 1.7 : 1.15;
-  const opacity = selected ? 1 : 0.72;
+  // Same weight as single relations (renderRelation): uniform 1.1 / 0.7.
+  const width = selected ? 1.7 : 1.1;
+  const opacity = selected ? 1 : 0.7;
   const hub = fan.hub;
   const trunkX = hub.x;
   const farY = fan.spokes.reduce((best, point) => (
