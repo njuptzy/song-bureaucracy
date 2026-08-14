@@ -1139,11 +1139,12 @@ function renderMain(layer, layout, options) {
       stroke: COLORS.olive, "stroke-width": 0.65, "stroke-dasharray": "3 4", opacity: 0.45,
     }));
     for (const segment of lane.segments || []) {
+      // 推定存续段（无明确建置记录、由普通记载推断的存在）不再画线：
+      // 整条通长虚线只有噪声没有信息量，车道基线和事件点已足够定位。
+      if (segment.inferredStart) continue;
       group.appendChild(svgElement("line", {
         x1: segment.startX, y1: segment.y, x2: segment.endX, y2: segment.y,
         stroke: COLORS.line, "stroke-width": 2.1,
-        "stroke-dasharray": segment.inferredStart ? "5 3" : null,
-        opacity: segment.inferredStart ? 0.68 : 1,
       }));
       if (!segment.openStart) {
         group.appendChild(svgElement("line", {
