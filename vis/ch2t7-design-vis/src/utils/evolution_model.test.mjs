@@ -208,6 +208,80 @@ describe("buildEvolutionModel relations", () => {
     assert.equal(model.lanes.find((lane) => lane.entityId === 1).events.find((item) => item.id === 12).expanded, true);
   });
 
+  it("可见实体彼此之间的演变关系被补全,但不引入新实体", () => {
+    const entities = Array.from({ length: 4 }, (_, index) => entity(index + 1));
+    const timepoints = Object.fromEntries(entities.map(({ id }) => [
+      id,
+      [timepoint(id * 10 + 1, 1000, "始置")],
+    ]));
+    const model = buildEvolutionModel({
+      entities,
+      timepoints,
+      changeRelations: [
+        { id: 1, relation_type: "前后演变", source: 1, target: 2, source_timepoint_id: 11, target_timepoint_id: 21 },
+        { id: 2, relation_type: "前后演变", source: 1, target: 3, source_timepoint_id: 11, target_timepoint_id: 31 },
+        // 邻居 2 与邻居 3 之间的关系:两端都不含焦点,但都在可见集合内
+        { id: 3, relation_type: "前后演变", source: 2, target: 3, source_timepoint_id: 21, target_timepoint_id: 31 },
+        // 端点含集合外实体 9 的关系不补全
+        { id: 4, relation_type: "前后演变", source: 2, target: 9, source_timepoint_id: 21, target_timepoint_id: 91 },
+      ],
+    }, [1]);
+    assert.deepEqual(model.relations.map((item) => item.id).sort(), [1, 2, 3]);
+    assert.deepEqual(new Set(model.visibleEntityIds), new Set([1, 2, 3]));
+    assert.equal(model.lanes.length, 3);
+  });
+
+  it("车道按演变关系做重心排序：互相关联的实体聚到相邻位置", () => {
+    const entities = Array.from({ length: 6 }, (_, index) => entity(index + 1));
+    const timepoints = Object.fromEntries(entities.map(({ id }) => [
+      id,
+      [timepoint(id * 10 + 1, 1000, "始置")],
+    ]));
+    const input = (changeRelations) => ({
+      entities,
+      timepoints,
+      changeRelations,
+    });
+    // 2/3/4 既直连焦点又互相关联成一簇;5 只与焦点 1 相连(叶子)
+    const relations = [
+      { id: 1, relation_type: "前后演变", source: 1, target: 5, source_timepoint_id: 11, target_timepoint_id: 51 },
+      { id: 2, relation_type: "前后演变", source: 1, target: 2, source_timepoint_id: 11, target_timepoint_id: 21 },
+      { id: 3, relation_type: "前后演变", source: 1, target: 3, source_timepoint_id: 11, target_timepoint_id: 31 },
+      { id: 4, relation_type: "前后演变", source: 1, target: 4, source_timepoint_id: 11, target_timepoint_id: 41 },
+      { id: 5, relation_type: "前后演变", source: 2, target: 3, source_timepoint_id: 21, target_timepoint_id: 31 },
+      { id: 6, relation_type: "前后演变", source: 3, target: 4, source_timepoint_id: 31, target_timepoint_id: 41 },
+      { id: 7, relation_type: "前后演变", source: 2, target: 4, source_timepoint_id: 21, target_timepoint_id: 41 },
+    ];
+    const model = buildEvolutionModel(input(relations), [1]);
+    const order = model.lanes.map((lane) => lane.entityId);
+
+    // 焦点车道固定在首位;只连焦点的叶子 5 紧邻焦点(连线最短);
+    // 互相关联的 2/3/4 占据连续位置
+    assert.equal(order[0], 1);
+    assert.equal(order[1], 5);
+    assert.deepEqual(new Set(order.slice(2)), new Set([2, 3, 4]));
+    // 同输入重排结果稳定
+    const again = buildEvolutionModel(input(relations), [1]);
+    assert.deepEqual(again.lanes.map((lane) => lane.entityId), order);
+  });
+
+  it("多个焦点车道保持用户给定顺序且不被排序移动", () => {
+    const entities = Array.from({ length: 4 }, (_, index) => entity(index + 1));
+    const timepoints = Object.fromEntries(entities.map(({ id }) => [
+      id,
+      [timepoint(id * 10 + 1, 1000, "始置")],
+    ]));
+    const model = buildEvolutionModel({
+      entities,
+      timepoints,
+      changeRelations: [
+        { id: 1, relation_type: "前后演变", source: 4, target: 3, source_timepoint_id: 41, target_timepoint_id: 31 },
+        { id: 2, relation_type: "前后演变", source: 1, target: 4, source_timepoint_id: 11, target_timepoint_id: 41 },
+      ],
+    }, [3, 1]);
+    assert.deepEqual(model.lanes.map((lane) => lane.entityId).slice(0, 2), [3, 1]);
+  });
+
   it("缺少 relation_group_id 时使用显式 change_event_id 合成同一事件组", () => {
     const model = buildEvolutionModel({
       entities: [entity(1), entity(2), entity(3)],

@@ -373,6 +373,62 @@ function endpointEntityIds(relation) {
   return relation.members.map((member) => member.entityId).filter((id) => id != null);
 }
 
+/**
+ * Lane ordering by barycenter sweeps (StoryFlow-style crossing reduction).
+ * Focus lanes keep their leading positions; every relation-derived lane is
+ * pulled toward the average position of the lanes it shares relations with,
+ * so tightly connected entities end up adjacent and cross-lane relation lines
+ * stay short. Ordering is deterministic: ties fall back to discovery order,
+ * and sweeps stop early once the order stabilizes.
+ */
+function orderLanesByRelations(lanes, relations, focusIds) {
+  if (lanes.length <= 2) return lanes;
+  const neighbors = new Map(lanes.map((lane) => [lane.entityId, new Set()]));
+  for (const relation of relations) {
+    const ids = [...new Set(endpointEntityIds(relation))].filter((id) => neighbors.has(id));
+    for (const first of ids) {
+      for (const second of ids) {
+        if (first === second) continue;
+        neighbors.get(first).add(second);
+        neighbors.get(second).add(first);
+      }
+    }
+  }
+  const focusSet = new Set(focusIds);
+  const fixed = lanes.filter((lane) => focusSet.has(lane.entityId));
+  const free = lanes.filter((lane) => !focusSet.has(lane.entityId));
+  if (!free.length) return lanes;
+  const position = new Map(fixed.map((lane, index) => [lane.entityId, index]));
+  free.forEach((lane, index) => position.set(lane.entityId, fixed.length + index));
+  const discoveryOrder = new Map(free.map((lane, index) => [lane.entityId, index]));
+  const barycenter = (lane) => {
+    const related = [...neighbors.get(lane.entityId)]
+      .map((id) => position.get(id))
+      .filter(Number.isFinite);
+    if (!related.length) return null;
+    return related.reduce((sum, value) => sum + value, 0) / related.length;
+  };
+  let current = free;
+  for (let round = 0; round < 8; round += 1) {
+    const sorted = [...current].sort((first, second) => {
+      const firstCenter = barycenter(first);
+      const secondCenter = barycenter(second);
+      if (firstCenter == null && secondCenter == null) {
+        return discoveryOrder.get(first.entityId) - discoveryOrder.get(second.entityId);
+      }
+      if (firstCenter == null) return 1;
+      if (secondCenter == null) return -1;
+      return firstCenter - secondCenter
+        || discoveryOrder.get(first.entityId) - discoveryOrder.get(second.entityId);
+    });
+    sorted.forEach((lane, index) => position.set(lane.entityId, fixed.length + index));
+    const unchanged = sorted.every((lane, index) => lane === current[index]);
+    current = sorted;
+    if (unchanged) break;
+  }
+  return [...fixed, ...current];
+}
+
 function relevantRelationsForFocus(relations, focusIds) {
   if (!focusIds.length) return [];
   const focusSet = new Set(focusIds);
@@ -382,10 +438,23 @@ function relevantRelationsForFocus(relations, focusIds) {
   const relevantGroupIds = new Set(
     directlyRelevant.map((relation) => relation.groupId).filter((id) => id != null)
   );
-  return relations.filter((relation) => (
+  const selected = relations.filter((relation) => (
     directlyRelevant.includes(relation)
       || (relation.groupId != null && relevantGroupIds.has(relation.groupId))
   ));
+  // 补全:可见实体彼此之间的关系也要展示——只收"端点含焦点"会把视图压成
+  // 星形,丢掉邻居车道之间真实存在的演变边(如总计司→盐铁/度支/户部)。
+  // 补全只加边、不引入新实体,因此可见集合一次计算即收敛。
+  const visibleIds = new Set(focusIds);
+  for (const relation of selected) {
+    for (const id of endpointEntityIds(relation)) visibleIds.add(id);
+  }
+  const selectedKeys = new Set(selected.map((relation) => relation.key ?? relation.id));
+  return relations.filter((relation) => {
+    if (selectedKeys.has(relation.key ?? relation.id)) return true;
+    const ids = endpointEntityIds(relation);
+    return ids.length > 0 && ids.every((id) => visibleIds.has(id));
+  });
 }
 
 function buildRelationGroups(relations, anomalies) {
@@ -640,13 +709,17 @@ export function buildEvolutionModel(data, focusEntityIds, options = {}) {
     relations.flatMap((relation) => relation.members.map((member) => member.timepointId))
       .filter((id) => id != null)
   );
-  const lanes = visibleEntityIds.map((entityId) => buildLane(
-    entityMap.get(entityId),
-    timepointsByEntity.get(entityId) || [],
-    endpointIds,
-    yearMin,
-    yearMax,
-  ));
+  const lanes = orderLanesByRelations(
+    visibleEntityIds.map((entityId) => buildLane(
+      entityMap.get(entityId),
+      timepointsByEntity.get(entityId) || [],
+      endpointIds,
+      yearMin,
+      yearMax,
+    )),
+    relations,
+    normalizedFocusIds,
+  );
   lanes.forEach((lane) => anomalies.push(...lane.anomalies));
 
   const offAxis = {
