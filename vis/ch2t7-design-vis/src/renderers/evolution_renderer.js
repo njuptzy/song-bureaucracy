@@ -419,26 +419,25 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 99, "建置/罢置", (sample, itemX) => {
-    sample.appendChild(svgElement("line", {
-      x1: itemX,
-      y1: rowY - 6,
-      x2: itemX,
-      y2: rowY + 6,
+  item(x + 99, "建置", (sample, itemX) => {
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX} ${rowY - 4.8}L${itemX + 4.8} ${rowY + 3.8}H${itemX - 4.8}Z`,
+      fill: COLORS.line,
       stroke: COLORS.line,
       "stroke-width": 1,
-    }));
-    sample.appendChild(svgElement("rect", {
-      x: itemX - 3.5,
-      y: rowY - 3.5,
-      width: 7,
-      height: 7,
-      fill: COLORS.paper,
-      stroke: COLORS.line,
-      "stroke-width": 0.9,
+      "stroke-linejoin": "round",
     }));
   });
-  item(x + 167, "时间范围", (sample, itemX) => {
+  item(x + 148, "罢置", (sample, itemX) => {
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX} ${rowY + 4.8}L${itemX + 4.8} ${rowY - 3.8}H${itemX - 4.8}Z`,
+      fill: COLORS.paper,
+      stroke: COLORS.line,
+      "stroke-width": 1,
+      "stroke-linejoin": "round",
+    }));
+  });
+  item(x + 214, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -446,7 +445,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 232, "模糊纪年区间", (sample, itemX) => {
+  item(x + 282, "模糊纪年区间", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7, y1: rowY + 2, x2: itemX + 7, y2: rowY + 2,
       stroke: COLORS.olive,
@@ -460,7 +459,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 1.1,
     }));
   });
-  item(x + 316, "演变关系", (sample, itemX) => {
+  item(x + 372, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -471,7 +470,7 @@ function renderEvolutionLegend(parent, layout) {
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  item(x + 379, "存续段", (sample, itemX) => {
+  item(x + 440, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -481,7 +480,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 2,
     }));
   });
-  item(x + 437, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 498, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY + 3,
@@ -609,17 +608,18 @@ function renderEventMark(parent, event, selected, handlers) {
       "stroke-width": 1,
     }));
   } else if (event.effect === "activate" || event.effect === "deactivate") {
-    const tickHalfHeight = event.displaced ? 6.5 : 9;
-    group.appendChild(svgElement("line", {
-      x1: x, y1: y - tickHalfHeight, x2: x, y2: y + tickHalfHeight,
-      stroke: markSelected ? COLORS.selected : COLORS.line,
-      "stroke-width": 1.2,
-    }));
-    group.appendChild(svgElement("rect", {
-      x: x - 4, y: y - 4, width: 8, height: 8,
-      fill: markSelected ? COLORS.selected : COLORS.paper,
+    // 建置/罢置用一对镜像三角形：建置 = 实心正立三角（立起来、实体出现），
+    // 罢置 = 空心倒三角（撤倒、只余空位）。形状+填充双重编码，选中态统一
+    // 换选中色填充。
+    const up = event.effect === "activate";
+    const apexY = up ? y - 4.8 : y + 4.8;
+    const baseY = up ? y + 3.8 : y - 3.8;
+    group.appendChild(svgElement("path", {
+      d: `M${x} ${apexY}L${x + 4.8} ${baseY}H${x - 4.8}Z`,
+      fill: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.paper),
       stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
+      "stroke-linejoin": "round",
     }));
   } else {
     group.appendChild(svgElement("circle", {
@@ -759,15 +759,23 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, handler
     : 0;
   const junctionX = relationGroup.junctionX;
   const junction = { x: junctionX, y: centerY };
+  const selected = relationGroup.relations.some((relation) => (
+    `relation:${relation.id}` === selectedRelationKey
+  ));
+  const strokeColor = selected ? COLORS.selected : COLORS.line;
+  const strokeWidth = selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width;
+  const strokeOpacity = selected ? RELATION_STROKE.selectedOpacity : RELATION_STROKE.opacity;
   for (const source of relationGroup.sourcePoints.filter((point) => point.x != null)) {
     group.appendChild(svgElement("path", {
-      d: relationPath(source, junction), fill: "none", stroke: COLORS.line, "stroke-width": 1.05,
+      d: relationPath(source, junction), fill: "none", stroke: strokeColor,
+      "stroke-width": strokeWidth, "stroke-opacity": strokeOpacity,
     }));
   }
   for (const target of relationGroup.targetPoints.filter((point) => point.x != null)) {
     group.appendChild(svgElement("path", {
-      d: relationPath(junction, target), fill: "none", stroke: COLORS.line,
-      "stroke-width": 1.05, "marker-end": "url(#evolution-relation-arrow)",
+      d: relationPath(junction, target), fill: "none", stroke: strokeColor,
+      "stroke-width": strokeWidth, "stroke-opacity": strokeOpacity,
+      "marker-end": "url(#evolution-relation-arrow)",
     }));
   }
   group.appendChild(svgElement("rect", {
