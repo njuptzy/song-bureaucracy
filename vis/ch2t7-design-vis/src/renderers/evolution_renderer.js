@@ -414,7 +414,7 @@ function renderEvolutionLegend(parent, layout) {
     sample.appendChild(svgElement("circle", {
       cx: itemX,
       cy: rowY,
-      r: 3.2,
+      r: 2.6,
       fill: COLORS.paper,
       stroke: COLORS.line,
       "stroke-width": 0.9,
@@ -623,7 +623,7 @@ function renderEventMark(parent, event, selected, handlers) {
     }));
   } else {
     group.appendChild(svgElement("circle", {
-      cx: x, cy: y, r: markSelected ? 4.6 : 3.3,
+      cx: x, cy: y, r: markSelected ? 4.2 : 2.6,
       fill: markSelected ? COLORS.selected : COLORS.paper,
       stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
