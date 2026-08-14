@@ -445,8 +445,9 @@ function renderEvolutionLegend(parent, layout) {
       r: 2.6,
       fill: COLORS.paper,
       stroke: COLORS.line,
-      "stroke-width": 0.9,
-      "stroke-dasharray": "1.1 1.2",
+      "stroke-width": 1,
+      "stroke-linecap": "round",
+      "stroke-dasharray": `0.01 ${(2 * Math.PI * 2.6) / 6 - 0.01}`,
     }));
   });
   item(x + 266, "时间范围", (sample, itemX) => {
@@ -670,14 +671,18 @@ function renderEventMark(parent, event, selected, handlers) {
       "stroke-linejoin": "round",
     }));
   } else {
-    // 模糊纪年点（"宋初"类锚定单年）：虚线描边圆 = 轮廓不闭合、时间不确切，
-    // 与实线描边的精确点区分，不再伪造区间跨度。
+    // 模糊纪年点（"宋初"类锚定单年）：圆点环 = 轮廓不实、时间不确切。
+    // 标准 dotted circle 画法：圆头端点 + 点长归零 + 间距严格整除圆周
+    // （6 颗，接缝无缝），小圆上不会塌成齿轮。
+    const fuzzyDots = 6;
+    const fuzzyGap = (2 * Math.PI * 2.6) / fuzzyDots - 0.01;
     group.appendChild(svgElement("circle", {
       cx: x, cy: y, r: markSelected ? 4.2 : 2.6,
       fill: markSelected ? COLORS.selected : COLORS.paper,
       stroke: markSelected ? COLORS.selected : COLORS.line,
       "stroke-width": 1,
-      "stroke-dasharray": fuzzyPoint && !markSelected ? "1.1 1.2" : null,
+      "stroke-linecap": fuzzyPoint && !markSelected ? "round" : null,
+      "stroke-dasharray": fuzzyPoint && !markSelected ? `0.01 ${fuzzyGap}` : null,
     }));
   }
 
