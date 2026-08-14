@@ -432,7 +432,7 @@ function renderEvolutionLegend(parent, layout) {
   item(x + 148, "罢置", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX} ${rowY + 4.8}L${itemX + 4.8} ${rowY - 3.8}H${itemX - 4.8}Z`,
-      fill: COLORS.paper,
+      fill: COLORS.abolish,
       stroke: COLORS.abolish,
       "stroke-width": 1,
       "stroke-linejoin": "round",
@@ -609,15 +609,14 @@ function renderEventMark(parent, event, selected, handlers) {
       "stroke-width": 1,
     }));
   } else if (event.effect === "activate" || event.effect === "deactivate") {
-    // 建置/罢置用一对镜像三角形：建置 = 实心正立三角（立起来、实体出现），
-    // 罢置 = 空心倒三角（撤倒、只余空位）。形状+填充双重编码，选中态统一
-    // 换选中色填充。
+    // 建置/罢置用一对镜像实心三角形：建置 = 墨色正立三角（立起来），
+    // 罢置 = 赭红倒三角（裁撤）。形状+颜色双重编码，选中态统一换选中色。
     const up = event.effect === "activate";
     const apexY = up ? y - 4.8 : y + 4.8;
     const baseY = up ? y + 3.8 : y - 3.8;
     group.appendChild(svgElement("path", {
       d: `M${x} ${apexY}L${x + 4.8} ${baseY}H${x - 4.8}Z`,
-      fill: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.paper),
+      fill: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish),
       stroke: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish),
       "stroke-width": 1,
       "stroke-linejoin": "round",
