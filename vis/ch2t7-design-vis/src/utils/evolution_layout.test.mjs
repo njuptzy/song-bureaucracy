@@ -189,7 +189,7 @@ describe("layoutEvolutionModel", () => {
     assert.equal(overlaps, false);
   });
 
-  it("同年及邻近普通关系标签稳定分层并留在画布内", () => {
+  it("共享端点的同标签关系归并为扇形，独立关系标签稳定且不重叠", () => {
     const relations = [
       { id: 20, relation_type: "前后演变", source: 1, target: 2, source_timepoint_id: 11, target_timepoint_id: 21 },
       { id: 21, relation_type: "前后演变", source: 1, target: 2, source_timepoint_id: 11, target_timepoint_id: 21 },
@@ -214,17 +214,24 @@ describe("layoutEvolutionModel", () => {
     const second = layoutEvolutionModel(buildEvolutionModel(input([...relations].reverse()), [1]), bounds);
     const ordinary = first.relations;
 
+    // 完全共享源端点的 20/21 归并为一个扇形组，不再各占一个标签
     assert.equal(ordinary.length, 3);
-    assert.ok(new Set(ordinary.map((relation) => relation.labelY)).size > 1);
+    assert.equal(first.fanGroups.length, 1);
+    const fan = first.fanGroups[0];
+    assert.equal(fan.direction, "out");
+    assert.deepEqual(fan.relations.map((relation) => relation.id).sort(), [20, 21]);
+    const fanMemberIds = new Set(fan.relations.map((relation) => relation.id));
     for (const relation of ordinary) {
+      if (fanMemberIds.has(relation.id)) {
+        assert.equal(relation.labelVisible, false);
+        continue;
+      }
       assert.equal(relation.labelVisible, true);
       assert.equal(relation.labelOverflow, false);
       assert.ok(Number.isFinite(relation.labelX));
       assert.ok(Number.isFinite(relation.labelY));
       assert.ok(Number.isFinite(relation.leader.x1));
       assert.ok(Number.isFinite(relation.leader.y1));
-      assert.ok(Number.isFinite(relation.leader.x2));
-      assert.ok(Number.isFinite(relation.leader.y2));
       assert.equal(relation.leader.x1, relation.labelAnchorX);
       assert.equal(relation.leader.y1, relation.labelAnchorY);
       assert.ok(relation.labelBounds.x >= bounds.x);
@@ -232,24 +239,35 @@ describe("layoutEvolutionModel", () => {
       assert.ok(relation.labelBounds.y >= bounds.y);
       assert.ok(relation.labelBounds.bottom <= bounds.y + bounds.height);
     }
-    for (let index = 0; index < ordinary.length; index += 1) {
-      for (let otherIndex = index + 1; otherIndex < ordinary.length; otherIndex += 1) {
-        const firstBox = ordinary[index].labelBounds;
-        const secondBox = ordinary[otherIndex].labelBounds;
-        const overlaps = firstBox.x < secondBox.right
-          && firstBox.right > secondBox.x
-          && firstBox.y < secondBox.bottom
-          && firstBox.bottom > secondBox.y;
-        assert.equal(overlaps, false);
-      }
-    }
 
+    // 扇形标签唯一、在界内，且不与独立关系标签重叠
+    assert.equal(fan.labelVisible, true);
+    assert.ok(fan.labelBounds.x >= bounds.x);
+    assert.ok(fan.labelBounds.right <= bounds.x + bounds.width);
+    assert.ok(fan.labelBounds.y >= bounds.y);
+    assert.ok(fan.labelBounds.bottom <= bounds.y + bounds.height);
+    const lone = ordinary.find((relation) => !fanMemberIds.has(relation.id));
+    const fanOverlaps = fan.labelBounds.x < lone.labelBounds.right
+      && fan.labelBounds.right > lone.labelBounds.x
+      && fan.labelBounds.y < lone.labelBounds.bottom
+      && fan.labelBounds.bottom > lone.labelBounds.y;
+    assert.equal(fanOverlaps, false);
+
+    // 输入顺序不影响布局结果
     const placementsById = (layout) => Object.fromEntries(layout.relations.map((relation) => [
       relation.id,
       [relation.labelX, relation.labelY, relation.leader],
     ]));
     assert.deepEqual(placementsById(first), placementsById(second));
+    const fanPlacements = (layout) => layout.fanGroups.map((item) => [
+      item.direction,
+      item.relations.map((relation) => relation.id).sort(),
+      item.labelX,
+      item.labelY,
+    ]);
+    assert.deepEqual(fanPlacements(first), fanPlacements(second));
 
+    // 重复 id 的不同证据关系共享端点时也稳定归并
     const duplicateIds = [
       { ...relations[0], id: 30, evidence_key: "R30-A", display_relation_type: "甲" },
       { ...relations[0], id: 30, evidence_key: "R30-B", display_relation_type: "乙" },
@@ -262,32 +280,87 @@ describe("layoutEvolutionModel", () => {
       buildEvolutionModel(input([...duplicateIds].reverse()), [1]),
       bounds,
     );
-    const placementsByEvidence = (layout) => Object.fromEntries(layout.relations.map((relation) => [
-      relation.evidenceKey,
-      [relation.labelX, relation.labelY, relation.leader],
-    ]));
-    assert.deepEqual(placementsByEvidence(duplicateFirst), placementsByEvidence(duplicateSecond));
+    const fanEvidence = (layout) => layout.fanGroups.map((item) => [
+      item.relations.map((relation) => relation.evidenceKey).sort(),
+      item.labelX,
+      item.labelY,
+    ]);
+    assert.deepEqual(fanEvidence(duplicateFirst), fanEvidence(duplicateSecond));
+  });
+
+  it("一源多目的同年关系渲染为一个扇形主干加一组辐条", () => {
+    const input = (changeRelations) => ({
+      entities: [entity(1), entity(2), entity(3), entity(4)],
+      timepoints: {
+        1: [timepoint(11, 997, "析置")],
+        2: [timepoint(21, 997, "始置")],
+        3: [timepoint(31, 997, "始置")],
+        4: [timepoint(41, 997, "始置")],
+      },
+      changeRelations,
+    });
+    const relations = [
+      { id: 1, relation_type: "前后演变", source: 1, target: 2, source_timepoint_id: 11, target_timepoint_id: 21 },
+      { id: 2, relation_type: "前后演变", source: 1, target: 3, source_timepoint_id: 11, target_timepoint_id: 31 },
+      { id: 3, relation_type: "前后演变", source: 1, target: 4, source_timepoint_id: 11, target_timepoint_id: 41 },
+      { id: 4, relation_type: "前后演变", source: 2, target: 1, source_timepoint_id: 21, target_timepoint_id: 11 },
+    ];
+    const bounds = { x: 10, y: 20, width: 640, height: 280 };
+    const layout = layoutEvolutionModel(buildEvolutionModel(input(relations), [1]), bounds);
+
+    assert.equal(layout.fanGroups.length, 1);
+    const fan = layout.fanGroups[0];
+    assert.equal(fan.direction, "out");
+    assert.deepEqual(fan.relations.map((relation) => relation.id).sort(), [1, 2, 3]);
+    // 辐条端点保持在各自真实年份与车道上，主干只做视觉收拢
+    assert.equal(fan.spokes.length, 3);
+    assert.ok(fan.top <= fan.hub.y && fan.bottom >= fan.hub.y);
+    for (const spoke of fan.spokes) {
+      assert.ok(Number.isFinite(spoke.x));
+      assert.notEqual(spoke.y, fan.hub.y);
+    }
+    // 扇成员不单独出标签；未共享端点的关系 4 保留自己的标签
+    for (const relation of layout.relations) {
+      assert.equal(relation.labelVisible, relation.id === 4);
+    }
+    assert.equal(fan.labelVisible, true);
+    const lone = layout.relations.find((relation) => relation.id === 4);
+    const fanOverlaps = fan.labelBounds.x < lone.labelBounds.right
+      && fan.labelBounds.right > lone.labelBounds.x
+      && fan.labelBounds.y < lone.labelBounds.bottom
+      && fan.labelBounds.bottom > lone.labelBounds.y;
+    assert.equal(fanOverlaps, false);
+
+    const reversed = layoutEvolutionModel(
+      buildEvolutionModel(input([...relations].reverse()), [1]),
+      bounds,
+    );
+    assert.equal(reversed.fanGroups.length, 1);
+    assert.equal(reversed.fanGroups[0].labelX, fan.labelX);
+    assert.equal(reversed.fanGroups[0].labelY, fan.labelY);
   });
 
   it("空间不足时隐藏溢出关系标签，不再强制叠放", () => {
+    // 端点两两不同（不触发扇形归并），标签数量远超可用空间
     const changeRelations = Array.from({ length: 12 }, (_, index) => ({
       id: 100 + index,
       relation_type: "演变·改称",
       display_relation_type: "改称",
       source: 1,
       target: 2,
-      source_timepoint_id: 11,
-      target_timepoint_id: 21,
+      source_timepoint_id: 1000 + index,
+      target_timepoint_id: 2000 + index,
     }));
     const model = buildEvolutionModel({
       entities: [entity(1), entity(2)],
       timepoints: {
-        1: [timepoint(11, 1000, "始置")],
-        2: [timepoint(21, 1000, "始置")],
+        1: Array.from({ length: 12 }, (_, index) => timepoint(1000 + index, 1000 + index, "始置")),
+        2: Array.from({ length: 12 }, (_, index) => timepoint(2000 + index, 1000 + index, "始置")),
       },
       changeRelations,
     }, [1]);
     const layout = layoutEvolutionModel(model, { x: 0, y: 0, width: 100, height: 40 });
+    assert.equal(layout.fanGroups.length, 0);
     const visible = layout.relations.filter((relation) => relation.labelVisible);
     const hidden = layout.relations.filter((relation) => !relation.labelVisible);
 

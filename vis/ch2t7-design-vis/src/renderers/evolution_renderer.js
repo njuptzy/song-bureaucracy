@@ -864,91 +864,119 @@ function renderOffAxis(parent, layout, selectedItem, handlers) {
 }
 
 /**
- * StoryFlow-style braid prototype: cross-lane relations whose endpoints sit in
- * the same year cluster share one vertical trunk instead of each sweeping its
- * own S-curve across the canvas. Singles keep the classic path.
+ * Fan rendering: relations that share one exact endpoint (laid out in
+ * `layout.fanGroups`) collapse into a single trunk along the shared column,
+ * with short spoke stubs into each event mark and one label for the whole
+ * fan. The trunk never moves an endpoint off its true year — it only removes
+ * the duplicated parallel curves between the same two lanes.
  */
-function bundleRelations(relations) {
-  const items = [];
-  const singles = [];
-  for (const relation of relations) {
-    const source = relation.sourcePoints.find((point) => point.x != null);
-    const target = relation.targetPoints.find((point) => point.x != null);
-    if (!source || !target || relation.hasOffAxisEndpoint || Math.abs(target.y - source.y) < 1) {
-      singles.push(relation);
-      continue;
-    }
-    items.push({ relation, source, target, cx: (source.x + target.x) / 2 });
-  }
-  items.sort((first, second) => first.cx - second.cx);
-  const bundles = [];
-  const claimed = new Set();
-  for (const item of items) {
-    if (claimed.has(item)) continue;
-    const cluster = [item];
-    claimed.add(item);
-    for (const other of items) {
-      if (claimed.has(other)) continue;
-      if (Math.abs(other.cx - item.cx) <= 70) {
-        cluster.push(other);
-        claimed.add(other);
-      }
-    }
-    if (cluster.length > 1) bundles.push(cluster);
-    else singles.push(item.relation);
-  }
-  return { bundles, singles };
-}
+function renderFanGroup(parent, fan, selectedRelationKey, handlers) {
+  const selected = fan.relations.some((relation) => (
+    `relation:${relation.id}` === selectedRelationKey
+  ));
+  const group = svgElement("g", {
+    class: `evolution-fan-group${selected ? " is-selected" : ""}`,
+    "data-fan-key": fan.key,
+  });
+  const color = selected ? COLORS.selected : COLORS.line;
+  const width = selected ? 1.7 : 1.15;
+  const opacity = selected ? 1 : 0.72;
+  const hub = fan.hub;
+  const trunkX = hub.x;
+  const farY = fan.spokes.reduce((best, point) => (
+    Math.abs(point.y - hub.y) > Math.abs(best - hub.y) ? point.y : best
+  ), hub.y);
+  const travel = Math.sign(farY - hub.y) || 1;
 
-function renderRelationBundle(parent, bundle, selectedKey, handlers) {
-  const group = svgElement("g", { class: "evolution-relation-bundle" });
-  const trunkX = bundle.reduce((sum, item) => sum + item.cx, 0) / bundle.length;
-  const ys = bundle.flatMap((item) => [item.source.y, item.target.y]);
-  const trunkTop = Math.min(...ys);
-  const trunkBottom = Math.max(...ys);
+  // Main trunk: hub -> farthest spoke column position.
   group.appendChild(svgElement("line", {
-    class: "evolution-relation-trunk",
-    x1: trunkX, y1: trunkTop, x2: trunkX, y2: trunkBottom,
-    stroke: COLORS.line, "stroke-width": 1.9, "stroke-opacity": 0.5,
+    class: "evolution-fan-trunk",
+    x1: trunkX, y1: hub.y, x2: trunkX, y2: farY,
+    stroke: color, "stroke-width": width, "stroke-opacity": opacity,
     "stroke-linecap": "round", "pointer-events": "none",
   }));
-  for (const item of bundle) {
-    const { relation, source, target } = item;
-    const isSelected = selectedKey === `relation:${relation.id}`;
-    const color = isSelected ? COLORS.selected : COLORS.line;
-    const width = isSelected ? 1.7 : 1.05;
-    const opacity = isSelected ? 1 : 0.68;
-    const sub = svgElement("g", {
-      class: `evolution-relation${isSelected ? " is-selected" : ""}`,
-      "data-relation-id": relation.id,
-    });
-    const entry = Math.max(-9, Math.min(9, (target.y - source.y) * 0.06));
-    const into = `M${source.x} ${source.y}Q${trunkX} ${source.y} ${trunkX} ${source.y + entry}`;
-    const outFromY = target.y - entry;
-    const out = `M${trunkX} ${outFromY}Q${trunkX} ${target.y} ${target.x} ${target.y}`;
-    sub.appendChild(svgElement("path", {
-      d: into, fill: "none", stroke: color, "stroke-width": width, "stroke-opacity": opacity,
-    }));
-    sub.appendChild(svgElement("path", {
-      d: out, fill: "none", stroke: color, "stroke-width": width, "stroke-opacity": opacity,
-      "marker-end": "url(#evolution-relation-arrow)",
-    }));
-    if (relation.labelVisible !== false) {
-      appendText(sub, compactRelationLabel(relation.label), {
-        x: relation.labelX ?? trunkX,
-        y: relation.labelY ?? (source.y + target.y) / 2 - 7,
-        class: "evolution-relation-label",
-        "text-anchor": "middle",
-      });
+
+  for (const spoke of fan.spokes) {
+    const sameColumn = Math.abs(spoke.x - trunkX) < 1;
+    if (fan.direction === "out") {
+      // Relation ends at the spoke: arrow stub into the event mark. When the
+      // spoke sits on another column, bridge horizontally from the trunk.
+      const d = sameColumn
+        ? `M${trunkX} ${spoke.y - travel * 8}L${trunkX} ${spoke.y}`
+        : `M${trunkX} ${spoke.y}L${spoke.x} ${spoke.y}`;
+      group.appendChild(svgElement("path", {
+        d, fill: "none", stroke: color, "stroke-width": width,
+        "stroke-opacity": opacity, "marker-end": "url(#evolution-relation-arrow)",
+        "pointer-events": "none",
+      }));
+    } else if (sameColumn) {
+      // Fan-in source already lies on the trunk: mark the join with a dot.
+      group.appendChild(svgElement("circle", {
+        cx: trunkX, cy: spoke.y, r: 1.9, fill: color, "fill-opacity": opacity,
+        "pointer-events": "none",
+      }));
+    } else {
+      group.appendChild(svgElement("path", {
+        d: `M${spoke.x} ${spoke.y}L${trunkX} ${spoke.y}`,
+        fill: "none", stroke: color, "stroke-width": width,
+        "stroke-opacity": opacity, "pointer-events": "none",
+      }));
     }
-    sub.appendChild(svgElement("path", {
-      d: `${into}L${trunkX} ${outFromY}${out.slice(1)}`,
-      fill: "none", stroke: "transparent", "stroke-width": 12, "pointer-events": "stroke",
-    }));
-    addTitle(sub, `${relation.label}：${[source, target].map((point) => point.rawTime || point.effectiveYear || "年代未明").join(" → ")}`);
-    makeInteractive(sub, `查看关系${relation.label}`, () => handlers.onSelectRelation?.(relation));
-    group.appendChild(sub);
   }
+  if (fan.direction === "in") {
+    // Fan-in converges into the hub: single arrowhead at the shared target.
+    group.appendChild(svgElement("path", {
+      d: `M${trunkX} ${hub.y + travel * 8}L${trunkX} ${hub.y}`,
+      fill: "none", stroke: color, "stroke-width": width,
+      "stroke-opacity": opacity, "marker-end": "url(#evolution-relation-arrow)",
+      "pointer-events": "none",
+    }));
+  }
+
+  if (fan.labelVisible !== false) {
+    const leader = fan.leader;
+    if (leader && Math.hypot(leader.x2 - leader.x1, leader.y2 - leader.y1) > 4) {
+      group.appendChild(svgElement("line", {
+        x1: leader.x1, y1: leader.y1, x2: leader.x2, y2: leader.y2,
+        class: "evolution-relation-label-leader",
+        stroke: COLORS.olive, "stroke-width": 0.7, "stroke-dasharray": "2 2",
+        "pointer-events": "none",
+      }));
+    }
+    appendText(group, compactRelationLabel(fan.label), {
+      x: Number.isFinite(fan.labelX) ? fan.labelX : trunkX,
+      y: Number.isFinite(fan.labelY) ? fan.labelY : (fan.top + fan.bottom) / 2 - 7,
+      class: "evolution-relation-label",
+      "text-anchor": "middle",
+    });
+  } else if (fan.labelOverflow) {
+    const x = fan.labelAnchorX ?? trunkX;
+    const y = fan.labelAnchorY ?? (fan.top + fan.bottom) / 2;
+    group.appendChild(svgElement("circle", {
+      class: "evolution-relation-overflow-marker",
+      cx: x, cy: y, r: 3.2,
+      fill: COLORS.paper, stroke: COLORS.olive, "stroke-width": 0.8,
+    }));
+    appendText(group, "…", {
+      x, y: y + 3.2,
+      class: "evolution-relation-overflow-glyph", "text-anchor": "middle",
+    });
+  }
+
+  group.appendChild(svgElement("line", {
+    x1: trunkX, y1: Math.min(hub.y, farY), x2: trunkX, y2: Math.max(hub.y, farY),
+    stroke: "transparent", "stroke-width": 14, "pointer-events": "stroke",
+  }));
+  const endpointText = (point) => point.rawTime || point.effectiveYear || "年代未明";
+  addTitle(group, `${compactRelationLabel(fan.label)} ×${fan.relations.length}：${fan.relations.map((relation) => {
+    const source = relation.sourcePoints.find((point) => point.x != null);
+    const target = relation.targetPoints.find((point) => point.x != null);
+    return `${endpointText(source || {})} → ${endpointText(target || {})}`;
+  }).join("；")}`);
+  makeInteractive(group, `查看关系组${compactRelationLabel(fan.label)}`, () => {
+    const relation = fan.relations[0];
+    if (relation) handlers.onSelectRelation?.(relation);
+  });
   parent.appendChild(group);
 }
 
@@ -1105,12 +1133,15 @@ function renderMain(layer, layout, options) {
   }
 
   const groupedRelationIds = new Set(layout.relationGroups.flatMap((item) => item.relationIds || []));
+  const fanRelationIds = new Set(
+    (layout.fanGroups || []).flatMap((fan) => fan.relations.map((relation) => relation.id)),
+  );
   const ungrouped = layout.relations.filter((relation) => !groupedRelationIds.has(relation.id));
-  const { bundles, singles } = bundleRelations(ungrouped);
-  for (const bundle of bundles) {
-    renderRelationBundle(group, bundle, selected, options.handlers);
+  for (const fan of layout.fanGroups || []) {
+    renderFanGroup(group, fan, selected, options.handlers);
   }
-  for (const relation of singles) {
+  for (const relation of ungrouped) {
+    if (fanRelationIds.has(relation.id)) continue;
     renderRelation(
       group,
       relation,

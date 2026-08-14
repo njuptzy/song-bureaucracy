@@ -122,6 +122,91 @@ function relationGroupStableKey(group) {
   ].join("|");
 }
 
+/**
+ * Geometry-driven fan grouping. Ungrouped relations that share the exact same
+ * rendered endpoint (same entity/timepoint at the same laid-out position) and
+ * carry the same compact label collapse into one fan: a shared trunk plus
+ * spokes, instead of several near-identical parallel curves that each drag
+ * their own duplicate label. Fan-out (shared source) is claimed before fan-in
+ * (shared target); a relation joins at most one fan. Only endpoints anchored
+ * on the timeline participate — off-axis or undated endpoints keep the classic
+ * per-relation rendering.
+ */
+function fanIdentity(point) {
+  return [
+    point.entityId,
+    point.timepointId ?? "",
+    point.x.toFixed(2),
+    point.y.toFixed(2),
+  ].join(":");
+}
+
+function collectFans(candidates, endpointRole, direction) {
+  const buckets = new Map();
+  for (const relation of candidates) {
+    const hubs = (endpointRole === "source" ? relation.sourcePoints : relation.targetPoints)
+      .filter((point) => point.x != null);
+    const spokes = (endpointRole === "source" ? relation.targetPoints : relation.sourcePoints)
+      .filter((point) => point.x != null);
+    if (hubs.length !== 1 || !spokes.length) continue;
+    if (spokes.every((point) => Math.abs(point.y - hubs[0].y) < 1)) continue;
+    const key = [
+      direction,
+      fanIdentity(hubs[0]),
+      compactRelationLabel(relation.label),
+    ].join("|");
+    if (!buckets.has(key)) buckets.set(key, { direction, hub: hubs[0], relations: [], spokes: [] });
+    const bucket = buckets.get(key);
+    bucket.relations.push(relation);
+    bucket.spokes.push(...spokes);
+  }
+  return [...buckets.values()].filter((bucket) => bucket.relations.length > 1);
+}
+
+function buildFanGroups(relations, aggregatedGroupIds) {
+  const candidates = relations.filter((relation) => (
+    relation.drawable
+    && !relation.hasOffAxisEndpoint
+    && (relation.groupId == null || !aggregatedGroupIds.has(relation.groupId))
+  ));
+  const fanOuts = collectFans(candidates, "source", "out");
+  const claimed = new Set(fanOuts.flatMap((fan) => fan.relations));
+  const fanIns = collectFans(
+    candidates.filter((relation) => !claimed.has(relation)),
+    "target",
+    "in",
+  );
+  return [...fanOuts, ...fanIns].map((fan, index) => {
+    const spokes = uniqueBy(fan.spokes, fanIdentity);
+    const ys = [fan.hub.y, ...spokes.map((point) => point.y)];
+    return {
+      key: `fan:${index}`,
+      direction: fan.direction,
+      label: fan.relations[0].label,
+      relations: fan.relations,
+      hub: fan.hub,
+      spokes,
+      top: Math.min(...ys),
+      bottom: Math.max(...ys),
+    };
+  });
+}
+
+function fanAnchor(fan) {
+  return {
+    x: fan.hub.x,
+    y: (fan.top + fan.bottom) / 2,
+  };
+}
+
+function fanStableKey(fan) {
+  return [
+    fan.direction,
+    fan.label ?? "",
+    ...fan.relations.map(relationStableKey).sort(),
+  ].join("|");
+}
+
 function labelBox(labelX, labelY, width) {
   const x = labelX - width / 2;
   const y = labelY - RELATION_LABEL_ASCENT;
@@ -633,8 +718,13 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
       .filter((group) => group.renderMode === "group")
       .map((group) => group.groupId),
   );
+  const fanGroupsWithoutLabels = buildFanGroups(relationsWithoutLabels, aggregatedGroupIds);
+  const fanClaimedRelations = new Set(
+    fanGroupsWithoutLabels.flatMap((fan) => fan.relations),
+  );
   const groupLabelKey = (group) => `group:${typeof group.groupId}:${String(group.groupId)}`;
   const relationLabelKey = (relation) => `relation:${relation.key}`;
+  const fanLabelKey = (fan) => `fan-label:${fan.key}`;
   const labelItems = [
     ...relationGroupsWithoutLabels
       .filter((group) => group.drawable && group.renderMode === "group")
@@ -646,10 +736,20 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
         anchor: relationGroupAnchor(group),
         stableKey: relationGroupStableKey(group),
       })),
+    ...fanGroupsWithoutLabels.map((fan) => ({
+      key: fanLabelKey(fan),
+      id: fan.relations[0]?.id ?? fan.key,
+      priority: 1,
+      label: fan.label,
+      anchor: fanAnchor(fan),
+      stableKey: fanStableKey(fan),
+    })),
     ...relationsWithoutLabels
-      .filter((relation) => relation.drawable && (
-        relation.groupId == null || !aggregatedGroupIds.has(relation.groupId)
-      ))
+      .filter((relation) => relation.drawable
+        && !fanClaimedRelations.has(relation)
+        && (
+          relation.groupId == null || !aggregatedGroupIds.has(relation.groupId)
+        ))
       .map((relation) => ({
         key: relationLabelKey(relation),
         id: relation.id,
@@ -686,6 +786,19 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
     labelOverflow: false,
     ...(labelPlacements.get(groupLabelKey(group)) || {}),
   }));
+  const fanGroups = fanGroupsWithoutLabels.map((fan) => ({
+    ...fan,
+    relations: fan.relations.map((relation) => relationByKey.get(relation.key) || relation),
+    labelX: null,
+    labelY: null,
+    labelBounds: null,
+    labelAnchorX: null,
+    labelAnchorY: null,
+    leader: null,
+    labelVisible: false,
+    labelOverflow: false,
+    ...(labelPlacements.get(fanLabelKey(fan)) || {}),
+  }));
 
   offAxis.relationEndpoints = (model?.offAxis?.relationEndpoints || []).map((endpoint) => {
     const point = layoutMember(endpoint);
@@ -706,6 +819,7 @@ export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
     lanes,
     relations,
     relationGroups,
+    fanGroups,
     offAxis,
   };
 }
