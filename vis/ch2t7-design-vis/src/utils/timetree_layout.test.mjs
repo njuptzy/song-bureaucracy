@@ -12,6 +12,7 @@ import {
   timetreeEventsForLane,
   timetreeRelationEndpointIds,
   timetreeRelationsForEntity,
+  timetreeVirtualBusGeometry,
   timetreeNodeX,
   timetreeRowY,
   timetreeYearToX,
@@ -99,6 +100,34 @@ describe("timetreeLaneLinkSpan", () => {
     const span = timetreeLaneLinkSpan(TIMETREE_GEOMETRY.plot.x0 + 20);
     assert.equal(span.x0, TIMETREE_GEOMETRY.plot.x0 - 4);
     assert.equal(span.x1 - span.x0, 4);
+  });
+});
+
+describe("timetreeVirtualBusGeometry", () => {
+  it("不同宽度子节点共用一根位于全部外框左侧的竖向总线", () => {
+    const parent = { right: 170, y: 200 };
+    const children = [
+      { left: 186, y: 120 },
+      { left: 218, y: 200 },
+      { left: 268, y: 280 },
+    ];
+    const bus = timetreeVirtualBusGeometry(parent, children);
+    assert.equal(bus.busX, 178);
+    assert.equal(bus.y0, 120);
+    assert.equal(bus.y1, 280);
+    assert.ok(children.every((child) => bus.busX < child.left));
+    assert.ok(bus.children.every((branch) => branch.x0 === bus.busX));
+  });
+
+  it("单个子节点也只生成同一套父干、总线和支线", () => {
+    const bus = timetreeVirtualBusGeometry(
+      { right: 100, y: 50 },
+      [{ left: 140, y: 50 }],
+    );
+    assert.equal(bus.busX, 120);
+    assert.equal(bus.y0, 50);
+    assert.equal(bus.y1, 50);
+    assert.deepEqual(bus.children, [{ x0: 120, x1: 140, y: 50 }]);
   });
 });
 

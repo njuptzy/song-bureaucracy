@@ -3,6 +3,7 @@ import {
   fitTimetreeCapsuleLabel,
   TIMETREE_GEOMETRY,
   timetreeLaneLinkSpan,
+  timetreeVirtualBusGeometry,
   timetreeNodeX,
   timetreeRowY,
 } from "../utils/timetree_layout.js";
@@ -315,6 +316,23 @@ function renderTreeLink(parent, parentNode, childNode) {
   });
   polyline.style.pointerEvents = "none";
   parent.appendChild(polyline);
+}
+
+// 虚拟类别/制度组严格复用层级视图的共同总线语法；旋转后横向总线变为竖向。
+function renderVirtualTreeBus(parent, parentNode, childNodes) {
+  const bus = timetreeVirtualBusGeometry(parentNode, childNodes);
+  if (!bus) return;
+  const appendLine = (x1, y1, x2, y2) => {
+    const line = svgElement("line", {
+      class: "cls-26 timetree-tree-link",
+      x1, y1, x2, y2,
+      "pointer-events": "none",
+    });
+    parent.appendChild(line);
+  };
+  appendLine(bus.parent.x0, bus.parent.y, bus.parent.x1, bus.parent.y);
+  appendLine(bus.busX, bus.y0, bus.busX, bus.y1);
+  bus.children.forEach((child) => appendLine(child.x0, child.y, child.x1, child.y));
 }
 
 // 机构节点与其右侧时间车道的直接对应线。使用虚线，避免与实体存续线混淆。
@@ -644,7 +662,7 @@ export function renderTimetreeOverlay(svg, options) {
     }
   }
 
-  // 第一遍：行带、树连线、存续段（底层）。
+  // 第一遍：行带与存续段（底层）。
   const underlay = svgElement("g", { class: "timetree-underlay" });
   content.appendChild(underlay);
   for (const row of rows) {
@@ -654,12 +672,33 @@ export function renderTimetreeOverlay(svg, options) {
     if (row.entityId != null) {
       makeInteractive(band, `查看${row.title}`, () => handlers.onSelectEntity?.(row.entityId));
     }
-    if (treeTemplates && row.parentKey && nodeInfoByKey.has(row.parentKey)) {
-      renderTreeLink(underlay, nodeInfoByKey.get(row.parentKey), nodeInfoByKey.get(row.key));
-    }
     if (row.entityId != null) {
       renderLaneLink(underlay, nodeInfoByKey.get(row.key), y, geometry, selected);
       renderSegments(underlay, segmentsByLane.get(row.entityId), y);
+    }
+  }
+
+
+  // 第二遍：层级连线。虚拟父节点的所有下级共享一根分叉总线；真实机构
+  // 仍按数据库中的每条明确上下级边逐条连接。
+  if (treeTemplates) {
+    const rowByKey = new Map(rows.map((row) => [row.key, row]));
+    const childrenByParentKey = new Map();
+    for (const row of rows) {
+      if (!row.parentKey || !rowByKey.has(row.parentKey)) continue;
+      if (!childrenByParentKey.has(row.parentKey)) childrenByParentKey.set(row.parentKey, []);
+      childrenByParentKey.get(row.parentKey).push(row);
+    }
+    for (const [parentKey, childRows] of childrenByParentKey) {
+      const parentRow = rowByKey.get(parentKey);
+      const parentInfo = nodeInfoByKey.get(parentKey);
+      const childInfos = childRows.map((row) => nodeInfoByKey.get(row.key)).filter(Boolean);
+      if (!parentInfo || !childInfos.length) continue;
+      if (parentRow.isVirtual) {
+        renderVirtualTreeBus(underlay, parentInfo, childInfos);
+      } else {
+        childInfos.forEach((childInfo) => renderTreeLink(underlay, parentInfo, childInfo));
+      }
     }
   }
 

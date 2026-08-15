@@ -90,6 +90,24 @@ export function timetreeLaneLinkSpan(nodeRight, geometry = TIMETREE_GEOMETRY) {
 }
 
 /**
+ * 旋转后的虚拟父节点共同分叉总线。总线取父框右缘与所有子框最左缘之间，
+ * 确保不同宽度的制度组共用一根安全竖线，不穿过任何子节点外框。
+ */
+export function timetreeVirtualBusGeometry(parentNode, childNodes = []) {
+  if (!parentNode || !childNodes.length) return null;
+  const nearestChildLeft = Math.min(...childNodes.map((child) => child.left));
+  const busX = (parentNode.right + nearestChildLeft) / 2;
+  const ys = [parentNode.y, ...childNodes.map((child) => child.y)];
+  return {
+    busX,
+    y0: Math.min(...ys),
+    y1: Math.max(...ys),
+    parent: { x0: parentNode.right, x1: busX, y: parentNode.y },
+    children: childNodes.map((child) => ({ x0: busX, x1: child.left, y: child.y })),
+  };
+}
+
+/**
  * 时间线树的点密度联动：当前选中机构展开全部时间点；其他机构只保留
  * 建置、罢废和演变关系端点等关键点，避免总览状态被普通记载淹没。
  */
