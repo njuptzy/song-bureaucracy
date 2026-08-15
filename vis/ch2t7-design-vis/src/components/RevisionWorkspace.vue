@@ -461,13 +461,15 @@ function formatDate(value) {
 .revision-ui { position: absolute; inset: 0; pointer-events: none; z-index: 20; color: var(--ink); }
 button, input, textarea, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; }
-.revision-toolbar { position: absolute; top: 18px; right: 24px; display: flex; height: 34px; border: 1px solid rgba(86,57,5,.55); background: rgba(245,243,236,.94); box-shadow: 0 2px 10px rgba(53,23,4,.08); pointer-events: auto; }
-.toolbar-command { border: 0; border-right: 1px solid rgba(86,57,5,.24); padding: 0 12px; background: transparent; cursor: pointer; white-space: nowrap; }
+.revision-toolbar { position: absolute; top: 18px; right: 24px; display: flex; height: 34px; border: 1px solid rgba(86,57,5,.62); background: transparent; box-shadow: none; pointer-events: auto; }
+.toolbar-command { position: relative; border: 0; border-right: 1px solid rgba(86,57,5,.28); padding: 0 12px; background: transparent; cursor: pointer; white-space: nowrap; }
 .toolbar-command:last-child { border-right: 0; }
-.toolbar-command:hover, .toolbar-command.active { background: rgba(145,128,105,.16); }
+.toolbar-command:hover { color: var(--taupe); }
+.toolbar-command.active::after { position: absolute; right: 8px; bottom: 2px; left: 8px; height: 2px; background: var(--ink-2); content: ""; }
+.toolbar-command:focus-visible { outline: 1px dashed rgba(86,57,5,.78); outline-offset: -4px; }
 .toolbar-command:disabled { opacity: .45; cursor: not-allowed; }
 .command-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 6px; border: 1px solid currentColor; font-size: 11px; }
-.draft-count { display: inline-grid; min-width: 17px; height: 17px; margin-left: 7px; place-items: center; border-radius: 50%; background: var(--ink-2); color: var(--paper); font-size: 10px; }
+.draft-count { display: inline-grid; min-width: 16px; height: 16px; margin-left: 7px; place-items: center; border: 1px solid currentColor; border-radius: 0; background: transparent; color: inherit; font-size: 9px; }
 .revision-lock, .connection-guide { position: absolute; top: 60px; right: 24px; pointer-events: auto; }
 .revision-lock { max-width: 440px; padding: 8px 12px; border-left: 3px solid #a0432e; background: rgba(245,243,236,.97); color: #7b2f20; }
 .connection-guide { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(86,57,5,.45); background: rgba(245,243,236,.96); }
