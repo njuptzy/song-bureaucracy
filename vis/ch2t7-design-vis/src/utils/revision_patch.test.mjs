@@ -89,8 +89,8 @@ test("删除虚影仍可显示但不再终止实体生命周期", () => {
     entities: [{ id: 1, title: "甲司", type: "机构" }],
     timepoints: {
       1: [
-        { id: 1, entity_id: 1, time: "1000年", year_start: 1000, year_end: 1000, time_type: "exact", event: "初置甲司" },
-        { id: "deleted:2", entity_id: 1, time: "1010年", year_start: 1010, year_end: 1010, time_type: "exact", event: "罢甲司", _revision_status: "deleted" },
+        { id: 1, entity_id: 1, time: "1000年", year_start: 1000, year_end: 1000, time_type: "exact", event: "初置甲司", lifecycle_effect: "activate" },
+        { id: "deleted:2", entity_id: 1, time: "1010年", year_start: 1010, year_end: 1010, time_type: "exact", event: "罢甲司", lifecycle_effect: "deactivate", _revision_status: "deleted" },
       ],
     },
     changeRelations: [],

@@ -1,12 +1,10 @@
-import {
-  classifyEventType,
-  classifyExistenceEffect,
-} from "../../../shared/entity_lifecycle.js";
+import { classifyEventType } from "../../../shared/entity_lifecycle.js";
 
 const DEFAULT_YEAR_MIN = 960;
 const DEFAULT_YEAR_MAX = 1279;
 const SOURCE_ROLES = new Set(["source", "giver", "subject", "来源", "给予者"]);
 const TARGET_ROLES = new Set(["target", "receiver", "object", "后继", "接受者"]);
+const LIFECYCLE_EFFECTS = new Set(["activate", "preserve", "deactivate", "ignore"]);
 
 const RELATION_LABELS = new Map([
   ["演变·改称", "演变·改称"],
@@ -37,6 +35,11 @@ function finiteYear(value) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function explicitLifecycleEffect(source) {
+  const value = String(source?.lifecycle_effect ?? source?.lifecycleEffect ?? "");
+  return LIFECYCLE_EFFECTS.has(value) ? value : "ignore";
 }
 
 function normalizedTimeType(item) {
@@ -90,7 +93,7 @@ function normalizeTimepoints(data, entityMap) {
         iconType: eventGlyphType(eventType),
         effect: ["before", "deleted"].includes(source._revision_status || source.revisionStatus)
           ? "ignore"
-          : classifyExistenceEffect(source, entity),
+          : explicitLifecycleEffect(source),
       };
       byId.set(item.id, item);
       if (!byEntity.has(entityId)) byEntity.set(entityId, []);
@@ -527,19 +530,11 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     .filter((timepoint) => timepoint.effectiveYear != null)
     .sort((a, b) => a.effectiveYear - b.effectiveYear || a.chainIndex - b.chainIndex);
 
-  let active = null;
-  let inferredStart = false;
+  let active = false;
   for (const timepoint of chain.timepoints) {
     if (timepoint.timeType !== "pre_song") continue;
-    if (timepoint.effect === "activate") {
-      active = true;
-      inferredStart = false;
-    }
+    if (timepoint.effect === "activate") active = true;
     else if (timepoint.effect === "deactivate") active = false;
-    else if (timepoint.effect === "preserve" && active == null) {
-      active = true;
-      inferredStart = true;
-    }
   }
 
   let startYear = active ? yearMin : null;
@@ -550,29 +545,22 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     if (year < yearMin) {
       if (event.effect === "activate") {
         active = true;
-        inferredStart = false;
       }
       else if (event.effect === "deactivate") active = false;
-      else if (event.effect === "preserve" && active == null) {
-        active = true;
-        inferredStart = true;
-      }
       startYear = active ? yearMin : null;
+      startEventId = null;
       openStart = Boolean(active);
       continue;
     }
     if (year > yearMax) break;
     if (event.effect === "ignore") continue;
     if (event.effect === "activate") {
-      // 明确建置必须重置起点：当前存续若只是由普通记载推定的
-      // （inferredStart），线段要从建置事件起画，而不是从第一条记载起画。
-      if (active !== true || inferredStart) {
+      if (!active) {
         active = true;
         startYear = year;
         startEventId = event.id;
         openStart = false;
       }
-      inferredStart = false;
       continue;
     }
     if (event.effect === "deactivate") {
@@ -586,35 +574,16 @@ function lifecycleSegments(chain, yearMin, yearMax) {
           endEventId: event.id,
           openStart,
           openEnd: false,
-          inferredStart,
-        });
-      } else if (active == null) {
-        segments.push({
-          id: `${chain.id}:unknown-${event.id}`,
-          chainId: chain.id,
-          startYear: year,
-          endYear: year,
-          startEventId: null,
-          endEventId: event.id,
-          openStart: true,
-          openEnd: false,
+          inferredStart: false,
         });
       }
       active = false;
       startYear = null;
       startEventId = null;
       openStart = false;
-      inferredStart = false;
       continue;
     }
-    if (event.effect === "preserve" && active == null) {
-      active = true;
-      startYear = year;
-      startEventId = event.id;
-      openStart = true;
-      inferredStart = true;
-    }
-    // preserve after an explicit deactivation deliberately does nothing.
+    // preserve / ignore 都只保留当前状态，不能创建或终止存续段。
   }
   if (active === true && startYear != null) {
     segments.push({
@@ -626,7 +595,7 @@ function lifecycleSegments(chain, yearMin, yearMax) {
       endEventId: null,
       openStart,
       openEnd: true,
-      inferredStart,
+      inferredStart: false,
     });
   }
   return segments;

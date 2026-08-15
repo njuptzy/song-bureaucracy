@@ -13,6 +13,9 @@ const timepoint = (id, year, event = "普通记载", overrides = {}) => ({
   time_type: year == null ? "undated" : "exact",
   year_start: year,
   year_end: year,
+  lifecycle_effect: /始置|复置|沿置/.test(event)
+    ? "activate"
+    : (/罢/.test(event) ? "deactivate" : "preserve"),
   ...overrides,
 });
 

@@ -8,6 +8,9 @@ function entity(id, title = `实体${id}`, type = "机构") {
 
 function timepoint(id, year, event, overrides = {}) {
   const timeType = overrides.time_type || (year == null ? "undated" : "exact");
+  const lifecycleEffect = /始置|复置|沿置/.test(event)
+    ? "activate"
+    : (/罢/.test(event) ? "deactivate" : "preserve");
   return {
     id,
     time: year == null ? "未知" : String(year),
@@ -17,6 +20,7 @@ function timepoint(id, year, event, overrides = {}) {
     time_type: timeType,
     year_start: year,
     year_end: year,
+    lifecycle_effect: lifecycleEffect,
     ...overrides,
   };
 }
@@ -54,10 +58,10 @@ describe("buildEvolutionModel lifecycle", () => {
 
     assert.equal(model.lanes[0].events[0].iconType, "abolish");
     assert.equal(model.lanes[0].events[0].effect, "preserve");
-    assert.equal(model.lanes[0].segments[0].endYear, 1279);
+    assert.deepEqual(model.lanes[0].segments, []);
   });
 
-  it("首次普通记载只作为推定存续起点，不伪装成明确建置", () => {
+  it("preserve 不能在未知状态下创建存续线", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "无始置记录司")],
       timepoints: {
@@ -66,19 +70,10 @@ describe("buildEvolutionModel lifecycle", () => {
       changeRelations: [],
     }, [1], { yearMin: 960, yearMax: 1279 });
 
-    const segment = model.lanes[0].segments[0];
-    assert.deepEqual(
-      {
-        startYear: segment.startYear,
-        endYear: segment.endYear,
-        openStart: segment.openStart,
-        inferredStart: segment.inferredStart,
-      },
-      { startYear: 1000, endYear: 1279, openStart: true, inferredStart: true },
-    );
+    assert.deepEqual(model.lanes[0].segments, []);
   });
 
-  it("范围外的明确建置会把推定存续线恢复为确定起点", () => {
+  it("范围外的 activate 让存续线从视图左边界继续", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "后置司")],
       timepoints: {
@@ -97,7 +92,7 @@ describe("buildEvolutionModel lifecycle", () => {
     assert.equal(segment.inferredStart, false);
   });
 
-  it("推定存续后遇到明确建置，线段起点重置到建置年", () => {
+  it("此前 preserve 不开线，遇到 activate 才开始存续段", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "后明置司")],
       timepoints: {
@@ -116,6 +111,23 @@ describe("buildEvolutionModel lifecycle", () => {
       })),
       [{ startYear: 1000, endYear: 1010, inferredStart: false }],
     );
+  });
+
+  it("缺失或非法的 lifecycle_effect 不回退事件文字推断", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "字段缺失司")],
+      timepoints: {
+        1: [
+          timepoint(11, 1000, "始置", { lifecycle_effect: undefined }),
+          timepoint(12, 1010, "罢字段缺失司", { lifecycle_effect: "非法值" }),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+
+    assert.equal(model.lanes[0].events[0].effect, "ignore");
+    assert.equal(model.lanes[0].events[1].effect, "ignore");
+    assert.deepEqual(model.lanes[0].segments, []);
   });
 
   it("罢废后的普通记载不复活，明确复置才重开，bounded 在上界生效", () => {
