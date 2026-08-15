@@ -41,13 +41,15 @@
     </div>
 
     <section v-if="!drawer && editMode && selection && !connectionMode" class="selection-editor" aria-label="选中事实编辑器">
-      <header class="editor-heading">
-        <div>
-          <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
-          <strong>{{ selectionTitle }}</strong>
-        </div>
-        <button type="button" class="icon-command" title="关闭编辑表单" @click="$emit('clear-selection')">×</button>
-      </header>
+      <fieldset class="editor-frame">
+        <legend class="editor-heading">
+          <div>
+            <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
+            <strong>{{ selectionTitle }}</strong>
+          </div>
+          <button type="button" class="icon-command" title="关闭编辑表单" @click="$emit('clear-selection')">×</button>
+        </legend>
+        <div class="editor-frame-scroll">
 
       <template v-if="selection.kind === 'timepoint'">
         <div class="editor-tabs" role="tablist">
@@ -119,6 +121,8 @@
         <span class="form-error">{{ localError }}</span>
         <button class="primary-command" type="button" :disabled="busy" @click="submitSelection">加入草稿</button>
       </footer>
+        </div>
+      </fieldset>
     </section>
 
     <section v-if="!drawer && editMode && connectionMode && connectSource && connectTarget" class="connection-editor">
@@ -479,8 +483,7 @@ button { color: inherit; }
   width: var(--revision-panel-width, 20.4688%);
   height: var(--revision-panel-height, 31.2963%);
   max-height: none;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -488,7 +491,37 @@ button { color: inherit; }
   scrollbar-color: rgba(86,57,5,.48) transparent;
   scrollbar-width: thin;
 }
-.selection-editor, .connection-editor { padding: 13px 10px 8px; }
+.selection-editor { padding: 0; }
+.connection-editor { padding: 13px 10px 8px; overflow-y: auto; }
+.editor-frame {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 10px 8px;
+  flex-direction: column;
+  border: 1px solid rgba(86,57,5,.78);
+  border-radius: 0;
+  background: transparent;
+}
+.editor-frame > .editor-heading {
+  box-sizing: border-box;
+  width: min(92%, max-content);
+  max-width: calc(100% - 22px);
+  margin-left: 9px;
+  padding: 0 8px;
+  border: 0;
+}
+.editor-frame-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 2px 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(86,57,5,.48) transparent;
+  scrollbar-width: thin;
+}
 .editor-heading, .drawer-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid rgba(86,57,5,.32); }
 .editor-heading div, .drawer-heading div { display: grid; gap: 3px; min-width: 0; }
 .editor-heading strong, .drawer-heading strong { overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
