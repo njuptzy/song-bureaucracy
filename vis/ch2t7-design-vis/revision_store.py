@@ -16,9 +16,18 @@ from typing import Callable
 
 
 EDITABLE_FIELDS = {
-    "Timepoints": {"time", "event", "attr_category", "attr_officer_type", "attr_grade", "quotation"},
+    "Timepoints": {
+        "time", "event", "event_type", "lifecycle_effect", "attr_category",
+        "attr_officer_type", "attr_grade", "quotation",
+    },
     "Relationships": {"subject_id", "object_id", "quotation"},
 }
+EVENT_TYPES = {
+    "establish", "restore", "abolish", "rename", "reorganize", "merge", "split",
+    "incorporate", "duty_transfer", "affiliation_change", "staffing_change",
+    "proposal_unimplemented", "record",
+}
+LIFECYCLE_EFFECTS = {"activate", "preserve", "deactivate", "ignore"}
 SUPPORTED_TABLES = ("Entities", "Timepoints", "Relationships", "Citations", "NormalizedTimes")
 ROW_KEYS = {
     "Entities": "id",
@@ -442,8 +451,12 @@ class RevisionStore:
                     raise RevisionError("新增时间点必须指定所属实体", code="MISSING_ENTITY")
                 if token(after["entity_id"]) not in state["Entities"]:
                     raise RevisionError("新增时间点所属实体不存在", code="INVALID_ENTITY")
-                for field in ("time", "event", "attr_category", "attr_officer_type", "attr_grade", "quotation"):
+                for field in (
+                    "time", "event", "attr_category", "attr_officer_type", "attr_grade", "quotation",
+                ):
                     after.setdefault(field, "")
+                after.setdefault("event_type", "record")
+                after.setdefault("lifecycle_effect", "preserve")
                 after.setdefault("prev_id", None)
                 after.setdefault("succ_id", None)
                 if evidence and not after.get("quotation"):
@@ -846,6 +859,10 @@ class RevisionStore:
             row = state["Timepoints"].get(point_id)
             if not row:
                 continue
+            if row.get("event_type") not in EVENT_TYPES:
+                errors.append(f"时间点 {point_id} 的事件类型无效")
+            if row.get("lifecycle_effect") not in LIFECYCLE_EFFECTS:
+                errors.append(f"时间点 {point_id} 的存废影响无效")
             for field, reverse in (("prev_id", "succ_id"), ("succ_id", "prev_id")):
                 neighbor_id = row.get(field)
                 if neighbor_id is None:

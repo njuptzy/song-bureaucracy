@@ -13,6 +13,39 @@ const IMPLICIT_SOURCE_VERBS = [
   "改为", "改名为", "改名", "改称为", "改称", "改置为",
 ];
 
+export const EVENT_TYPE_VALUES = [
+  "establish",
+  "restore",
+  "abolish",
+  "rename",
+  "reorganize",
+  "merge",
+  "split",
+  "incorporate",
+  "duty_transfer",
+  "affiliation_change",
+  "staffing_change",
+  "proposal_unimplemented",
+  "record",
+];
+
+export const LIFECYCLE_EFFECT_VALUES = ["activate", "preserve", "deactivate", "ignore"];
+
+const EVENT_TYPE_RULES = [
+  ["proposal_unimplemented", [...FAILED_CHANGE_WORDS, ...NEGATED_ACTIVATION_VERBS]],
+  ["restore", ["复置", "复设", "恢复", "复旧", "再置", "重置"]],
+  ["establish", ["正式建置", "始置", "初置", "新置", "创置", "设立", "建立", "成立", "开设", "创设", "设置"]],
+  ["abolish", TERMINATION_VERBS],
+  ["rename", ["复改称", "复改名", "复称", "改名", "改称", "更名"]],
+  ["reorganize", ["改置"]],
+  ["merge", ["合并", "合置", "重合", "合为"]],
+  ["split", ["分拆", "分置", "复分为", "分为"]],
+  ["incorporate", ["并入", "并归"]],
+  ["duty_transfer", ["职事归", "职掌归", "职权归", "事务归", "移交"]],
+  ["affiliation_change", ["改隶", "归隶", "拨属", "隶属"]],
+  ["staffing_change", ["增员", "减员", "裁减", "官额", "员额", "编制"]],
+];
+
 function splitClauses(text) {
   const clauses = [];
   let start = 0;
@@ -39,6 +72,13 @@ function occurrences(text, word) {
 function exactEntityPhrase(text, title) {
   if (!title) return false;
   return text === title || text === `${title}之名` || text === `${title}名`;
+}
+
+function entityNames(entity = {}) {
+  const aliases = Array.isArray(entity.aliases) ? entity.aliases : [];
+  return [...new Set([entity.title, ...aliases]
+    .map((value) => String(value || "").replace(/\s+/g, ""))
+    .filter(Boolean))];
 }
 
 function stripDiscourseLead(text) {
@@ -73,16 +113,16 @@ function implicitTerminationTargetsCurrent(before, after) {
   return false;
 }
 
-function verbTargetsEntity(clause, index, verb, title, { activation = false, termination = false } = {}) {
+function verbTargetsEntity(clause, index, verb, names, { activation = false, termination = false } = {}) {
   const before = stripDiscourseLead(clause.slice(0, index));
   const after = clause.slice(index + verb.length);
 
   // 明示主语：“三司罢”“太常寺之名废止”。不能只做 title 子串匹配，
   // 否则“太常寺主簿罢置”会把太常寺本身误判为被罢。
-  if (exactEntityPhrase(before, title)) return true;
+  if (names.some((title) => exactEntityPhrase(before, title))) return true;
 
   // 明示宾语：“罢三司”。同样要求完整实体名，不能把“罢三司某案”算作三司被罢。
-  if (exactEntityPhrase(after, title)) return true;
+  if (names.some((title) => exactEntityPhrase(after, title))) return true;
 
   // 只有没有其他名词宾语的独立陈述，才允许按时间点所属实体补出省略的主语。
   if (!before && !after) return true;
@@ -90,7 +130,7 @@ function verbTargetsEntity(clause, index, verb, title, { activation = false, ter
   if (activation && !before && /^(?:于|在)/.test(after)) return true;
   // “复置行在同文馆”等写法中，“行在”是地点限定，后面的完整实体名
   // 仍是复置对象；不能因地点前缀而漏掉恢复语义。
-  if (activation && title && after === `行在${title}`) return true;
+  if (activation && names.some((title) => after === `行在${title}`)) return true;
   if (termination && implicitTerminationTargetsCurrent(before, after)) return true;
   return false;
 }
@@ -108,7 +148,7 @@ function addTransition(transitions, effect, index, reason, priority = 0) {
  */
 export function classifyEntityLifecycle(eventText, entity = {}) {
   const text = String(eventText || "").replace(/\s+/g, "");
-  const title = String(entity?.title || "").replace(/\s+/g, "");
+  const names = entityNames(entity);
   if (!text) return { effect: "preserve", transitions: [] };
 
   const transitions = [];
@@ -121,7 +161,7 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
 
     for (const verb of NEGATED_ACTIVATION_VERBS) {
       for (const index of occurrences(clause, verb)) {
-        if (verbTargetsEntity(clause, index, verb, title)) {
+        if (verbTargetsEntity(clause, index, verb, names)) {
           addTransition(transitions, "deactivate", start + index, `当前实体未再设置：${verb}`, 3);
         }
       }
@@ -130,7 +170,7 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
     for (const verb of ACTIVATION_VERBS) {
       for (const index of occurrences(clause, verb)) {
         const precededByNegation = ["不", "未"].includes(clause[index - 1]);
-        if (!precededByNegation && verbTargetsEntity(clause, index, verb, title, { activation: true })) {
+        if (!precededByNegation && verbTargetsEntity(clause, index, verb, names, { activation: true })) {
           addTransition(transitions, "activate", start + index, `当前实体设置或恢复：${verb}`, 2);
         }
       }
@@ -140,14 +180,15 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
     const resultMatch = clause.match(
       /(?:复改称为|复改称|复改名为|复改名|改置为|改名为|改名|改称为|改称|更名为|更名|合并为|合置为|重合为|仍为|依旧为)([^为]+)$/,
     );
-    if (title && resultMatch?.[1] === title) {
-      const index = clause.length - title.length;
+    const resultName = names.find((title) => resultMatch?.[1] === title);
+    if (resultName) {
+      const index = clause.length - resultName.length;
       addTransition(transitions, "activate", start + index, "当前实体是改制或合并结果", 2);
     }
 
     for (const verb of TERMINATION_VERBS) {
       for (const index of occurrences(clause, verb)) {
-        if (verbTargetsEntity(clause, index, verb, title, { termination: true })) {
+        if (verbTargetsEntity(clause, index, verb, names, { termination: true })) {
           addTransition(transitions, "deactivate", start + index, `当前实体终止：${verb}`, 2);
         }
       }
@@ -184,7 +225,28 @@ export function classifyEntityLifecycle(eventText, entity = {}) {
   return { effect: last?.effect || "preserve", transitions };
 }
 
+export function classifyEventType(eventText) {
+  const text = String(eventText || "").replace(/\s+/g, "");
+  if (!text) return "record";
+  const matches = [];
+  EVENT_TYPE_RULES.forEach(([eventType, words], priority) => {
+    for (const word of words) {
+      for (const index of occurrences(text, word)) {
+        if (["establish", "restore"].includes(eventType)
+          && ["不", "未"].includes(text[index - 1])) continue;
+        matches.push({ eventType, index, priority, length: word.length });
+      }
+    }
+  });
+  const last = matches.sort((a, b) => (
+    a.index - b.index || a.length - b.length || a.priority - b.priority
+  )).at(-1);
+  return last?.eventType || "record";
+}
+
 export function classifyExistenceEffect(timepoint, entity = {}) {
+  const explicit = String(timepoint?.lifecycle_effect ?? timepoint?.lifecycleEffect ?? "");
+  if (LIFECYCLE_EFFECT_VALUES.includes(explicit)) return explicit;
   return classifyEntityLifecycle(timepoint?.event, entity).effect;
 }
 

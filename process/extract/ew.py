@@ -112,6 +112,8 @@ class EntryWriter:
         attr_officer_type: str | None = None,
         attr_grade: str | None = None,
         chain: str = "tail",
+        event_type: str | None = None,
+        lifecycle_effect: str | None = None,
     ) -> int:
         """新建时间点。
 
@@ -125,19 +127,22 @@ class EntryWriter:
 
         # 相同 time 复用
         row = self.conn.execute(
-            "SELECT id, attr_category, attr_officer_type, attr_grade FROM Timepoints"
+            "SELECT id, attr_category, attr_officer_type, attr_grade, event_type, lifecycle_effect"
+            " FROM Timepoints"
             " WHERE entity_id = ? AND time = ? ORDER BY id LIMIT 1",
             (entity_id, time),
         ).fetchone()
         if row:
             tp_id = row[0]
             updates, params = [], []
-            for col, new, old in (
-                ("attr_category", attr_category, row[1]),
-                ("attr_officer_type", attr_officer_type, row[2]),
-                ("attr_grade", attr_grade, row[3]),
+            for col, new, old, overwrite in (
+                ("attr_category", attr_category, row[1], False),
+                ("attr_officer_type", attr_officer_type, row[2], False),
+                ("attr_grade", attr_grade, row[3], False),
+                ("event_type", event_type, row[4], True),
+                ("lifecycle_effect", lifecycle_effect, row[5], True),
             ):
-                if new and not old:
+                if new and (not old or (overwrite and new != old)):
                     updates.append(f"{col} = ?")
                     params.append(new)
             if updates:
@@ -164,10 +169,10 @@ class EntryWriter:
         if only_ph:
             tp_id = ph[0]
             self.conn.execute(
-                "UPDATE Timepoints SET time=?, event=?, quotation=?,"
+                "UPDATE Timepoints SET time=?, event=?, event_type=?, lifecycle_effect=?, quotation=?,"
                 " attr_category=?, attr_officer_type=?, attr_grade=? WHERE id=?",
-                (time, event, quotation, attr_category, attr_officer_type,
-                 attr_grade, tp_id),
+                (time, event, event_type or "record", lifecycle_effect or "preserve", quotation,
+                 attr_category, attr_officer_type, attr_grade, tp_id),
             )
             self._br("Timepoints", tp_id,
                      f"复用占位节点写入首个真实时间点（time='未知',event='占位' -> "
@@ -190,10 +195,10 @@ class EntryWriter:
             ).fetchone()
             succ_id = row2[0] if row2 else None
         tp_id = self._insert(
-            "INSERT INTO Timepoints (entity_id, time, event, prev_id, succ_id,"
+            "INSERT INTO Timepoints (entity_id, time, event, event_type, lifecycle_effect, prev_id, succ_id,"
             " attr_category, attr_officer_type, attr_grade, quotation)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
-            (entity_id, time, event, prev_id, succ_id,
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (entity_id, time, event, event_type or "record", lifecycle_effect or "preserve", prev_id, succ_id,
              attr_category, attr_officer_type, attr_grade, quotation),
             "Timepoints",
             decision,

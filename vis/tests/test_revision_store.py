@@ -52,6 +52,8 @@ def make_database(path: Path) -> None:
             entity_id INTEGER NOT NULL,
             time TEXT,
             event TEXT,
+            event_type TEXT NOT NULL DEFAULT 'record',
+            lifecycle_effect TEXT NOT NULL DEFAULT 'preserve',
             prev_id INTEGER,
             succ_id INTEGER,
             attr_category TEXT,
@@ -226,6 +228,35 @@ class RevisionStoreTest(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
         self.assertTrue(self.store.rollback_db.exists())
         self.assertTrue(self.store.rollback_revisions_db.exists())
+
+    def test_event_type_and_lifecycle_effect_are_editable_and_validated(self):
+        self.store.add_group({
+            "reason": "明确区分事件语义与存废影响",
+            "operations": [{
+                "action": "update",
+                "target_table": "Timepoints",
+                "target_id": 10,
+                "after": {"event_type": "establish", "lifecycle_effect": "activate"},
+                "evidence": self.existing_evidence(),
+            }],
+        })
+        changed = self.store.preview()["patch"]["timepoints"]["upsert"][0]
+        self.assertEqual(changed["event_type"], "establish")
+        self.assertEqual(changed["lifecycle_effect"], "activate")
+
+        self.store.discard()
+        with self.assertRaises(REVISION.RevisionError) as error:
+            self.store.add_group({
+                "reason": "测试非法事件类型",
+                "operations": [{
+                    "action": "update",
+                    "target_table": "Timepoints",
+                    "target_id": 10,
+                    "after": {"event_type": "unknown"},
+                    "evidence": self.existing_evidence(),
+                }],
+            })
+        self.assertEqual(error.exception.code, "DRAFT_VALIDATION_FAILED")
 
     def test_delete_timepoint_expands_dependencies_and_restore_recreates_exact_state(self):
         baseline = self.store.state()["baseline"]

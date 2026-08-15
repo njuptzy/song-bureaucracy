@@ -21,9 +21,17 @@ Relationships、Citations 和 BuildRecords。事实范围、实体边界、时�
 - **Entities**：静态实体（`title`、`type`：`机构` 或 `官职`）。只有 `title` **和**
   `type` 都完全一致才默认复用（先查后建）；包含关系、前后缀相似、简称相似都不等于
   同一实体。仅当同名同类型确为不同实体时才允许重复新建，并在 BuildRecords 说明。
-- **Timepoints**：实体时间线节点（`entity_id`、`time`、`event`、`prev_id`/`succ_id`、
-  `attr_category`、`attr_officer_type`、`attr_grade`）。时间点表示制度状态或变化，按
-  原文保留时间文本。prev/succ 必须按历史先后连接并保持互反，不得仅按提取顺序接到链尾。
+- **Timepoints**：实体时间线节点（`entity_id`、`time`、`event`、`event_type`、
+  `lifecycle_effect`、`prev_id`/`succ_id`、`attr_category`、`attr_officer_type`、
+  `attr_grade`）。时间点表示制度状态或变化，按原文保留时间文本。`event_type` 只能取
+  `establish`（建置）、`restore`（复置）、`abolish`（罢废）、`rename`（改称）、
+  `reorganize`（改置）、`merge`（合并）、`split`（分拆）、`incorporate`（并入）、
+  `duty_transfer`（职掌移交）、`affiliation_change`（隶属变化）、
+  `staffing_change`（编制变化）、`proposal_unimplemented`（拟议未行）、`record`（一般记载）。
+  `lifecycle_effect` 单独记录该事件对当前实体存废的影响，只能取 `activate`（启用）、
+  `preserve`（普通记载）、`deactivate`（罢废）、`ignore`（拟议未行）。两字段不得混用，
+  例如“复称旧名”可记为 `event_type=rename`、`lifecycle_effect=activate`。prev/succ 必须按
+  历史先后连接并保持互反，不得仅按提取顺序接到链尾。
   新实体已有占位节点时，首个真实时间点应复用并清除“占位”；有真实时间信息后不留
   `time="未知", event="占位"` 的残留节点。
 - **Relationships**：连接**时间点**不是实体。方向约定：`上下级机构` = 上级→下级；`编制隶属` = 机构→官职（可带 `staff_quota`/`staff_type`）；`前后演变` = 来源→后继；`统称与实例` = 统称→实例。

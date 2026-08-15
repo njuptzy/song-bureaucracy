@@ -711,9 +711,10 @@ const INLINE_DETAIL_FIELDS = [
   { key: "office", label: "衙署：" },
   { key: "composition", label: "编制文本：" },
 ];
+const DETAIL_PANEL_EXTRA_KEYS = ["extra-1", "extra-2"];
 const DETAIL_PANEL_SECTION_KEYS = [
   ...INLINE_DETAIL_FIELDS.map((field) => field.key),
-  "extra",
+  ...DETAIL_PANEL_EXTRA_KEYS,
 ];
 
 function inlineDetailValues(entity) {
@@ -2965,6 +2966,22 @@ const EVOLUTION_EFFECT_LABELS = {
   ignore: "拟议未行",
 };
 
+const EVOLUTION_EVENT_TYPE_LABELS = {
+  establish: "建置",
+  restore: "复置",
+  abolish: "罢废",
+  rename: "改称",
+  reorganize: "改置",
+  merge: "合并",
+  split: "分拆",
+  incorporate: "并入",
+  duty_transfer: "职掌移交",
+  affiliation_change: "隶属变化",
+  staffing_change: "编制变化",
+  proposal_unimplemented: "拟议未行",
+  record: "一般记载",
+};
+
 const EVOLUTION_TIME_TYPE_LABELS = {
   exact: "明确时间点",
   range: "明确连续区间",
@@ -3032,6 +3049,10 @@ function evolutionDetailPayload(svg) {
       year: eventTimeLabel(event),
       sections: [
         { label: "事件：", value: event.event || "原文未单列事件名。" },
+        {
+          label: "事件类型：",
+          value: EVOLUTION_EVENT_TYPE_LABELS[event.eventType] || event.eventType || "一般记载",
+        },
         {
           label: "词条原文：",
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
@@ -3217,10 +3238,12 @@ function updateDetails(svg) {
       if (hiddenLabel) hiddenLabel.style.display = "none";
       if (hiddenContent) hiddenContent.style.display = "none";
     });
-    const extraLabel = svg.querySelector("[data-detail-section-label='extra']");
-    const extraContent = svg.querySelector("[data-detail-section-content='extra']");
-    if (extraLabel) extraLabel.style.display = "none";
-    if (extraContent) extraContent.style.display = "none";
+    DETAIL_PANEL_EXTRA_KEYS.forEach((key) => {
+      const extraLabel = svg.querySelector(`[data-detail-section-label='${key}']`);
+      const extraContent = svg.querySelector(`[data-detail-section-content='${key}']`);
+      if (extraLabel) extraLabel.style.display = "none";
+      if (extraContent) extraContent.style.display = "none";
+    });
     const scrollContent = svg.querySelector(".detail-panel-scroll-content");
     if (scrollContent) scrollContent.dataset.contentBottom = "650";
     detailPanelScrollOffset = 0;
@@ -3230,10 +3253,12 @@ function updateDetails(svg) {
   const values = inlineDetailValues(entity);
   const staff = displayStaffFor(entity.id);
   const children = childrenFor(entity.id);
-  const extraLabel = svg.querySelector("[data-detail-section-label='extra']");
-  const extraContent = svg.querySelector("[data-detail-section-content='extra']");
-  if (extraLabel) extraLabel.style.display = "none";
-  if (extraContent) extraContent.style.display = "none";
+  DETAIL_PANEL_EXTRA_KEYS.forEach((key) => {
+    const extraLabel = svg.querySelector(`[data-detail-section-label='${key}']`);
+    const extraContent = svg.querySelector(`[data-detail-section-content='${key}']`);
+    if (extraLabel) extraLabel.style.display = "none";
+    if (extraContent) extraContent.style.display = "none";
+  });
 
   const detailSlots = {
     title: findTextAt(svg, 99.85, 505.87),

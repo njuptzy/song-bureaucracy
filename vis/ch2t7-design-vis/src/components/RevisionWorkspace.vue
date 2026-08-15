@@ -73,6 +73,18 @@
                   <span>事件</span>
                   <textarea v-model="timeForm.event" rows="3"></textarea>
                 </label>
+                <label class="field">
+                  <span>事件类型</span>
+                  <select v-model="timeForm.event_type">
+                    <option v-for="item in eventTypeOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>存废影响</span>
+                  <select v-model="timeForm.lifecycle_effect">
+                    <option v-for="item in lifecycleEffectOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </label>
                 <label v-if="action === 'insert'" class="field">
                   <span>插入位置</span>
                   <select v-model="insertPosition">
@@ -242,6 +254,27 @@ const timepointActions = [
   { value: "insert", label: "新增相邻" },
   { value: "delete", label: "删除" },
 ];
+const eventTypeOptions = [
+  { value: "establish", label: "建置" },
+  { value: "restore", label: "复置" },
+  { value: "abolish", label: "罢废" },
+  { value: "rename", label: "改称" },
+  { value: "reorganize", label: "改置" },
+  { value: "merge", label: "合并" },
+  { value: "split", label: "分拆" },
+  { value: "incorporate", label: "并入" },
+  { value: "duty_transfer", label: "职掌移交" },
+  { value: "affiliation_change", label: "隶属变化" },
+  { value: "staffing_change", label: "编制变化" },
+  { value: "proposal_unimplemented", label: "拟议未行" },
+  { value: "record", label: "一般记载" },
+];
+const lifecycleEffectOptions = [
+  { value: "activate", label: "启用" },
+  { value: "preserve", label: "普通记载" },
+  { value: "deactivate", label: "罢废" },
+  { value: "ignore", label: "拟议未行" },
+];
 const action = ref("update");
 const insertPosition = ref("after");
 const reason = ref("");
@@ -253,7 +286,15 @@ const commitSummary = ref("");
 const connectReason = ref("");
 const connectQuotation = ref("");
 const connectEvidence = reactive({ citation: "", quotation: "" });
-const timeForm = reactive({ time: "", event: "", attr_category: "", attr_officer_type: "", attr_grade: "" });
+const timeForm = reactive({
+  time: "",
+  event: "",
+  event_type: "record",
+  lifecycle_effect: "preserve",
+  attr_category: "",
+  attr_officer_type: "",
+  attr_grade: "",
+});
 const relationForm = reactive({ subject_id: null, object_id: null });
 const evidence = reactive({ citation: "", quotation: "", note: "" });
 let normalizeTimer = null;
@@ -316,6 +357,8 @@ watch(() => props.selection, (selection) => {
     Object.assign(timeForm, {
       time: item.rawTime || item.time || "",
       event: item.event || "",
+      event_type: item.event_type || item.eventType || "record",
+      lifecycle_effect: item.lifecycle_effect || item.effect || "preserve",
       attr_category: item.attr_category || "",
       attr_officer_type: item.attr_officer_type || "",
       attr_grade: item.attr_grade || "",
@@ -433,7 +476,8 @@ function automaticCount(group) {
 }
 
 const fieldNames = {
-  time: "纪年", event: "事件", attr_category: "属性分类",
+  time: "纪年", event: "事件", event_type: "事件类型", lifecycle_effect: "存废影响",
+  attr_category: "属性分类",
   attr_officer_type: "官员类型", attr_grade: "品级", quotation: "逐字引文",
   subject_id: "来源端点", object_id: "目标端点", prev_id: "前序指针",
   succ_id: "后继指针", raw_time: "标准化原文", year_start: "起始年", year_end: "结束年",

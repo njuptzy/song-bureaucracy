@@ -186,8 +186,9 @@ def build_payload() -> dict:
     timepoints = {}
     normalized_by_id = {}
     for r in entries.execute(
-        "SELECT id, entity_id, time, event, prev_id, succ_id, attr_category,"
-        " attr_officer_type, attr_grade, quotation FROM Timepoints ORDER BY entity_id, id"
+        "SELECT id, entity_id, time, event, event_type, lifecycle_effect,"
+        " prev_id, succ_id, attr_category, attr_officer_type, attr_grade, quotation"
+        " FROM Timepoints ORDER BY entity_id, id"
     ):
         normalized_payload = _normalized_time_payload(r["time"] or "")
         normalized_by_id[r["id"]] = normalized_payload
@@ -198,6 +199,8 @@ def build_payload() -> dict:
                 "succ_id": r["succ_id"],
                 "time": r["time"] or "",
                 "event": r["event"] or "",
+                "event_type": r["event_type"] or "record",
+                "lifecycle_effect": r["lifecycle_effect"] or "preserve",
                 "attr_category": r["attr_category"] or "",
                 "attr_officer_type": r["attr_officer_type"] or "",
                 "attr_grade": r["attr_grade"] or "",

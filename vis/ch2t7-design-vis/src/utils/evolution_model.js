@@ -1,4 +1,7 @@
-import { classifyExistenceEffect } from "../../../shared/entity_lifecycle.js";
+import {
+  classifyEventType,
+  classifyExistenceEffect,
+} from "../../../shared/entity_lifecycle.js";
 
 const DEFAULT_YEAR_MIN = 960;
 const DEFAULT_YEAR_MAX = 1279;
@@ -76,6 +79,7 @@ function normalizeTimepoints(data, entityMap) {
         yearEnd,
         effectiveYear: effectiveYear({ time_type: timeType, year_start: yearStart, year_end: yearEnd }),
         revisionStatus: source._revision_status || source.revisionStatus || "",
+        eventType: source.event_type || source.eventType || classifyEventType(source.event),
         effect: ["before", "deleted"].includes(source._revision_status || source.revisionStatus)
           ? "ignore"
           : classifyExistenceEffect(source, entity),

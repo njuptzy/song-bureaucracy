@@ -129,6 +129,8 @@ class Database:
           entity_id INTEGER NOT NULL,
           time TEXT,
           event TEXT,
+          event_type TEXT NOT NULL DEFAULT 'record',
+          lifecycle_effect TEXT NOT NULL DEFAULT 'preserve',
           prev_id INTEGER,
           succ_id INTEGER,
           attr_category TEXT,
