@@ -175,7 +175,45 @@ export function timetreeLaneEntityIds(rows) {
     .map((row) => row.entityId);
 }
 
-/** 默认展开：制度组全部展开、机构全部收起（总览形态）。 */
+/**
+ * 与层次结构视图一致的单路径展开：制度组互斥，机构只保留当前祖先路径；
+ * 收起节点时移除它及所有已展开后代。
+ */
+export function toggleTimetreeExpansion(rows = [], currentKeys = [], clickedKey) {
+  const rowByKey = new Map(rows.map((row) => [row.key, row]));
+  const clicked = rowByKey.get(clickedKey);
+  if (!clicked) return [...currentKeys];
+  const current = new Set(currentKeys);
+
+  if (clicked.isVirtual) {
+    return current.has(clickedKey) ? [] : [clickedKey];
+  }
+
+  if (!current.has(clickedKey)) {
+    const path = [];
+    let cursor = clicked;
+    while (cursor) {
+      path.push(cursor.key);
+      cursor = cursor.parentKey ? rowByKey.get(cursor.parentKey) : null;
+    }
+    return path.reverse();
+  }
+
+  const removed = new Set([clickedKey]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      if (!removed.has(row.key) && row.parentKey && removed.has(row.parentKey)) {
+        removed.add(row.key);
+        changed = true;
+      }
+    }
+  }
+  return currentKeys.filter((key) => !removed.has(key));
+}
+
+/** 默认展开：只打开首个有数据的制度组，机构保持收起。 */
 export function defaultTimetreeExpandedKeys({
   entities = [],
   category = "中央机构",
@@ -186,6 +224,6 @@ export function defaultTimetreeExpandedKeys({
   const rootIds = entities
     .filter((entity) => entity?.type === "机构" && defaultCategory(entity) === category)
     .map((entity) => entity.id);
-  return groupInstitutionRootIds(rootIds, entityMap, category, groupNames)
-    .map(({ group }) => timetreeGroupKey(category, group));
+  const [first] = groupInstitutionRootIds(rootIds, entityMap, category, groupNames);
+  return first?.group ? [timetreeGroupKey(category, first.group)] : [];
 }

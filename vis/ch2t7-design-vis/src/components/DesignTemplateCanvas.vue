@@ -72,7 +72,9 @@ import { renderTimetreeOverlay } from "../renderers/timetree_renderer";
 import {
   buildTimetreeRows,
   defaultTimetreeExpandedKeys,
+  timetreeEntityKey,
   timetreeLaneEntityIds,
+  toggleTimetreeExpansion,
 } from "../utils/timetree_model";
 import {
   clampTimetreeScroll,
@@ -2772,7 +2774,12 @@ function renderDynamicEvolution(svg) {
 // —— 时间线树视图：左侧层级树（原层级逆时针旋转 90°）+ 右侧逐行对齐的时间线 ——
 
 function timetreeActiveExpandedKeys(category) {
-  if (timetreeExpandedKeys.value) return timetreeExpandedKeys.value;
+  if (timetreeExpandedKeys.value !== null) return timetreeExpandedKeys.value;
+  const inherited = [
+    ...expandedInstitutionGroupIds,
+    ...expandedHierarchyPath.map((entityId) => timetreeEntityKey(entityId)),
+  ];
+  if (inherited.length) return inherited;
   return defaultTimetreeExpandedKeys({
     entities: props.data.entities,
     category,
@@ -2862,10 +2869,11 @@ function renderDynamicTimetree(svg) {
       refreshTemplate();
     },
     onToggleNode(key) {
-      const next = new Set(timetreeActiveExpandedKeys(category));
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      timetreeExpandedKeys.value = [...next];
+      timetreeExpandedKeys.value = toggleTimetreeExpansion(
+        rows,
+        timetreeActiveExpandedKeys(category),
+        key,
+      );
       refreshTemplate();
     },
     onExpandAll() {

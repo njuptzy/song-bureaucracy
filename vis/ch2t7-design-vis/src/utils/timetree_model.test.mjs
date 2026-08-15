@@ -6,6 +6,7 @@ import {
   timetreeEntityKey,
   timetreeGroupKey,
   timetreeLaneEntityIds,
+  toggleTimetreeExpansion,
 } from "./timetree_model.js";
 
 const CENTRAL_GROUPS = ["决策中枢", "行政执行"];
@@ -165,12 +166,45 @@ describe("buildTimetreeRows", () => {
     });
     assert.deepEqual(timetreeLaneEntityIds(rows), [1, 2]);
   });
+
+  it("制度组展开与层次结构一样互斥", () => {
+    const rows = [
+      { key: "group:a", isVirtual: true, parentKey: null },
+      { key: "group:b", isVirtual: true, parentKey: null },
+    ];
+    assert.deepEqual(toggleTimetreeExpansion(rows, ["group:a"], "group:b"), ["group:b"]);
+    assert.deepEqual(toggleTimetreeExpansion(rows, ["group:a"], "group:a"), []);
+  });
+
+  it("机构展开只保留当前祖先路径，收起时移除后代", () => {
+    const rows = [
+      { key: "group:a", isVirtual: true, parentKey: null },
+      { key: "entity:1", isVirtual: false, parentKey: "group:a" },
+      { key: "entity:2", isVirtual: false, parentKey: "entity:1" },
+      { key: "entity:3", isVirtual: false, parentKey: "group:a" },
+    ];
+    assert.deepEqual(
+      toggleTimetreeExpansion(rows, ["group:a", "entity:3"], "entity:2"),
+      ["group:a", "entity:1", "entity:2"],
+    );
+    assert.deepEqual(
+      toggleTimetreeExpansion(
+        rows,
+        ["group:a", "entity:1", "entity:2"],
+        "entity:1",
+      ),
+      ["group:a"],
+    );
+  });
 });
 
 describe("defaultTimetreeExpandedKeys", () => {
-  it("默认展开全部制度组、机构保持收起", () => {
+  it("默认只展开首个有数据的制度组、机构保持收起", () => {
     const keys = defaultTimetreeExpandedKeys({
-      entities: [entity(1, "甲司", { central_group: "决策中枢" })],
+      entities: [
+        entity(1, "甲司", { central_group: "决策中枢" }),
+        entity(2, "乙司", { central_group: "行政执行" }),
+      ],
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
     });
