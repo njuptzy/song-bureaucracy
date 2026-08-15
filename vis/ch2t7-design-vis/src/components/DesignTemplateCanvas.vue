@@ -80,6 +80,7 @@ import {
   layoutTimetreeRelations,
   layoutTimetreeSegments,
   TIMETREE_GEOMETRY,
+  timetreeLayoutSpan,
   timetreeYearToX,
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
@@ -2804,13 +2805,15 @@ function renderDynamicTimetree(svg) {
   );
 
   const geometry = TIMETREE_GEOMETRY;
-  const scrollOffset = clampTimetreeScroll(timetreeScroll.value, rows.length, geometry);
+  const layoutSpan = timetreeLayoutSpan(rows);
+  const scrollOffset = clampTimetreeScroll(timetreeScroll.value, layoutSpan, geometry);
   if (scrollOffset !== timetreeScroll.value) timetreeScroll.value = scrollOffset;
   const xOf = (year) => timetreeYearToX(year, YEAR_MIN, YEAR_MAX, geometry.plot);
   const yByEntityId = new Map(rows
     .filter((row) => row.entityId != null)
     .map((row) => [row.entityId, geometry.rowsTop
-      + row.rowIndex * geometry.rowPitch + geometry.rowPitch / 2 - scrollOffset]));
+      + (row.layoutIndex ?? row.rowIndex) * geometry.rowPitch
+      + geometry.rowPitch / 2 - scrollOffset]));
 
   const lanesByEntityId = new Map(laneModel.lanes.map((lane) => [lane.entityId, lane]));
   const eventsByLane = new Map();
@@ -2909,7 +2912,7 @@ function renderDynamicTimetree(svg) {
     onScroll(deltaY) {
       const next = clampTimetreeScroll(
         timetreeScroll.value + deltaY * 0.6,
-        rows.length,
+        layoutSpan,
         geometry,
       );
       if (next === timetreeScroll.value) return;
@@ -2917,8 +2920,8 @@ function renderDynamicTimetree(svg) {
       scheduleTimelineRefresh();
     },
     onScrollToFraction(fraction) {
-      const maxOffset = clampTimetreeScroll(Number.POSITIVE_INFINITY, rows.length, geometry);
-      timetreeScroll.value = clampTimetreeScroll(maxOffset * fraction, rows.length, geometry);
+      const maxOffset = clampTimetreeScroll(Number.POSITIVE_INFINITY, layoutSpan, geometry);
+      timetreeScroll.value = clampTimetreeScroll(maxOffset * fraction, layoutSpan, geometry);
       scheduleTimelineRefresh();
     },
     onOpenEvolution(entityId) {
@@ -2941,9 +2944,9 @@ function renderDynamicTimetree(svg) {
     yearMax: YEAR_MAX,
     scroll: {
       offset: scrollOffset,
-      maxOffset: clampTimetreeScroll(Number.POSITIVE_INFINITY, rows.length, geometry),
+      maxOffset: clampTimetreeScroll(Number.POSITIVE_INFINITY, layoutSpan, geometry),
       viewportHeight: geometry.rowsBottom - geometry.rowsTop,
-      contentHeight: rows.length * geometry.rowPitch,
+      contentHeight: layoutSpan * geometry.rowPitch,
     },
     selectedEntityId: selectedId.value,
     selectedEventId: timetreeSelectedEventId.value,

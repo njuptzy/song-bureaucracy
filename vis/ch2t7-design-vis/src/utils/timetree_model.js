@@ -17,11 +17,48 @@ function defaultCategory(entity) {
 }
 
 /**
- * 构建时间线树的可见行（前序遍历顺序）。
- * 每一行对应左侧层级树的一个节点；非虚拟行同时在右侧时间线拥有一条车道。
+ * 为前序节点补充旋转树的纵向坐标。
  *
- * 返回行对象：{ key, entityId, title, depth, isVirtual, childCount, expanded }
+ * 叶节点按可见顺序依次占据纵向槽位；展开的父节点位于首尾子树中心。
+ * 这等价于把原本“深度向下、兄弟横排”的层级树逆时针旋转 90°，而不是
+ * 把前序遍历结果画成带缩进的列表。
+ */
+export function assignTimetreeLayoutIndices(rows = []) {
+  const rowByKey = new Map(rows.map((row) => [row.key, row]));
+  const childrenByKey = new Map();
+  const roots = [];
+  for (const row of rows) {
+    if (row.parentKey && rowByKey.has(row.parentKey)) {
+      if (!childrenByKey.has(row.parentKey)) childrenByKey.set(row.parentKey, []);
+      childrenByKey.get(row.parentKey).push(row);
+    } else {
+      roots.push(row);
+    }
+  }
+
+  let nextLeafIndex = 0;
+  const place = (row) => {
+    const children = childrenByKey.get(row.key) || [];
+    if (!children.length) {
+      row.layoutIndex = nextLeafIndex;
+      nextLeafIndex += 1;
+      return row.layoutIndex;
+    }
+    const childIndices = children.map(place);
+    row.layoutIndex = (childIndices[0] + childIndices[childIndices.length - 1]) / 2;
+    return row.layoutIndex;
+  };
+  roots.forEach(place);
+  return rows;
+}
+
+/**
+ * 构建时间线树的可见节点（数组顺序仍为前序遍历，几何位置由 layoutIndex 决定）。
+ * 每个节点对应左侧层级树的一个节点；非虚拟节点同时在右侧时间线拥有一条车道。
+ *
+ * 返回节点对象：{ key, entityId, title, depth, rowIndex, layoutIndex, isVirtual, childCount, expanded }
  * - key：展开状态使用的稳定键（制度组用分组 id，实体用 entity:<id>）
+ * - rowIndex：稳定的前序顺序；layoutIndex：旋转树实际使用的纵向槽位
  * - childCount：被收起的下级数量（展开时为 0）
  */
 export function buildTimetreeRows({
@@ -129,7 +166,7 @@ export function buildTimetreeRows({
       for (const rootId of groupedRootIds) visitEntity(rootId, 1, new Set(), key);
     }
   }
-  return rows;
+  return assignTimetreeLayoutIndices(rows);
 }
 
 /** 非虚拟行的实体 id，按行顺序——右侧时间线车道的构建顺序。 */

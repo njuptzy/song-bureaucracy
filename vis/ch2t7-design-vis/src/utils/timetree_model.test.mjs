@@ -69,6 +69,58 @@ describe("buildTimetreeRows", () => {
     );
   });
 
+  it("旋转后父节点位于多个子节点的纵向中心", () => {
+    const rows = buildTimetreeRows({
+      entities: [entity(1, "中枢"), entity(2, "甲司"), entity(3, "乙司"), entity(4, "丙司")],
+      hierarchyEdges: [
+        { parent: 1, child: 2 },
+        { parent: 1, child: 3 },
+        { parent: 1, child: 4 },
+      ],
+      category: "中央机构",
+      groupNames: [],
+      expandedIds: new Set([timetreeEntityKey(1)]),
+    });
+    const byTitle = new Map(rows.map((row) => [row.title, row]));
+    assert.equal(byTitle.get("中枢").layoutIndex, 1);
+    assert.deepEqual(
+      ["甲司", "乙司", "丙司"]
+        .map((title) => byTitle.get(title).layoutIndex)
+        .sort((a, b) => a - b),
+      [0, 1, 2],
+    );
+  });
+
+  it("多层旋转树保持各级父节点对子树居中", () => {
+    const rows = buildTimetreeRows({
+      entities: [
+        entity(1, "根"), entity(2, "左支"), entity(3, "右支"),
+        entity(4, "左一"), entity(5, "左二"), entity(6, "右一"),
+      ],
+      hierarchyEdges: [
+        { parent: 1, child: 2 }, { parent: 1, child: 3 },
+        { parent: 2, child: 4 }, { parent: 2, child: 5 },
+        { parent: 3, child: 6 },
+      ],
+      category: "中央机构",
+      groupNames: [],
+      expandedIds: new Set([
+        timetreeEntityKey(1), timetreeEntityKey(2), timetreeEntityKey(3),
+      ]),
+    });
+    const byTitle = new Map(rows.map((row) => [row.title, row]));
+    assert.equal(
+      byTitle.get("左支").layoutIndex,
+      (byTitle.get("左一").layoutIndex + byTitle.get("左二").layoutIndex) / 2,
+    );
+    assert.equal(byTitle.get("右支").layoutIndex, byTitle.get("右一").layoutIndex);
+    assert.equal(
+      byTitle.get("根").layoutIndex,
+      (byTitle.get("左支").layoutIndex + byTitle.get("右支").layoutIndex) / 2,
+    );
+    assert.notEqual(byTitle.get("左一").layoutIndex, byTitle.get("左二").layoutIndex);
+  });
+
   it("层级边成环时不死循环", () => {
     const rows = buildTimetreeRows({
       entities: [entity(1, "甲司"), entity(2, "乙司")],

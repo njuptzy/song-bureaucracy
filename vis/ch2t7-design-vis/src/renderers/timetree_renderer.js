@@ -608,7 +608,7 @@ export function renderTimetreeOverlay(svg, options) {
 
   const yByKey = new Map(rows.map((row) => [
     row.key,
-    timetreeRowY(row.rowIndex, scroll?.offset || 0, geometry),
+    timetreeRowY(row.layoutIndex ?? row.rowIndex, scroll?.offset || 0, geometry),
   ]));
 
   // 每个树节点的最终坐标与外框左右缘（连线端点用）。

@@ -49,17 +49,24 @@ export function timetreeYearToX(year, yearMin, yearMax, plot = TIMETREE_GEOMETRY
   return plot.x0 + (year - yearMin) / span * (plot.x1 - plot.x0);
 }
 
+/** 旋转树实际占用的纵向槽位数；父节点居中不会额外增加内容高度。 */
+export function timetreeLayoutSpan(rowsOrCount = []) {
+  if (typeof rowsOrCount === "number") return Math.max(0, rowsOrCount);
+  if (!rowsOrCount.length) return 0;
+  return Math.max(...rowsOrCount.map((row) => row.layoutIndex ?? row.rowIndex ?? 0)) + 1;
+}
+
 /** 滚动量钳制：内容不足一屏时锁死在 0。 */
-export function clampTimetreeScroll(offset, rowCount, geometry = TIMETREE_GEOMETRY) {
-  const content = rowCount * geometry.rowPitch;
+export function clampTimetreeScroll(offset, rowsOrCount, geometry = TIMETREE_GEOMETRY) {
+  const content = timetreeLayoutSpan(rowsOrCount) * geometry.rowPitch;
   const viewport = geometry.rowsBottom - geometry.rowsTop;
   const maxOffset = Math.max(0, content - viewport);
   return Math.max(0, Math.min(maxOffset, Number.isFinite(offset) ? offset : 0));
 }
 
 /** 每行 y 中心（含滚动偏移；视口外的行由渲染层的 clipPath 裁掉）。 */
-export function timetreeRowY(rowIndex, scrollOffset, geometry = TIMETREE_GEOMETRY) {
-  return geometry.rowsTop + rowIndex * geometry.rowPitch
+export function timetreeRowY(layoutIndex, scrollOffset, geometry = TIMETREE_GEOMETRY) {
+  return geometry.rowsTop + layoutIndex * geometry.rowPitch
     + geometry.rowPitch / 2 - scrollOffset;
 }
 

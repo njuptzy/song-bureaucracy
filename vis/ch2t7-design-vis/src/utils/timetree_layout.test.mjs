@@ -7,6 +7,7 @@ import {
   layoutTimetreeRelations,
   layoutTimetreeSegments,
   TIMETREE_GEOMETRY,
+  timetreeLayoutSpan,
   timetreeNodeX,
   timetreeRowY,
   timetreeYearToX,
@@ -53,6 +54,17 @@ describe("clampTimetreeScroll", () => {
     assert.equal(clampTimetreeScroll(99999, 100), maxOffset);
     assert.equal(clampTimetreeScroll(-5, 100), 0);
   });
+
+  it("按旋转树的实际纵向跨度而不是前序节点总数计算", () => {
+    const rows = [
+      { rowIndex: 0, layoutIndex: 1 },
+      { rowIndex: 1, layoutIndex: 0 },
+      { rowIndex: 2, layoutIndex: 1 },
+      { rowIndex: 3, layoutIndex: 2 },
+    ];
+    assert.equal(timetreeLayoutSpan(rows), 3);
+    assert.equal(clampTimetreeScroll(50, rows), 0);
+  });
 });
 
 describe("timetreeRowY / timetreeNodeX", () => {
@@ -61,6 +73,7 @@ describe("timetreeRowY / timetreeNodeX", () => {
     assert.equal(base, TIMETREE_GEOMETRY.rowsTop + TIMETREE_GEOMETRY.rowPitch / 2);
     assert.equal(timetreeRowY(0, 20), base - 20);
     assert.equal(timetreeRowY(3, 0), base + 3 * TIMETREE_GEOMETRY.rowPitch);
+    assert.equal(timetreeRowY(1.5, 0), base + 1.5 * TIMETREE_GEOMETRY.rowPitch);
   });
 
   it("树节点 x 随深度右移且不超过树区右界", () => {
