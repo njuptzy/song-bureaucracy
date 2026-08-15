@@ -66,6 +66,7 @@ import { buildEvolutionModel } from "../utils/evolution_model";
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import { timelineSelectionForEvolutionItem } from "../utils/evolution_selection";
+import { dictionaryEntryText } from "../utils/dictionary_entry";
 import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
 import { formatStandardTime } from "../utils/time_format";
 
@@ -709,6 +710,10 @@ const INLINE_DETAIL_FIELDS = [
   { key: "children", label: "下级机构：" },
   { key: "office", label: "衙署：" },
   { key: "composition", label: "编制文本：" },
+];
+const DETAIL_PANEL_SECTION_KEYS = [
+  ...INLINE_DETAIL_FIELDS.map((field) => field.key),
+  "extra",
 ];
 
 function inlineDetailValues(entity) {
@@ -2844,11 +2849,11 @@ function setupDetailPanel(svg) {
   if (labelTemplate && contentTemplate) {
     const sectionLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
     sectionLayer.classList.add("detail-panel-sections");
-    for (const field of INLINE_DETAIL_FIELDS) {
+    for (const key of DETAIL_PANEL_SECTION_KEYS) {
       const label = labelTemplate.cloneNode(false);
-      label.dataset.detailSectionLabel = field.key;
+      label.dataset.detailSectionLabel = key;
       const content = contentTemplate.cloneNode(false);
-      content.dataset.detailSectionContent = field.key;
+      content.dataset.detailSectionContent = key;
       sectionLayer.append(label, content);
     }
     scrollContent.appendChild(sectionLayer);
@@ -3017,6 +3022,7 @@ function evolutionDetailPayload(svg) {
   if (selected?.kind === "timepoint") {
     const event = selected.item;
     const entity = entityMap.get(event.entityId) || selectedEntity();
+    const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
@@ -3026,6 +3032,10 @@ function evolutionDetailPayload(svg) {
       year: eventTimeLabel(event),
       sections: [
         { label: "事件：", value: event.event || "原文未单列事件名。" },
+        {
+          label: "词条原文：",
+          value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
+        },
         {
           label: "存废判定：",
           value: `${EVOLUTION_EFFECT_LABELS[event.effect] || event.effect || "普通记载"}。关系箭头不参与这一判定。`,
@@ -3084,6 +3094,7 @@ function evolutionDetailPayload(svg) {
   ));
   const timepoints = props.data.timepoints[String(entity.id)] || [];
   const dictionary = props.data.dictionary?.[entity.title] || {};
+  const dictionaryOriginal = dictionaryEntryText(dictionary);
   const segmentLabel = lane?.segments?.length
     ? lane.segments.map((segment) => `${segment.startYear}—${segment.endYear}`).join("；")
     : "当前算法未确认宋代存续段。";
@@ -3092,6 +3103,10 @@ function evolutionDetailPayload(svg) {
     year: `${timepoints.length} 个时间点`,
     sections: [
       { label: "实体类型：", value: entity.type },
+      {
+        label: "词条原文：",
+        value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
+      },
       { label: "确认存续段：", value: segmentLabel },
       {
         label: "时间节点：",
@@ -3139,9 +3154,9 @@ function updateEvolutionDetails(svg) {
   }
 
   let cursorY = 536.92;
-  INLINE_DETAIL_FIELDS.forEach((field, index) => {
-    const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
-    const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
+  DETAIL_PANEL_SECTION_KEYS.forEach((key, index) => {
+    const label = svg.querySelector(`[data-detail-section-label='${key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${key}']`);
     const section = payload.sections[index];
     if (!label || !content) return;
     if (!section) {
@@ -3202,6 +3217,10 @@ function updateDetails(svg) {
       if (hiddenLabel) hiddenLabel.style.display = "none";
       if (hiddenContent) hiddenContent.style.display = "none";
     });
+    const extraLabel = svg.querySelector("[data-detail-section-label='extra']");
+    const extraContent = svg.querySelector("[data-detail-section-content='extra']");
+    if (extraLabel) extraLabel.style.display = "none";
+    if (extraContent) extraContent.style.display = "none";
     const scrollContent = svg.querySelector(".detail-panel-scroll-content");
     if (scrollContent) scrollContent.dataset.contentBottom = "650";
     detailPanelScrollOffset = 0;
@@ -3211,6 +3230,10 @@ function updateDetails(svg) {
   const values = inlineDetailValues(entity);
   const staff = displayStaffFor(entity.id);
   const children = childrenFor(entity.id);
+  const extraLabel = svg.querySelector("[data-detail-section-label='extra']");
+  const extraContent = svg.querySelector("[data-detail-section-content='extra']");
+  if (extraLabel) extraLabel.style.display = "none";
+  if (extraContent) extraContent.style.display = "none";
 
   const detailSlots = {
     title: findTextAt(svg, 99.85, 505.87),
