@@ -530,11 +530,26 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     .filter((timepoint) => timepoint.effectiveYear != null)
     .sort((a, b) => a.effectiveYear - b.effectiveYear || a.chainIndex - b.chainIndex);
 
-  let active = false;
+  // null 表示此前没有足以判断存废状态的记录。首个 preserve 能证明
+  // 机构在该时点存在，但不能把已经明确罢废的机构自动恢复。
+  let active = null;
+  let inferredStart = false;
   for (const timepoint of chain.timepoints) {
     if (timepoint.timeType !== "pre_song") continue;
-    if (timepoint.effect === "activate") active = true;
-    else if (timepoint.effect === "deactivate") active = false;
+    if (timepoint.effect === "activate") {
+      if (active !== true) {
+        active = true;
+        inferredStart = false;
+      }
+    }
+    else if (timepoint.effect === "preserve" && active === null) {
+      active = true;
+      inferredStart = true;
+    }
+    else if (timepoint.effect === "deactivate") {
+      active = false;
+      inferredStart = false;
+    }
   }
 
   let startYear = active ? yearMin : null;
@@ -544,9 +559,19 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     const year = event.effectiveYear;
     if (year < yearMin) {
       if (event.effect === "activate") {
-        active = true;
+        if (active !== true) {
+          active = true;
+          inferredStart = false;
+        }
       }
-      else if (event.effect === "deactivate") active = false;
+      else if (event.effect === "preserve" && active === null) {
+        active = true;
+        inferredStart = true;
+      }
+      else if (event.effect === "deactivate") {
+        active = false;
+        inferredStart = false;
+      }
       startYear = active ? yearMin : null;
       startEventId = null;
       openStart = Boolean(active);
@@ -554,12 +579,23 @@ function lifecycleSegments(chain, yearMin, yearMax) {
     }
     if (year > yearMax) break;
     if (event.effect === "ignore") continue;
+    if (event.effect === "preserve") {
+      if (active === null) {
+        active = true;
+        startYear = year;
+        startEventId = event.id;
+        openStart = true;
+        inferredStart = true;
+      }
+      continue;
+    }
     if (event.effect === "activate") {
-      if (!active) {
+      if (active !== true) {
         active = true;
         startYear = year;
         startEventId = event.id;
         openStart = false;
+        inferredStart = false;
       }
       continue;
     }
@@ -574,16 +610,16 @@ function lifecycleSegments(chain, yearMin, yearMax) {
           endEventId: event.id,
           openStart,
           openEnd: false,
-          inferredStart: false,
+          inferredStart,
         });
       }
       active = false;
       startYear = null;
       startEventId = null;
       openStart = false;
+      inferredStart = false;
       continue;
     }
-    // preserve / ignore 都只保留当前状态，不能创建或终止存续段。
   }
   if (active === true && startYear != null) {
     segments.push({
@@ -595,7 +631,7 @@ function lifecycleSegments(chain, yearMin, yearMax) {
       endEventId: null,
       openStart,
       openEnd: true,
-      inferredStart: false,
+      inferredStart,
     });
   }
   return segments;

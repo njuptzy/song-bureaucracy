@@ -58,10 +58,15 @@ describe("buildEvolutionModel lifecycle", () => {
 
     assert.equal(model.lanes[0].events[0].iconType, "abolish");
     assert.equal(model.lanes[0].events[0].effect, "preserve");
-    assert.deepEqual(model.lanes[0].segments, []);
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear, openStart, inferredStart }) => ({
+        startYear, endYear, openStart, inferredStart,
+      })),
+      [{ startYear: 1082, endYear: 1279, openStart: true, inferredStart: true }],
+    );
   });
 
-  it("preserve 不能在未知状态下创建存续线", () => {
+  it("首个 preserve 证明当时已存在，并创建开放起点存续线", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "无始置记录司")],
       timepoints: {
@@ -70,7 +75,12 @@ describe("buildEvolutionModel lifecycle", () => {
       changeRelations: [],
     }, [1], { yearMin: 960, yearMax: 1279 });
 
-    assert.deepEqual(model.lanes[0].segments, []);
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear, openStart, openEnd, inferredStart }) => ({
+        startYear, endYear, openStart, openEnd, inferredStart,
+      })),
+      [{ startYear: 1000, endYear: 1279, openStart: true, openEnd: true, inferredStart: true }],
+    );
   });
 
   it("范围外的 activate 让存续线从视图左边界继续", () => {
@@ -89,10 +99,10 @@ describe("buildEvolutionModel lifecycle", () => {
     const segment = model.lanes[0].segments[0];
     assert.equal(segment.startYear, 960);
     assert.equal(segment.openStart, true);
-    assert.equal(segment.inferredStart, false);
+    assert.equal(segment.inferredStart, true);
   });
 
-  it("此前 preserve 不开线，遇到 activate 才开始存续段", () => {
+  it("此前 preserve 已证明存在，后续 activate 不会丢掉早期存续段", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "后明置司")],
       timepoints: {
@@ -109,7 +119,74 @@ describe("buildEvolutionModel lifecycle", () => {
       model.lanes[0].segments.map(({ startYear, endYear, inferredStart }) => ({
         startYear, endYear, inferredStart,
       })),
-      [{ startYear: 1000, endYear: 1010, inferredStart: false }],
+      [{ startYear: 990, endYear: 1010, inferredStart: true }],
+    );
+  });
+
+  it("deactivate 后的 preserve 不会自动复活", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "已罢司")],
+      timepoints: {
+        1: link([
+          timepoint(11, 1000, "普通记载"),
+          timepoint(12, 1010, "罢已罢司"),
+          timepoint(13, 1020, "后续记载"),
+        ]),
+      },
+      changeRelations: [],
+    }, [1], { yearMin: 960, yearMax: 1279 });
+
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear }) => ({ startYear, endYear })),
+      [{ startYear: 1000, endYear: 1010 }],
+    );
+  });
+
+  it("太常寺式：宋前 preserve 使存续线贯穿主时间轴", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(174, "太常寺")],
+      timepoints: {
+        174: [timepoint(1742, 1000, "宋初记载", { prev_id: 1741 })],
+      },
+      preSongTimepoints: {
+        174: [timepoint(1741, null, "宋前记载", {
+          time: "宋前",
+          time_type: "pre_song",
+          lifecycle_effect: "preserve",
+          succ_id: 1742,
+        })],
+      },
+      changeRelations: [],
+    }, [174], { yearMin: 960, yearMax: 1279 });
+
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear, openStart, openEnd }) => ({
+        startYear, endYear, openStart, openEnd,
+      })),
+      [{ startYear: 960, endYear: 1279, openStart: true, openEnd: true }],
+    );
+  });
+
+  it("光禄寺式：preserve、罢废、复置、再罢废产生两段存续线", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1992, "光禄寺")],
+      timepoints: {
+        1992: link([
+          timepoint(19921, 960, "宋前期"),
+          timepoint(19922, 1129, "并归礼部", { lifecycle_effect: "deactivate" }),
+          timepoint(19923, 1153, "复置", { lifecycle_effect: "activate" }),
+          timepoint(19924, 1163, "并入太常寺", { lifecycle_effect: "deactivate" }),
+        ]),
+      },
+      changeRelations: [],
+    }, [1992], { yearMin: 960, yearMax: 1279 });
+
+    assert.deepEqual(
+      model.lanes[0].segments.map(({ startYear, endYear }) => ({ startYear, endYear })),
+      [
+        { startYear: 960, endYear: 1129 },
+        { startYear: 1153, endYear: 1163 },
+      ],
     );
   });
 
