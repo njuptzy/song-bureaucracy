@@ -3953,8 +3953,7 @@ onUnmounted(() => {
 .design-template { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f5f3ec; }
 .svg-mount { width: 100%; height: 100%; }
 .svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
-.design-template.revision-panel-active .svg-mount :deep(.evolution-selector-layer),
-.design-template.revision-panel-active .svg-mount :deep(.detail-panel-group) {
+.design-template.revision-panel-active .svg-mount :deep(.evolution-selector-layer) {
   visibility: hidden;
   pointer-events: none;
 }

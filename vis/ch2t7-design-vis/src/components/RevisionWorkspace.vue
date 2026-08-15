@@ -474,14 +474,18 @@ button { color: inherit; }
   left: 4.25%;
   top: 29.7%;
   right: auto;
-  bottom: 8.55%;
+  bottom: auto;
   width: 20.5%;
+  height: 19%;
   max-height: none;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 0;
-  background: transparent;
+  background: rgba(245,243,236,.985);
   box-shadow: none;
   pointer-events: auto;
+  scrollbar-color: rgba(86,57,5,.48) transparent;
+  scrollbar-width: thin;
 }
 .selection-editor, .connection-editor { padding: 13px 10px 8px; }
 .editor-heading, .drawer-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid rgba(86,57,5,.32); }
