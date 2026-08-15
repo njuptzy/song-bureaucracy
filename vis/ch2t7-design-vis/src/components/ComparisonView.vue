@@ -18,9 +18,9 @@
         v-model.number="comparisonScale"
         type="range"
         min="0.7"
-        max="1"
+        max="2"
         step="0.05"
-        aria-label="调整对照视图显示比例，最高保持完整显示"
+        aria-label="调整对照视图显示比例"
       >
       <output>{{ Math.round(comparisonScale * 100) }}%</output>
       <button

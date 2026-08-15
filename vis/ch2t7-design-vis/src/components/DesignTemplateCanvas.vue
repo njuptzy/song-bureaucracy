@@ -2701,11 +2701,11 @@ const COMPARISON_VIEWBOX = {
 
 function comparisonPaneScale() {
   const propValue = Number(props.comparisonScale);
-  if (Number.isFinite(propValue) && propValue > 0) return Math.min(1, propValue);
+  if (Number.isFinite(propValue) && propValue > 0) return propValue;
   const queryValue = new URLSearchParams(window.location.search).get("comparisonScale");
   const parsed = Number(queryValue);
   return Number.isFinite(parsed) && parsed > 0
-    ? Math.min(1, parsed)
+    ? parsed
     : COMPARISON_PANE_SCALE;
 }
 
