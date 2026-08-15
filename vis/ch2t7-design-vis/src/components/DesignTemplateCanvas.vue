@@ -122,6 +122,16 @@ const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
   ? Math.max(1, Math.floor(initialState.evolutionLanePage))
   : 1);
 const evolutionSearchOpen = ref(false);
+const comparisonPaneOffsets = ref({
+  hierarchy: {
+    x: Number(initialState.comparisonPaneOffsets?.hierarchy?.x) || 0,
+    y: Number(initialState.comparisonPaneOffsets?.hierarchy?.y) || 0,
+  },
+  evolution: {
+    x: Number(initialState.comparisonPaneOffsets?.evolution?.x) || 0,
+    y: Number(initialState.comparisonPaneOffsets?.evolution?.y) || 0,
+  },
+});
 // 时间线树视图状态：展开键 null = 用默认（制度组全展开）；滚动与选中独立于其他视图。
 const timetreeExpandedKeys = ref(null);
 const timetreeScroll = ref(0);
@@ -250,6 +260,10 @@ const persistedCanvasState = computed(() => ({
   compositionFocusId: compositionFocusId.value,
   selectedCategory: selectedCategory.value,
   spaceAwareExpansion: spaceAwareExpansion.value,
+  comparisonPaneOffsets: {
+    hierarchy: { ...comparisonPaneOffsets.value.hierarchy },
+    evolution: { ...comparisonPaneOffsets.value.evolution },
+  },
 }));
 
 watch(persistedCanvasState, (state) => emit("state-change", state), {
@@ -2756,15 +2770,106 @@ function hideComparisonPlotExamples(svg) {
   }
 }
 
-function renderComparisonHeading(svg, text, x) {
-  const heading = svgElement("text", {
-    class: "comparison-pane-heading",
-    x,
-    y: COMPARISON_PLOT_BOUNDS.y - 13,
-    "text-anchor": "middle",
+function comparisonPointerPoint(svg, event) {
+  const point = svg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const matrix = svg.getScreenCTM();
+  return matrix ? point.matrixTransform(matrix.inverse()) : { x: event.clientX, y: event.clientY };
+}
+
+function clampComparisonPaneOffset(svg, baseX, baseY, width, height, offset) {
+  const viewBox = svg.viewBox?.baseVal;
+  const bounds = viewBox?.width
+    ? viewBox
+    : { x: 0, y: 0, width: 1920, height: 1080 };
+  const handleTop = baseY - 30;
+  return {
+    x: Math.max(bounds.x - baseX, Math.min(
+      bounds.x + bounds.width - baseX - width,
+      offset.x,
+    )),
+    y: Math.max(bounds.y - handleTop, Math.min(
+      bounds.y + bounds.height - baseY - height,
+      offset.y,
+    )),
+  };
+}
+
+function bindComparisonPaneDrag(svg, group, handle, key, baseX, baseY, width, height) {
+  const apply = (offset) => {
+    group.setAttribute("transform", `translate(${offset.x} ${offset.y})`);
+  };
+  const save = (offset) => {
+    comparisonPaneOffsets.value = {
+      ...comparisonPaneOffsets.value,
+      [key]: { ...offset },
+    };
+    apply(offset);
+  };
+  apply(clampComparisonPaneOffset(
+    svg,
+    baseX,
+    baseY,
+    width,
+    height,
+    comparisonPaneOffsets.value[key] || { x: 0, y: 0 },
+  ));
+
+  let drag = null;
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startOffset = comparisonPaneOffsets.value[key] || { x: 0, y: 0 };
+    drag = {
+      pointerId: event.pointerId,
+      start: comparisonPointerPoint(svg, event),
+      startOffset: { ...startOffset },
+      current: { ...startOffset },
+    };
+    handle.setPointerCapture?.(event.pointerId);
+    handle.classList.add("is-dragging");
   });
-  setText(heading, text);
-  svg.querySelector(".dynamic-comparison-layer")?.appendChild(heading);
+  handle.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const point = comparisonPointerPoint(svg, event);
+    drag.current = clampComparisonPaneOffset(svg, baseX, baseY, width, height, {
+      x: drag.startOffset.x + point.x - drag.start.x,
+      y: drag.startOffset.y + point.y - drag.start.y,
+    });
+    apply(drag.current);
+  });
+  const finishDrag = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    handle.releasePointerCapture?.(event.pointerId);
+    handle.classList.remove("is-dragging");
+    save(drag.current);
+    drag = null;
+  };
+  handle.addEventListener("pointerup", finishDrag);
+  handle.addEventListener("pointercancel", finishDrag);
+  handle.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    save({ x: 0, y: 0 });
+  });
+  handle.addEventListener("keydown", (event) => {
+    const delta = event.shiftKey ? 20 : 8;
+    const movement = {
+      ArrowLeft: [-delta, 0],
+      ArrowRight: [delta, 0],
+      ArrowUp: [0, -delta],
+      ArrowDown: [0, delta],
+    }[event.key];
+    if (!movement) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const current = comparisonPaneOffsets.value[key] || { x: 0, y: 0 };
+    save(clampComparisonPaneOffset(svg, baseX, baseY, width, height, {
+      x: current.x + movement[0],
+      y: current.y + movement[1],
+    }));
+  });
 }
 
 function renderDynamicComparison(svg) {
@@ -2781,35 +2886,72 @@ function renderDynamicComparison(svg) {
   const paneScale = Math.max(0.1, comparisonPaneScale());
   const childWidth = blockWidth * paneScale;
   const childHeight = COMPARISON_PLOT_BOUNDS.height * paneScale;
-  const createPaneViewport = (child, x) => {
-    const clipId = `comparison-pane-clip-${x}`;
-    const clip = svgElement("clipPath", {
-      id: clipId,
-      "clipPathUnits": "userSpaceOnUse",
-    });
-    clip.appendChild(svgElement("rect", {
+  const createPaneViewport = (child, x, key, title) => {
+    // 不再用固定 clipPath 截断放大后的画板；每一侧改成独立的 HTML 滚动视口。
+    // 这样比例超过 100% 时内容仍然完整存在，只是通过滚动查看超出部分。
+    const paneGroup = svgElement("g", { class: `comparison-pane-group comparison-pane-${key}` });
+    const viewport = svgElement("foreignObject", {
+      class: "comparison-pane-viewport",
       x,
       y: COMPARISON_PLOT_BOUNDS.y,
       width: blockWidth,
       height: COMPARISON_PLOT_BOUNDS.height,
-    }));
-    svg.querySelector("defs")?.appendChild(clip);
-    const viewport = svgElement("g", {
-      class: "comparison-pane-viewport",
-      "clip-path": `url(#${clipId})`,
     });
-    child.setAttribute("x", String(x - (childWidth - blockWidth) / 2));
-    child.setAttribute("y", String(
-      COMPARISON_PLOT_BOUNDS.y - (childHeight - COMPARISON_PLOT_BOUNDS.height) / 2,
-    ));
+    const scroll = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    scroll.className = "comparison-pane-scroll";
+    scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", `${title}可滚动画布`);
+    const stage = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    stage.className = "comparison-pane-stage";
+    stage.style.width = `${Math.max(blockWidth, childWidth)}px`;
+    stage.style.height = `${Math.max(COMPARISON_PLOT_BOUNDS.height, childHeight)}px`;
+    child.setAttribute("x", "0");
+    child.setAttribute("y", "0");
     child.setAttribute("width", String(childWidth));
     child.setAttribute("height", String(childHeight));
-    viewport.appendChild(child);
-    return viewport;
+    stage.appendChild(child);
+    scroll.appendChild(stage);
+    viewport.appendChild(scroll);
+    const handle = svgElement("g", {
+      class: "comparison-pane-drag-handle",
+      role: "button",
+      tabindex: "0",
+      "aria-label": `拖动${title}整体位置；双击复位`,
+    });
+    handle.appendChild(svgElement("rect", {
+      class: "comparison-pane-drag-surface",
+      x,
+      y: COMPARISON_PLOT_BOUNDS.y - 28,
+      width: blockWidth,
+      height: 24,
+      rx: 2,
+    }));
+    const heading = svgElement("text", {
+      class: "comparison-pane-heading",
+      x: x + blockWidth / 2,
+      y: COMPARISON_PLOT_BOUNDS.y - 11,
+      "text-anchor": "middle",
+    });
+    setText(heading, title);
+    const hint = svgElement("title");
+    setText(hint, `按住拖动${title}整体位置；双击恢复默认位置`);
+    handle.append(heading, hint);
+    paneGroup.append(handle, viewport);
+    bindComparisonPaneDrag(
+      svg,
+      paneGroup,
+      handle,
+      key,
+      x,
+      COMPARISON_PLOT_BOUNDS.y,
+      blockWidth,
+      COMPARISON_PLOT_BOUNDS.height,
+    );
+    return paneGroup;
   };
   layer.append(
-    createPaneViewport(leftSvg, leftX),
-    createPaneViewport(rightSvg, rightX),
+    createPaneViewport(leftSvg, leftX, "hierarchy", "层级结构"),
+    createPaneViewport(rightSvg, rightX, "evolution", "时间沿革"),
   );
   const divider = svgElement("line", {
     class: "comparison-pane-divider",
@@ -2839,8 +2981,6 @@ function renderDynamicComparison(svg) {
 
   svg.__evolutionModel = rightSvg.__evolutionModel;
   svg.__evolutionLayout = rightSvg.__evolutionLayout;
-  renderComparisonHeading(svg, "层级结构", leftX + blockWidth / 2);
-  renderComparisonHeading(svg, "时间沿革", rightX + blockWidth / 2);
 }
 
 function renderDynamicEvolution(svg) {
@@ -4757,8 +4897,62 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+.svg-mount :deep(.comparison-pane-viewport) {
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.svg-mount :deep(.comparison-pane-group) {
+  pointer-events: auto;
+}
+
+.svg-mount :deep(.comparison-pane-scroll) {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  pointer-events: auto;
+  scrollbar-color: rgba(86, 57, 5, 0.56) rgba(86, 57, 5, 0.08);
+  scrollbar-width: thin;
+}
+
+.svg-mount :deep(.comparison-pane-stage) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+}
+
 .svg-mount :deep(.comparison-child-svg) {
   overflow: visible;
+  display: block;
+}
+
+.svg-mount :deep(.comparison-pane-drag-handle) {
+  pointer-events: all;
+  cursor: grab;
+  touch-action: none;
+}
+
+.svg-mount :deep(.comparison-pane-drag-handle.is-dragging) {
+  cursor: grabbing;
+}
+
+.svg-mount :deep(.comparison-pane-drag-surface) {
+  fill: rgba(245, 243, 236, 0.86);
+  stroke: rgba(86, 57, 5, 0.42);
+  stroke-width: 0.8px;
+}
+
+.svg-mount :deep(.comparison-pane-drag-handle:hover .comparison-pane-drag-surface),
+.svg-mount :deep(.comparison-pane-drag-handle:focus-visible .comparison-pane-drag-surface),
+.svg-mount :deep(.comparison-pane-drag-handle.is-dragging .comparison-pane-drag-surface) {
+  fill: rgba(145, 128, 105, 0.18);
+  stroke-opacity: 0.82;
+}
+
+.svg-mount :deep(.comparison-pane-drag-handle:focus) {
+  outline: none;
 }
 
 .svg-mount :deep(.comparison-child-svg .dynamic-tree-viewport),
