@@ -2691,7 +2691,7 @@ const COMPARISON_PLOT_BOUNDS = {
 const COMPARISON_GAP = 18;
 // 对照视图左右两块共用的等比例缩放入口：1 = 当前大小，1.1 = 放大 10%。
 // 只允许统一缩放，不能分别修改宽高，否则会破坏设计稿比例。
-const COMPARISON_PANE_SCALE = 2;
+const COMPARISON_PANE_SCALE = 0.7;
 const COMPARISON_VIEWBOX = {
   x: 500,
   y: 120,
@@ -2701,11 +2701,11 @@ const COMPARISON_VIEWBOX = {
 
 function comparisonPaneScale() {
   const propValue = Number(props.comparisonScale);
-  if (Number.isFinite(propValue) && propValue > 0) return propValue;
+  if (Number.isFinite(propValue) && propValue > 0) return Math.min(1, propValue);
   const queryValue = new URLSearchParams(window.location.search).get("comparisonScale");
   const parsed = Number(queryValue);
   return Number.isFinite(parsed) && parsed > 0
-    ? parsed
+    ? Math.min(1, parsed)
     : COMPARISON_PANE_SCALE;
 }
 

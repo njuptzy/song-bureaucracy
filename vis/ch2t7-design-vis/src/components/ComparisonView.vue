@@ -12,18 +12,26 @@
     <button class="comparison-exit" type="button" @click="$emit('exit-comparison')">
       返回单视图
     </button>
-    <label class="comparison-scale-control">
-      <span>对照比例</span>
+    <div class="comparison-scale-control" aria-label="对照视图显示比例">
+      <span class="comparison-scale-label">显示比例</span>
       <input
         v-model.number="comparisonScale"
         type="range"
         min="0.7"
-        max="2"
+        max="1"
         step="0.05"
-        aria-label="调整对照视图比例"
+        aria-label="调整对照视图显示比例，最高保持完整显示"
       >
       <output>{{ Math.round(comparisonScale * 100) }}%</output>
-    </label>
+      <button
+        class="comparison-scale-reset"
+        type="button"
+        :disabled="comparisonScale === 1"
+        @click="comparisonScale = 1"
+      >
+        适配
+      </button>
+    </div>
   </section>
 </template>
 
@@ -38,7 +46,8 @@ defineProps({
 });
 defineEmits(["state-change", "selection-change", "exit-comparison"]);
 
-const comparisonScale = ref(1);
+// 初始留出放大余量；100% 是两块内容完整适配当前区域的上限。
+const comparisonScale = ref(0.7);
 </script>
 
 <style scoped>
@@ -84,7 +93,7 @@ const comparisonScale = ref(1);
   top: 62px;
   right: 18px;
   display: grid;
-  grid-template-columns: auto minmax(112px, 150px) auto;
+  grid-template-columns: auto minmax(112px, 150px) auto auto;
   align-items: center;
   gap: 8px;
   min-height: 26px;
@@ -103,9 +112,36 @@ const comparisonScale = ref(1);
   accent-color: #563905;
 }
 
+.comparison-scale-label {
+  white-space: nowrap;
+}
+
 .comparison-scale-control output {
   min-width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.comparison-scale-reset {
+  min-width: 32px;
+  padding: 2px 5px;
+  border: 1px solid rgba(86, 57, 5, 0.28);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+
+.comparison-scale-reset:hover:not(:disabled),
+.comparison-scale-reset:focus-visible:not(:disabled) {
+  background: rgba(86, 57, 5, 0.08);
+  outline: none;
+}
+
+.comparison-scale-reset:disabled {
+  opacity: 0.42;
+  cursor: default;
 }
 </style>
