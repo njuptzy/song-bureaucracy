@@ -40,109 +40,113 @@
       <button type="button" class="text-command" @click="$emit('cancel-connect')">取消连接</button>
     </div>
 
-    <section v-if="showEmptyEditor" class="selection-editor editor-empty" aria-label="演变校订区域">
+    <section v-if="!drawer && editMode && !connectionMode" class="selection-editor" aria-label="演变校订区域">
       <fieldset class="editor-frame">
-        <legend class="editor-heading editor-empty-heading">
-          <strong>{{ emptyEditorTitle }}</strong>
-        </legend>
-      </fieldset>
-    </section>
-
-    <section v-if="!drawer && editMode && selection && !connectionMode" class="selection-editor" aria-label="选中事实编辑器">
-      <fieldset class="editor-frame">
-        <legend class="editor-heading">
-          <div>
-            <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
-            <strong>{{ selectionTitle }}</strong>
-          </div>
-          <button type="button" class="icon-command" title="关闭编辑表单" @click="$emit('clear-selection')">×</button>
+        <legend class="editor-heading editor-frame-title">
+          <strong>演变校订</strong>
         </legend>
         <div class="editor-frame-scroll">
+          <template v-if="selection">
+            <header class="editor-context-heading">
+              <div>
+                <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
+                <strong>{{ selectionTitle }}</strong>
+              </div>
+              <button type="button" class="icon-command" title="清空当前选择" @click="$emit('clear-selection')">×</button>
+            </header>
 
-      <template v-if="selection.kind === 'timepoint'">
-        <div class="editor-tabs" role="tablist">
-          <button v-for="item in timepointActions" :key="item.value" type="button"
-            :class="{ active: action === item.value }" @click="action = item.value">{{ item.label }}</button>
-        </div>
-        <div v-if="action !== 'delete'" class="form-grid">
-          <label class="field field-wide">
-            <span>原文纪年</span>
-            <input v-model="timeForm.time" type="text" @input="normalizeTime" />
-          </label>
-          <div class="normalized-time field-wide">
-            <span>{{ normalizedLabel }}</span>
-            <small>{{ normalizedTime?.parse_note || '输入纪年后即时解析' }}</small>
-          </div>
-          <label class="field field-wide">
-            <span>事件</span>
-            <textarea v-model="timeForm.event" rows="3"></textarea>
-          </label>
-          <label v-if="action === 'insert'" class="field">
-            <span>插入位置</span>
-            <select v-model="insertPosition">
-              <option value="after">当前点之后</option>
-              <option value="before">当前点之前</option>
-            </select>
-          </label>
-          <label class="field"><span>属性分类</span><input v-model="timeForm.attr_category" type="text" /></label>
-          <label class="field"><span>官员类型</span><input v-model="timeForm.attr_officer_type" type="text" /></label>
-          <label class="field"><span>品级</span><input v-model="timeForm.attr_grade" type="text" /></label>
-        </div>
-        <p v-else class="impact-copy">
-          删除会把关联关系、引用、标准化时间和链指针调整作为一个不可拆分的操作组加入草稿。
-        </p>
-      </template>
+            <template v-if="selection.kind === 'timepoint'">
+              <div class="editor-tabs" role="tablist">
+                <button v-for="item in timepointActions" :key="item.value" type="button"
+                  :class="{ active: action === item.value }" @click="action = item.value">{{ item.label }}</button>
+              </div>
+              <div v-if="action !== 'delete'" class="form-grid">
+                <label class="field field-wide">
+                  <span>原文纪年</span>
+                  <input v-model="timeForm.time" type="text" @input="normalizeTime" />
+                </label>
+                <div class="normalized-time field-wide">
+                  <span>{{ normalizedLabel }}</span>
+                  <small>{{ normalizedTime?.parse_note || '输入纪年后即时解析' }}</small>
+                </div>
+                <label class="field field-wide">
+                  <span>事件</span>
+                  <textarea v-model="timeForm.event" rows="3"></textarea>
+                </label>
+                <label v-if="action === 'insert'" class="field">
+                  <span>插入位置</span>
+                  <select v-model="insertPosition">
+                    <option value="after">当前点之后</option>
+                    <option value="before">当前点之前</option>
+                  </select>
+                </label>
+                <label class="field"><span>属性分类</span><input v-model="timeForm.attr_category" type="text" /></label>
+                <label class="field"><span>官员类型</span><input v-model="timeForm.attr_officer_type" type="text" /></label>
+                <label class="field"><span>品级</span><input v-model="timeForm.attr_grade" type="text" /></label>
+              </div>
+              <p v-else class="impact-copy">
+                删除会把关联关系、引用、标准化时间和链指针调整作为一个不可拆分的操作组加入草稿。
+              </p>
+            </template>
 
-      <template v-else>
-        <div class="editor-tabs" role="tablist">
-          <button type="button" :class="{ active: action === 'update' }" @click="action = 'update'">调整关系</button>
-          <button type="button" :class="{ active: action === 'delete' }" @click="action = 'delete'">删除</button>
-        </div>
-        <div v-if="action === 'update'" class="relation-endpoints">
-          <label class="field field-wide"><span>来源时间点</span><select v-model="relationForm.subject_id">
-            <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
-          </select></label>
-          <button type="button" class="swap-command" title="交换来源和目标方向" @click="swapRelation">⇄ 交换方向</button>
-          <label class="field field-wide"><span>目标时间点</span><select v-model="relationForm.object_id">
-            <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
-          </select></label>
-        </div>
-        <p v-else class="impact-copy">删除关系不会删除端点时间点；关系引用会作为自动联动一并移除。</p>
-      </template>
+            <template v-else>
+              <div class="editor-tabs" role="tablist">
+                <button type="button" :class="{ active: action === 'update' }" @click="action = 'update'">调整关系</button>
+                <button type="button" :class="{ active: action === 'delete' }" @click="action = 'delete'">删除</button>
+              </div>
+              <div v-if="action === 'update'" class="relation-endpoints">
+                <label class="field field-wide"><span>来源时间点</span><select v-model="relationForm.subject_id">
+                  <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
+                </select></label>
+                <button type="button" class="swap-command" title="交换来源和目标方向" @click="swapRelation">⇄ 交换方向</button>
+                <label class="field field-wide"><span>目标时间点</span><select v-model="relationForm.object_id">
+                  <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
+                </select></label>
+              </div>
+              <p v-else class="impact-copy">删除关系不会删除端点时间点；关系引用会作为自动联动一并移除。</p>
+            </template>
 
-      <div class="evidence-section">
-        <label class="field field-wide"><span>修改理由</span><textarea v-model="reason" rows="2" placeholder="说明为什么要作出这项历史判断"></textarea></label>
-        <div v-if="existingEvidence.length && action !== 'insert'" class="evidence-mode">
-          <label><input v-model="evidenceMode" type="radio" value="existing" /> 关联已有证据</label>
-          <label><input v-model="evidenceMode" type="radio" value="new" /> 新增证据</label>
-        </div>
-        <label v-if="evidenceMode === 'existing'" class="field field-wide"><span>已有证据</span><select v-model="existingCitationId">
-          <option v-for="item in existingEvidence" :key="item.id" :value="item.id">{{ item.citation || item.quotation }}</option>
-        </select></label>
-        <template v-else>
-          <label class="field field-wide"><span>出处</span><input v-model="evidence.citation" type="text" placeholder="书名、卷次或条目来源" /></label>
-          <label class="field field-wide"><span>逐字引文</span><textarea v-model="evidence.quotation" rows="3"></textarea></label>
-          <label class="field field-wide"><span>证据说明</span><input v-model="evidence.note" type="text" /></label>
-        </template>
-      </div>
-      <footer class="editor-footer">
-        <span class="form-error">{{ localError }}</span>
-        <button class="primary-command" type="button" :disabled="busy" @click="submitSelection">加入草稿</button>
-      </footer>
+            <div class="evidence-section">
+              <label class="field field-wide"><span>修改理由</span><textarea v-model="reason" rows="2" placeholder="说明为什么要作出这项历史判断"></textarea></label>
+              <div v-if="existingEvidence.length && action !== 'insert'" class="evidence-mode">
+                <label><input v-model="evidenceMode" type="radio" value="existing" /> 关联已有证据</label>
+                <label><input v-model="evidenceMode" type="radio" value="new" /> 新增证据</label>
+              </div>
+              <label v-if="evidenceMode === 'existing'" class="field field-wide"><span>已有证据</span><select v-model="existingCitationId">
+                <option v-for="item in existingEvidence" :key="item.id" :value="item.id">{{ item.citation || item.quotation }}</option>
+              </select></label>
+              <template v-else>
+                <label class="field field-wide"><span>出处</span><input v-model="evidence.citation" type="text" placeholder="书名、卷次或条目来源" /></label>
+                <label class="field field-wide"><span>逐字引文</span><textarea v-model="evidence.quotation" rows="3"></textarea></label>
+                <label class="field field-wide"><span>证据说明</span><input v-model="evidence.note" type="text" /></label>
+              </template>
+            </div>
+            <footer class="editor-footer">
+              <span class="form-error">{{ localError }}</span>
+              <button class="primary-command" type="button" :disabled="busy" @click="submitSelection">加入草稿</button>
+            </footer>
+          </template>
         </div>
       </fieldset>
     </section>
 
-    <section v-if="!drawer && editMode && connectionMode && connectSource && connectTarget" class="connection-editor">
-      <header class="editor-heading"><div><span class="editor-kicker">新建前后演变</span><strong>{{ connectLabel }}</strong></div></header>
-      <label class="field field-wide"><span>关系说明</span><input v-model="connectQuotation" type="text" /></label>
-      <label class="field field-wide"><span>修改理由</span><textarea v-model="connectReason" rows="2"></textarea></label>
-      <label class="field field-wide"><span>出处</span><input v-model="connectEvidence.citation" type="text" /></label>
-      <label class="field field-wide"><span>逐字引文</span><textarea v-model="connectEvidence.quotation" rows="2"></textarea></label>
-      <footer class="editor-footer">
-        <span class="form-error">{{ localError }}</span>
-        <button type="button" class="primary-command" @click="submitConnection">加入关系</button>
-      </footer>
+    <section v-if="!drawer && editMode && connectionMode" class="selection-editor connection-editor" aria-label="新建前后演变区域">
+      <fieldset class="editor-frame">
+        <legend class="editor-heading editor-frame-title"><strong>新建前后演变</strong></legend>
+        <div class="editor-frame-scroll">
+          <template v-if="connectSource && connectTarget">
+            <header class="editor-context-heading"><strong>{{ connectLabel }}</strong></header>
+            <label class="field field-wide"><span>关系说明</span><input v-model="connectQuotation" type="text" /></label>
+            <label class="field field-wide"><span>修改理由</span><textarea v-model="connectReason" rows="2"></textarea></label>
+            <label class="field field-wide"><span>出处</span><input v-model="connectEvidence.citation" type="text" /></label>
+            <label class="field field-wide"><span>逐字引文</span><textarea v-model="connectEvidence.quotation" rows="2"></textarea></label>
+            <footer class="editor-footer">
+              <span class="form-error">{{ localError }}</span>
+              <button type="button" class="primary-command" @click="submitConnection">加入关系</button>
+            </footer>
+          </template>
+        </div>
+      </fieldset>
     </section>
 
     <aside v-if="drawer" class="revision-drawer" :aria-label="drawer === 'workspace' ? '修改工作区' : '提交历史'">
@@ -238,14 +242,6 @@ const timepointActions = [
   { value: "insert", label: "新增相邻" },
   { value: "delete", label: "删除" },
 ];
-const showEmptyEditor = computed(() => {
-  if (!props.editMode || props.drawer) return false;
-  if (!props.connectionMode) return !props.selection;
-  return !(props.connectSource && props.connectTarget);
-});
-const emptyEditorTitle = computed(() => (
-  props.connectionMode ? "新建前后演变" : "演变校订"
-));
 const action = ref("update");
 const insertPosition = ref("after");
 const reason = ref("");
@@ -510,8 +506,7 @@ button { color: inherit; }
   scrollbar-width: thin;
 }
 .selection-editor { padding: 0; }
-.editor-empty { pointer-events: none; }
-.connection-editor { padding: 13px 10px 8px; overflow-y: auto; }
+.connection-editor { padding: 0; overflow: hidden; }
 .editor-frame {
   display: flex;
   min-width: 0;
@@ -532,7 +527,7 @@ button { color: inherit; }
   padding: 0 8px;
   border: 0;
 }
-.editor-frame > .editor-empty-heading { width: max-content; }
+.editor-frame > .editor-frame-title { width: max-content; }
 .editor-frame-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -543,6 +538,9 @@ button { color: inherit; }
   scrollbar-width: thin;
 }
 .editor-heading, .drawer-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid rgba(86,57,5,.32); }
+.editor-context-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 2px 0 9px; border-bottom: 1px solid rgba(86,57,5,.32); }
+.editor-context-heading > div { display: grid; gap: 3px; min-width: 0; }
+.editor-context-heading strong { overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
 .editor-heading div, .drawer-heading div { display: grid; gap: 3px; min-width: 0; }
 .editor-heading strong, .drawer-heading strong { overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
 .editor-kicker, .drawer-heading span { color: var(--taupe); font-size: 10px; }
