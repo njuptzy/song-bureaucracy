@@ -601,6 +601,12 @@ export function eventStemGeometry(event) {
   const y = event.y;
   const baseY = event.baseY ?? y;
   if (!event.displaced || !Number.isFinite(event.baseX)) return null;
+  // Year is encoded by x. A purely vertical displacement keeps the event on
+  // its exact year already, so a stem adds no temporal information. Worse, if
+  // a relation terminates at another glyph on the same anchor, the vertical
+  // stem visually continues that relation through the glyph into this circle.
+  // Only draw a year-pointer when collision handling actually moved x.
+  if (Math.abs(x - event.baseX) < 0.5) return null;
   // 位移量太小（anchor 几乎落在圆点里）时不画回指茎和定位点：
   // 圆点自身已经在真实年份上，再叠一粒小芯只会读出"◎"的假复合标记。
   const displacement = Math.hypot(x - event.baseX, y - baseY);
