@@ -714,8 +714,12 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
 function endpointClearance(point, arrowhead = false) {
   if (point?.timepointId == null) return 0;
   const triangle = ["establish", "abolish"].includes(point.iconType);
-  if (triangle) return arrowhead ? 7.5 : 6;
-  return arrowhead ? 5.5 : 4;
+  // The endpoint is the arrow tip / relation stroke endpoint, so clearance
+  // should follow the visible glyph edge instead of leaving a large dead gap.
+  // Use the selected circle radius as the safe envelope: otherwise a relation
+  // attached to a displaced or selected record visibly cuts into the ring.
+  if (triangle) return arrowhead ? 5.8 : 6;
+  return arrowhead ? 4.8 : 4.8;
 }
 
 function insetPoint(point, toward, distance) {
@@ -739,16 +743,30 @@ export function relationPath(source, target) {
   const deltaY = end.y - start.y;
   if (Math.abs(deltaY) < 1) {
     const lift = start.y > 470 ? -28 : 28;
-    const mid = (start.x + end.x) / 2;
-    return `M${start.x} ${start.y}C${mid} ${start.y + lift} ${mid} ${end.y + lift} ${end.x} ${end.y}`;
+    const deltaX = end.x - start.x;
+    const direction = Math.sign(deltaX || 1);
+    const span = Math.abs(deltaX);
+    const sourceControlX = start.x + direction * Math.min(34, span * 0.34);
+    const targetControlX = end.x - direction * Math.min(22, span * 0.22);
+    // Keep the final control point on the endpoint centreline. The marker's
+    // tangent therefore points at the target glyph, not at the lane beside it.
+    return `M${start.x} ${start.y}C${sourceControlX} ${start.y + lift} ${targetControlX} ${end.y} ${end.x} ${end.y}`;
   }
   // Keep cross-lane jumps tight: a wide bend sweeps across empty canvas and
   // reads as a stray arc when the jump spans several lanes.
   const bend = Math.max(18, Math.min(56, Math.abs(deltaY) * 0.26));
   const direction = Math.sign(end.x - start.x || 1);
   const sourceControlX = start.x + direction * bend;
-  const targetControlX = end.x - direction * bend;
-  return `M${start.x} ${start.y}C${sourceControlX} ${start.y} ${targetControlX} ${end.y} ${end.x} ${end.y}`;
+  const centerDeltaX = target.x - source.x;
+  const centerDeltaY = target.y - source.y;
+  const centerLength = Math.hypot(centerDeltaX, centerDeltaY) || 1;
+  const approach = Math.min(bend, Math.max(8, centerLength * 0.22));
+  const targetControlX = end.x - centerDeltaX / centerLength * approach;
+  const targetControlY = end.y - centerDeltaY / centerLength * approach;
+  // The last bezier tangent is collinear with target centre -> glyph edge.
+  // This matters for vertically aligned events: a horizontal tangent used to
+  // make the arrow appear to point at the timeline rather than the icon.
+  return `M${start.x} ${start.y}C${sourceControlX} ${start.y} ${targetControlX} ${targetControlY} ${end.x} ${end.y}`;
 }
 
 function renderRelation(parent, relation, selected, dimmed, handlers, suppressLabel = false) {
