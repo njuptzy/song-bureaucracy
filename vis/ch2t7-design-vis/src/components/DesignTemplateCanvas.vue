@@ -2778,6 +2778,16 @@ function timetreeActiveExpandedKeys(category) {
 
 function renderDynamicTimetree(svg) {
   hideEvolutionExamples(svg);
+  // hideEvolutionExamples 的隐藏区（x58–480/y270–478）覆盖了左侧分类导航，
+  // 时间线树视图仍需要它切换分类，恢复显示。
+  for (const element of svg.children) {
+    if (element.style?.display !== "none") continue;
+    const text = normalizeText(element);
+    if (CATEGORY_NAMES.some((name) => text.includes(name))) {
+      element.style.removeProperty("display");
+    }
+  }
+  const treeTemplates = hierarchyTemplates(svg);
   const category = selectedCategory.value;
   const rows = buildTimetreeRows({
     entities: props.data.entities,
@@ -2938,6 +2948,7 @@ function renderDynamicTimetree(svg) {
     selectedEntityId: selectedId.value,
     selectedEventId: timetreeSelectedEventId.value,
     selectedRelationId: timetreeSelectedRelationId.value,
+    treeTemplates,
     handlers,
   });
 }
@@ -4311,16 +4322,8 @@ onUnmounted(() => {
 .svg-mount :deep(.timetree-row-band.is-odd) { fill-opacity: 0.05; }
 .svg-mount :deep(.timetree-row-band:hover) { fill-opacity: 0.09; }
 .svg-mount :deep(.timetree-row-band.is-selected) { fill-opacity: 0.12; }
-.svg-mount :deep(.timetree-tree-label) {
-  fill: #351704;
-  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS, serif;
-  font-size: 13px;
-}
-.svg-mount :deep(.timetree-tree-node.is-virtual .timetree-tree-label) { font-weight: 600; }
-.svg-mount :deep(.timetree-tree-node.is-selected .timetree-tree-label) { font-weight: 700; }
-.svg-mount :deep(.timetree-tree-count) { fill: #918069; font-size: 10px; }
-.svg-mount :deep(.timetree-tree-toggle) { cursor: pointer; }
-.svg-mount :deep(.timetree-tree-toggle:hover) { fill: #563905; }
+.svg-mount :deep(.timetree-tree-node) { cursor: pointer; }
+.svg-mount :deep(.timetree-tree-node:focus) { outline: none; }
 .svg-mount :deep(.timetree-offaxis-badge) { fill: #918069; font-size: 9px; letter-spacing: 0.5px; }
 .svg-mount :deep(.timetree-empty-hint) { fill: #918069; font-size: 14px; letter-spacing: 3px; }
 .svg-mount :deep(.timetree-scrollbar-thumb:hover) { fill-opacity: 0.5; }

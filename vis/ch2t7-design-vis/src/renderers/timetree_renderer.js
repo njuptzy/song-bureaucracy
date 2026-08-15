@@ -173,74 +173,179 @@ function renderRowBand(parent, row, y, geometry, selected) {
   return band;
 }
 
-function renderTreeLink(parent, row, y, parentY, geometry) {
-  if (parentY == null) return;
-  const nodeX = timetreeNodeX(row.depth, geometry);
-  const linkX = nodeX - 22;
-  parent.appendChild(svgElement("path", {
-    class: "timetree-tree-link",
-    d: `M${linkX} ${parentY}V${y}H${nodeX - 15}`,
-    fill: "none",
-    stroke: COLORS.olive,
-    "stroke-width": 0.7,
-    "stroke-opacity": 0.6,
-    "pointer-events": "none",
-  }));
+// ---- 层级树节点：完全复用层级视图的模板盖章，整体逆时针旋转 90° ----
+
+function setNodeText(element, text) {
+  if (!element) return;
+  element.replaceChildren(document.createTextNode(text || "暂无资料"));
 }
 
-function renderTreeNode(parent, row, y, geometry, selected, handlers) {
-  const nodeX = timetreeNodeX(row.depth, geometry);
-  const group = svgElement("g", {
+// 与层级视图 fitDynamicNodeLabel 同规则：按胶囊可用长度截断（模板空间里
+// 胶囊是竖放的，可用长度 = polygon 高度；旋转后即横向可用宽度）。
+function fitCapsuleLabel(label, fullTitle, capsuleLength) {
+  if (!label) return;
+  const maxGlyphs = Math.max(1, Math.floor((capsuleLength - 4) / 17.14));
+  const displayTitle = fullTitle.length > maxGlyphs
+    ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
+    : fullTitle;
+  setNodeText(label, displayTitle);
+}
+
+function virtualNodeWidth(row, templates) {
+  return Math.max(
+    Number(templates.emperorRect.getAttribute("width")),
+    row.title.length * 17.14 + 24,
+  );
+}
+
+// 真实机构节点：盖章层级视图的胶囊模板（竖排胶囊 + 竖排文字 + cls-81 标记 +
+// 收起计数短横），内容保持模板坐标不动，由外壳做 rotate(-90)。
+function stampCapsuleNode(svg, row, templates, selected, nodeIndex) {
+  const nodeGroup = templates.templateGroup.cloneNode(true);
+  nodeGroup.removeAttribute("transform");
+  nodeGroup.dataset.entityId = String(row.entityId);
+  const bounds = templates.templatePolygonBounds;
+  const cx = bounds.x + bounds.width / 2;
+  const cy = bounds.y + bounds.height / 2;
+  // 未选中且未展开的节点不保留原稿的选中标记（与层级视图一致）。
+  if (!selected && !row.expanded) nodeGroup.querySelector("g.cls-81")?.remove();
+
+  const label = nodeGroup.querySelector("text");
+  if (label) {
+    // 旋转后胶囊横放，文字改为横排并随外壳转正：rotate(90) 抵消外壳的 -90°。
+    label.style.writingMode = "horizontal-tb";
+    label.style.textOrientation = "mixed";
+    fitCapsuleLabel(label, row.title, bounds.height);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("dominant-baseline", "central");
+    label.setAttribute("transform", `translate(${cx} ${cy}) rotate(90)`);
+    // 与层级视图相同的文字裁剪（模板空间内，随外壳一起旋转）。
+    const clipId = `timetree-node-clip-${nodeIndex}`;
+    const clipPath = svgElement("clipPath", {
+      id: clipId,
+      clipPathUnits: "userSpaceOnUse",
+      "data-timetree-def": "node-clip",
+    });
+    clipPath.appendChild(svgElement("rect", {
+      x: bounds.x + 3,
+      y: bounds.y + 2,
+      width: bounds.width - 6,
+      height: bounds.height - 4,
+    }));
+    svg.querySelector("defs")?.appendChild(clipPath);
+    const clipGroup = svgElement("g", { "clip-path": `url(#${clipId})` });
+    label.parentNode.insertBefore(clipGroup, label);
+    clipGroup.appendChild(label);
+  }
+
+  // 点击热区 = 胶囊外框（随外壳旋转）。
+  nodeGroup.insertBefore(svgElement("rect", {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    fill: "transparent",
+    "pointer-events": "all",
+    "aria-hidden": "true",
+  }), nodeGroup.firstChild);
+
+  // 收起下级的计数短横：与层级视图相同的 log2 档位，旋转后落在横胶囊右端。
+  const hiddenCount = row.childCount || 0;
+  if (hiddenCount > 0) {
+    const barCount = Math.min(5, Math.max(1, Math.ceil(Math.log2(hiddenCount + 1))));
+    for (let index = 0; index < barCount; index += 1) {
+      nodeGroup.appendChild(svgElement("rect", {
+        x: bounds.x + 1,
+        y: bounds.y + bounds.height - 4 - index * 3,
+        width: bounds.width - 2,
+        height: 1.8,
+        fill: COLORS.line,
+        opacity: 0.55,
+      }));
+    }
+  }
+  return nodeGroup;
+}
+
+// 制度组虚拟节点：沿用层级视图的"皇帝"模板（横排胶囊 + 居中文字），
+// 该模板本身即横向，不再旋转。
+function stampGroupNode(row, templates) {
+  const nodeGroup = svgElement("g");
+  const width = virtualNodeWidth(row, templates);
+  const height = Number(templates.emperorRect.getAttribute("height"));
+  const rect = templates.emperorRect.cloneNode(true);
+  rect.style.removeProperty("display");
+  rect.setAttribute("x", String(-width / 2));
+  rect.setAttribute("y", String(-height / 2));
+  rect.setAttribute("width", String(width));
+  rect.setAttribute("height", String(height));
+  rect.removeAttribute("opacity");
+  rect.style.removeProperty("opacity");
+  rect.setAttribute("opacity", "0.82");
+  const label = templates.emperorText.cloneNode(true);
+  label.style.removeProperty("display");
+  label.removeAttribute("opacity");
+  label.style.removeProperty("opacity");
+  label.removeAttribute("transform");
+  label.style.writingMode = "horizontal-tb";
+  label.style.textOrientation = "mixed";
+  label.setAttribute("x", "0");
+  label.setAttribute("y", "0");
+  label.setAttribute("text-anchor", "middle");
+  label.setAttribute("dominant-baseline", "central");
+  setNodeText(label, row.title);
+  nodeGroup.append(rect, label);
+  return nodeGroup;
+}
+
+// 连线与层级视图同一语法（cls-26 正交折线）：从父节点外框右边中点，
+// 经父子中点竖线，接到子节点外框左边中点。
+function renderTreeLink(parent, parentNode, childNode) {
+  const midX = (parentNode.right + childNode.left) / 2;
+  const polyline = svgElement("polyline", {
+    class: "cls-26 timetree-tree-link",
+    points: `${parentNode.right},${parentNode.y} ${midX},${parentNode.y} ${midX},${childNode.y} ${childNode.left},${childNode.y}`,
+  });
+  polyline.style.pointerEvents = "none";
+  parent.appendChild(polyline);
+}
+
+function renderTreeNode(svg, parent, row, info, selected, handlers, templates, nodeIndex) {
+  const wrapper = svgElement("g", {
     class: `timetree-tree-node${row.isVirtual ? " is-virtual" : ""}${selected ? " is-selected" : ""}`,
   });
-  if (row.totalChildren > 0) {
-    // 展开/收起三角：收起朝右、展开朝下，与层级视图的折叠语义一致。
-    const size = 4.2;
-    const cx = nodeX - 11;
-    const d = row.expanded
-      ? `M${cx - size} ${y - size * 0.6}L${cx + size} ${y - size * 0.6}L${cx} ${y + size * 0.8}Z`
-      : `M${cx - size * 0.6} ${y - size}L${cx - size * 0.6} ${y + size}L${cx + size * 0.8} ${y}Z`;
-    const toggle = svgElement("path", {
-      class: "timetree-tree-toggle",
-      d,
-      fill: row.expanded ? COLORS.line : COLORS.paper,
-      stroke: COLORS.line,
-      "stroke-width": 0.9,
-      "stroke-linejoin": "round",
-    });
-    makeInteractive(toggle, row.expanded ? `收起${row.title}` : `展开${row.title}`, () => {
-      handlers.onToggleNode?.(row.key);
-    });
-    addTitle(toggle, row.expanded ? "收起下级" : `展开 ${row.totalChildren} 个下级`);
-    group.appendChild(toggle);
+  if (row.isVirtual) {
+    wrapper.setAttribute("transform", `translate(${info.x} ${info.y})`);
+    wrapper.appendChild(stampGroupNode(row, templates));
+  } else {
+    const bounds = templates.templatePolygonBounds;
+    const cx = bounds.x + bounds.width / 2;
+    const cy = bounds.y + bounds.height / 2;
+    wrapper.setAttribute(
+      "transform",
+      `translate(${info.x} ${info.y}) rotate(-90) translate(${-cx} ${-cy})`,
+    );
+    wrapper.appendChild(stampCapsuleNode(svg, row, templates, selected, nodeIndex));
   }
-  const label = appendText(group, row.title, {
-    x: nodeX,
-    y: y + 4.5,
-    class: "timetree-tree-label",
+  const hasChildren = row.totalChildren > 0;
+  const expandHint = hasChildren
+    ? (row.expanded ? "；点击收起下级" : `；点击展开 ${row.totalChildren} 个下级`)
+    : "";
+  const evolutionHint = row.entityId != null ? "；双击进入演变视图" : "";
+  addTitle(wrapper, `${row.title}${expandHint}${evolutionHint}`);
+  makeInteractive(wrapper, row.title, () => {
+    // 与层级视图一致的交互语义：点有下级的节点 = 展开/收起 + 选中。
+    if (hasChildren) handlers.onToggleNode?.(row.key);
+    if (row.entityId != null) handlers.onSelectEntity?.(row.entityId);
   });
   if (row.entityId != null) {
-    makeInteractive(label, `查看${row.title}`, () => handlers.onSelectEntity?.(row.entityId));
-    label.addEventListener("dblclick", (event) => {
+    wrapper.addEventListener("dblclick", (event) => {
       event.preventDefault();
       event.stopPropagation();
       handlers.onOpenEvolution?.(row.entityId);
     });
-    addTitle(label, `${row.title}（双击进入演变视图）`);
-  } else {
-    label.style.cursor = "pointer";
-    makeInteractive(label, row.expanded ? `收起${row.title}` : `展开${row.title}`, () => {
-      handlers.onToggleNode?.(row.key);
-    });
   }
-  if (row.childCount > 0) {
-    appendText(group, `（${row.childCount}）`, {
-      x: nodeX + row.title.length * 13.5 + 6,
-      y: y + 4.5,
-      class: "timetree-tree-count",
-    });
-  }
-  parent.appendChild(group);
+  parent.appendChild(wrapper);
 }
 
 function renderSegments(parent, segments, y) {
@@ -468,6 +573,7 @@ export function renderTimetreeOverlay(svg, options) {
     selectedEntityId = null,
     selectedEventId = null,
     selectedRelationId = null,
+    treeTemplates = null,
     handlers = {},
   } = options;
   const geometry = TIMETREE_GEOMETRY;
@@ -499,6 +605,19 @@ export function renderTimetreeOverlay(svg, options) {
     timetreeRowY(row.rowIndex, scroll?.offset || 0, geometry),
   ]));
 
+  // 每个树节点的最终坐标与外框左右缘（连线端点用）。
+  // 旋转后真实节点横放：横向半长 = 模板竖胶囊高度的一半。
+  const nodeInfoByKey = new Map();
+  if (treeTemplates) {
+    const capsuleHalf = treeTemplates.templatePolygonBounds.height / 2;
+    for (const row of rows) {
+      const x = timetreeNodeX(row.depth, geometry);
+      const y = yByKey.get(row.key);
+      const halfW = row.isVirtual ? virtualNodeWidth(row, treeTemplates) / 2 : capsuleHalf;
+      nodeInfoByKey.set(row.key, { x, y, left: x - halfW, right: x + halfW });
+    }
+  }
+
   // 第一遍：行带、树连线、存续段（底层）。
   const underlay = svgElement("g", { class: "timetree-underlay" });
   content.appendChild(underlay);
@@ -509,7 +628,9 @@ export function renderTimetreeOverlay(svg, options) {
     if (row.entityId != null) {
       makeInteractive(band, `查看${row.title}`, () => handlers.onSelectEntity?.(row.entityId));
     }
-    renderTreeLink(underlay, row, y, row.parentKey ? yByKey.get(row.parentKey) : null, geometry);
+    if (treeTemplates && row.parentKey && nodeInfoByKey.has(row.parentKey)) {
+      renderTreeLink(underlay, nodeInfoByKey.get(row.parentKey), nodeInfoByKey.get(row.key));
+    }
     if (row.entityId != null) {
       renderSegments(underlay, segmentsByLane.get(row.entityId), y);
     }
@@ -525,6 +646,7 @@ export function renderTimetreeOverlay(svg, options) {
   // 第二遍：事件点与树节点（顶层，保证可点）。
   const overlay = svgElement("g", { class: "timetree-overlay" });
   content.appendChild(overlay);
+  let nodeIndex = 0;
   for (const row of rows) {
     const y = yByKey.get(row.key);
     if (row.entityId != null) {
@@ -534,7 +656,19 @@ export function renderTimetreeOverlay(svg, options) {
       const lane = lanesByEntityId.get(row.entityId);
       if (lane) renderOffAxisBadge(overlay, lane, y, geometry);
     }
-    renderTreeNode(overlay, row, y, geometry, row.entityId === selectedEntityId, handlers);
+    if (treeTemplates) {
+      renderTreeNode(
+        svg,
+        overlay,
+        row,
+        nodeInfoByKey.get(row.key),
+        row.entityId != null && row.entityId === selectedEntityId,
+        handlers,
+        treeTemplates,
+        nodeIndex,
+      );
+      nodeIndex += 1;
+    }
   }
 
   // 滚轮滚动：挂在整层上，事件从行带/事件点冒泡上来，不挡任何点击。

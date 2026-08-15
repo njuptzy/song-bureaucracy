@@ -2,14 +2,18 @@
 // 共享同一套行 y 坐标；x 方向树区与年代区分离，年代映射与演变视图一致
 // （960–1279 线性映射）。
 
+// 树区几何与层级视图对齐：层级视图 d3.tree nodeSize=[52,145]（兄弟 52、层距 145），
+// 逆时针旋转 90° 后兄弟间距变成行距（52）、层距变成深度方向的横向间距。
+// depthGap 取 130 而不是 145：横放胶囊长约 120，需为连线留出中点间隙，
+// 且 depth 3 的节点右缘不能超过 dividerX。
 export const TIMETREE_GEOMETRY = {
-  tree: { x0: 510, depthGap: 104, maxX: 940 },
+  tree: { x0: 510, depthGap: 130, maxX: 900 },
   dividerX: 962,
   plot: { x0: 992, x1: 1828 },
   axisY: 262,
   rowsTop: 296,
   rowsBottom: 844,
-  rowPitch: 34,
+  rowPitch: 52,
 };
 
 export function timetreeYearToX(year, yearMin, yearMax, plot = TIMETREE_GEOMETRY.plot) {
