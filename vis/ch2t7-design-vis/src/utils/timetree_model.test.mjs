@@ -225,7 +225,7 @@ describe("buildTimetreeRows", () => {
 });
 
 describe("defaultTimetreeExpandedKeys", () => {
-  it("默认只展开首个有数据的制度组、机构保持收起", () => {
+  it("默认只展开类别根，第二层制度组全部保持收起", () => {
     const keys = defaultTimetreeExpandedKeys({
       entities: [
         entity(1, "甲司", { central_group: "决策中枢" }),
@@ -234,10 +234,7 @@ describe("defaultTimetreeExpandedKeys", () => {
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
     });
-    assert.deepEqual(keys, [
-      timetreeCategoryKey("中央机构"),
-      timetreeGroupKey("中央机构", "决策中枢"),
-    ]);
+    assert.deepEqual(keys, [timetreeCategoryKey("中央机构")]);
   });
 
   it("无制度组配置时默认展开类别根、具体机构保持收起", () => {

@@ -73,7 +73,6 @@ import {
   buildTimetreeRows,
   defaultTimetreeExpandedKeys,
   timetreeCategoryKey,
-  timetreeEntityKey,
   timetreeLaneEntityIds,
   toggleTimetreeExpansion,
 } from "../utils/timetree_model";
@@ -2778,16 +2777,8 @@ function timetreeActiveExpandedKeys(category) {
   if (timetreeExpandedKeys.value !== null) return timetreeExpandedKeys.value;
   const categoryKey = timetreeCategoryKey(category);
   if (collapsedHierarchyIds.has(categoryKey)) return [];
-  const inherited = [
-    categoryKey,
-    ...expandedInstitutionGroupIds,
-    ...expandedHierarchyPath.map((entityId) => timetreeEntityKey(entityId)),
-  ];
-  if (inherited.length) return inherited;
   return defaultTimetreeExpandedKeys({
-    entities: props.data.entities,
     category,
-    groupNames: institutionGroupNames[category] || [],
   });
 }
 

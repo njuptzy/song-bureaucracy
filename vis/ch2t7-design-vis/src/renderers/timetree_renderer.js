@@ -3,8 +3,8 @@ import {
   fitTimetreeCapsuleLabel,
   TIMETREE_GEOMETRY,
   timetreeLaneLinkSpan,
+  timetreeNodeColumns,
   timetreeVirtualBusGeometry,
-  timetreeNodeX,
   timetreeRowY,
 } from "../utils/timetree_layout.js";
 
@@ -654,10 +654,15 @@ export function renderTimetreeOverlay(svg, options) {
   const nodeInfoByKey = new Map();
   if (treeTemplates) {
     const capsuleHalf = treeTemplates.templatePolygonBounds.height / 2;
+    const halfWidthByKey = new Map(rows.map((row) => [
+      row.key,
+      row.isVirtual ? virtualNodeWidth(row, treeTemplates) / 2 : capsuleHalf,
+    ]));
+    const xByDepth = timetreeNodeColumns(rows, halfWidthByKey, geometry);
     for (const row of rows) {
-      const x = timetreeNodeX(row.depth, geometry);
+      const x = xByDepth.get(row.depth);
       const y = yByKey.get(row.key);
-      const halfW = row.isVirtual ? virtualNodeWidth(row, treeTemplates) / 2 : capsuleHalf;
+      const halfW = halfWidthByKey.get(row.key);
       nodeInfoByKey.set(row.key, { x, y, left: x - halfW, right: x + halfW });
     }
   }

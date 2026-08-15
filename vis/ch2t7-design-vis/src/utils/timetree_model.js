@@ -234,20 +234,9 @@ export function toggleTimetreeExpansion(rows = [], currentKeys = [], clickedKey)
   return currentKeys.filter((key) => !removed.has(key));
 }
 
-/** 默认展开：类别根 + 首个有数据的制度组，机构保持收起。 */
+/** 默认只展开类别根；第二层制度组由用户点击后再展开。 */
 export function defaultTimetreeExpandedKeys({
-  entities = [],
   category = "中央机构",
-  groupNames = [],
 } = {}) {
-  const categoryKey = timetreeCategoryKey(category);
-  if (!groupNames.length) return [categoryKey];
-  const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
-  const rootIds = entities
-    .filter((entity) => entity?.type === "机构" && defaultCategory(entity) === category)
-    .map((entity) => entity.id);
-  const [first] = groupInstitutionRootIds(rootIds, entityMap, category, groupNames);
-  return first?.group
-    ? [categoryKey, timetreeGroupKey(category, first.group)]
-    : [categoryKey];
+  return [timetreeCategoryKey(category)];
 }

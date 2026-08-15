@@ -9,6 +9,7 @@ import {
   TIMETREE_GEOMETRY,
   timetreeLayoutSpan,
   timetreeLaneLinkSpan,
+  timetreeNodeColumns,
   timetreeEventsForLane,
   timetreeRelationEndpointIds,
   timetreeRelationsForEntity,
@@ -128,6 +129,48 @@ describe("timetreeVirtualBusGeometry", () => {
     assert.equal(bus.y0, 50);
     assert.equal(bus.y1, 50);
     assert.deepEqual(bus.children, [{ x0: 120, x1: 140, y: 50 }]);
+  });
+});
+
+describe("timetreeNodeColumns", () => {
+  it("长制度组不会与类别根重叠，分叉总线拥有独立空隙", () => {
+    const rows = [
+      { key: "category", depth: 0 },
+      { key: "long-group", depth: 1 },
+      { key: "short-group", depth: 1 },
+    ];
+    const halfWidths = new Map([
+      ["category", 46.3],
+      ["long-group", 97.7],
+      ["short-group", 45],
+    ]);
+    const columns = timetreeNodeColumns(rows, halfWidths);
+    const parentRight = columns.get(0) + halfWidths.get("category");
+    const nearestChildLeft = columns.get(1) - halfWidths.get("long-group");
+    assert.ok(nearestChildLeft - parentRight >= 12);
+  });
+
+  it("右侧不足时整体左移但不破坏层间安全距离", () => {
+    const geometry = {
+      ...TIMETREE_GEOMETRY,
+      content: { x0: 500, x1: 900 },
+      tree: { x0: 610, depthGap: 145, maxX: 850 },
+      dividerX: 900,
+    };
+    const rows = [
+      { key: "root", depth: 0 },
+      { key: "group", depth: 1 },
+      { key: "entity", depth: 2 },
+    ];
+    const halfWidths = new Map([
+      ["root", 45],
+      ["group", 90],
+      ["entity", 50],
+    ]);
+    const columns = timetreeNodeColumns(rows, halfWidths, geometry);
+    assert.ok(columns.get(1) - 90 - (columns.get(0) + 45) >= 12);
+    assert.ok(columns.get(2) - 50 - (columns.get(1) + 90) >= 12);
+    assert.ok(columns.get(0) - 45 >= geometry.content.x0 + 8);
   });
 });
 

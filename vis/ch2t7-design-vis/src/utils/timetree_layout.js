@@ -79,6 +79,58 @@ export function timetreeNodeX(depth, geometry = TIMETREE_GEOMETRY) {
 }
 
 /**
+ * 根据各层实际节点宽度计算树列中心。固定 depthGap 只是期望位置；遇到长制度组
+ * 名称时必须把后续列向右推，保证父子外框之间始终留有可画分叉线的空隙。
+ * 若右侧空间不足，整棵树优先整体左移，而不是压缩到节点外框里。
+ */
+export function timetreeNodeColumns(
+  rows = [],
+  halfWidthByKey = new Map(),
+  geometry = TIMETREE_GEOMETRY,
+  minEdgeGap = 12,
+) {
+  const depths = [...new Set(rows.map((row) => row.depth))].sort((a, b) => a - b);
+  const maxHalfWidthByDepth = new Map(depths.map((depth) => [
+    depth,
+    Math.max(
+      0,
+      ...rows
+        .filter((row) => row.depth === depth)
+        .map((row) => halfWidthByKey.get(row.key) || 0),
+    ),
+  ]));
+  const xByDepth = new Map();
+  for (const [index, depth] of depths.entries()) {
+    const nominalX = timetreeNodeX(depth, geometry);
+    if (index === 0) {
+      xByDepth.set(depth, nominalX);
+      continue;
+    }
+    const previousDepth = depths[index - 1];
+    const safeX = xByDepth.get(previousDepth)
+      + maxHalfWidthByDepth.get(previousDepth)
+      + minEdgeGap
+      + maxHalfWidthByDepth.get(depth);
+    xByDepth.set(depth, Math.max(nominalX, safeX));
+  }
+
+  if (!depths.length) return xByDepth;
+  const leftBound = geometry.content.x0 + 8;
+  const rightBound = geometry.dividerX - 16;
+  const leftmost = Math.min(...depths.map(
+    (depth) => xByDepth.get(depth) - maxHalfWidthByDepth.get(depth),
+  ));
+  const rightmost = Math.max(...depths.map(
+    (depth) => xByDepth.get(depth) + maxHalfWidthByDepth.get(depth),
+  ));
+  const shiftLeft = Math.max(0, Math.min(rightmost - rightBound, leftmost - leftBound));
+  if (shiftLeft > 0) {
+    depths.forEach((depth) => xByDepth.set(depth, xByDepth.get(depth) - shiftLeft));
+  }
+  return xByDepth;
+}
+
+/**
  * 左侧具体机构节点到右侧时间车道的关联线范围。
  * 留出少量节点呼吸空间，并固定接到年代区的起点；这条线只表达视图对应关系，
  * 不参与生命周期语义。
