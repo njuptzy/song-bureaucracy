@@ -1,7 +1,12 @@
+import http.client
 import importlib.util
+import json
 import sqlite3
+import tempfile
+import threading
 import unittest
 from pathlib import Path
+from http.server import ThreadingHTTPServer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -148,6 +153,65 @@ class Ch2t7DesignServerContractTest(unittest.TestCase):
         self.assertEqual(relation["relation_scope"], "机构")
         self.assertEqual(relation["source_time"]["year_start"], 983)
         self.assertEqual(relation["target_time"]["year_start"], 994)
+
+    def test_revision_routes_persist_small_draft_patch_without_touching_formal_database(self):
+        from vis.tests.test_revision_store import make_database
+
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "entries.db"
+            make_database(database)
+            previous_store = SERVER._revision_store
+            SERVER._revision_store = SERVER.RevisionStore(database, SERVER._normalized_time_payload)
+            httpd = ThreadingHTTPServer(("127.0.0.1", 0), SERVER.Handler)
+            thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            thread.start()
+            connection = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+            try:
+                connection.request("GET", "/api/revisions/state")
+                response = connection.getresponse()
+                state = json.loads(response.read())
+                self.assertEqual(response.status, 200)
+                self.assertEqual(state["draft"]["group_count"], 0)
+
+                operation = {
+                    "reason": "核对原文后校正",
+                    "operations": [{
+                        "action": "update",
+                        "target_table": "Timepoints",
+                        "target_id": 10,
+                        "after": {"time": "1005年"},
+                        "evidence": [{"mode": "existing", "citation_id": 1000}],
+                    }],
+                }
+                connection.request(
+                    "POST",
+                    "/api/revisions/draft/operations",
+                    body=json.dumps(operation, ensure_ascii=False).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                created = json.loads(response.read())
+                self.assertEqual(response.status, 200)
+                self.assertTrue(created["preview"]["validation"]["valid"])
+
+                connection.request("GET", "/api/revisions/draft/preview")
+                response = connection.getresponse()
+                raw_preview = response.read()
+                preview = json.loads(raw_preview)
+                self.assertEqual(response.status, 200)
+                self.assertLess(len(raw_preview), 100_000)
+                self.assertEqual(preview["patch"]["timepoints"]["upsert"][0]["time"], "1005年")
+                with sqlite3.connect(database) as formal:
+                    self.assertEqual(
+                        formal.execute("SELECT time FROM Timepoints WHERE id=10").fetchone()[0],
+                        "1000年",
+                    )
+            finally:
+                connection.close()
+                httpd.shutdown()
+                httpd.server_close()
+                thread.join(timeout=5)
+                SERVER._revision_store = previous_store
 
 
 if __name__ == "__main__":

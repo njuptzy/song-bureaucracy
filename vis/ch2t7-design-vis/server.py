@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""宋代职官设计稿可视化：只读数据服务 + dist 静态托管。
+"""宋代职官设计稿可视化：数据服务、修订工作区与 dist 静态托管。
 
 用法:
     python3 server.py [--port 8650] [--entries-db PATH] [--dict-db PATH]
@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
 from normalize_times import normalize_time  # noqa: E402
@@ -30,6 +31,7 @@ from institution_categories import (  # noqa: E402
     classify_institution_group,
     resolve_source_catalogs,
 )
+from revision_store import RevisionError, RevisionStore  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
 DICT_TABLE = "chapter2t7"
@@ -55,6 +57,7 @@ CHANGE_RELATION_OPTIONAL_COLUMNS = (
 
 _cache = {}
 _cache_lock = threading.Lock()
+_revision_store = None
 
 
 def _database_fingerprint() -> str:
@@ -337,12 +340,13 @@ def build_payload() -> dict:
 
     citations = {}
     for r in entries.execute(
-        "SELECT target_table, target_id, citation, quotation, note, conflict_flag"
+        "SELECT id, target_table, target_id, citation, quotation, note, conflict_flag"
         " FROM Citations ORDER BY target_table, target_id, id"
     ):
         key = ("T" if r["target_table"] == "Timepoints" else "R") + str(r["target_id"])
         citations.setdefault(key, []).append(
             {
+                "id": r["id"],
                 "citation": r["citation"] or "",
                 "quotation": r["quotation"] or "",
                 "note": r["note"] or "",
@@ -590,6 +594,12 @@ def get_version() -> bytes:
     return json.dumps({"version": _database_fingerprint()}, ensure_ascii=False).encode("utf-8")
 
 
+def get_revision_store() -> RevisionStore:
+    if _revision_store is None:
+        raise RuntimeError("修订工作区尚未初始化")
+    return _revision_store
+
+
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -616,8 +626,55 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_json(self, code: int, payload):
+        self._send(
+            code,
+            json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            "application/json; charset=utf-8",
+        )
+
+    def _read_json(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise RevisionError("Content-Length 不合法", code="INVALID_CONTENT_LENGTH") from exc
+        if length <= 0:
+            return {}
+        if length > 2 * 1024 * 1024:
+            raise RevisionError("请求体超过 2 MB", code="PAYLOAD_TOO_LARGE", status=413)
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RevisionError("请求体不是有效 JSON", code="INVALID_JSON") from exc
+        if not isinstance(payload, dict):
+            raise RevisionError("请求体必须是 JSON 对象", code="INVALID_JSON_OBJECT")
+        return payload
+
+    def _revision_call(self, callback):
+        try:
+            self._send_json(200, callback())
+        except RevisionError as exc:
+            self._send_json(exc.status, exc.payload())
+        except Exception as exc:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            self._send_json(500, {"error": str(exc), "code": "INTERNAL_ERROR"})
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/revisions/state":
+            self._revision_call(lambda: get_revision_store().state())
+            return
+        if path == "/api/revisions/draft/preview":
+            self._revision_call(lambda: get_revision_store().preview())
+            return
+        if path == "/api/revisions/commits":
+            self._revision_call(lambda: get_revision_store().list_commits())
+            return
+        commit_match = re.fullmatch(r"/api/revisions/commits/([0-9a-f]{64})", path)
+        if commit_match:
+            self._revision_call(lambda: get_revision_store().get_commit(commit_match.group(1)))
+            return
         design_files = {
             "/api/design/hierarchy.svg": DESIGN_HIERARCHY_SVG,
             "/api/design/composition.svg": DESIGN_COMPOSITION_SVG,
@@ -662,9 +719,49 @@ class Handler(BaseHTTPRequestHandler):
         ctype = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
         self._send(200, target.read_bytes(), ctype)
 
+    def do_POST(self):
+        path = urlparse(self.path).path
+        payload_cache = None
+
+        def body():
+            nonlocal payload_cache
+            if payload_cache is None:
+                payload_cache = self._read_json()
+            return payload_cache
+
+        routes = {
+            "/api/revisions/draft/operations": lambda: get_revision_store().add_group(body()),
+            "/api/revisions/draft/undo": lambda: get_revision_store().undo(),
+            "/api/revisions/draft/redo": lambda: get_revision_store().redo(),
+            "/api/revisions/draft/discard": lambda: get_revision_store().discard(),
+            "/api/revisions/commit": lambda: get_revision_store().commit(body().get("summary", "")),
+            "/api/revisions/restore-preview": lambda: get_revision_store().restore_preview(
+                body().get("target_hash", "")
+            ),
+            "/api/revisions/restore": lambda: get_revision_store().restore(
+                body().get("target_hash", ""), body().get("summary")
+            ),
+            "/api/revisions/normalize-time": lambda: _normalized_time_payload(
+                str(body().get("time", ""))
+            ),
+        }
+        callback = routes.get(path)
+        if callback is None:
+            self._send_json(404, {"error": "接口不存在", "code": "NOT_FOUND"})
+            return
+        self._revision_call(callback)
+
+    def do_DELETE(self):
+        path = urlparse(self.path).path
+        match = re.fullmatch(r"/api/revisions/draft/operations/([A-Za-z0-9:_-]+)", path)
+        if not match:
+            self._send_json(404, {"error": "接口不存在", "code": "NOT_FOUND"})
+            return
+        self._revision_call(lambda: get_revision_store().remove_group(match.group(1)))
+
 
 def main():
-    global ENTRIES_DB, DICT_DB, DICT_TABLE
+    global ENTRIES_DB, DICT_DB, DICT_TABLE, _revision_store
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8650)
@@ -672,15 +769,23 @@ def main():
     parser.add_argument("--entries-db", type=Path, default=ENTRIES_DB)
     parser.add_argument("--dict-db", type=Path, default=DICT_DB)
     parser.add_argument("--dict-table", default=DICT_TABLE)
+    parser.add_argument(
+        "--revisions-db",
+        type=Path,
+        help="旁路版本库路径；默认由 --entries-db 推导为 *.revisions.db",
+    )
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", args.dict_table):
         parser.error("--dict-table 必须是合法的 SQLite 表名")
     ENTRIES_DB = args.entries_db.expanduser().resolve()
     DICT_DB = args.dict_db.expanduser().resolve()
     DICT_TABLE = args.dict_table
+    revisions_db = args.revisions_db.expanduser().resolve() if args.revisions_db else None
+    _revision_store = RevisionStore(ENTRIES_DB, _normalized_time_payload, revisions_db)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"[server] 结构化数据源: {ENTRIES_DB}")
     print(f"[server] 辞典数据源: {DICT_DB}（表 {DICT_TABLE}）")
+    print(f"[server] 版本工作区: {_revision_store.revisions_db}")
     print(f"[server] 服务地址: http://{args.host}:{args.port}/", flush=True)
     try:
         server.serve_forever()

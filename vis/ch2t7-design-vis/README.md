@@ -25,7 +25,16 @@
 - Vue 3：状态与数据加载
 - D3.js：SVG DOM 数据绑定、年份映射和交互
 - Vite：前端构建
-- Python 标准库：只读 SQLite API 与原设计资源服务
+- Python 标准库：SQLite 数据 API、旁路版本工作区与原设计资源服务
+
+## 人工修订与版本
+
+- 系统默认只读；右上角“进入修改”显式开启时间点和“前后演变”关系校订。
+- 草稿保存在与结果库同名的 `*.revisions.db`，刷新页面后仍保留，不会改变正式四表或 `/api/data` 指纹。
+- 每项人工修改必须填写理由并关联已有引用，或填写新出处和逐字引文。链指针、依赖引用和 `NormalizedTimes` 刷新作为同一操作组的自动联动保存。
+- 草稿预览只返回受影响时间点、关系、引用和年份补丁；前端增量应用，不重新下载完整 `/api/data`。
+- 提交时使用 SQLite `ATTACH + BEGIN IMMEDIATE` 同事务更新结果库和版本库，并在提交前刷新唯一的 `latest-rollback` 应急检查点。
+- 历史恢复采用反向提交，不删除已有提交；外部脚本改变正式库后，工作区会锁定并拒绝自动合并。
 
 ## 启动
 
@@ -49,6 +58,12 @@ src/components/DesignTemplateCanvas.vue
 ## 接口
 
 - `/api/data`：ch2t7 实体、时间点、层级关系、编制关系、引用和辞典原文
+- `/api/revisions/state`：当前 HEAD、草稿游标和编辑锁
+- `/api/revisions/draft/operations|preview|undo|redo|discard`：持久草稿及增量预览
+- `/api/revisions/commit`：原子提交当前草稿
+- `/api/revisions/commits[/<hash>]`：线性提交历史与逐项差异
+- `/api/revisions/restore-preview|restore`：预览并创建恢复提交
+- `/api/revisions/normalize-time`：只解析原文纪年，不写数据库
 - `/api/design/hierarchy.svg`：原始可编辑层级画板
 - `/api/design/composition.svg`：原始可编辑编制画板
 - `/api/design/*.ttf|otf`：设计包字体

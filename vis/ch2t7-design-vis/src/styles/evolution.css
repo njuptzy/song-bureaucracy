@@ -157,6 +157,42 @@
   stroke-width: 2.4;
 }
 
+.dynamic-evolution-layer .is-revision-added {
+  filter: drop-shadow(0 0 2px rgba(74, 118, 92, 0.72));
+}
+
+.dynamic-evolution-layer .is-revision-added > circle,
+.dynamic-evolution-layer .is-revision-added > path:not([stroke="transparent"]) {
+  stroke: #4a765c;
+  stroke-width: 1.8px;
+}
+
+.dynamic-evolution-layer .is-revision-modified {
+  filter: drop-shadow(0 0 2px rgba(148, 102, 40, 0.62));
+}
+
+.dynamic-evolution-layer .is-revision-modified > circle,
+.dynamic-evolution-layer .is-revision-modified > path:not([stroke="transparent"]) {
+  stroke: #946628;
+  stroke-width: 1.8px;
+}
+
+.dynamic-evolution-layer .is-revision-before,
+.dynamic-evolution-layer .is-revision-deleted {
+  opacity: 0.28;
+}
+
+.dynamic-evolution-layer .is-revision-before > path,
+.dynamic-evolution-layer .is-revision-before > circle,
+.dynamic-evolution-layer .is-revision-deleted > path,
+.dynamic-evolution-layer .is-revision-deleted > circle {
+  stroke-dasharray: 3 3;
+}
+
+.dynamic-evolution-layer .is-revision-deleted {
+  filter: grayscale(0.8);
+}
+
 .evolution-search-surface {
   width: 100%;
   height: 100%;

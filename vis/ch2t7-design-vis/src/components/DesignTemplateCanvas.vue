@@ -69,7 +69,7 @@ const props = defineProps({
   data: { type: Object, required: true },
   initialState: { type: Object, default: null },
 });
-const emit = defineEmits(["state-change"]);
+const emit = defineEmits(["state-change", "selection-change"]);
 const initialState = props.initialState || {};
 
 const hostRef = ref(null);
@@ -222,11 +222,28 @@ watch(persistedCanvasState, (state) => emit("state-change", state), {
 
 watch(() => props.data, (data) => {
   rebuildDataIndexes(data);
-  yearSnapshotCache.clear();
-  evolutionModelCacheKey = "";
-  evolutionModelCache = null;
-  evolutionLayoutCacheKey = "";
-  evolutionLayoutCache = null;
+  const affectedEntityIds = new Set(data?.revisionPreview?.affectedEntityIds || []);
+  const affectedYears = data?.revisionPreview?.affectedYears || [];
+  if (!data?.revisionPreview) {
+    yearSnapshotCache.clear();
+  } else if (affectedYears.length) {
+    const earliest = Math.min(...affectedYears);
+    for (const year of yearSnapshotCache.keys()) {
+      if (year >= earliest) yearSnapshotCache.delete(year);
+    }
+  }
+  const currentEvolutionIds = new Set([
+    ...(evolutionModelCache?.visibleEntityIds || []),
+    ...evolutionEntityIds.value,
+  ]);
+  const evolutionAffected = !data?.revisionPreview
+    || [...affectedEntityIds].some((id) => currentEvolutionIds.has(id));
+  if (evolutionAffected) {
+    evolutionModelCacheKey = "";
+    evolutionModelCache = null;
+    evolutionLayoutCacheKey = "";
+    evolutionLayoutCache = null;
+  }
   if (svgMountRef.value) refreshTemplate({ rebindStatic: true, rebindControls: true });
 }, { flush: "post" });
 
@@ -2600,6 +2617,7 @@ function renderDynamicEvolution(svg) {
     onSelectEntity(entityId) {
       selectedId.value = entityId;
       selectedEvolutionItem.value = null;
+      emit("selection-change", null);
       detailPanelScrollOffset = 0;
       refreshTemplate();
     },
@@ -2656,6 +2674,7 @@ function renderDynamicEvolution(svg) {
       if (current?.kind === "timepoint" && current.id === event.id) {
         // 再次点击已选中的事件 = 取消选择，并复位联动的时间线框选。
         selectedEvolutionItem.value = null;
+        emit("selection-change", null);
         applyEvolutionTimelineSelection(null);
         svg.__moveTimelineSelection?.();
         svg.__syncTimelineSelectionStyle?.();
@@ -2664,6 +2683,12 @@ function renderDynamicEvolution(svg) {
       }
       selectedId.value = event.entityId;
       selectedEvolutionItem.value = { kind: "timepoint", id: event.id, item: event };
+      emit("selection-change", {
+        kind: "timepoint",
+        id: event.id,
+        entityId: event.entityId,
+        item: { ...event },
+      });
       detailPanelScrollOffset = 0;
       applyEvolutionTimelineSelection("timepoint", event.effectiveYear);
       refreshTemplate();
@@ -2673,6 +2698,7 @@ function renderDynamicEvolution(svg) {
       if (current?.kind === "relation" && current.id === relation.id) {
         // 再次点击已选中的关系 = 取消选择，并复位联动的时间线框选。
         selectedEvolutionItem.value = null;
+        emit("selection-change", null);
         applyEvolutionTimelineSelection(null);
         svg.__moveTimelineSelection?.();
         svg.__syncTimelineSelectionStyle?.();
@@ -2680,6 +2706,11 @@ function renderDynamicEvolution(svg) {
         return;
       }
       selectedEvolutionItem.value = { kind: "relation", id: relation.id, item: relation };
+      emit("selection-change", {
+        kind: "relation",
+        id: relation.id,
+        item: { ...relation },
+      });
       detailPanelScrollOffset = 0;
       applyEvolutionTimelineSelection("relation");
       refreshTemplate();

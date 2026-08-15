@@ -595,9 +595,10 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
 }
 
 function renderEventMark(parent, event, selected, dimmed, handlers) {
+  const revisionClass = event.revisionStatus ? ` is-revision-${event.revisionStatus}` : "";
   const group = svgElement("g", {
     class: `evolution-event evolution-event-${event.effect}`
-      + `${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
+      + `${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}${revisionClass}`,
     "data-timepoint-id": event.id,
   });
   const x = event.displayX;
@@ -736,7 +737,8 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   const targets = relation.targetPoints.filter((point) => point.x != null);
   if (!sources.length || !targets.length) return;
   const group = svgElement("g", {
-    class: `evolution-relation${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
+    class: `evolution-relation${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`
+      + `${relation.revisionStatus ? ` is-revision-${relation.revisionStatus}` : ""}`,
     "data-relation-id": relation.id,
   });
   for (const source of sources) {

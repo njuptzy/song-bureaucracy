@@ -75,7 +75,10 @@ function normalizeTimepoints(data, entityMap) {
         yearStart,
         yearEnd,
         effectiveYear: effectiveYear({ time_type: timeType, year_start: yearStart, year_end: yearEnd }),
-        effect: classifyExistenceEffect(source, entity),
+        revisionStatus: source._revision_status || source.revisionStatus || "",
+        effect: ["before", "deleted"].includes(source._revision_status || source.revisionStatus)
+          ? "ignore"
+          : classifyExistenceEffect(source, entity),
       };
       byId.set(item.id, item);
       if (!byEntity.has(entityId)) byEntity.set(entityId, []);
@@ -327,6 +330,12 @@ function normalizedRelation({ source, state = null, index, fallback = false }, t
       ?? classificationStatus,
     evidenceKey: firstDefined(value, ["evidence_key", "evidenceKey"]),
     quotation: String(value.quotation ?? source.quotation ?? ""),
+    revisionStatus: firstDefined(value, ["_revision_status", "revisionStatus"])
+      ?? firstDefined(source, ["_revision_status", "revisionStatus"])
+      ?? "",
+    revisionOriginalId: firstDefined(value, ["_revision_original_id", "revisionOriginalId"])
+      ?? firstDefined(source, ["_revision_original_id", "revisionOriginalId"])
+      ?? null,
     members,
     sourceMembers,
     targetMembers,
