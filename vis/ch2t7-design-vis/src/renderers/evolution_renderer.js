@@ -123,19 +123,21 @@ function ensureDefs(svg) {
 
   const arrow = svgElement("marker", {
     id: "evolution-relation-arrow",
-    markerWidth: 8,
-    markerHeight: 8,
-    refX: 7,
-    refY: 4,
+    markerWidth: 6,
+    markerHeight: 6,
+    refX: 5.5,
+    refY: 3,
     orient: "auto",
-    markerUnits: "strokeWidth",
+    markerUnits: "userSpaceOnUse",
     "data-evolution-def": "marker",
   });
   arrow.appendChild(svgElement("path", {
-    d: "M0 0L8 4L0 8",
+    d: "M0.5 0.5L5.5 3L0.5 5.5",
     fill: "none",
     stroke: COLORS.line,
-    "stroke-width": 1.15,
+    "stroke-width": 1,
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
   }));
   defs.append(clip, arrow);
 }
@@ -709,19 +711,44 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
   parent.appendChild(group);
 }
 
-function relationPath(source, target) {
-  const deltaY = target.y - source.y;
+function endpointClearance(point, arrowhead = false) {
+  if (point?.timepointId == null) return 0;
+  const triangle = ["establish", "abolish"].includes(point.iconType);
+  if (triangle) return arrowhead ? 7.5 : 6;
+  return arrowhead ? 5.5 : 4;
+}
+
+function insetPoint(point, toward, distance) {
+  const deltaX = toward.x - point.x;
+  const deltaY = toward.y - point.y;
+  const length = Math.hypot(deltaX, deltaY);
+  if (!length || !distance) return { ...point };
+  const inset = Math.min(distance, Math.max(0, length / 2 - 1));
+  return {
+    ...point,
+    x: point.x + deltaX / length * inset,
+    y: point.y + deltaY / length * inset,
+  };
+}
+
+export function relationPath(source, target) {
+  // Relations terminate outside the event glyph. Drawing to its center makes
+  // the event triangle cover the real marker and read as an oversized arrow.
+  const start = insetPoint(source, target, endpointClearance(source));
+  const end = insetPoint(target, source, endpointClearance(target, true));
+  const deltaY = end.y - start.y;
   if (Math.abs(deltaY) < 1) {
-    const lift = source.y > 470 ? -28 : 28;
-    const mid = (source.x + target.x) / 2;
-    return `M${source.x} ${source.y}C${mid} ${source.y + lift} ${mid} ${target.y + lift} ${target.x} ${target.y}`;
+    const lift = start.y > 470 ? -28 : 28;
+    const mid = (start.x + end.x) / 2;
+    return `M${start.x} ${start.y}C${mid} ${start.y + lift} ${mid} ${end.y + lift} ${end.x} ${end.y}`;
   }
   // Keep cross-lane jumps tight: a wide bend sweeps across empty canvas and
   // reads as a stray arc when the jump spans several lanes.
   const bend = Math.max(18, Math.min(56, Math.abs(deltaY) * 0.26));
-  const sourceControlX = source.x + Math.sign(target.x - source.x || 1) * bend;
-  const targetControlX = target.x - Math.sign(target.x - source.x || 1) * bend;
-  return `M${source.x} ${source.y}C${sourceControlX} ${source.y} ${targetControlX} ${target.y} ${target.x} ${target.y}`;
+  const direction = Math.sign(end.x - start.x || 1);
+  const sourceControlX = start.x + direction * bend;
+  const targetControlX = end.x - direction * bend;
+  return `M${start.x} ${start.y}C${sourceControlX} ${start.y} ${targetControlX} ${end.y} ${end.x} ${end.y}`;
 }
 
 function renderRelation(parent, relation, selected, dimmed, handlers, suppressLabel = false) {
@@ -1005,9 +1032,10 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
     if (fan.direction === "out") {
       // Split: branch leaves the hub and ends with an arrowhead on each
       // target event mark — N arrowheads make the 1→N reading explicit.
+      const target = insetPoint(spoke, hub, endpointClearance(spoke, true));
       const d = sameColumn
-        ? branchPath(hub, spoke, bow)
-        : `M${trunkX} ${spoke.y}L${spoke.x} ${spoke.y}`;
+        ? branchPath(hub, target, bow)
+        : `M${trunkX} ${target.y}L${target.x} ${target.y}`;
       group.appendChild(svgElement("path", {
         d, fill: "none", stroke: color, "stroke-width": width,
         "stroke-opacity": opacity, "marker-end": "url(#evolution-relation-arrow)",
@@ -1021,9 +1049,10 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
       }
     } else {
       // Merge: one branch per source lane converging into the hub.
+      const source = insetPoint(spoke, hub, endpointClearance(spoke));
       const d = sameColumn
-        ? branchPath(spoke, hub, bow)
-        : `M${spoke.x} ${spoke.y}L${trunkX} ${spoke.y}`;
+        ? branchPath(source, hub, bow)
+        : `M${source.x} ${source.y}L${trunkX} ${source.y}`;
       group.appendChild(svgElement("path", {
         d, fill: "none", stroke: color, "stroke-width": width,
         "stroke-opacity": opacity, "pointer-events": "none",
@@ -1048,8 +1077,10 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
 
   if (fan.direction === "in") {
     // Fan-in converges into the hub: single arrowhead at the shared target.
+    const approach = { x: trunkX, y: hub.y + travel * 16 };
+    const target = insetPoint(hub, approach, endpointClearance(hub, true));
     group.appendChild(svgElement("path", {
-      d: `M${trunkX} ${hub.y + travel * 8}L${trunkX} ${hub.y}`,
+      d: `M${approach.x} ${approach.y}L${target.x} ${target.y}`,
       fill: "none", stroke: color, "stroke-width": width,
       "stroke-opacity": opacity, "marker-end": "url(#evolution-relation-arrow)",
       "pointer-events": "none",

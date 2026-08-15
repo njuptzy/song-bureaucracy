@@ -243,6 +243,7 @@ function normalizeMember(source, role, relationSource, timepointById) {
     role: memberRole(raw.role, role),
     entityId,
     timepointId,
+    iconType: timepoint?.iconType || null,
     timeType,
     yearStart,
     yearEnd,

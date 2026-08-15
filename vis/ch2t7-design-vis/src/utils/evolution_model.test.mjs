@@ -199,6 +199,27 @@ describe("buildEvolutionModel lifecycle", () => {
 });
 
 describe("buildEvolutionModel relations", () => {
+  it("关系端点继承时间点图形类型以预留箭头间隔", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1), entity(2)],
+      timepoints: {
+        1: [timepoint(11, 1000, "普通记载")],
+        2: [timepoint(21, 1010, "罢废", { event_type: "abolish" })],
+      },
+      changeRelations: [{
+        id: 1,
+        relation_type: "前后演变",
+        source: 1,
+        target: 2,
+        source_timepoint_id: 11,
+        target_timepoint_id: 21,
+      }],
+    }, [1]);
+
+    assert.equal(model.relations[0].sourceMembers[0].iconType, "record");
+    assert.equal(model.relations[0].targetMembers[0].iconType, "abolish");
+  });
+
   it("changeRelations 优先，不猜关系子型，只对显式事件组字段分组", () => {
     const entities = Array.from({ length: 7 }, (_, index) => entity(index + 1));
     const timepoints = Object.fromEntries(entities.map(({ id }) => [
