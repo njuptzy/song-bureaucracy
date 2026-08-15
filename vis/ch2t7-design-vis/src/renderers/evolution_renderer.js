@@ -642,7 +642,24 @@ function renderEventStem(parent, event, dimmed) {
   parent.appendChild(group);
 }
 
-function renderEventMark(parent, event, selected, dimmed, handlers) {
+export function eventMasksAlignedRelation(event, relations = []) {
+  const baseY = event.baseY ?? event.y;
+  return event.iconType === "record"
+    && event.displaced
+    && Number.isFinite(event.baseX)
+    && Math.abs(event.displayX - event.baseX) < 0.5
+    && relations.some((relation) => (
+      [...(relation.sourcePoints || []), ...(relation.targetPoints || [])].some((point) => (
+        point.timepointId !== event.id
+        && Number.isFinite(point.x)
+        && Number.isFinite(point.y)
+        && Math.abs(point.x - event.baseX) < 0.5
+        && Math.abs(point.y - baseY) < 0.5
+      ))
+    ));
+}
+
+function renderEventMark(parent, event, selected, dimmed, handlers, maskAlignedRelation = false) {
   const revisionClass = event.revisionStatus ? ` is-revision-${event.revisionStatus}` : "";
   const iconType = event.iconType || "record";
   const group = svgElement("g", {
@@ -720,6 +737,21 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       "stroke-linejoin": "round",
     }));
   } else {
+    // A displaced record can sit directly above another event that is also a
+    // relation endpoint. Leave a narrow paper gap around this one mark so the
+    // aligned strokes read as passing behind it, not through it. Geometry and
+    // every other line stay unchanged.
+    if (maskAlignedRelation) {
+      group.appendChild(svgElement("circle", {
+        class: "evolution-event-line-mask",
+        cx: x,
+        cy: y,
+        r: selected ? 5.4 : 4.2,
+        fill: COLORS.paper,
+        stroke: "none",
+        "pointer-events": "none",
+      }));
+    }
     group.appendChild(svgElement("circle", {
       cx: x, cy: y, r: selected ? 4.2 : 2.6,
       fill: selected ? COLORS.selected : COLORS.paper,
@@ -1387,6 +1419,7 @@ function renderMain(layer, layout, options) {
       selected === `timepoint:${event.id}`,
       selectionFocus.active && !focusedTimepointIds.has(event.id),
       options.handlers,
+      eventMasksAlignedRelation(event, layout.relations),
     );
   }
   renderOffAxis(group, layout, options.selectedItem, {
