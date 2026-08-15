@@ -1,7 +1,7 @@
 export const CANVAS_STATE_STORAGE_KEY = "song-bureaucracy:canvas-state:v1";
 
 const CANVAS_STATE_VERSION = 1;
-const VIEW_MODES = new Set(["hierarchy", "composition", "evolution"]);
+const VIEW_MODES = new Set(["hierarchy", "composition", "evolution", "timetree"]);
 const EVOLUTION_MODES = new Set(["single", "compare"]);
 const EVOLUTION_ITEM_KINDS = new Set(["timepoint", "relation"]);
 

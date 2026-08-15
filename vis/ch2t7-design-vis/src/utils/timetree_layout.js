@@ -1,0 +1,113 @@
+// 时间线树视图的几何布局：左侧层级树（根在左、深度向右）与右侧时间线
+// 共享同一套行 y 坐标；x 方向树区与年代区分离，年代映射与演变视图一致
+// （960–1279 线性映射）。
+
+export const TIMETREE_GEOMETRY = {
+  tree: { x0: 510, depthGap: 104, maxX: 940 },
+  dividerX: 962,
+  plot: { x0: 992, x1: 1828 },
+  axisY: 262,
+  rowsTop: 296,
+  rowsBottom: 844,
+  rowPitch: 34,
+};
+
+export function timetreeYearToX(year, yearMin, yearMax, plot = TIMETREE_GEOMETRY.plot) {
+  const span = Math.max(1, yearMax - yearMin);
+  return plot.x0 + (year - yearMin) / span * (plot.x1 - plot.x0);
+}
+
+/** 滚动量钳制：内容不足一屏时锁死在 0。 */
+export function clampTimetreeScroll(offset, rowCount, geometry = TIMETREE_GEOMETRY) {
+  const content = rowCount * geometry.rowPitch;
+  const viewport = geometry.rowsBottom - geometry.rowsTop;
+  const maxOffset = Math.max(0, content - viewport);
+  return Math.max(0, Math.min(maxOffset, Number.isFinite(offset) ? offset : 0));
+}
+
+/** 每行 y 中心（含滚动偏移；视口外的行由渲染层的 clipPath 裁掉）。 */
+export function timetreeRowY(rowIndex, scrollOffset, geometry = TIMETREE_GEOMETRY) {
+  return geometry.rowsTop + rowIndex * geometry.rowPitch
+    + geometry.rowPitch / 2 - scrollOffset;
+}
+
+/** 树节点标签的 x：深度向右，与"逆时针旋转 90°"后的自上而下树等价。 */
+export function timetreeNodeX(depth, geometry = TIMETREE_GEOMETRY) {
+  return Math.min(
+    geometry.tree.x0 + depth * geometry.tree.depthGap,
+    geometry.tree.maxX,
+  );
+}
+
+const STACK_MIN_GAP = 11;
+// 错层位移等级：先上后下交替，最多 5 层，再密则接受重叠（与演变视图
+// "密集点错层"同思路，但用固定档位保证确定性）。
+const STACK_OFFSETS = [0, -8, 8, -15, 15];
+
+/**
+ * 单车道事件布局：同年/近年的点沿 y 错层，displayX 始终落在真实年份上，
+ * 错层点带 vertical leader（茎）回指车道线。
+ * 输入事件需带 effectiveYear / yearStart / yearEnd / timeType。
+ */
+export function layoutTimetreeEvents(events, xOf) {
+  const laid = events
+    .filter((event) => event.effectiveYear != null)
+    .map((event) => ({
+      ...event,
+      baseX: xOf(event.effectiveYear),
+      rangeStartX: event.yearStart != null ? xOf(event.yearStart) : null,
+      rangeEndX: event.yearEnd != null ? xOf(event.yearEnd) : null,
+    }))
+    .sort((a, b) => a.baseX - b.baseX || String(a.id).localeCompare(String(b.id), "zh", { numeric: true }));
+
+  const levelLastX = [];
+  for (const event of laid) {
+    let level = levelLastX.findIndex((lastX) => event.baseX - lastX >= STACK_MIN_GAP);
+    if (level === -1) {
+      if (levelLastX.length < STACK_OFFSETS.length) {
+        levelLastX.push(Number.NEGATIVE_INFINITY);
+        level = levelLastX.length - 1;
+      } else {
+        level = STACK_OFFSETS.length - 1;
+      }
+    }
+    levelLastX[level] = event.baseX;
+    event.dy = STACK_OFFSETS[level];
+    event.displaced = event.dy !== 0;
+  }
+  return laid;
+}
+
+/** 存续段几何：开放端按 yearMin/yearMax 边界截断。 */
+export function layoutTimetreeSegments(segments, xOf) {
+  return (segments || []).map((segment) => ({
+    ...segment,
+    x0: xOf(segment.startYear),
+    x1: xOf(segment.endYear),
+  }));
+}
+
+/**
+ * 演变关系端点定位：成员 timepointId → 已布局事件位置。
+ * 端点落在离轴区（年代未明等）的关系无法定位，标记为不可画。
+ */
+export function layoutTimetreeRelations(relations, eventPositionById) {
+  const positioned = [];
+  for (const relation of relations || []) {
+    const locate = (member) => {
+      const position = member.timepointId != null
+        ? eventPositionById.get(member.timepointId)
+        : null;
+      return position ? { ...position, timepointId: member.timepointId } : null;
+    };
+    const sourcePoints = (relation.sourceMembers || []).map(locate).filter(Boolean);
+    const targetPoints = (relation.targetMembers || []).map(locate).filter(Boolean);
+    positioned.push({
+      ...relation,
+      sourcePoints,
+      targetPoints,
+      drawable: sourcePoints.length > 0 && targetPoints.length > 0,
+    });
+  }
+  return positioned;
+}

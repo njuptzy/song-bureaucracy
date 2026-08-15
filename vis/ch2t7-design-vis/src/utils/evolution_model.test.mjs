@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildEvolutionModel, eventGlyphType } from "./evolution_model.js";
+import { buildEvolutionLanes, buildEvolutionModel, eventGlyphType } from "./evolution_model.js";
 
 function entity(id, title = `实体${id}`, type = "机构") {
   return { id, title, type };
@@ -578,5 +578,63 @@ describe("buildEvolutionModel relations", () => {
     assert.equal(relation.sourceMembers[0].rawTime, "唐末");
     assert.equal(relation.targetMembers[0].rawTime, "太平兴国五年");
     assert.equal(model.offAxis.relationEndpoints[0].timeType, "pre_song");
+  });
+});
+
+describe("buildEvolutionLanes（时间线树专用）", () => {
+  const laneTimepoint = (id, entityId, year) => ({
+    id,
+    entity_id: entityId,
+    time: String(year),
+    event: `事件${id}`,
+    prev_id: null,
+    succ_id: null,
+    time_type: "exact",
+    year_start: year,
+    year_end: year,
+    lifecycle_effect: "preserve",
+  });
+
+  it("实体数量不受 4 个上限截断，车道保持输入顺序", () => {
+    const entities = [1, 2, 3, 4, 5, 6].map((id) => entity(id, `机构${id}`));
+    const model = buildEvolutionLanes({
+      entities,
+      timepoints: Object.fromEntries(
+        entities.map(({ id }) => [id, [laneTimepoint(id * 10 + 1, id, 1000 + id)]]),
+      ),
+      changeRelations: [],
+    }, [6, 4, 2, 5, 1, 3], { yearMin: 960, yearMax: 1279 });
+    assert.deepEqual(model.lanes.map((lane) => lane.entityId), [6, 4, 2, 5, 1, 3]);
+  });
+
+  it("只保留两端实体都在集合内的关系", () => {
+    const model = buildEvolutionLanes({
+      entities: [entity(1, "甲司"), entity(2, "乙司"), entity(3, "丙司")],
+      timepoints: {
+        1: [laneTimepoint(11, 1, 1000)],
+        2: [laneTimepoint(21, 2, 1010)],
+        3: [laneTimepoint(31, 3, 1020)],
+      },
+      changeRelations: [
+        {
+          id: 91,
+          relation_type: "前后演变",
+          source: 1,
+          target: 2,
+          source_timepoint_id: 11,
+          target_timepoint_id: 21,
+        },
+        {
+          id: 92,
+          relation_type: "前后演变",
+          source: 2,
+          target: 3,
+          source_timepoint_id: 21,
+          target_timepoint_id: 31,
+        },
+      ],
+    }, [1, 2], { yearMin: 960, yearMax: 1279 });
+    assert.deepEqual(model.relations.map((relation) => relation.id), [91]);
+    assert.ok(model.lanes[0].events[0].relationEndpoint);
   });
 });

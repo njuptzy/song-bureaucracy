@@ -789,3 +789,61 @@ export function buildEvolutionModel(data, focusEntityIds, options = {}) {
     yearMax,
   };
 }
+
+/**
+ * 时间线树视图专用：为任意实体集合构建车道，保持调用方给定的顺序
+ * （车道顺序由层级树决定，不做 StoryFlow 式重心重排），不做 4 个焦点
+ * 实体的截断，也不按焦点过滤关系——只收两端实体都在集合内的关系。
+ */
+export function buildEvolutionLanes(data, entityIds, options = {}) {
+  const yearMin = finiteYear(options.yearMin) ?? DEFAULT_YEAR_MIN;
+  const yearMax = finiteYear(options.yearMax) ?? DEFAULT_YEAR_MAX;
+  if (yearMax < yearMin) throw new RangeError("yearMax must be greater than or equal to yearMin");
+
+  const entityMap = new Map((data?.entities || []).map((entity) => [normalizeId(entity.id), {
+    ...entity,
+    id: normalizeId(entity.id),
+  }]));
+  const orderedIds = [];
+  for (const value of entityIds || []) {
+    const id = normalizeId(value);
+    if (entityMap.has(id) && !orderedIds.includes(id)) orderedIds.push(id);
+  }
+
+  const { byId: timepointById, byEntity: timepointsByEntity } = normalizeTimepoints(data, entityMap);
+  const allRelations = normalizeRelations(data, timepointById);
+  const visible = new Set(orderedIds);
+  const relations = allRelations.filter((relation) => {
+    const ids = endpointEntityIds(relation);
+    return ids.length > 0 && ids.every((id) => visible.has(id));
+  });
+
+  const anomalies = [];
+  for (const relation of relations) {
+    if (!relation.sourceMembers.length || !relation.targetMembers.length) {
+      anomalies.push({ type: "incomplete_relation_endpoints", relationId: relation.id });
+    }
+  }
+
+  const endpointIds = new Set(
+    relations.flatMap((relation) => relation.members.map((member) => member.timepointId))
+      .filter((id) => id != null),
+  );
+  const lanes = orderedIds.map((entityId) => buildLane(
+    entityMap.get(entityId),
+    timepointsByEntity.get(entityId) || [],
+    endpointIds,
+    yearMin,
+    yearMax,
+  ));
+  lanes.forEach((lane) => anomalies.push(...lane.anomalies));
+
+  return {
+    entityIds: orderedIds,
+    lanes,
+    relations,
+    anomalies,
+    yearMin,
+    yearMax,
+  };
+}

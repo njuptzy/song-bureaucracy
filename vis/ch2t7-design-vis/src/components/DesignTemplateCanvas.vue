@@ -62,12 +62,26 @@ import {
   layoutComposition,
   COMPOSITION_GEOMETRY,
 } from "../utils/composition_layout";
-import { buildEvolutionModel } from "../utils/evolution_model";
+import { buildEvolutionLanes, buildEvolutionModel } from "../utils/evolution_model";
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import { timelineSelectionForEvolutionItem } from "../utils/evolution_selection";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
+import { renderTimetreeOverlay } from "../renderers/timetree_renderer";
+import {
+  buildTimetreeRows,
+  defaultTimetreeExpandedKeys,
+  timetreeLaneEntityIds,
+} from "../utils/timetree_model";
+import {
+  clampTimetreeScroll,
+  layoutTimetreeEvents,
+  layoutTimetreeRelations,
+  layoutTimetreeSegments,
+  TIMETREE_GEOMETRY,
+  timetreeYearToX,
+} from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
 
 const props = defineProps({
@@ -82,7 +96,7 @@ const hostRef = ref(null);
 const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
-const viewMode = ref(["hierarchy", "composition", "evolution"].includes(initialState.viewMode)
+const viewMode = ref(["hierarchy", "composition", "evolution", "timetree"].includes(initialState.viewMode)
   ? initialState.viewMode
   : "hierarchy");
 const evolutionMode = ref(initialState.evolutionMode === "compare" ? "compare" : "single");
@@ -96,6 +110,11 @@ const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
   ? Math.max(1, Math.floor(initialState.evolutionLanePage))
   : 1);
 const evolutionSearchOpen = ref(false);
+// 时间线树视图状态：展开键 null = 用默认（制度组全展开）；滚动与选中独立于其他视图。
+const timetreeExpandedKeys = ref(null);
+const timetreeScroll = ref(0);
+const timetreeSelectedEventId = ref(null);
+const timetreeSelectedRelationId = ref(null);
 const selectedRange = ref(Array.isArray(initialState.selectedRange)
   ? initialState.selectedRange.slice(0, 2)
   : [1080, 1080]);
@@ -539,6 +558,7 @@ const DESIGN_URL_BY_MODE = {
   hierarchy: HIERARCHY_DESIGN_URL,
   composition: "/api/design/composition.svg",
   evolution: HIERARCHY_DESIGN_URL,
+  timetree: HIERARCHY_DESIGN_URL,
 };
 
 function templateCategoryItems(svg) {
@@ -2745,9 +2765,187 @@ function renderDynamicEvolution(svg) {
   });
 }
 
+// —— 时间线树视图：左侧层级树（原层级逆时针旋转 90°）+ 右侧逐行对齐的时间线 ——
+
+function timetreeActiveExpandedKeys(category) {
+  if (timetreeExpandedKeys.value) return timetreeExpandedKeys.value;
+  return defaultTimetreeExpandedKeys({
+    entities: props.data.entities,
+    category,
+    groupNames: institutionGroupNames[category] || [],
+  });
+}
+
+function renderDynamicTimetree(svg) {
+  hideEvolutionExamples(svg);
+  const category = selectedCategory.value;
+  const rows = buildTimetreeRows({
+    entities: props.data.entities,
+    hierarchyEdges: hierarchyEdgesWithoutCollectives(props.data.hierarchyEdges || []),
+    category,
+    collectiveIds: [...collectiveEntityIds],
+    groupNames: institutionGroupNames[category] || [],
+    expandedIds: new Set(timetreeActiveExpandedKeys(category)),
+  });
+  const laneModel = buildEvolutionLanes(
+    props.data,
+    timetreeLaneEntityIds(rows),
+    { yearMin: YEAR_MIN, yearMax: YEAR_MAX },
+  );
+
+  const geometry = TIMETREE_GEOMETRY;
+  const scrollOffset = clampTimetreeScroll(timetreeScroll.value, rows.length, geometry);
+  if (scrollOffset !== timetreeScroll.value) timetreeScroll.value = scrollOffset;
+  const xOf = (year) => timetreeYearToX(year, YEAR_MIN, YEAR_MAX, geometry.plot);
+  const yByEntityId = new Map(rows
+    .filter((row) => row.entityId != null)
+    .map((row) => [row.entityId, geometry.rowsTop
+      + row.rowIndex * geometry.rowPitch + geometry.rowPitch / 2 - scrollOffset]));
+
+  const lanesByEntityId = new Map(laneModel.lanes.map((lane) => [lane.entityId, lane]));
+  const eventsByLane = new Map();
+  const segmentsByLane = new Map();
+  const eventPositionById = new Map();
+  for (const lane of laneModel.lanes) {
+    const y = yByEntityId.get(lane.entityId);
+    const events = layoutTimetreeEvents(lane.events, xOf);
+    eventsByLane.set(lane.entityId, events);
+    segmentsByLane.set(lane.entityId, layoutTimetreeSegments(lane.segments, xOf));
+    for (const event of events) {
+      eventPositionById.set(event.id, {
+        x: event.baseX,
+        y: y + (event.dy || 0),
+        iconType: event.iconType,
+        rawTime: event.rawTime,
+        effectiveYear: event.effectiveYear,
+      });
+    }
+  }
+  const relations = layoutTimetreeRelations(laneModel.relations, eventPositionById)
+    .filter((relation) => relation.drawable);
+
+  const handlers = {
+    onSelectEntity(entityId) {
+      selectedId.value = entityId;
+      timetreeSelectedEventId.value = null;
+      timetreeSelectedRelationId.value = null;
+      emit("selection-change", null);
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onToggleNode(key) {
+      const next = new Set(timetreeActiveExpandedKeys(category));
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      timetreeExpandedKeys.value = [...next];
+      refreshTemplate();
+    },
+    onExpandAll() {
+      const next = new Set(timetreeActiveExpandedKeys(category));
+      for (const row of buildTimetreeRows({
+        entities: props.data.entities,
+        hierarchyEdges: hierarchyEdgesWithoutCollectives(props.data.hierarchyEdges || []),
+        category,
+        collectiveIds: [...collectiveEntityIds],
+        groupNames: institutionGroupNames[category] || [],
+        expandedIds: new Set(["__none__"]),
+      })) {
+        if (row.totalChildren > 0) next.add(row.key);
+      }
+      // 全部展开需要递归收集： collapsed 节点的下级键也要在集合里。
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const row of buildTimetreeRows({
+          entities: props.data.entities,
+          hierarchyEdges: hierarchyEdgesWithoutCollectives(props.data.hierarchyEdges || []),
+          category,
+          collectiveIds: [...collectiveEntityIds],
+          groupNames: institutionGroupNames[category] || [],
+          expandedIds: next,
+        })) {
+          if (row.totalChildren > 0 && !next.has(row.key)) {
+            next.add(row.key);
+            grew = true;
+          }
+        }
+      }
+      timetreeExpandedKeys.value = [...next];
+      refreshTemplate();
+    },
+    onCollapseAll() {
+      timetreeExpandedKeys.value = [];
+      refreshTemplate();
+    },
+    onSelectEvent(event) {
+      if (timetreeSelectedEventId.value === event.id) {
+        // 再次点击已选中的事件 = 取消选择（与演变视图一致）。
+        timetreeSelectedEventId.value = null;
+        refreshTemplate();
+        return;
+      }
+      selectedId.value = event.entityId;
+      timetreeSelectedEventId.value = event.id;
+      timetreeSelectedRelationId.value = null;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onSelectRelation(relation) {
+      timetreeSelectedRelationId.value = timetreeSelectedRelationId.value === relation.id
+        ? null
+        : relation.id;
+      refreshTemplate();
+    },
+    onScroll(deltaY) {
+      const next = clampTimetreeScroll(
+        timetreeScroll.value + deltaY * 0.6,
+        rows.length,
+        geometry,
+      );
+      if (next === timetreeScroll.value) return;
+      timetreeScroll.value = next;
+      scheduleTimelineRefresh();
+    },
+    onScrollToFraction(fraction) {
+      const maxOffset = clampTimetreeScroll(Number.POSITIVE_INFINITY, rows.length, geometry);
+      timetreeScroll.value = clampTimetreeScroll(maxOffset * fraction, rows.length, geometry);
+      scheduleTimelineRefresh();
+    },
+    onOpenEvolution(entityId) {
+      selectedId.value = entityId;
+      evolutionEntityIds.value = [entityId];
+      evolutionMode.value = "single";
+      selectedEvolutionItem.value = null;
+      evolutionLanePage.value = 1;
+      viewMode.value = "evolution";
+    },
+  };
+
+  renderTimetreeOverlay(svg, {
+    rows,
+    lanesByEntityId,
+    eventsByLane,
+    segmentsByLane,
+    relations,
+    yearMin: YEAR_MIN,
+    yearMax: YEAR_MAX,
+    scroll: {
+      offset: scrollOffset,
+      maxOffset: clampTimetreeScroll(Number.POSITIVE_INFINITY, rows.length, geometry),
+      viewportHeight: geometry.rowsBottom - geometry.rowsTop,
+      contentHeight: rows.length * geometry.rowPitch,
+    },
+    selectedEntityId: selectedId.value,
+    selectedEventId: timetreeSelectedEventId.value,
+    selectedRelationId: timetreeSelectedRelationId.value,
+    handlers,
+  });
+}
+
 function populateCenter(svg) {
   if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
   else if (viewMode.value === "composition") renderDynamicComposition(svg);
+  else if (viewMode.value === "timetree") renderDynamicTimetree(svg);
   else renderDynamicEvolution(svg);
 }
 
@@ -3492,6 +3690,54 @@ function restoreHierarchyFocus() {
   if (institution) focusHierarchyContext(institution, true);
 }
 
+function ensureTimetreeViewControl(svg) {
+  let control = svg.querySelector(".timetree-view-control");
+  if (!control) {
+    control = svgElement("g", { class: "timetree-view-control" });
+    const surface = svgElement("rect", {
+      x: 1386.5,
+      y: 80,
+      width: 125.8,
+      height: 26,
+      rx: 2.7,
+      fill: "#a5a68d",
+      "fill-opacity": 0,
+      stroke: "#563905",
+      "stroke-width": 0.78,
+      "stroke-opacity": 0.42,
+    });
+    const template = findTextAt(svg, 1570.42, 98.84, 2);
+    const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
+    label.setAttribute("transform", "translate(1449.4 98.84)");
+    label.setAttribute("text-anchor", "middle");
+    setText(label, "时间线树");
+    control.append(surface, label);
+    svg.appendChild(control);
+  }
+  const active = viewMode.value === "timetree";
+  const surface = control.querySelector("rect");
+  const label = control.querySelector("text");
+  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
+  if (label) label.style.fontWeight = active ? "700" : "400";
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (active) return;
+    selectedEvolutionItem.value = null;
+    viewMode.value = "timetree";
+  };
+  control.setAttribute("role", "button");
+  control.setAttribute("tabindex", active ? "-1" : "0");
+  control.setAttribute("aria-label", active ? "当前为时间线树视图" : "打开时间线树视图");
+  control.style.cursor = active ? "default" : "pointer";
+  d3.select(control)
+    .on("click.timetree-view", active ? null : activate)
+    .on("keydown.timetree-view", active ? null : (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
+}
+
 function ensureEvolutionViewControl(svg) {
   let control = svg.querySelector(".evolution-view-control");
   if (!control) {
@@ -3545,6 +3791,7 @@ function makeEvolutionControlInteractive(control, active) {
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
   ensureEvolutionViewControl(svg);
+  ensureTimetreeViewControl(svg);
   const categoryItems = templateCategoryItems(svg);
   const selectionTemplate = categoryItems
     .map(({ group }) => [...group.children].find(
@@ -3583,13 +3830,15 @@ function bindTemplateControls(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
-      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer, .evolution-view-control")) return;
+      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer, .evolution-view-control, .dynamic-timetree-layer, .timetree-view-control")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
         const canActivate = targetMode === "hierarchy"
-          && (viewMode.value === "composition" || viewMode.value === "evolution");
+          && (viewMode.value === "composition"
+            || viewMode.value === "evolution"
+            || viewMode.value === "timetree");
         const activateView = (event) => {
           event.stopPropagation();
           if (!canActivate) return;
@@ -3600,7 +3849,9 @@ function bindTemplateControls(svg) {
               focusHierarchyContext(focus, true);
             }
           }
-          if (viewMode.value === "evolution") restoreHierarchyFocus();
+          if (viewMode.value === "evolution" || viewMode.value === "timetree") {
+            restoreHierarchyFocus();
+          }
           viewMode.value = "hierarchy";
         };
         this.style.cursor = canActivate ? "pointer" : "default";
@@ -3627,7 +3878,7 @@ function bindTemplateControls(svg) {
       if (CATEGORY_NAMES.includes(text)) {
         const category = text;
         const group = this.parentElement;
-        const categoryInteractive = viewMode.value === "hierarchy";
+        const categoryInteractive = viewMode.value === "hierarchy" || viewMode.value === "timetree";
         if (!categoryInteractive) {
           this.style.cursor = "default";
           d3.select(this).on("click.category", null);
@@ -3646,6 +3897,10 @@ function bindTemplateControls(svg) {
           lastExpandedHierarchyId = null;
           hierarchyPanX = 0;
           hierarchyPanY = 0;
+          timetreeExpandedKeys.value = null;
+          timetreeScroll.value = 0;
+          timetreeSelectedEventId.value = null;
+          timetreeSelectedRelationId.value = null;
           selectedCategory.value = category;
           selectedId.value = null;
           expandedDetailId.value = null;
@@ -3949,6 +4204,10 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
     svg.querySelector(".dynamic-evolution-layer")?.remove();
     svg.querySelectorAll("[data-evolution-def]").forEach((element) => element.remove());
   }
+  if (viewMode.value === "timetree") {
+    svg.querySelector(".dynamic-timetree-layer")?.remove();
+    svg.querySelectorAll("[data-timetree-def]").forEach((element) => element.remove());
+  }
 
   selectedEntity();
   populateCenter(svg);
@@ -4043,5 +4302,25 @@ onUnmounted(() => {
 .svg-mount :deep(.space-aware-expansion-control:focus) { outline: none; }
 .svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) { stroke-width: 1.35; stroke-dasharray: 3 2; }
 .svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }
+/* —— 时间线树视图 —— */
+.svg-mount :deep(.timetree-axis-label) { fill: #918069; font-size: 11px; letter-spacing: 1px; }
+.svg-mount :deep(.timetree-header-control) { fill: #563905; font-size: 11px; letter-spacing: 1px; }
+.svg-mount :deep(.timetree-header-control:hover) { text-decoration: underline; }
+.svg-mount :deep(.timetree-row-band.is-odd) { fill-opacity: 0.05; }
+.svg-mount :deep(.timetree-row-band:hover) { fill-opacity: 0.09; }
+.svg-mount :deep(.timetree-row-band.is-selected) { fill-opacity: 0.12; }
+.svg-mount :deep(.timetree-tree-label) {
+  fill: #351704;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS, serif;
+  font-size: 13px;
+}
+.svg-mount :deep(.timetree-tree-node.is-virtual .timetree-tree-label) { font-weight: 600; }
+.svg-mount :deep(.timetree-tree-node.is-selected .timetree-tree-label) { font-weight: 700; }
+.svg-mount :deep(.timetree-tree-count) { fill: #918069; font-size: 10px; }
+.svg-mount :deep(.timetree-tree-toggle) { cursor: pointer; }
+.svg-mount :deep(.timetree-tree-toggle:hover) { fill: #563905; }
+.svg-mount :deep(.timetree-offaxis-badge) { fill: #918069; font-size: 9px; letter-spacing: 0.5px; }
+.svg-mount :deep(.timetree-empty-hint) { fill: #918069; font-size: 14px; letter-spacing: 3px; }
+.svg-mount :deep(.timetree-scrollbar-thumb:hover) { fill-opacity: 0.5; }
 .template-message { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; color: #563905; background: #f5f3ec; letter-spacing: 3px; }
 </style>
