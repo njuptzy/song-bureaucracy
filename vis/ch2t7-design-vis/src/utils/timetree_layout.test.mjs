@@ -7,6 +7,7 @@ import {
   layoutTimetreeRelations,
   layoutTimetreeSegments,
   TIMETREE_GEOMETRY,
+  timetreeAlignedHalfWidths,
   timetreeLayoutSpan,
   timetreeLaneLinkSpan,
   timetreeNodeColumns,
@@ -171,6 +172,41 @@ describe("timetreeNodeColumns", () => {
     assert.ok(columns.get(1) - 90 - (columns.get(0) + 45) >= 12);
     assert.ok(columns.get(2) - 50 - (columns.get(1) + 90) >= 12);
     assert.ok(columns.get(0) - 45 >= geometry.content.x0 + 8);
+  });
+});
+
+describe("timetreeAlignedHalfWidths", () => {
+  it("同一类别下的制度组统一为最长标题宽度，类别根保持原尺寸", () => {
+    const rows = [
+      { key: "category", parentKey: null, isVirtual: true },
+      { key: "group-a", parentKey: "category", isVirtual: true },
+      { key: "group-b", parentKey: "category", isVirtual: true },
+      { key: "group-c", parentKey: "category", isVirtual: true },
+    ];
+    const natural = new Map([
+      ["category", 46],
+      ["group-a", 70],
+      ["group-b", 98],
+      ["group-c", 45],
+    ]);
+    const aligned = timetreeAlignedHalfWidths(rows, natural);
+    assert.equal(aligned.get("category"), 46);
+    assert.equal(aligned.get("group-a"), 98);
+    assert.equal(aligned.get("group-b"), 98);
+    assert.equal(aligned.get("group-c"), 98);
+  });
+
+  it("真实机构不参与虚拟制度组的统一宽度", () => {
+    const rows = [
+      { key: "group", parentKey: "category", isVirtual: true },
+      { key: "entity", parentKey: "group", isVirtual: false },
+    ];
+    const aligned = timetreeAlignedHalfWidths(rows, new Map([
+      ["group", 92],
+      ["entity", 51],
+    ]));
+    assert.equal(aligned.get("group"), 92);
+    assert.equal(aligned.get("entity"), 51);
   });
 });
 

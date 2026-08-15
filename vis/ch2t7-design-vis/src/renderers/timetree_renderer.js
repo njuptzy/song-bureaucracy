@@ -2,6 +2,7 @@ import { relationPath } from "./evolution_renderer.js";
 import {
   fitTimetreeCapsuleLabel,
   TIMETREE_GEOMETRY,
+  timetreeAlignedHalfWidths,
   timetreeLaneLinkSpan,
   timetreeNodeColumns,
   timetreeVirtualBusGeometry,
@@ -277,9 +278,8 @@ function stampCapsuleNode(svg, row, templates, selected, nodeIndex) {
 
 // 制度组虚拟节点：沿用层级视图的"皇帝"模板（横排胶囊 + 居中文字），
 // 该模板本身即横向，不再旋转。
-function stampGroupNode(row, templates) {
+function stampGroupNode(row, templates, width) {
   const nodeGroup = svgElement("g");
-  const width = virtualNodeWidth(row, templates);
   const height = Number(templates.emperorRect.getAttribute("height"));
   const rect = templates.emperorRect.cloneNode(true);
   rect.style.removeProperty("display");
@@ -360,7 +360,7 @@ function renderTreeNode(svg, parent, row, info, selected, handlers, templates, n
   });
   if (row.isVirtual) {
     wrapper.setAttribute("transform", `translate(${info.x} ${info.y})`);
-    wrapper.appendChild(stampGroupNode(row, templates));
+    wrapper.appendChild(stampGroupNode(row, templates, info.right - info.left));
   } else {
     const bounds = templates.templatePolygonBounds;
     const cx = bounds.x + bounds.width / 2;
@@ -654,10 +654,11 @@ export function renderTimetreeOverlay(svg, options) {
   const nodeInfoByKey = new Map();
   if (treeTemplates) {
     const capsuleHalf = treeTemplates.templatePolygonBounds.height / 2;
-    const halfWidthByKey = new Map(rows.map((row) => [
+    const naturalHalfWidthByKey = new Map(rows.map((row) => [
       row.key,
       row.isVirtual ? virtualNodeWidth(row, treeTemplates) / 2 : capsuleHalf,
     ]));
+    const halfWidthByKey = timetreeAlignedHalfWidths(rows, naturalHalfWidthByKey);
     const xByDepth = timetreeNodeColumns(rows, halfWidthByKey, geometry);
     for (const row of rows) {
       const x = xByDepth.get(row.depth);

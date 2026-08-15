@@ -79,6 +79,28 @@ export function timetreeNodeX(depth, geometry = TIMETREE_GEOMETRY) {
 }
 
 /**
+ * 同一虚拟父节点下的制度组必须使用统一宽度，保证外框、文字中心和连线入口
+ * 落在同一列。类别根或真实机构仍保留自身尺寸。
+ */
+export function timetreeAlignedHalfWidths(rows = [], naturalHalfWidthByKey = new Map()) {
+  const aligned = new Map(naturalHalfWidthByKey);
+  const virtualChildrenByParent = new Map();
+  for (const row of rows) {
+    if (!row.isVirtual || row.parentKey == null) continue;
+    if (!virtualChildrenByParent.has(row.parentKey)) virtualChildrenByParent.set(row.parentKey, []);
+    virtualChildrenByParent.get(row.parentKey).push(row);
+  }
+  for (const siblings of virtualChildrenByParent.values()) {
+    const sharedHalfWidth = Math.max(
+      0,
+      ...siblings.map((row) => naturalHalfWidthByKey.get(row.key) || 0),
+    );
+    siblings.forEach((row) => aligned.set(row.key, sharedHalfWidth));
+  }
+  return aligned;
+}
+
+/**
  * 根据各层实际节点宽度计算树列中心。固定 depthGap 只是期望位置；遇到长制度组
  * 名称时必须把后续列向右推，保证父子外框之间始终留有可画分叉线的空隙。
  * 若右侧空间不足，整棵树优先整体左移，而不是压缩到节点外框里。
