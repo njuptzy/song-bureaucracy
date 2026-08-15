@@ -4,12 +4,13 @@
       v-if="data"
       :data="data"
       :initial-state="canvasState"
+      :revision-panel-active="revisionPanelVisible"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
-      v-if="baseData"
+      v-if="baseData && isEvolutionView"
       :edit-mode="editMode"
       :drawer="revisionDrawer"
       :state="revisionState"
@@ -37,7 +38,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DesignTemplateCanvas from "./components/DesignTemplateCanvas.vue";
 import RevisionWorkspace from "./components/RevisionWorkspace.vue";
 import { readCanvasState, writeCanvasState } from "./utils/canvas_state";
@@ -63,6 +64,15 @@ const connectSource = ref(null);
 const connectTarget = ref(null);
 let versionTimer = null;
 
+const isEvolutionView = computed(() => canvasState.value?.viewMode === "evolution");
+const revisionPanelVisible = computed(() => {
+  if (!isEvolutionView.value) return false;
+  if (revisionDrawer.value) return true;
+  if (!editMode.value) return false;
+  if (connectionMode.value) return Boolean(connectSource.value && connectTarget.value);
+  return Boolean(selectedFact.value);
+});
+
 function handleCanvasStateChange(state) {
   canvasState.value = state;
   writeCanvasState(state);
@@ -70,6 +80,9 @@ function handleCanvasStateChange(state) {
 
 function handleSelectionChange(selection) {
   selectedFact.value = selection;
+  if (editMode.value && selection && !connectionMode.value) {
+    revisionDrawer.value = "";
+  }
   if (!editMode.value || !connectionMode.value || selection?.kind !== "timepoint") return;
   if (!connectSource.value) {
     connectSource.value = selection;
@@ -138,8 +151,13 @@ function toggleEditMode() {
 }
 
 async function toggleDrawer(name) {
-  revisionDrawer.value = revisionDrawer.value === name ? "" : name;
+  const opening = revisionDrawer.value !== name;
+  revisionDrawer.value = opening ? name : "";
   revisionError.value = "";
+  if (opening) {
+    selectedFact.value = null;
+    cancelConnection();
+  }
   if (revisionDrawer.value === "history") {
     try { await loadCommits(); } catch (reason) { revisionError.value = reason.message; }
   }
@@ -165,6 +183,7 @@ async function addOperation(payload) {
     revisionState.value = result.preview.state;
     applyPreview(result.preview);
     revisionDrawer.value = "workspace";
+    selectedFact.value = null;
   } catch { /* error is displayed by runRevisionAction */ }
 }
 
@@ -209,6 +228,7 @@ async function restoreVersion(targetHash) {
 
 function toggleConnectionMode() {
   connectionMode.value = !connectionMode.value;
+  revisionDrawer.value = "";
   connectSource.value = null;
   connectTarget.value = null;
   selectedFact.value = null;

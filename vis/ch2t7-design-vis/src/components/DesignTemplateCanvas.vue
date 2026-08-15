@@ -1,5 +1,9 @@
 <template>
-  <div ref="hostRef" class="design-template" :class="{ loading: loading }">
+  <div
+    ref="hostRef"
+    class="design-template"
+    :class="{ loading: loading, 'revision-panel-active': revisionPanelActive }"
+  >
     <div v-if="error" class="template-message">{{ error }}</div>
     <div v-else-if="loading" class="template-message">载入 SVG 设计画板…</div>
     <div ref="svgMountRef" class="svg-mount"></div>
@@ -68,6 +72,7 @@ import { formatStandardTime } from "../utils/time_format";
 const props = defineProps({
   data: { type: Object, required: true },
   initialState: { type: Object, default: null },
+  revisionPanelActive: { type: Boolean, default: false },
 });
 const emit = defineEmits(["state-change", "selection-change"]);
 const initialState = props.initialState || {};
@@ -3948,6 +3953,11 @@ onUnmounted(() => {
 .design-template { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f5f3ec; }
 .svg-mount { width: 100%; height: 100%; }
 .svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
+.design-template.revision-panel-active .svg-mount :deep(.evolution-selector-layer),
+.design-template.revision-panel-active .svg-mount :deep(.detail-panel-group) {
+  visibility: hidden;
+  pointer-events: none;
+}
 .svg-mount :deep(.shared-category-label) {
   fill: #351704;
   font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;

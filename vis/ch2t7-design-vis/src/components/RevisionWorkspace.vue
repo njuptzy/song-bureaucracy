@@ -40,7 +40,7 @@
       <button type="button" class="text-command" @click="$emit('cancel-connect')">取消连接</button>
     </div>
 
-    <section v-if="editMode && selection && !connectionMode" class="selection-editor" aria-label="选中事实编辑器">
+    <section v-if="!drawer && editMode && selection && !connectionMode" class="selection-editor" aria-label="选中事实编辑器">
       <header class="editor-heading">
         <div>
           <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
@@ -121,7 +121,7 @@
       </footer>
     </section>
 
-    <section v-if="editMode && connectionMode && connectSource && connectTarget" class="connection-editor">
+    <section v-if="!drawer && editMode && connectionMode && connectSource && connectTarget" class="connection-editor">
       <header class="editor-heading"><div><span class="editor-kicker">新建前后演变</span><strong>{{ connectLabel }}</strong></div></header>
       <label class="field field-wide"><span>关系说明</span><input v-model="connectQuotation" type="text" /></label>
       <label class="field field-wide"><span>修改理由</span><textarea v-model="connectReason" rows="2"></textarea></label>
@@ -469,8 +469,21 @@ button { color: inherit; }
 .connection-step { opacity: .48; }
 .connection-step.done { opacity: 1; color: #4a765c; }
 .guide-line { width: 25px; border-top: 1px dashed var(--ink-2); }
-.selection-editor, .connection-editor { position: absolute; left: 4.25%; top: 45.7%; width: 20.5%; max-height: 36.2%; overflow: auto; padding: 15px 16px 12px; border: 1px solid rgba(86,57,5,.62); background: rgba(245,243,236,.98); box-shadow: 0 7px 24px rgba(53,23,4,.12); pointer-events: auto; }
-.connection-editor { left: auto; right: 24px; top: 104px; width: 340px; max-height: calc(100% - 128px); }
+.selection-editor, .connection-editor, .revision-drawer {
+  position: absolute;
+  left: 4.25%;
+  top: 29.7%;
+  right: auto;
+  bottom: 8.55%;
+  width: 20.5%;
+  max-height: none;
+  overflow: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: auto;
+}
+.selection-editor, .connection-editor { padding: 13px 10px 8px; }
 .editor-heading, .drawer-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid rgba(86,57,5,.32); }
 .editor-heading div, .drawer-heading div { display: grid; gap: 3px; min-width: 0; }
 .editor-heading strong, .drawer-heading strong { overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
@@ -500,7 +513,7 @@ button { color: inherit; }
 .primary-command { border: 1px solid var(--ink-2); padding: 7px 12px; background: var(--ink-2); color: var(--paper); cursor: pointer; white-space: nowrap; }
 .primary-command:disabled { opacity: .4; cursor: not-allowed; }
 .text-command { border: 0; border-bottom: 1px solid currentColor; padding: 2px 0; background: transparent; cursor: pointer; font-size: 11px; }
-.revision-drawer { position: absolute; top: 64px; right: 24px; bottom: 22px; width: 370px; display: flex; flex-direction: column; padding: 17px; border: 1px solid rgba(86,57,5,.62); background: rgba(245,243,236,.985); box-shadow: -8px 10px 28px rgba(53,23,4,.14); pointer-events: auto; overflow: hidden; }
+.revision-drawer { display: flex; flex-direction: column; padding: 13px 10px 8px; overflow: hidden; }
 .drawer-heading { flex: 0 0 auto; }
 .workspace-controls { display: flex; gap: 6px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(86,57,5,.22); }
 .connect-command { margin-left: auto; }
@@ -534,8 +547,6 @@ button { color: inherit; }
 .history-list li.head { border-left: 2px solid #4a765c; padding-left: 9px; }
 .revision-toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 520px; padding: 9px 14px; border: 1px solid #a0432e; background: rgba(245,243,236,.98); color: #7b2f20; pointer-events: auto; }
 @media (max-width: 1100px) {
-  .selection-editor { left: 12px; top: 100px; width: 340px; max-height: calc(100% - 130px); }
-  .revision-drawer { right: 12px; width: 340px; }
   .revision-toolbar { right: 12px; }
 }
 </style>
