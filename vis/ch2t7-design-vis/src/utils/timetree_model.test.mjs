@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildTimetreeRows,
   defaultTimetreeExpandedKeys,
+  timetreeCategoryKey,
   timetreeEntityKey,
   timetreeGroupKey,
   timetreeLaneEntityIds,
@@ -16,15 +17,18 @@ function entity(id, title, overrides = {}) {
 }
 
 describe("buildTimetreeRows", () => {
-  it("无制度组配置时根节点直接位于第 0 层", () => {
+  it("无制度组配置时类别根位于第 0 层、机构位于第 1 层", () => {
     const rows = buildTimetreeRows({
       entities: [entity(1, "甲司"), entity(2, "乙司")],
       hierarchyEdges: [],
       category: "中央机构",
       groupNames: [],
-      expandedIds: new Set(),
+      expandedIds: new Set([timetreeCategoryKey("中央机构")]),
     });
-    assert.deepEqual(rows.map((row) => [row.entityId, row.depth]), [[1, 0], [2, 0]]);
+    assert.deepEqual(
+      rows.map((row) => [row.entityId, row.depth]),
+      [[null, 0], [1, 1], [2, 1]],
+    );
   });
 
   it("制度组作为虚拟行参与排序，收起时带下级计数", () => {
@@ -37,11 +41,13 @@ describe("buildTimetreeRows", () => {
       hierarchyEdges: [],
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
-      expandedIds: new Set(),
+      expandedIds: new Set([timetreeCategoryKey("中央机构")]),
     });
-    assert.deepEqual(rows.map((row) => row.title), ["决策中枢", "行政执行"]);
+    assert.deepEqual(rows.map((row) => row.title), ["中央机构", "决策中枢", "行政执行"]);
     assert.ok(rows.every((row) => row.isVirtual));
-    assert.deepEqual(rows.map((row) => row.childCount), [1, 2]);
+    assert.deepEqual(rows.map((row) => row.childCount), [0, 1, 2]);
+    assert.equal(rows[1].parentKey, timetreeCategoryKey("中央机构"));
+    assert.equal(rows[2].parentKey, timetreeCategoryKey("中央机构"));
   });
 
   it("展开制度组后按前序输出机构行，展开机构显示下级", () => {
@@ -55,6 +61,7 @@ describe("buildTimetreeRows", () => {
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
       expandedIds: new Set([
+        timetreeCategoryKey("中央机构"),
         timetreeGroupKey("中央机构", "行政执行"),
         timetreeEntityKey(2),
       ]),
@@ -62,10 +69,11 @@ describe("buildTimetreeRows", () => {
     assert.deepEqual(
       rows.map((row) => [row.title, row.depth, row.isVirtual]),
       [
-        ["决策中枢", 0, true],
-        ["行政执行", 0, true],
-        ["乙司", 1, false],
-        ["丙司", 2, false],
+        ["中央机构", 0, true],
+        ["决策中枢", 1, true],
+        ["行政执行", 1, true],
+        ["乙司", 2, false],
+        ["丙司", 3, false],
       ],
     );
   });
@@ -80,7 +88,7 @@ describe("buildTimetreeRows", () => {
       ],
       category: "中央机构",
       groupNames: [],
-      expandedIds: new Set([timetreeEntityKey(1)]),
+      expandedIds: new Set([timetreeCategoryKey("中央机构"), timetreeEntityKey(1)]),
     });
     const byTitle = new Map(rows.map((row) => [row.title, row]));
     assert.equal(byTitle.get("中枢").layoutIndex, 1);
@@ -106,6 +114,7 @@ describe("buildTimetreeRows", () => {
       category: "中央机构",
       groupNames: [],
       expandedIds: new Set([
+        timetreeCategoryKey("中央机构"),
         timetreeEntityKey(1), timetreeEntityKey(2), timetreeEntityKey(3),
       ]),
     });
@@ -131,7 +140,9 @@ describe("buildTimetreeRows", () => {
       ],
       category: "中央机构",
       groupNames: [],
-      expandedIds: new Set([timetreeEntityKey(1), timetreeEntityKey(2)]),
+      expandedIds: new Set([
+        timetreeCategoryKey("中央机构"), timetreeEntityKey(1), timetreeEntityKey(2),
+      ]),
     });
     assert.ok(rows.length <= 2);
   });
@@ -148,9 +159,9 @@ describe("buildTimetreeRows", () => {
       category: "中央机构",
       collectiveIds: [2],
       groupNames: [],
-      expandedIds: new Set(),
+      expandedIds: new Set([timetreeCategoryKey("中央机构")]),
     });
-    assert.deepEqual(rows.map((row) => row.entityId), [1]);
+    assert.deepEqual(rows.filter((row) => !row.isVirtual).map((row) => row.entityId), [1]);
   });
 
   it("车道实体列表只含非虚拟行且保持行序", () => {
@@ -162,38 +173,53 @@ describe("buildTimetreeRows", () => {
       hierarchyEdges: [],
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
-      expandedIds: new Set(CENTRAL_GROUPS.map((group) => timetreeGroupKey("中央机构", group))),
+      expandedIds: new Set([
+        timetreeCategoryKey("中央机构"),
+        ...CENTRAL_GROUPS.map((group) => timetreeGroupKey("中央机构", group)),
+      ]),
     });
     assert.deepEqual(timetreeLaneEntityIds(rows), [1, 2]);
   });
 
   it("制度组展开与层次结构一样互斥", () => {
     const rows = [
-      { key: "group:a", isVirtual: true, parentKey: null },
-      { key: "group:b", isVirtual: true, parentKey: null },
+      { key: "category:中央机构", isVirtual: true, parentKey: null },
+      { key: "group:a", isVirtual: true, parentKey: "category:中央机构" },
+      { key: "group:b", isVirtual: true, parentKey: "category:中央机构" },
     ];
-    assert.deepEqual(toggleTimetreeExpansion(rows, ["group:a"], "group:b"), ["group:b"]);
-    assert.deepEqual(toggleTimetreeExpansion(rows, ["group:a"], "group:a"), []);
+    assert.deepEqual(
+      toggleTimetreeExpansion(rows, ["category:中央机构", "group:a"], "group:b"),
+      ["category:中央机构", "group:b"],
+    );
+    assert.deepEqual(
+      toggleTimetreeExpansion(rows, ["category:中央机构", "group:a"], "group:a"),
+      ["category:中央机构"],
+    );
   });
 
   it("机构展开只保留当前祖先路径，收起时移除后代", () => {
     const rows = [
-      { key: "group:a", isVirtual: true, parentKey: null },
+      { key: "category:中央机构", isVirtual: true, parentKey: null },
+      { key: "group:a", isVirtual: true, parentKey: "category:中央机构" },
       { key: "entity:1", isVirtual: false, parentKey: "group:a" },
       { key: "entity:2", isVirtual: false, parentKey: "entity:1" },
       { key: "entity:3", isVirtual: false, parentKey: "group:a" },
     ];
     assert.deepEqual(
-      toggleTimetreeExpansion(rows, ["group:a", "entity:3"], "entity:2"),
-      ["group:a", "entity:1", "entity:2"],
+      toggleTimetreeExpansion(
+        rows,
+        ["category:中央机构", "group:a", "entity:3"],
+        "entity:2",
+      ),
+      ["category:中央机构", "group:a", "entity:1", "entity:2"],
     );
     assert.deepEqual(
       toggleTimetreeExpansion(
         rows,
-        ["group:a", "entity:1", "entity:2"],
+        ["category:中央机构", "group:a", "entity:1", "entity:2"],
         "entity:1",
       ),
-      ["group:a"],
+      ["category:中央机构", "group:a"],
     );
   });
 });
@@ -208,14 +234,17 @@ describe("defaultTimetreeExpandedKeys", () => {
       category: "中央机构",
       groupNames: CENTRAL_GROUPS,
     });
-    assert.deepEqual(keys, [timetreeGroupKey("中央机构", "决策中枢")]);
+    assert.deepEqual(keys, [
+      timetreeCategoryKey("中央机构"),
+      timetreeGroupKey("中央机构", "决策中枢"),
+    ]);
   });
 
-  it("无制度组配置时默认全部收起", () => {
+  it("无制度组配置时默认展开类别根、具体机构保持收起", () => {
     assert.deepEqual(defaultTimetreeExpandedKeys({
       entities: [entity(1, "甲司")],
       category: "路级机构",
       groupNames: [],
-    }), []);
+    }), [timetreeCategoryKey("路级机构")]);
   });
 });

@@ -288,7 +288,7 @@ function stampGroupNode(row, templates) {
   rect.setAttribute("height", String(height));
   rect.removeAttribute("opacity");
   rect.style.removeProperty("opacity");
-  rect.setAttribute("opacity", "0.82");
+  rect.setAttribute("opacity", row.isInstitutionGroup ? "0.82" : "1");
   const label = templates.emperorText.cloneNode(true);
   label.style.removeProperty("display");
   label.removeAttribute("opacity");

@@ -72,6 +72,7 @@ import { renderTimetreeOverlay } from "../renderers/timetree_renderer";
 import {
   buildTimetreeRows,
   defaultTimetreeExpandedKeys,
+  timetreeCategoryKey,
   timetreeEntityKey,
   timetreeLaneEntityIds,
   toggleTimetreeExpansion,
@@ -2775,7 +2776,10 @@ function renderDynamicEvolution(svg) {
 
 function timetreeActiveExpandedKeys(category) {
   if (timetreeExpandedKeys.value !== null) return timetreeExpandedKeys.value;
+  const categoryKey = timetreeCategoryKey(category);
+  if (collapsedHierarchyIds.has(categoryKey)) return [];
   const inherited = [
+    categoryKey,
     ...expandedInstitutionGroupIds,
     ...expandedHierarchyPath.map((entityId) => timetreeEntityKey(entityId)),
   ];

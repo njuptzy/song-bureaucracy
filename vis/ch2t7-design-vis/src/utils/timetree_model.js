@@ -1,8 +1,11 @@
 import { groupInstitutionRootIds, institutionGroupId } from "./central_groups.js";
 
-// 时间线树视图的层级模型：与层级视图共享"制度组虚拟层 + 上下级边"的
-// 组织语义，但展开状态完全独立——本视图支持多节点同时展开（时间线树的
-// 核心交互），不受层级视图单路径展开状态的影响。
+// 时间线树视图严格复用层级视图的“类别根 → 制度组虚拟层 → 机构层级边”
+// 组织语义，仅把最终树坐标逆时针旋转 90°。
+
+export function timetreeCategoryKey(category) {
+  return `category:${category}`;
+}
 
 export function timetreeGroupKey(category, group) {
   return institutionGroupId(category, group);
@@ -143,9 +146,29 @@ export function buildTimetreeRows({
     ? groupInstitutionRootIds(rootIds, entityMap, category, groupNames)
     : [{ group: "", rootIds }];
 
+  const categoryKey = timetreeCategoryKey(category);
+  const categoryExpanded = expandedIds.has(categoryKey);
+  const categoryChildCount = groupNames.length ? groups.length : rootIds.length;
+  rows.push({
+    key: categoryKey,
+    entityId: null,
+    parentKey: null,
+    rowIndex: rows.length,
+    title: category,
+    depth: 0,
+    isVirtual: true,
+    isCategoryRoot: true,
+    isInstitutionGroup: false,
+    childCount: categoryExpanded ? 0 : categoryChildCount,
+    totalChildren: categoryChildCount,
+    expanded: categoryExpanded,
+  });
+
+  if (!categoryExpanded) return assignTimetreeLayoutIndices(rows);
+
   for (const { group, rootIds: groupedRootIds } of groups) {
     if (!group) {
-      for (const rootId of groupedRootIds) visitEntity(rootId, 0, new Set());
+      for (const rootId of groupedRootIds) visitEntity(rootId, 1, new Set(), categoryKey);
       continue;
     }
     const key = timetreeGroupKey(category, group);
@@ -153,17 +176,19 @@ export function buildTimetreeRows({
     rows.push({
       key,
       entityId: null,
-      parentKey: null,
+      parentKey: categoryKey,
       rowIndex: rows.length,
       title: group,
-      depth: 0,
+      depth: 1,
       isVirtual: true,
+      isCategoryRoot: false,
+      isInstitutionGroup: true,
       childCount: expanded ? 0 : groupedRootIds.length,
       totalChildren: groupedRootIds.length,
       expanded,
     });
     if (expanded) {
-      for (const rootId of groupedRootIds) visitEntity(rootId, 1, new Set(), key);
+      for (const rootId of groupedRootIds) visitEntity(rootId, 2, new Set(), key);
     }
   }
   return assignTimetreeLayoutIndices(rows);
@@ -184,10 +209,6 @@ export function toggleTimetreeExpansion(rows = [], currentKeys = [], clickedKey)
   const clicked = rowByKey.get(clickedKey);
   if (!clicked) return [...currentKeys];
   const current = new Set(currentKeys);
-
-  if (clicked.isVirtual) {
-    return current.has(clickedKey) ? [] : [clickedKey];
-  }
 
   if (!current.has(clickedKey)) {
     const path = [];
@@ -213,17 +234,20 @@ export function toggleTimetreeExpansion(rows = [], currentKeys = [], clickedKey)
   return currentKeys.filter((key) => !removed.has(key));
 }
 
-/** 默认展开：只打开首个有数据的制度组，机构保持收起。 */
+/** 默认展开：类别根 + 首个有数据的制度组，机构保持收起。 */
 export function defaultTimetreeExpandedKeys({
   entities = [],
   category = "中央机构",
   groupNames = [],
 } = {}) {
-  if (!groupNames.length) return [];
+  const categoryKey = timetreeCategoryKey(category);
+  if (!groupNames.length) return [categoryKey];
   const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
   const rootIds = entities
     .filter((entity) => entity?.type === "机构" && defaultCategory(entity) === category)
     .map((entity) => entity.id);
   const [first] = groupInstitutionRootIds(rootIds, entityMap, category, groupNames);
-  return first?.group ? [timetreeGroupKey(category, first.group)] : [];
+  return first?.group
+    ? [categoryKey, timetreeGroupKey(category, first.group)]
+    : [categoryKey];
 }
