@@ -3694,8 +3694,10 @@ function ensureTimetreeViewControl(svg) {
   let control = svg.querySelector(".timetree-view-control");
   if (!control) {
     control = svgElement("g", { class: "timetree-view-control" });
+    // 演变视图按钮在 1248.5，空间展开控件在 1392（层级视图内显示）；
+    // 时间线树放在演变视图左侧，避开两者。
     const surface = svgElement("rect", {
-      x: 1386.5,
+      x: 1110.5,
       y: 80,
       width: 125.8,
       height: 26,
@@ -3708,7 +3710,7 @@ function ensureTimetreeViewControl(svg) {
     });
     const template = findTextAt(svg, 1570.42, 98.84, 2);
     const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
-    label.setAttribute("transform", "translate(1449.4 98.84)");
+    label.setAttribute("transform", "translate(1173.4 98.84)");
     label.setAttribute("text-anchor", "middle");
     setText(label, "时间线树");
     control.append(surface, label);
