@@ -89,6 +89,36 @@ export function timetreeLaneLinkSpan(nodeRight, geometry = TIMETREE_GEOMETRY) {
   return { x0, x1 };
 }
 
+/**
+ * 时间线树的点密度联动：当前选中机构展开全部时间点；其他机构只保留
+ * 建置、罢废和演变关系端点等关键点，避免总览状态被普通记载淹没。
+ */
+export function timetreeEventsForLane(events = [], {
+  active = false,
+  linkedEndpointIds = null,
+} = {}) {
+  if (active) return events;
+  if (linkedEndpointIds instanceof Set) {
+    return events.filter((event) => linkedEndpointIds.has(event.id));
+  }
+  return events.filter((event) => event.expanded);
+}
+
+/** 当前有明确机构选择时，只保留直接涉及该机构的前后演变关系。 */
+export function timetreeRelationsForEntity(relations = [], entityId = null) {
+  if (entityId == null) return relations;
+  return relations.filter((relation) => (relation.members || []).some(
+    (member) => member.entityId === entityId,
+  ));
+}
+
+/** 收集当前联动关系的端点，供其他机构车道保留必要的上下文点。 */
+export function timetreeRelationEndpointIds(relations = []) {
+  return new Set(relations.flatMap((relation) => (relation.members || [])
+    .map((member) => member.timepointId)
+    .filter((id) => id != null)));
+}
+
 const STACK_MIN_GAP = 11;
 // 错层位移等级：先上后下交替，最多 5 层，再密则接受重叠（与演变视图
 // "密集点错层"同思路，但用固定档位保证确定性）。

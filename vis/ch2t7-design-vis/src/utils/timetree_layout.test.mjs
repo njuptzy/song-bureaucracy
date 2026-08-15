@@ -9,6 +9,9 @@ import {
   TIMETREE_GEOMETRY,
   timetreeLayoutSpan,
   timetreeLaneLinkSpan,
+  timetreeEventsForLane,
+  timetreeRelationEndpointIds,
+  timetreeRelationsForEntity,
   timetreeNodeX,
   timetreeRowY,
   timetreeYearToX,
@@ -96,6 +99,50 @@ describe("timetreeLaneLinkSpan", () => {
     const span = timetreeLaneLinkSpan(TIMETREE_GEOMETRY.plot.x0 + 20);
     assert.equal(span.x0, TIMETREE_GEOMETRY.plot.x0 - 4);
     assert.equal(span.x1 - span.x0, 4);
+  });
+});
+
+describe("timetreeEventsForLane", () => {
+  const events = [
+    { id: 1, expanded: false, event: "普通记载" },
+    { id: 2, expanded: true, event: "建置" },
+    { id: 3, expanded: true, event: "演变关系端点" },
+    { id: 4, expanded: false, event: "属性记载" },
+  ];
+
+  it("未选机构只显示关键时间点", () => {
+    assert.deepEqual(timetreeEventsForLane(events).map(({ id }) => id), [2, 3]);
+  });
+
+  it("选中机构展开自己的全部时间点", () => {
+    assert.deepEqual(
+      timetreeEventsForLane(events, { active: true }).map(({ id }) => id),
+      [1, 2, 3, 4],
+    );
+  });
+
+  it("其他机构只保留与选中机构直接相连的关系端点", () => {
+    assert.deepEqual(
+      timetreeEventsForLane(events, { linkedEndpointIds: new Set([3]) }).map(({ id }) => id),
+      [3],
+    );
+  });
+});
+
+describe("时间线树关系焦点", () => {
+  const relations = [
+    { id: 11, members: [{ entityId: 1, timepointId: 101 }, { entityId: 2, timepointId: 201 }] },
+    { id: 12, members: [{ entityId: 2, timepointId: 202 }, { entityId: 3, timepointId: 301 }] },
+  ];
+
+  it("只保留直接涉及选中机构的关系", () => {
+    const focused = timetreeRelationsForEntity(relations, 1);
+    assert.deepEqual(focused.map(({ id }) => id), [11]);
+    assert.deepEqual([...timetreeRelationEndpointIds(focused)], [101, 201]);
+  });
+
+  it("没有明确机构选择时保留总览关系", () => {
+    assert.equal(timetreeRelationsForEntity(relations, null), relations);
   });
 });
 

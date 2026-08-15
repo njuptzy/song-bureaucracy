@@ -81,6 +81,9 @@ import {
   layoutTimetreeSegments,
   TIMETREE_GEOMETRY,
   timetreeLayoutSpan,
+  timetreeEventsForLane,
+  timetreeRelationEndpointIds,
+  timetreeRelationsForEntity,
   timetreeYearToX,
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
@@ -2816,12 +2819,24 @@ function renderDynamicTimetree(svg) {
       + geometry.rowPitch / 2 - scrollOffset]));
 
   const lanesByEntityId = new Map(laneModel.lanes.map((lane) => [lane.entityId, lane]));
+  const visibleLaneIds = new Set(laneModel.lanes.map((lane) => lane.entityId));
+  const activeLaneId = visibleLaneIds.has(selectedId.value) ? selectedId.value : null;
+  const focusedLaneRelations = timetreeRelationsForEntity(laneModel.relations, activeLaneId);
+  const linkedEndpointIds = activeLaneId == null
+    ? null
+    : timetreeRelationEndpointIds(focusedLaneRelations);
   const eventsByLane = new Map();
   const segmentsByLane = new Map();
   const eventPositionById = new Map();
   for (const lane of laneModel.lanes) {
     const y = yByEntityId.get(lane.entityId);
-    const events = layoutTimetreeEvents(lane.events, xOf);
+    const events = layoutTimetreeEvents(
+      timetreeEventsForLane(lane.events, {
+        active: lane.entityId === activeLaneId,
+        linkedEndpointIds,
+      }),
+      xOf,
+    );
     eventsByLane.set(lane.entityId, events);
     segmentsByLane.set(lane.entityId, layoutTimetreeSegments(lane.segments, xOf));
     for (const event of events) {
@@ -2834,7 +2849,7 @@ function renderDynamicTimetree(svg) {
       });
     }
   }
-  const relations = layoutTimetreeRelations(laneModel.relations, eventPositionById)
+  const relations = layoutTimetreeRelations(focusedLaneRelations, eventPositionById)
     .filter((relation) => relation.drawable);
 
   const handlers = {
