@@ -130,6 +130,7 @@
 .dynamic-evolution-layer .evolution-relation.is-dimmed,
 .dynamic-evolution-layer .evolution-relation-group.is-dimmed,
 .dynamic-evolution-layer .evolution-fan-group.is-dimmed,
+.dynamic-evolution-layer .evolution-event-stem-group.is-dimmed,
 .dynamic-evolution-layer .evolution-lifecycle-segment.is-dimmed {
   opacity: 0.16;
 }

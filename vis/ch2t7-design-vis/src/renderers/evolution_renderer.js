@@ -596,6 +596,52 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   parent.appendChild(group);
 }
 
+export function eventStemGeometry(event) {
+  const x = event.displayX;
+  const y = event.y;
+  const baseY = event.baseY ?? y;
+  if (!event.displaced || !Number.isFinite(event.baseX)) return null;
+  // 位移量太小（anchor 几乎落在圆点里）时不画回指茎和定位点：
+  // 圆点自身已经在真实年份上，再叠一粒小芯只会读出"◎"的假复合标记。
+  const displacement = Math.hypot(x - event.baseX, y - baseY);
+  if (displacement <= 4) return null;
+  return {
+    x1: event.baseX,
+    y1: baseY,
+    x2: x,
+    y2: y,
+    anchorX: event.baseX,
+    anchorY: baseY,
+  };
+}
+
+function renderEventStem(parent, event, dimmed) {
+  const geometry = eventStemGeometry(event);
+  if (!geometry) return;
+  const group = svgElement("g", {
+    class: `evolution-event-stem-group${dimmed ? " is-dimmed" : ""}`,
+    "data-stem-timepoint-id": event.id,
+  });
+  group.appendChild(svgElement("line", {
+    class: "evolution-event-stem",
+    x1: geometry.x1,
+    y1: geometry.y1,
+    x2: geometry.x2,
+    y2: geometry.y2,
+    stroke: COLORS.olive,
+    "stroke-width": 0.65,
+    "stroke-opacity": 0.74,
+  }));
+  group.appendChild(svgElement("circle", {
+    class: "evolution-event-anchor",
+    cx: geometry.anchorX,
+    cy: geometry.anchorY,
+    r: 1.65,
+    fill: COLORS.line,
+  }));
+  parent.appendChild(group);
+}
+
 function renderEventMark(parent, event, selected, dimmed, handlers) {
   const revisionClass = event.revisionStatus ? ` is-revision-${event.revisionStatus}` : "";
   const iconType = event.iconType || "record";
@@ -606,24 +652,6 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
   });
   const x = event.displayX;
   const y = event.y;
-  const baseY = event.baseY ?? y;
-  if (event.displaced) {
-    // 位移量太小（anchor 几乎落在圆点里）时不画回指茎和定位点：
-    // 圆点自身已经在真实年份上，再叠一粒小芯只会读出"◎"的假复合标记。
-    const displacement = Math.hypot(x - event.baseX, y - baseY);
-    if (displacement > 4) {
-      group.appendChild(svgElement("line", {
-        class: "evolution-event-stem",
-        x1: event.baseX, y1: baseY, x2: x, y2: y,
-        stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.74,
-      }));
-      group.appendChild(svgElement("circle", {
-        class: "evolution-event-anchor",
-        cx: event.baseX, cy: baseY, r: 1.65,
-        fill: COLORS.line,
-      }));
-    }
-  }
   if (event.timeType === "bounded" && event.yearStart != null && event.yearEnd != null) {
     let startX = Math.min(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
     let endX = Math.max(event.rangeStartX ?? event.baseX, event.rangeEndX ?? event.baseX);
@@ -1318,6 +1346,18 @@ function renderMain(layer, layout, options) {
     (layout.fanGroups || []).flatMap((fan) => fan.relations.map((relation) => relation.id)),
   );
   const ungrouped = layout.relations.filter((relation) => !groupedRelationIds.has(relation.id));
+  // Wrong-layer bug: displaced-event stems used to live inside each event
+  // group. A later ordinary event could therefore paint its stem over an
+  // earlier establish/abolish glyph occupying the true-year anchor. Paint all
+  // stems first; relations remain above them and every event glyph masks the
+  // stem interior at the end.
+  for (const event of eventsToRender) {
+    renderEventStem(
+      group,
+      event,
+      selectionFocus.active && !focusedTimepointIds.has(event.id),
+    );
+  }
   for (const fan of layout.fanGroups || []) {
     renderFanGroup(group, fan, selected, selectionFocus.active, options.handlers);
   }
