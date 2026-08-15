@@ -674,13 +674,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       "pointer-events": "none",
     }));
   }
-  if (iconType === "proposal_unimplemented") {
-    group.appendChild(svgElement("path", {
-      d: `M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`,
-      stroke: selected ? COLORS.selected : COLORS.line,
-      "stroke-width": selected ? 1.5 : 1,
-    }));
-  } else if (iconType === "establish" || iconType === "abolish") {
+  if (iconType === "establish" || iconType === "abolish") {
     // 建置/罢置用一对镜像实心三角形：建置 = 墨色正立三角（立起来），
     // 罢置 = 赭红倒三角（裁撤）；选中只换颜色和尺寸，不改变形状。
     const up = iconType === "establish";

@@ -27,7 +27,7 @@ Relationships、Citations 和 BuildRecords。事实范围、实体边界、时�
   `establish`（建置）、`restore`（复置）、`abolish`（罢废）、`rename`（改称）、
   `reorganize`（改置）、`merge`（合并）、`split`（分拆）、`incorporate`（并入）、
   `duty_transfer`（职掌移交）、`affiliation_change`（隶属变化）、
-  `staffing_change`（编制变化）、`proposal_unimplemented`（拟议未行）、`record`（一般记载）。
+  `staffing_change`（编制变化）、`record`（一般记载）。拟议但未施行的变化记为 `record`。
   `lifecycle_effect` 单独记录该事件对当前实体存废的影响，只能取 `activate`（启用）、
   `preserve`（普通记载）、`deactivate`（罢废）、`ignore`（拟议未行）。两字段不得混用，
   例如“复称旧名”可记为 `event_type=rename`、`lifecycle_effect=activate`。prev/succ 必须按

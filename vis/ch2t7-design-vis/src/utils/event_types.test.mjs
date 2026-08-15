@@ -12,8 +12,9 @@ test("事件语义类型与存废影响分开记录", () => {
   assert.equal(classifyEventType("改称太常寺"), "rename");
   assert.equal(classifyEventType("复称太常礼院"), "rename");
   assert.equal(classifyEventType("职事归太常寺"), "duty_transfer");
-  assert.equal(classifyEventType("议复置而未果"), "proposal_unimplemented");
-  assert.equal(classifyEventType("此后不复置"), "proposal_unimplemented");
+  assert.equal(classifyEventType("议复置而未果"), "record");
+  assert.equal(classifyEventType("此后不复置"), "record");
+  assert.equal(classifyEventType("议复置未果，后始置"), "establish");
 });
 
 test("生命周期判定可识别实体简称", () => {

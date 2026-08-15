@@ -58,7 +58,6 @@ function effectiveYear(item) {
 export function eventGlyphType(eventType) {
   if (["establish", "restore"].includes(eventType)) return "establish";
   if (eventType === "abolish") return "abolish";
-  if (eventType === "proposal_unimplemented") return "proposal_unimplemented";
   return "record";
 }
 

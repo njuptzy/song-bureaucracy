@@ -25,14 +25,13 @@ export const EVENT_TYPE_VALUES = [
   "duty_transfer",
   "affiliation_change",
   "staffing_change",
-  "proposal_unimplemented",
   "record",
 ];
 
 export const LIFECYCLE_EFFECT_VALUES = ["activate", "preserve", "deactivate", "ignore"];
 
 const EVENT_TYPE_RULES = [
-  ["proposal_unimplemented", [...FAILED_CHANGE_WORDS, ...NEGATED_ACTIVATION_VERBS]],
+  ["record", [...FAILED_CHANGE_WORDS, ...NEGATED_ACTIVATION_VERBS]],
   ["restore", ["复置", "复设", "恢复", "复旧", "再置", "重置"]],
   ["establish", ["正式建置", "始置", "初置", "新置", "创置", "设立", "建立", "成立", "开设", "创设", "设置"]],
   ["abolish", TERMINATION_VERBS],

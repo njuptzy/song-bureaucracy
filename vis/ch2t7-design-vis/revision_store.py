@@ -25,7 +25,7 @@ EDITABLE_FIELDS = {
 EVENT_TYPES = {
     "establish", "restore", "abolish", "rename", "reorganize", "merge", "split",
     "incorporate", "duty_transfer", "affiliation_change", "staffing_change",
-    "proposal_unimplemented", "record",
+    "record",
 }
 LIFECYCLE_EFFECTS = {"activate", "preserve", "deactivate", "ignore"}
 SUPPORTED_TABLES = ("Entities", "Timepoints", "Relationships", "Citations", "NormalizedTimes")

@@ -34,7 +34,7 @@ describe("eventGlyphType", () => {
     assert.equal(eventGlyphType("establish"), "establish");
     assert.equal(eventGlyphType("restore"), "establish");
     assert.equal(eventGlyphType("abolish"), "abolish");
-    assert.equal(eventGlyphType("proposal_unimplemented"), "proposal_unimplemented");
+    assert.equal(eventGlyphType("unknown_event_type"), "record");
     assert.equal(eventGlyphType("duty_transfer"), "record");
   });
 });

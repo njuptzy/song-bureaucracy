@@ -2978,7 +2978,6 @@ const EVOLUTION_EVENT_TYPE_LABELS = {
   duty_transfer: "职掌移交",
   affiliation_change: "隶属变化",
   staffing_change: "编制变化",
-  proposal_unimplemented: "拟议未行",
   record: "一般记载",
 };
 

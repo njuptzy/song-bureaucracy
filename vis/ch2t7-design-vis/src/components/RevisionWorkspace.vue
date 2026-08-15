@@ -266,7 +266,6 @@ const eventTypeOptions = [
   { value: "duty_transfer", label: "职掌移交" },
   { value: "affiliation_change", label: "隶属变化" },
   { value: "staffing_change", label: "编制变化" },
-  { value: "proposal_unimplemented", label: "拟议未行" },
   { value: "record", label: "一般记载" },
 ];
 const lifecycleEffectOptions = [
