@@ -2642,9 +2642,8 @@ function createComparisonChildSvg() {
     "viewBox",
     `${COMPARISON_VIEWBOX.x} ${COMPARISON_VIEWBOX.y} ${COMPARISON_VIEWBOX.width} ${COMPARISON_VIEWBOX.height}`
   );
-  // 对照区本身就是两个等宽内容槽位；让动态内容填满槽位，
-  // 不再把完整 4-01 画板的纵向空白一起缩进去。
-  child.setAttribute("preserveAspectRatio", "none");
+  // 保持原设计稿比例；空间通过裁剪区和上沿对齐利用，不能靠非等比拉伸。
+  child.setAttribute("preserveAspectRatio", "xMidYMin meet");
   child.classList.add("comparison-child-svg");
   return child;
 }
@@ -2726,6 +2725,9 @@ function renderDynamicComparison(svg) {
   renderDynamicHierarchy(leftSvg);
   retainComparisonLayer(leftSvg, ".dynamic-tree-viewport");
   renderDynamicEvolution(rightSvg);
+  // 对照区只保留时间轴本体；对象选择器属于独立演变视图入口，
+  // 放在双栏中会覆盖层级内容并造成误解。
+  rightSvg.querySelector(".evolution-selector-layer")?.remove();
   retainComparisonLayer(rightSvg, ".dynamic-evolution-layer");
 
   svg.__evolutionModel = rightSvg.__evolutionModel;
