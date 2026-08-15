@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   clampTimetreeScroll,
+  fitTimetreeCapsuleLabel,
   layoutTimetreeEvents,
   layoutTimetreeRelations,
   layoutTimetreeSegments,
@@ -15,6 +16,29 @@ describe("timetreeYearToX", () => {
   it("起止年映射到时间区两端", () => {
     assert.equal(timetreeYearToX(960, 960, 1279), TIMETREE_GEOMETRY.plot.x0);
     assert.equal(timetreeYearToX(1279, 960, 1279), TIMETREE_GEOMETRY.plot.x1);
+  });
+});
+
+describe("时间线树分区与机构名适配", () => {
+  it("层级树与时间线各占中央内容区的一半", () => {
+    const leftWidth = TIMETREE_GEOMETRY.dividerX - TIMETREE_GEOMETRY.content.x0;
+    const rightWidth = TIMETREE_GEOMETRY.content.x1 - TIMETREE_GEOMETRY.dividerX;
+    assert.equal(leftWidth, rightWidth);
+    assert.ok(TIMETREE_GEOMETRY.tree.x0 - 108 >= TIMETREE_GEOMETRY.content.x0);
+    assert.ok(TIMETREE_GEOMETRY.tree.maxX < TIMETREE_GEOMETRY.dividerX);
+    assert.ok(TIMETREE_GEOMETRY.plot.x0 > TIMETREE_GEOMETRY.dividerX);
+  });
+
+  it("中等长度机构名优先缩小字号完整显示", () => {
+    const fitted = fitTimetreeCapsuleLabel("都大提举在京仓草场司", 126.85);
+    assert.equal(fitted.text, "都大提举在京仓草场司");
+    assert.ok(fitted.fontSize >= 9.8 && fitted.fontSize < 17.14);
+  });
+
+  it("极端超长名称才在最小可读字号下省略", () => {
+    const fitted = fitTimetreeCapsuleLabel("一二三四五六七八九十甲乙丙丁戊己庚辛", 126.85);
+    assert.ok(fitted.text.endsWith("…"));
+    assert.equal(fitted.fontSize, 9.8);
   });
 });
 

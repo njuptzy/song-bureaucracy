@@ -2,19 +2,47 @@
 // 共享同一套行 y 坐标；x 方向树区与年代区分离，年代映射与演变视图一致
 // （960–1279 线性映射）。
 
-// 树区几何与层级视图对齐：层级视图 d3.tree nodeSize=[52,145]（兄弟 52、层距 145），
-// 逆时针旋转 90° 后兄弟间距变成行距（52）、层距变成深度方向的横向间距。
-// depthGap 取 130 而不是 145：横放胶囊长约 120，需为连线留出中点间隙，
-// 且 depth 3 的节点右缘不能超过 dividerX。
+// 中央内容区 500—1834 精确二等分：左半是层级树，右半是时间线。
+// 两区各自保留内边距，分界线不兼作任何一侧的内容起点。
 export const TIMETREE_GEOMETRY = {
-  tree: { x0: 510, depthGap: 130, maxX: 900 },
-  dividerX: 962,
-  plot: { x0: 992, x1: 1828 },
+  content: { x0: 500, x1: 1834 },
+  tree: { x0: 610, depthGap: 145, maxX: 1095 },
+  dividerX: 1167,
+  plot: { x0: 1192, x1: 1828 },
   axisY: 262,
   rowsTop: 296,
   rowsBottom: 844,
   rowPitch: 52,
 };
+
+const CAPSULE_LABEL_FONT_MAX = 17.14;
+const CAPSULE_LABEL_FONT_MIN = 9.8;
+const CAPSULE_LABEL_SIDE_PADDING = 14;
+const CJK_GLYPH_WIDTH_RATIO = 0.94;
+
+/**
+ * 横放机构胶囊的文字适配：先缩小字号保留全称，只有超过
+ * 最小可读字号仍放不下时才使用省略号。
+ */
+export function fitTimetreeCapsuleLabel(title, capsuleLength) {
+  const glyphs = [...String(title || "暂无资料")];
+  const available = Math.max(1, capsuleLength - CAPSULE_LABEL_SIDE_PADDING);
+  const fittedFontSize = Math.min(
+    CAPSULE_LABEL_FONT_MAX,
+    available / Math.max(1, glyphs.length * CJK_GLYPH_WIDTH_RATIO),
+  );
+  if (fittedFontSize >= CAPSULE_LABEL_FONT_MIN) {
+    return { text: glyphs.join(""), fontSize: fittedFontSize };
+  }
+  const maxGlyphs = Math.max(
+    2,
+    Math.floor(available / (CAPSULE_LABEL_FONT_MIN * CJK_GLYPH_WIDTH_RATIO)),
+  );
+  return {
+    text: `${glyphs.slice(0, maxGlyphs - 1).join("")}…`,
+    fontSize: CAPSULE_LABEL_FONT_MIN,
+  };
+}
 
 export function timetreeYearToX(year, yearMin, yearMax, plot = TIMETREE_GEOMETRY.plot) {
   const span = Math.max(1, yearMax - yearMin);

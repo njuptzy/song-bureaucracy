@@ -1,5 +1,6 @@
 import { relationPath } from "./evolution_renderer.js";
 import {
+  fitTimetreeCapsuleLabel,
   TIMETREE_GEOMETRY,
   timetreeNodeX,
   timetreeRowY,
@@ -85,9 +86,9 @@ function ensureTimetreeDefs(svg, geometry) {
     "data-timetree-def": "clip",
   });
   clip.appendChild(svgElement("rect", {
-    x: 498,
+    x: geometry.content.x0 - 2,
     y: geometry.rowsTop - 16,
-    width: 1336,
+    width: geometry.content.x1 - geometry.content.x0 + 4,
     height: geometry.rowsBottom - geometry.rowsTop + 32,
   }));
 
@@ -113,7 +114,13 @@ function ensureTimetreeDefs(svg, geometry) {
 }
 
 function renderAxis(parent, geometry, yearMin, yearMax) {
-  const { plot, axisY, rowsTop, rowsBottom } = geometry;
+  const { plot, dividerX, axisY, rowsTop, rowsBottom } = geometry;
+  parent.appendChild(svgElement("line", {
+    class: "timetree-region-divider",
+    x1: dividerX, y1: rowsTop - 12, x2: dividerX, y2: rowsBottom,
+    stroke: COLORS.line, "stroke-width": 0.65, "stroke-opacity": 0.18,
+    "pointer-events": "none",
+  }));
   parent.appendChild(svgElement("line", {
     x1: plot.x0, y1: axisY, x2: plot.x1, y2: axisY,
     stroke: COLORS.olive, "stroke-width": 0.7,
@@ -161,9 +168,9 @@ function renderHeaderControls(parent, geometry, handlers) {
 function renderRowBand(parent, row, y, geometry, selected) {
   const band = svgElement("rect", {
     class: `timetree-row-band${row.rowIndex % 2 ? " is-odd" : ""}${selected ? " is-selected" : ""}`,
-    x: 500,
+    x: geometry.content.x0,
     y: y - geometry.rowPitch / 2,
-    width: 1334,
+    width: geometry.content.x1 - geometry.content.x0,
     height: geometry.rowPitch,
     fill: selected ? COLORS.selected : COLORS.line,
     "fill-opacity": 0.028,
@@ -184,11 +191,10 @@ function setNodeText(element, text) {
 // 胶囊是竖放的，可用长度 = polygon 高度；旋转后即横向可用宽度）。
 function fitCapsuleLabel(label, fullTitle, capsuleLength) {
   if (!label) return;
-  const maxGlyphs = Math.max(1, Math.floor((capsuleLength - 4) / 17.14));
-  const displayTitle = fullTitle.length > maxGlyphs
-    ? `${fullTitle.slice(0, maxGlyphs - 1)}…`
-    : fullTitle;
-  setNodeText(label, displayTitle);
+  const fitted = fitTimetreeCapsuleLabel(fullTitle, capsuleLength);
+  label.style.fontSize = `${fitted.fontSize}px`;
+  label.style.letterSpacing = "0";
+  setNodeText(label, fitted.text);
 }
 
 function virtualNodeWidth(row, templates) {
@@ -504,7 +510,7 @@ function renderOffAxisBadge(parent, lane, y, geometry) {
 
 function renderScrollbar(parent, scroll, geometry, handlers) {
   if (!scroll || scroll.maxOffset <= 0) return;
-  const trackX = 1840;
+  const trackX = geometry.content.x1 + 6;
   const trackY = geometry.rowsTop;
   const trackHeight = geometry.rowsBottom - geometry.rowsTop;
   const thumbHeight = Math.max(
@@ -589,7 +595,7 @@ export function renderTimetreeOverlay(svg, options) {
 
   if (!rows.length) {
     appendText(layer, "当前分类暂无机构数据", {
-      x: (geometry.tree.x0 + geometry.plot.x1) / 2,
+      x: (geometry.content.x0 + geometry.content.x1) / 2,
       y: (geometry.rowsTop + geometry.rowsBottom) / 2,
       class: "timetree-empty-hint",
       "text-anchor": "middle",
