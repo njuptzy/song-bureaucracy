@@ -4,6 +4,7 @@
       :data="data"
       :initial-state="initialState"
       fixed-view-mode="comparison"
+      :comparison-scale="comparisonScale"
       :revision-panel-active="revisionPanelActive"
       @state-change="$emit('state-change', $event)"
       @selection-change="$emit('selection-change', $event)"
@@ -11,10 +12,23 @@
     <button class="comparison-exit" type="button" @click="$emit('exit-comparison')">
       返回单视图
     </button>
+    <label class="comparison-scale-control">
+      <span>对照比例</span>
+      <input
+        v-model.number="comparisonScale"
+        type="range"
+        min="0.7"
+        max="2"
+        step="0.05"
+        aria-label="调整对照视图比例"
+      >
+      <output>{{ Math.round(comparisonScale * 100) }}%</output>
+    </label>
   </section>
 </template>
 
 <script setup>
+import { ref } from "vue";
 import DesignTemplateCanvas from "./DesignTemplateCanvas.vue";
 
 defineProps({
@@ -23,6 +37,8 @@ defineProps({
   revisionPanelActive: { type: Boolean, default: false },
 });
 defineEmits(["state-change", "selection-change", "exit-comparison"]);
+
+const comparisonScale = ref(1);
 </script>
 
 <style scoped>
@@ -59,5 +75,37 @@ defineEmits(["state-change", "selection-change", "exit-comparison"]);
 .comparison-exit:focus-visible {
   background: rgba(145, 128, 105, 0.14);
   outline: none;
+}
+
+.comparison-scale-control {
+  position: absolute;
+  z-index: 8;
+  /* 修订工具栏固定在 top:18px；缩放控件放到其下方的独立带，不能抢占同一行。 */
+  top: 62px;
+  right: 18px;
+  display: grid;
+  grid-template-columns: auto minmax(112px, 150px) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid rgba(86, 57, 5, 0.36);
+  background: rgba(245, 243, 236, 0.92);
+  color: #563905;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.comparison-scale-control input {
+  width: 100%;
+  margin: 0;
+  accent-color: #563905;
+}
+
+.comparison-scale-control output {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 </style>

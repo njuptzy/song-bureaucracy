@@ -1,9 +1,6 @@
 <template>
-  <div
-    ref="hostRef"
-    class="design-template"
-    :class="{ loading: loading, 'revision-panel-active': revisionPanelActive }"
-  >
+  <div ref="hostRef" class="design-template"
+    :class="{ loading: loading, 'revision-panel-active': revisionPanelActive }">
     <div v-if="error" class="template-message">{{ error }}</div>
     <div v-else-if="loading" class="template-message">载入 SVG 设计画板…</div>
     <div ref="svgMountRef" class="svg-mount"></div>
@@ -95,6 +92,7 @@ const props = defineProps({
   initialState: { type: Object, default: null },
   revisionPanelActive: { type: Boolean, default: false },
   fixedViewMode: { type: String, default: "" },
+  comparisonScale: { type: Number, default: null },
 });
 const emit = defineEmits(["state-change", "selection-change", "open-comparison"]);
 const initialState = props.initialState || {};
@@ -447,9 +445,9 @@ function fitVerticalBarLabel(label, fullTitle, rect) {
   // 长名称在加宽的书脊内按传统顺序分成右、左两列，避免靠增加高度换字号。
   const columns = displayTitle.length > 6
     ? [
-        displayTitle.slice(0, Math.ceil(displayTitle.length / 2)),
-        displayTitle.slice(Math.ceil(displayTitle.length / 2)),
-      ]
+      displayTitle.slice(0, Math.ceil(displayTitle.length / 2)),
+      displayTitle.slice(Math.ceil(displayTitle.length / 2)),
+    ]
     : [displayTitle];
   const longestColumn = Math.max(...columns.map((column) => column.length));
   const bodyHeight = height - 34;
@@ -595,7 +593,7 @@ function templateCategoryItems(svg) {
     .map((group) => {
       const textElement = [...group.children].find((child) => (
         child.tagName.toLowerCase() === "text"
-          && CATEGORY_NAMES.includes(normalizeText(child))
+        && CATEGORY_NAMES.includes(normalizeText(child))
       ));
       return textElement
         ? { category: normalizeText(textElement), textElement, group }
@@ -852,12 +850,12 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
   const shouldExpand = expandedHierarchyPath.includes(rootId);
   const groupedChildren = shouldExpand
     ? buildSubordinateGroupNodes({
-        parent: entity,
-        childIds: allChildren,
-        entityMap,
-        expandedGroupIds: expandedSubordinateGroupIds,
-        treeForChild: (id) => hierarchyTreeData(id, depth + 2, nextVisiting),
-      })
+      parent: entity,
+      childIds: allChildren,
+      entityMap,
+      expandedGroupIds: expandedSubordinateGroupIds,
+      treeForChild: (id) => hierarchyTreeData(id, depth + 2, nextVisiting),
+    })
     : null;
   const shownChildren = shouldExpand ? allChildren : [];
   return {
@@ -981,13 +979,13 @@ function categoryForestData(category) {
   const showRoots = !collapsedHierarchyIds.has(virtualId);
   const visibleRoots = showRoots
     ? buildInstitutionGroupNodes({
-        rootIds: orderedRoots,
-        entityMap,
-        category,
-        groupNames: institutionGroupNames[category] || [],
-        expandedGroupIds: expandedInstitutionGroupIds,
-        treeForRoot: (id) => hierarchyTreeData(id, 2),
-      })
+      rootIds: orderedRoots,
+      entityMap,
+      category,
+      groupNames: institutionGroupNames[category] || [],
+      expandedGroupIds: expandedInstitutionGroupIds,
+      treeForRoot: (id) => hierarchyTreeData(id, 2),
+    })
     : [];
   return {
     id: virtualId,
@@ -1221,7 +1219,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
 
   const panelRect = [...card.children].find((element) => (
     element.tagName.toLowerCase() === "rect"
-      && Math.abs(Number(element.getAttribute("x")) - INLINE_COMPOSITION.panelX) < 0.1
+    && Math.abs(Number(element.getAttribute("x")) - INLINE_COMPOSITION.panelX) < 0.1
   ));
   if (panelRect) {
     panelRect.setAttribute("y", String(INLINE_COMPOSITION.panelY));
@@ -1230,7 +1228,7 @@ function renderInlineDetailCard(svg, layer, templateGroup, layout, entity) {
   }
   const panelBorder = [...card.children].find((element) => (
     element.tagName.toLowerCase() === "line"
-      && Math.abs(Number(element.getAttribute("x1")) - 1075.8) < 0.1
+    && Math.abs(Number(element.getAttribute("x1")) - 1075.8) < 0.1
   ));
   if (panelBorder) {
     panelBorder.setAttribute("x1", String(geometry.panelRight + 2.42));
@@ -1595,9 +1593,9 @@ function renderDynamicHierarchy(svg) {
     } else if (expandedInstitutionGroupNodes.length === 1) {
       branchCenterX = branchWidth <= viewportWidth
         ? Math.max(
-            area.left - minOffset,
-            Math.min(area.right - maxOffset, branchCenterX)
-          )
+          area.left - minOffset,
+          Math.min(area.right - maxOffset, branchCenterX)
+        )
         : areaCenterX - (minOffset + maxOffset) / 2;
     }
     expandedBranchCenterX.set(expandedInstitutionGroupNode.data.id, branchCenterX);
@@ -1650,7 +1648,7 @@ function renderDynamicHierarchy(svg) {
       );
       x = institutionGroupAncestor
         ? (expandedBranchCenterX.get(institutionGroupAncestor.data.id) ?? areaCenterX)
-          + node.x - institutionGroupAncestor.x
+        + node.x - institutionGroupAncestor.x
         : areaCenterX + node.x - root.x;
     }
     // 制度组是新增的一层导航，不能再完整占用旧树的一层高度。
@@ -2069,9 +2067,9 @@ function renderDynamicHierarchy(svg) {
       ? expandedInstitutionGroupIds.includes(node.data.id)
       : node.data.isSubordinateGroup
         ? expandedSubordinateGroupIds.includes(node.data.id)
-      : node.data.isVirtual
-        ? !collapsedHierarchyIds.has(node.data.id)
-      : expandedHierarchyPath.includes(node.data.id);
+        : node.data.isVirtual
+          ? !collapsedHierarchyIds.has(node.data.id)
+          : expandedHierarchyPath.includes(node.data.id);
     if (!node.data.isVirtual && node.data.id !== selectedId.value && !isExpanded) {
       nodeGroup.querySelector("g.cls-81")?.remove();
     }
@@ -2693,13 +2691,23 @@ const COMPARISON_PLOT_BOUNDS = {
 const COMPARISON_GAP = 18;
 // 对照视图左右两块共用的等比例缩放入口：1 = 当前大小，1.1 = 放大 10%。
 // 只允许统一缩放，不能分别修改宽高，否则会破坏设计稿比例。
-const COMPARISON_PANE_SCALE = 1;
+const COMPARISON_PANE_SCALE = 2;
 const COMPARISON_VIEWBOX = {
   x: 500,
   y: 120,
   width: 1340,
   height: 750,
 };
+
+function comparisonPaneScale() {
+  const propValue = Number(props.comparisonScale);
+  if (Number.isFinite(propValue) && propValue > 0) return propValue;
+  const queryValue = new URLSearchParams(window.location.search).get("comparisonScale");
+  const parsed = Number(queryValue);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : COMPARISON_PANE_SCALE;
+}
 
 function createComparisonChildSvg() {
   const child = svgCache.get(HIERARCHY_DESIGN_URL).cloneNode(true);
@@ -2770,7 +2778,7 @@ function renderDynamicComparison(svg) {
   const rightX = leftX + blockWidth + COMPARISON_GAP;
   const leftSvg = createComparisonChildSvg();
   const rightSvg = createComparisonChildSvg();
-  const paneScale = Math.max(0.1, Number(COMPARISON_PANE_SCALE) || 1);
+  const paneScale = Math.max(0.1, comparisonPaneScale());
   const childWidth = blockWidth * paneScale;
   const childHeight = COMPARISON_PLOT_BOUNDS.height * paneScale;
   const createPaneViewport = (child, x) => {
@@ -3320,14 +3328,14 @@ function setupDetailPanel(svg) {
 
   const scrollTrack = [...panelGroup.querySelectorAll("rect")].find((rect) => (
     Math.abs(Number(rect.getAttribute("x")) - 471.34) < 1
-      && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
-      && Number(rect.getAttribute("height")) > 300
+    && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
+    && Number(rect.getAttribute("height")) > 300
   ));
   const scrollThumb = [...panelGroup.querySelectorAll("rect")].find((rect) => (
     Math.abs(Number(rect.getAttribute("x")) - 471.34) < 1
-      && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
-      && Number(rect.getAttribute("height")) > 20
-      && Number(rect.getAttribute("height")) < 200
+    && Math.abs(Number(rect.getAttribute("y")) - 524.81) < 1
+    && Number(rect.getAttribute("height")) > 20
+    && Number(rect.getAttribute("height")) < 200
   ));
   if (scrollTrack) {
     scrollTrack.removeAttribute("class");
@@ -4570,6 +4578,9 @@ function flushTimelineRefresh(rebindStatic = false) {
 }
 
 watch(viewMode, renderTemplate);
+watch(() => props.comparisonScale, () => {
+  if (viewMode.value === "comparison") refreshTemplate();
+});
 onMounted(async () => {
   installDesignFonts();
   try {
@@ -4585,16 +4596,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.design-template { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f5f3ec; }
-.svg-mount { width: 100%; height: 100%; }
-.svg-mount :deep(.live-design-svg) { display: block; width: 100%; height: 100%; }
+.design-template {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #f5f3ec;
+}
+
+.svg-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.svg-mount :deep(.live-design-svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .design-template.revision-panel-active .svg-mount :deep(.evolution-selector-layer) {
   visibility: hidden;
   pointer-events: none;
 }
+
 .design-template.revision-panel-active .svg-mount :deep(.evolution-intro-copy) {
   display: none;
 }
+
 .svg-mount :deep(.shared-category-label) {
   fill: #351704;
   font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;
@@ -4603,44 +4632,140 @@ onUnmounted(() => {
   text-orientation: upright;
   writing-mode: tb;
 }
+
 .svg-mount :deep(.shared-category-outline) {
   fill: none;
   stroke: #563905;
   stroke-miterlimit: 10;
 }
-.svg-mount :deep(.shared-category-selection) { opacity: 0.4; }
+
+.svg-mount :deep(.shared-category-selection) {
+  opacity: 0.4;
+}
+
 .svg-mount :deep(.shared-category-selection-shape) {
   fill: #351704;
   stroke: #563905;
   stroke-miterlimit: 10;
   stroke-width: 0.75px;
 }
-.svg-mount :deep(.dynamic-tree-node:focus) { outline: none; }
-.svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) { stroke: #563905; stroke-width: 1.2; stroke-dasharray: 3 2; }
-.svg-mount :deep(.composition-detail-button:focus) { outline: none; }
-.svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) { fill-opacity: 0.08; stroke: #563905; stroke-width: 0.8; stroke-dasharray: 1.5 1; }
-.svg-mount :deep(.composition-item-hit-area) { fill: transparent; stroke: none; pointer-events: all; }
-.svg-mount :deep(.composition-institution-border) { fill: none; stroke: #563905; }
-.svg-mount :deep(.composition-level-1) { stroke-width: 3px; }
-.svg-mount :deep(.composition-level-2) { stroke-width: 2px; }
-.svg-mount :deep(.composition-level-3) { stroke-width: 1.15px; }
-.svg-mount :deep(.composition-level-4) { stroke-width: 0.51px; }
-.svg-mount :deep(.space-aware-expansion-control:focus) { outline: none; }
-.svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) { stroke-width: 1.35; stroke-dasharray: 3 2; }
-.svg-mount :deep(.svg-entity-hover) { filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75)); text-decoration: underline; }
+
+.svg-mount :deep(.dynamic-tree-node:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.dynamic-tree-node:focus-visible .dynamic-tree-node-hit-area) {
+  stroke: #563905;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 2;
+}
+
+.svg-mount :deep(.composition-detail-button:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.composition-detail-button:focus-visible .composition-detail-button-surface) {
+  fill-opacity: 0.08;
+  stroke: #563905;
+  stroke-width: 0.8;
+  stroke-dasharray: 1.5 1;
+}
+
+.svg-mount :deep(.composition-item-hit-area) {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.svg-mount :deep(.composition-institution-border) {
+  fill: none;
+  stroke: #563905;
+}
+
+.svg-mount :deep(.composition-level-1) {
+  stroke-width: 3px;
+}
+
+.svg-mount :deep(.composition-level-2) {
+  stroke-width: 2px;
+}
+
+.svg-mount :deep(.composition-level-3) {
+  stroke-width: 1.15px;
+}
+
+.svg-mount :deep(.composition-level-4) {
+  stroke-width: 0.51px;
+}
+
+.svg-mount :deep(.space-aware-expansion-control:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) {
+  stroke-width: 1.35;
+  stroke-dasharray: 3 2;
+}
+
+.svg-mount :deep(.svg-entity-hover) {
+  filter: drop-shadow(0 0 2px rgba(53, 23, 4, 0.75));
+  text-decoration: underline;
+}
+
 /* —— 时间线树视图 —— */
-.svg-mount :deep(.timetree-axis-label) { fill: #918069; font-size: 11px; letter-spacing: 1px; }
-.svg-mount :deep(.timetree-header-control) { fill: #563905; font-size: 11px; letter-spacing: 1px; }
-.svg-mount :deep(.timetree-header-control:hover) { text-decoration: underline; }
-.svg-mount :deep(.timetree-tree-node) { cursor: pointer; }
-.svg-mount :deep(.timetree-tree-node:focus) { outline: none; }
-.svg-mount :deep(.timetree-offaxis-badge) { fill: #918069; font-size: 9px; letter-spacing: 0.5px; }
-.svg-mount :deep(.timetree-empty-hint) { fill: #918069; font-size: 14px; letter-spacing: 3px; }
-.svg-mount :deep(.timetree-scrollbar-thumb:hover) { fill-opacity: 0.5; }
-.svg-mount :deep(.dynamic-comparison-layer) { pointer-events: none; }
-.svg-mount :deep(.comparison-child-svg) { overflow: visible; }
+.svg-mount :deep(.timetree-axis-label) {
+  fill: #918069;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.svg-mount :deep(.timetree-header-control) {
+  fill: #563905;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.svg-mount :deep(.timetree-header-control:hover) {
+  text-decoration: underline;
+}
+
+.svg-mount :deep(.timetree-tree-node) {
+  cursor: pointer;
+}
+
+.svg-mount :deep(.timetree-tree-node:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.timetree-offaxis-badge) {
+  fill: #918069;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.svg-mount :deep(.timetree-empty-hint) {
+  fill: #918069;
+  font-size: 14px;
+  letter-spacing: 3px;
+}
+
+.svg-mount :deep(.timetree-scrollbar-thumb:hover) {
+  fill-opacity: 0.5;
+}
+
+.svg-mount :deep(.dynamic-comparison-layer) {
+  pointer-events: none;
+}
+
+.svg-mount :deep(.comparison-child-svg) {
+  overflow: visible;
+}
+
 .svg-mount :deep(.comparison-child-svg .dynamic-tree-viewport),
-.svg-mount :deep(.comparison-child-svg .dynamic-evolution-layer) { pointer-events: all; }
+.svg-mount :deep(.comparison-child-svg .dynamic-evolution-layer) {
+  pointer-events: all;
+}
+
 .svg-mount :deep(.comparison-pane-heading) {
   fill: #563905;
   font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;
@@ -4648,6 +4773,7 @@ onUnmounted(() => {
   letter-spacing: 2px;
   pointer-events: none;
 }
+
 .svg-mount :deep(.comparison-pane-divider) {
   stroke: #563905;
   stroke-opacity: 0.34;
@@ -4655,5 +4781,15 @@ onUnmounted(() => {
   stroke-dasharray: 2 3;
   pointer-events: none;
 }
-.template-message { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; color: #563905; background: #f5f3ec; letter-spacing: 3px; }
+
+.template-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 5;
+  color: #563905;
+  background: #f5f3ec;
+  letter-spacing: 3px;
+}
 </style>
