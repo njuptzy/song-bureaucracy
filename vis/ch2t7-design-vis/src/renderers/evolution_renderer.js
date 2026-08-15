@@ -1224,22 +1224,26 @@ function renderMain(layer, layout, options) {
       // 推定存续段（无明确建置记录、由普通记载推断的存在）不再画线：
       // 整条通长虚线只有噪声没有信息量，车道基线和事件点已足够定位。
       if (segment.inferredStart) continue;
-      group.appendChild(svgElement("line", {
+      const segmentGroup = svgElement("g", {
+        class: `evolution-lifecycle-segment${selectionFocus.active ? " is-dimmed" : ""}`,
+      });
+      segmentGroup.appendChild(svgElement("line", {
         x1: segment.startX, y1: segment.y, x2: segment.endX, y2: segment.y,
         stroke: COLORS.line, "stroke-width": 2.1,
       }));
       if (!segment.openStart) {
-        group.appendChild(svgElement("line", {
+        segmentGroup.appendChild(svgElement("line", {
           x1: segment.startX, y1: segment.y - 7, x2: segment.startX, y2: segment.y + 7,
           stroke: COLORS.line, "stroke-width": 1,
         }));
       }
       if (!segment.openEnd) {
-        group.appendChild(svgElement("line", {
+        segmentGroup.appendChild(svgElement("line", {
           x1: segment.endX, y1: segment.y - 7, x2: segment.endX, y2: segment.y + 7,
           stroke: COLORS.line, "stroke-width": 1,
         }));
       }
+      group.appendChild(segmentGroup);
     }
     renderLaneLabel(
       group,
