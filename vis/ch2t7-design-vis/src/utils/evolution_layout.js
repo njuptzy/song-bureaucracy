@@ -299,8 +299,12 @@ function layoutLaneEvents(events, options) {
   for (const event of ordered) {
     const candidates = [];
     const seen = new Set();
-    for (const offsetX of horizontalOffsets) {
-      for (const offsetY of verticalOffsets) {
+    // Prefer spreading dense events along their own lane. Vertical stacking
+    // makes an abolish triangle hover over a relation curve and read as an
+    // arrow pointing at the line. Only use another row after horizontal room
+    // around the exact-year anchor has been exhausted.
+    for (const offsetY of verticalOffsets) {
+      for (const offsetX of horizontalOffsets) {
         const displayX = clamp(event.baseX + offsetX, plotLeft, plotRight);
         const displayY = laneY + offsetY;
         const key = `${displayX.toFixed(6)}:${displayY.toFixed(6)}`;
