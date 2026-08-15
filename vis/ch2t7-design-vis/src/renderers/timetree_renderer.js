@@ -168,19 +168,18 @@ function renderHeaderControls(parent, geometry, handlers) {
   makeInteractive(expand, "展开全部层级节点", () => handlers.onExpandAll?.());
 }
 
-function renderRowBand(parent, row, y, geometry, selected) {
-  const band = svgElement("rect", {
-    class: `timetree-row-band${row.rowIndex % 2 ? " is-odd" : ""}${selected ? " is-selected" : ""}`,
+function renderRowHitArea(parent, row, y, geometry) {
+  const hitArea = svgElement("rect", {
+    class: "timetree-row-hit-area",
     x: geometry.content.x0,
     y: y - geometry.rowPitch / 2,
     width: geometry.content.x1 - geometry.content.x0,
     height: geometry.rowPitch,
-    fill: selected ? COLORS.selected : COLORS.line,
-    "fill-opacity": 0.028,
+    fill: "transparent",
   });
-  if (row.entityId != null) band.style.cursor = "pointer";
-  parent.appendChild(band);
-  return band;
+  if (row.entityId != null) hitArea.style.cursor = "pointer";
+  parent.appendChild(hitArea);
+  return hitArea;
 }
 
 // ---- 层级树节点：完全复用层级视图的模板盖章，整体逆时针旋转 90° ----
@@ -668,15 +667,16 @@ export function renderTimetreeOverlay(svg, options) {
     }
   }
 
-  // 第一遍：行带与存续段（底层）。
+  // 第一遍：透明点击热区与存续段（底层）。热区不再绘制整行底色，避免
+  // 父子节点的重叠行带叠成灰色覆盖块。
   const underlay = svgElement("g", { class: "timetree-underlay" });
   content.appendChild(underlay);
   for (const row of rows) {
     const y = yByKey.get(row.key);
     const selected = row.entityId != null && row.entityId === selectedEntityId;
-    const band = renderRowBand(underlay, row, y, geometry, selected);
+    const hitArea = renderRowHitArea(underlay, row, y, geometry);
     if (row.entityId != null) {
-      makeInteractive(band, `查看${row.title}`, () => handlers.onSelectEntity?.(row.entityId));
+      makeInteractive(hitArea, `查看${row.title}`, () => handlers.onSelectEntity?.(row.entityId));
     }
     if (row.entityId != null) {
       renderLaneLink(underlay, nodeInfoByKey.get(row.key), y, geometry, selected);

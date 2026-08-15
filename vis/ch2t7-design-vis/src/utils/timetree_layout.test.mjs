@@ -37,6 +37,11 @@ describe("时间线树分区与机构名适配", () => {
     assert.ok(TIMETREE_GEOMETRY.plot.x0 > TIMETREE_GEOMETRY.dividerX);
   });
 
+  it("行视口利用到底部时间选择控件之前且不与其重叠", () => {
+    assert.equal(TIMETREE_GEOMETRY.rowsBottom, 892);
+    assert.ok(TIMETREE_GEOMETRY.rowsBottom + 16 < 913);
+  });
+
   it("中等长度机构名优先缩小字号完整显示", () => {
     const fitted = fitTimetreeCapsuleLabel("都大提举在京仓草场司", 126.85);
     assert.equal(fitted.text, "都大提举在京仓草场司");

@@ -4341,9 +4341,6 @@ onUnmounted(() => {
 .svg-mount :deep(.timetree-axis-label) { fill: #918069; font-size: 11px; letter-spacing: 1px; }
 .svg-mount :deep(.timetree-header-control) { fill: #563905; font-size: 11px; letter-spacing: 1px; }
 .svg-mount :deep(.timetree-header-control:hover) { text-decoration: underline; }
-.svg-mount :deep(.timetree-row-band.is-odd) { fill-opacity: 0.05; }
-.svg-mount :deep(.timetree-row-band:hover) { fill-opacity: 0.09; }
-.svg-mount :deep(.timetree-row-band.is-selected) { fill-opacity: 0.12; }
 .svg-mount :deep(.timetree-tree-node) { cursor: pointer; }
 .svg-mount :deep(.timetree-tree-node:focus) { outline: none; }
 .svg-mount :deep(.timetree-offaxis-badge) { fill: #918069; font-size: 9px; letter-spacing: 0.5px; }

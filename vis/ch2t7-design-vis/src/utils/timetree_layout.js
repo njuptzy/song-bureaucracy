@@ -11,7 +11,9 @@ export const TIMETREE_GEOMETRY = {
   plot: { x0: 1192, x1: 1828 },
   axisY: 262,
   rowsTop: 296,
-  rowsBottom: 844,
+  // 向下利用到原稿底部时间选择控件（y=913）之前；clip 额外外扩 16，
+  // 因此 892 是不会覆盖底部交互的最大安全边界。
+  rowsBottom: 892,
   rowPitch: 52,
 };
 
