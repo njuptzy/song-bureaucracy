@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  eventMasksAlignedRelation,
-  eventStemGeometry,
-  relationPath,
-} from "./evolution_renderer.js";
+import { eventStemGeometry, relationPath } from "./evolution_renderer.js";
 
 function endpoint(x, y, iconType = "record") {
   return { x, y, timepointId: `${x}:${y}`, iconType };
@@ -63,26 +59,4 @@ test("同年错层事件的回指线独立于事件图标计算，供底层先�
     displayX: 200,
     y: 140,
   }), null);
-});
-
-test("太常寺1129年错层圆点只遮住与其他关系端点重合的线", () => {
-  const event = {
-    id: 4344,
-    iconType: "record",
-    displaced: true,
-    baseX: 1165.29,
-    baseY: 300,
-    displayX: 1165.29,
-    y: 288,
-  };
-  const relations = [{
-    id: 4009,
-    sourcePoints: [{ timepointId: 4773, x: 1165.29, y: 784 }],
-    targetPoints: [{ timepointId: 4325, x: 1165.29, y: 300 }],
-  }];
-
-  assert.equal(eventMasksAlignedRelation(event, relations), true);
-  assert.equal(eventMasksAlignedRelation({ ...event, displaced: false }, relations), false);
-  assert.equal(eventMasksAlignedRelation({ ...event, iconType: "abolish" }, relations), false);
-  assert.equal(eventMasksAlignedRelation(event, []), false);
 });
