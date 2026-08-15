@@ -69,21 +69,25 @@ export function buildTimetreeRows({
   hierarchyEdges = [],
   category = "中央机构",
   collectiveIds = [],
+  activeEntityIds = null,
   groupNames = [],
   expandedIds = new Set(),
 } = {}) {
   const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
   const collectiveSet = new Set(collectiveIds);
+  const activeSet = activeEntityIds instanceof Set ? activeEntityIds : null;
   const eligible = (entity) => entity
     && entity.type === "机构"
     && defaultCategory(entity) === category
+    && (!activeSet || activeSet.has(entity.id))
     && !collectiveSet.has(entity.id);
 
   const childrenByParent = new Map();
   const childIds = new Set();
   for (const edge of hierarchyEdges || []) {
+    const parent = entityMap.get(edge.parent);
     const child = entityMap.get(edge.child);
-    if (!entityMap.has(edge.parent) || !child || collectiveSet.has(edge.child)) continue;
+    if (!eligible(parent) || !eligible(child)) continue;
     if (!childrenByParent.has(edge.parent)) childrenByParent.set(edge.parent, []);
     childrenByParent.get(edge.parent).push(edge.child);
     childIds.add(edge.child);

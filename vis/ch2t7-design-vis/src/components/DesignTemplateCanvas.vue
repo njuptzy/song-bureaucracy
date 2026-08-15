@@ -2797,9 +2797,10 @@ function renderDynamicTimetree(svg) {
   const category = selectedCategory.value;
   const rows = buildTimetreeRows({
     entities: props.data.entities,
-    hierarchyEdges: hierarchyEdgesWithoutCollectives(props.data.hierarchyEdges || []),
+    hierarchyEdges: hierarchyEdgesForView(),
     category,
     collectiveIds: [...collectiveEntityIds],
+    activeEntityIds: currentSnapshot.value?.entityIds || null,
     groupNames: institutionGroupNames[category] || [],
     expandedIds: new Set(timetreeActiveExpandedKeys(category)),
   });

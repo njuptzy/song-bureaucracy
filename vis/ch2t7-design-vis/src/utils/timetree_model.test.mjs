@@ -17,6 +17,33 @@ function entity(id, title, overrides = {}) {
 }
 
 describe("buildTimetreeRows", () => {
+  it("年度快照只保留当年存在的机构和层级边", () => {
+    const rows = buildTimetreeRows({
+      entities: [
+        entity(1, "中书门下"),
+        entity(2, "枢密院"),
+        entity(3, "后世新增机构"),
+        entity(4, "中书门下属司"),
+      ],
+      hierarchyEdges: [
+        { parent: 1, child: 4 },
+        { parent: 3, child: 4 },
+      ],
+      category: "中央机构",
+      activeEntityIds: new Set([1, 2, 4]),
+      expandedIds: new Set([
+        timetreeCategoryKey("中央机构"),
+        timetreeEntityKey(1),
+      ]),
+    });
+    assert.deepEqual(
+      rows.filter((row) => row.entityId != null).map((row) => row.entityId),
+      [1, 4, 2],
+    );
+    assert.equal(rows.some((row) => row.entityId === 3), false);
+    assert.equal(rows.find((row) => row.entityId === 4)?.parentKey, timetreeEntityKey(1));
+  });
+
   it("无制度组配置时类别根位于第 0 层、机构位于第 1 层", () => {
     const rows = buildTimetreeRows({
       entities: [entity(1, "甲司"), entity(2, "乙司")],
