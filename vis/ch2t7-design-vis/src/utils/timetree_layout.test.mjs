@@ -8,6 +8,7 @@ import {
   layoutTimetreeSegments,
   TIMETREE_GEOMETRY,
   timetreeLayoutSpan,
+  timetreeLaneLinkSpan,
   timetreeNodeX,
   timetreeRowY,
   timetreeYearToX,
@@ -79,6 +80,22 @@ describe("timetreeRowY / timetreeNodeX", () => {
   it("树节点 x 随深度右移且不超过树区右界", () => {
     assert.equal(timetreeNodeX(0), TIMETREE_GEOMETRY.tree.x0);
     assert.ok(timetreeNodeX(99) <= TIMETREE_GEOMETRY.tree.maxX);
+  });
+});
+
+describe("timetreeLaneLinkSpan", () => {
+  it("从具体节点右侧跨过分区边界并接到时间车道起点", () => {
+    const span = timetreeLaneLinkSpan(900);
+    assert.equal(span.x0, 905);
+    assert.equal(span.x1, TIMETREE_GEOMETRY.plot.x0);
+    assert.ok(span.x0 < TIMETREE_GEOMETRY.dividerX);
+    assert.ok(span.x1 > TIMETREE_GEOMETRY.dividerX);
+  });
+
+  it("深层节点接近时间区时仍保留最短可见连接", () => {
+    const span = timetreeLaneLinkSpan(TIMETREE_GEOMETRY.plot.x0 + 20);
+    assert.equal(span.x0, TIMETREE_GEOMETRY.plot.x0 - 4);
+    assert.equal(span.x1 - span.x0, 4);
   });
 });
 

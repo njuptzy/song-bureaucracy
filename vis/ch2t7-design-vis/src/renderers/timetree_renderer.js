@@ -2,6 +2,7 @@ import { relationPath } from "./evolution_renderer.js";
 import {
   fitTimetreeCapsuleLabel,
   TIMETREE_GEOMETRY,
+  timetreeLaneLinkSpan,
   timetreeNodeX,
   timetreeRowY,
 } from "../utils/timetree_layout.js";
@@ -314,6 +315,25 @@ function renderTreeLink(parent, parentNode, childNode) {
   });
   polyline.style.pointerEvents = "none";
   parent.appendChild(polyline);
+}
+
+// 机构节点与其右侧时间车道的直接对应线。使用虚线，避免与实体存续线混淆。
+function renderLaneLink(parent, nodeInfo, y, geometry, selected) {
+  if (!nodeInfo) return;
+  const { x0, x1 } = timetreeLaneLinkSpan(nodeInfo.right, geometry);
+  parent.appendChild(svgElement("line", {
+    class: `timetree-lane-link${selected ? " is-selected" : ""}`,
+    x1: x0,
+    y1: y,
+    x2: x1,
+    y2: y,
+    stroke: COLORS.olive,
+    "stroke-width": selected ? 1.05 : 0.72,
+    "stroke-opacity": selected ? 0.62 : 0.28,
+    "stroke-dasharray": "2.5 3.5",
+    "stroke-linecap": "round",
+    "pointer-events": "none",
+  }));
 }
 
 function renderTreeNode(svg, parent, row, info, selected, handlers, templates, nodeIndex) {
@@ -638,6 +658,7 @@ export function renderTimetreeOverlay(svg, options) {
       renderTreeLink(underlay, nodeInfoByKey.get(row.parentKey), nodeInfoByKey.get(row.key));
     }
     if (row.entityId != null) {
+      renderLaneLink(underlay, nodeInfoByKey.get(row.key), y, geometry, selected);
       renderSegments(underlay, segmentsByLane.get(row.entityId), y);
     }
   }

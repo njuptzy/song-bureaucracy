@@ -78,6 +78,17 @@ export function timetreeNodeX(depth, geometry = TIMETREE_GEOMETRY) {
   );
 }
 
+/**
+ * 左侧具体机构节点到右侧时间车道的关联线范围。
+ * 留出少量节点呼吸空间，并固定接到年代区的起点；这条线只表达视图对应关系，
+ * 不参与生命周期语义。
+ */
+export function timetreeLaneLinkSpan(nodeRight, geometry = TIMETREE_GEOMETRY) {
+  const x1 = geometry.plot.x0;
+  const x0 = Math.min(x1 - 4, Math.max(geometry.content.x0, nodeRight + 5));
+  return { x0, x1 };
+}
+
 const STACK_MIN_GAP = 11;
 // 错层位移等级：先上后下交替，最多 5 层，再密则接受重叠（与演变视图
 // "密集点错层"同思路，但用固定档位保证确定性）。
