@@ -765,7 +765,20 @@ function insetPoint(point, toward, distance) {
   };
 }
 
-export function relationPath(source, target) {
+export function relationRouteOptions(relation, source, target) {
+  // ch1t12: 太常寺 1129-04 (#4325) → 宗正寺 1135 (#4774).
+  // Its default final tangent crosses the displaced record point #7547 that
+  // sits immediately above the target triangle. Pull only this curve's final
+  // control point left; every other relation keeps the shared geometry.
+  if (Number(relation?.id) === 4010
+    && Number(source?.timepointId) === 4325
+    && Number(target?.timepointId) === 4774) {
+    return { targetControlOffsetX: -96 };
+  }
+  return {};
+}
+
+export function relationPath(source, target, options = {}) {
   // Relations terminate outside the event glyph. Drawing to its center makes
   // the event triangle cover the real marker and read as an oversized arrow.
   const start = insetPoint(source, target, endpointClearance(source));
@@ -791,7 +804,8 @@ export function relationPath(source, target) {
   const centerDeltaY = target.y - source.y;
   const centerLength = Math.hypot(centerDeltaX, centerDeltaY) || 1;
   const approach = Math.min(bend, Math.max(8, centerLength * 0.22));
-  const targetControlX = end.x - centerDeltaX / centerLength * approach;
+  const targetControlX = end.x - centerDeltaX / centerLength * approach
+    + (options.targetControlOffsetX || 0);
   const targetControlY = end.y - centerDeltaY / centerLength * approach;
   // The last bezier tangent is collinear with target centre -> glyph edge.
   // This matters for vertically aligned events: a horizontal tangent used to
@@ -811,8 +825,9 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   });
   for (const source of sources) {
     for (const target of targets) {
+      const routeOptions = relationRouteOptions(relation, source, target);
       group.appendChild(svgElement("path", {
-        d: relationPath(source, target),
+        d: relationPath(source, target, routeOptions),
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
         "stroke-width": selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width,
@@ -868,8 +883,9 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
     });
   }
   const all = [...sources, ...targets];
+  const hitRouteOptions = relationRouteOptions(relation, sources[0], targets[0]);
   const hit = svgElement("path", {
-    d: relationPath(sources[0], targets[0]),
+    d: relationPath(sources[0], targets[0], hitRouteOptions),
     fill: "none",
     stroke: "transparent",
     "stroke-width": 14,

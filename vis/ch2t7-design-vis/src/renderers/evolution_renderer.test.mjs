@@ -1,10 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { eventStemGeometry, relationPath } from "./evolution_renderer.js";
+import {
+  eventStemGeometry,
+  relationPath,
+  relationRouteOptions,
+} from "./evolution_renderer.js";
 
 function endpoint(x, y, iconType = "record") {
   return { x, y, timepointId: `${x}:${y}`, iconType };
+}
+
+function cubicPoint(path, t) {
+  const values = path.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * values[0]
+      + 3 * inverse ** 2 * t * values[2]
+      + 3 * inverse * t ** 2 * values[4]
+      + t ** 3 * values[6],
+    y: inverse ** 3 * values[1]
+      + 3 * inverse ** 2 * t * values[3]
+      + 3 * inverse * t ** 2 * values[5]
+      + t ** 3 * values[7],
+  };
 }
 
 test("关系箭头停在时间点图形外缘而不是中心", () => {
@@ -59,4 +78,34 @@ test("同年错层事件的回指线独立于事件图标计算，供底层先�
     displayX: 200,
     y: 140,
   }), null);
+});
+
+test("太常寺至宗正寺的目标曲线加深弯曲并绕开上方圆点", () => {
+  const relation = { id: 4010 };
+  const source = {
+    x: 1165.2918996865203,
+    y: 300,
+    timepointId: 4325,
+    iconType: "abolish",
+  };
+  const target = {
+    x: 1183.3467836990594,
+    y: 784,
+    timepointId: 4774,
+    iconType: "establish",
+  };
+  const obstacle = { x: 1183.3467836990594, y: 772 };
+  const baseline = relationPath(source, target);
+  const routed = relationPath(source, target, relationRouteOptions(relation, source, target));
+  const minimumDistance = Math.min(...Array.from({ length: 401 }, (_, index) => {
+    const point = cubicPoint(routed, index / 400);
+    return Math.hypot(point.x - obstacle.x, point.y - obstacle.y);
+  }));
+
+  assert.notEqual(routed, baseline);
+  assert.ok(minimumDistance > 5);
+  assert.deepEqual(
+    relationRouteOptions({ id: 9999 }, source, target),
+    {},
+  );
 });
