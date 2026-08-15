@@ -737,14 +737,80 @@ function insetPoint(point, toward, distance) {
   };
 }
 
-export function relationPath(source, target) {
+function cubicPoint(candidate, t) {
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * candidate.start.x
+      + 3 * inverse ** 2 * t * candidate.control1.x
+      + 3 * inverse * t ** 2 * candidate.control2.x
+      + t ** 3 * candidate.end.x,
+    y: inverse ** 3 * candidate.start.y
+      + 3 * inverse ** 2 * t * candidate.control1.y
+      + 3 * inverse * t ** 2 * candidate.control2.y
+      + t ** 3 * candidate.end.y,
+  };
+}
+
+function obstacleRadius(obstacle) {
+  return ["establish", "abolish"].includes(obstacle?.iconType) ? 8 : 6;
+}
+
+function relationCandidateScore(candidate, obstacles, source, target) {
+  const endpointIds = new Set(
+    [source?.timepointId, target?.timepointId].filter((id) => id != null),
+  );
+  const relevant = (obstacles || []).filter((obstacle) => (
+    Number.isFinite(obstacle?.x)
+    && Number.isFinite(obstacle?.y)
+    && !endpointIds.has(obstacle.timepointId)
+  ));
+  if (!relevant.length) return candidate.deviation || 0;
+  let collisionPenalty = 0;
+  for (let step = 1; step < 40; step += 1) {
+    const point = cubicPoint(candidate, step / 40);
+    for (const obstacle of relevant) {
+      const intrusion = obstacleRadius(obstacle)
+        - Math.hypot(point.x - obstacle.x, point.y - obstacle.y);
+      if (intrusion > 0) collisionPenalty += 100000 + intrusion ** 2 * 1000;
+    }
+  }
+  return collisionPenalty + (candidate.deviation || 0);
+}
+
+function candidatePath(candidate) {
+  return `M${candidate.start.x} ${candidate.start.y}`
+    + `C${candidate.control1.x} ${candidate.control1.y}`
+    + ` ${candidate.control2.x} ${candidate.control2.y}`
+    + ` ${candidate.end.x} ${candidate.end.y}`;
+}
+
+function bestRelationCandidate(candidates, obstacles, source, target) {
+  let best = candidates[0];
+  let bestScore = relationCandidateScore(best, obstacles, source, target);
+  // Candidates are ordered from the original / least-deformed curve outward.
+  // Most relations do not hit another event, so avoid evaluating every route
+  // on every interaction redraw. The first collision-free candidate is also
+  // the visually smallest detour.
+  if (bestScore < 100000) return candidatePath(best);
+  for (const candidate of candidates.slice(1)) {
+    const score = relationCandidateScore(candidate, obstacles, source, target);
+    if (score < 100000) return candidatePath(candidate);
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return candidatePath(best);
+}
+
+export function relationPath(source, target, obstacles = []) {
   // Relations terminate outside the event glyph. Drawing to its center makes
   // the event triangle cover the real marker and read as an oversized arrow.
   const start = insetPoint(source, target, endpointClearance(source));
   const end = insetPoint(target, source, endpointClearance(target, true));
   const deltaY = end.y - start.y;
   if (Math.abs(deltaY) < 1) {
-    const lift = start.y > 470 ? -28 : 28;
+    const preferredLift = start.y > 470 ? -28 : 28;
     const deltaX = end.x - start.x;
     const direction = Math.sign(deltaX || 1);
     const span = Math.abs(deltaX);
@@ -752,7 +818,21 @@ export function relationPath(source, target) {
     const targetControlX = end.x - direction * Math.min(22, span * 0.22);
     // Keep the final control point on the endpoint centreline. The marker's
     // tangent therefore points at the target glyph, not at the lane beside it.
-    return `M${start.x} ${start.y}C${sourceControlX} ${start.y + lift} ${targetControlX} ${end.y} ${end.x} ${end.y}`;
+    const lifts = [
+      preferredLift,
+      -preferredLift,
+      preferredLift * 1.55,
+      -preferredLift * 1.55,
+      preferredLift * 2.1,
+      -preferredLift * 2.1,
+    ];
+    return bestRelationCandidate(lifts.map((lift, index) => ({
+      start,
+      control1: { x: sourceControlX, y: start.y + lift },
+      control2: { x: targetControlX, y: end.y },
+      end,
+      deviation: index * 0.1,
+    })), obstacles, source, target);
   }
   // Keep cross-lane jumps tight: a wide bend sweeps across empty canvas and
   // reads as a stray arc when the jump spans several lanes.
@@ -768,10 +848,30 @@ export function relationPath(source, target) {
   // The last bezier tangent is collinear with target centre -> glyph edge.
   // This matters for vertically aligned events: a horizontal tangent used to
   // make the arrow appear to point at the timeline rather than the icon.
-  return `M${start.x} ${start.y}C${sourceControlX} ${start.y} ${targetControlX} ${targetControlY} ${end.x} ${end.y}`;
+  const perpendicularX = -centerDeltaY / centerLength;
+  const perpendicularY = centerDeltaX / centerLength;
+  const offsets = [0, 14, -14, 25, -25, 40, -40, 58, -58];
+  return bestRelationCandidate(offsets.map((offset, index) => ({
+    start,
+    control1: {
+      x: sourceControlX + perpendicularX * offset,
+      y: start.y + perpendicularY * offset,
+    },
+    control2: { x: targetControlX, y: targetControlY },
+    end,
+    deviation: index * 0.1,
+  })), obstacles, source, target);
 }
 
-function renderRelation(parent, relation, selected, dimmed, handlers, suppressLabel = false) {
+function renderRelation(
+  parent,
+  relation,
+  selected,
+  dimmed,
+  handlers,
+  suppressLabel = false,
+  obstacles = [],
+) {
   if (!relation.drawable) return;
   const sources = relation.sourcePoints.filter((point) => point.x != null);
   const targets = relation.targetPoints.filter((point) => point.x != null);
@@ -784,7 +884,7 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   for (const source of sources) {
     for (const target of targets) {
       group.appendChild(svgElement("path", {
-        d: relationPath(source, target),
+        d: relationPath(source, target, obstacles),
         fill: "none",
         stroke: selected ? COLORS.selected : COLORS.line,
         "stroke-width": selected ? RELATION_STROKE.selectedWidth : RELATION_STROKE.width,
@@ -841,7 +941,7 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   }
   const all = [...sources, ...targets];
   const hit = svgElement("path", {
-    d: relationPath(sources[0], targets[0]),
+    d: relationPath(sources[0], targets[0], obstacles),
     fill: "none",
     stroke: "transparent",
     "stroke-width": 14,
@@ -853,12 +953,19 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   parent.appendChild(group);
 }
 
-function renderRelationGroup(parent, relationGroup, selectedRelationKey, focusActive, handlers) {
+function renderRelationGroup(
+  parent,
+  relationGroup,
+  selectedRelationKey,
+  focusActive,
+  handlers,
+  obstacles = [],
+) {
   if (!relationGroup.drawable) return;
   if (relationGroup.renderMode === "individual" || relationGroup.junctionX == null) {
     relationGroup.relations.forEach((relation) => {
       const selected = `relation:${relation.id}` === selectedRelationKey;
-      renderRelation(parent, relation, selected, focusActive && !selected, handlers);
+      renderRelation(parent, relation, selected, focusActive && !selected, handlers, false, obstacles);
     });
     return;
   }
@@ -882,13 +989,13 @@ function renderRelationGroup(parent, relationGroup, selectedRelationKey, focusAc
   const strokeOpacity = selected ? RELATION_STROKE.selectedOpacity : RELATION_STROKE.opacity;
   for (const source of relationGroup.sourcePoints.filter((point) => point.x != null)) {
     group.appendChild(svgElement("path", {
-      d: relationPath(source, junction), fill: "none", stroke: strokeColor,
+      d: relationPath(source, junction, obstacles), fill: "none", stroke: strokeColor,
       "stroke-width": strokeWidth, "stroke-opacity": strokeOpacity,
     }));
   }
   for (const target of relationGroup.targetPoints.filter((point) => point.x != null)) {
     group.appendChild(svgElement("path", {
-      d: relationPath(junction, target), fill: "none", stroke: strokeColor,
+      d: relationPath(junction, target, obstacles), fill: "none", stroke: strokeColor,
       "stroke-width": strokeWidth, "stroke-opacity": strokeOpacity,
       "marker-end": "url(#evolution-relation-arrow)",
     }));
@@ -1317,6 +1424,12 @@ function renderMain(layer, layout, options) {
   const fanRelationIds = new Set(
     (layout.fanGroups || []).flatMap((fan) => fan.relations.map((relation) => relation.id)),
   );
+  const relationObstacles = eventsToRender.map((event) => ({
+    x: event.displayX,
+    y: event.y,
+    timepointId: event.id,
+    iconType: event.iconType,
+  }));
   const ungrouped = layout.relations.filter((relation) => !groupedRelationIds.has(relation.id));
   for (const fan of layout.fanGroups || []) {
     renderFanGroup(group, fan, selected, selectionFocus.active, options.handlers);
@@ -1329,10 +1442,19 @@ function renderMain(layer, layout, options) {
       selected === `relation:${relation.id}`,
       selectionFocus.active && selected !== `relation:${relation.id}`,
       options.handlers,
+      false,
+      relationObstacles,
     );
   }
   for (const relationGroup of layout.relationGroups) {
-    renderRelationGroup(group, relationGroup, selected, selectionFocus.active, options.handlers);
+    renderRelationGroup(
+      group,
+      relationGroup,
+      selected,
+      selectionFocus.active,
+      options.handlers,
+      relationObstacles,
+    );
   }
   // Render the selected event last so its emphasis stays on top of
   // neighbouring marks instead of being painted over by them.
