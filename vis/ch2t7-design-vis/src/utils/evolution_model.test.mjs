@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildEvolutionModel } from "./evolution_model.js";
+import { buildEvolutionModel, eventGlyphType } from "./evolution_model.js";
 
 function entity(id, title = `实体${id}`, type = "机构") {
   return { id, title, type };
@@ -29,7 +29,34 @@ function link(items) {
   }));
 }
 
+describe("eventGlyphType", () => {
+  it("事件点形状只由 event_type 决定", () => {
+    assert.equal(eventGlyphType("establish"), "establish");
+    assert.equal(eventGlyphType("restore"), "establish");
+    assert.equal(eventGlyphType("abolish"), "abolish");
+    assert.equal(eventGlyphType("proposal_unimplemented"), "proposal_unimplemented");
+    assert.equal(eventGlyphType("duty_transfer"), "record");
+  });
+});
+
 describe("buildEvolutionModel lifecycle", () => {
+  it("事件点形状与存续线状态使用各自字段", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "甲司")],
+      timepoints: {
+        1: [timepoint(11, 1082, "甲司被记为罢废事件", {
+          event_type: "abolish",
+          lifecycle_effect: "preserve",
+        })],
+      },
+      changeRelations: [],
+    }, [1], { yearMin: 960, yearMax: 1279 });
+
+    assert.equal(model.lanes[0].events[0].iconType, "abolish");
+    assert.equal(model.lanes[0].events[0].effect, "preserve");
+    assert.equal(model.lanes[0].segments[0].endYear, 1279);
+  });
+
   it("首次普通记载只作为推定存续起点，不伪装成明确建置", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "无始置记录司")],

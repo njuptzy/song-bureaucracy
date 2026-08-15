@@ -596,8 +596,9 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
 
 function renderEventMark(parent, event, selected, dimmed, handlers) {
   const revisionClass = event.revisionStatus ? ` is-revision-${event.revisionStatus}` : "";
+  const iconType = event.iconType || "record";
   const group = svgElement("g", {
-    class: `evolution-event evolution-event-${event.effect}`
+    class: `evolution-event evolution-event-${iconType}`
       + `${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}${revisionClass}`,
     "data-timepoint-id": event.id,
   });
@@ -673,40 +674,38 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       "pointer-events": "none",
     }));
   }
-  // For fuzzy (bounded) events the anchor dot only positions the record on the
-  // axis — filling it on selection would falsely assert a definite year, so
-  // selection highlights the dashed span below the lane instead.
-  const markSelected = selected && event.timeType !== "bounded";
-  if (event.effect === "ignore") {
+  if (iconType === "proposal_unimplemented") {
     group.appendChild(svgElement("path", {
       d: `M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`,
-      stroke: markSelected ? COLORS.selected : COLORS.line,
-      "stroke-width": 1,
+      stroke: selected ? COLORS.selected : COLORS.line,
+      "stroke-width": selected ? 1.5 : 1,
     }));
-  } else if (event.effect === "activate" || event.effect === "deactivate") {
+  } else if (iconType === "establish" || iconType === "abolish") {
     // 建置/罢置用一对镜像实心三角形：建置 = 墨色正立三角（立起来），
-    // 罢置 = 赭红倒三角（裁撤）。形状+颜色双重编码，选中态统一换选中色。
-    const up = event.effect === "activate";
-    const apexY = up ? y - 4.8 : y + 4.8;
-    const baseY = up ? y + 3.8 : y - 3.8;
+    // 罢置 = 赭红倒三角（裁撤）；选中只换颜色和尺寸，不改变形状。
+    const up = iconType === "establish";
+    const size = selected ? 5.6 : 4.8;
+    const apexY = up ? y - size : y + size;
+    const baseY = up ? y + size * 0.79 : y - size * 0.79;
+    const color = selected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish);
     group.appendChild(svgElement("path", {
-      d: `M${x} ${apexY}L${x + 4.8} ${baseY}H${x - 4.8}Z`,
-      fill: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish),
-      stroke: markSelected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish),
-      "stroke-width": 1,
+      d: `M${x} ${apexY}L${x + size} ${baseY}H${x - size}Z`,
+      fill: color,
+      stroke: color,
+      "stroke-width": selected ? 1.25 : 1,
       "stroke-linejoin": "round",
     }));
   } else {
     group.appendChild(svgElement("circle", {
-      cx: x, cy: y, r: markSelected ? 4.2 : 2.6,
-      fill: markSelected ? COLORS.selected : COLORS.paper,
-      stroke: markSelected ? COLORS.selected : COLORS.line,
-      "stroke-width": 1,
+      cx: x, cy: y, r: selected ? 4.2 : 2.6,
+      fill: selected ? COLORS.selected : COLORS.paper,
+      stroke: selected ? COLORS.selected : COLORS.line,
+      "stroke-width": selected ? 1.2 : 1,
     }));
   }
 
-  // Selection feedback stays on the mark itself (or, for bounded events, on
-  // the dashed span); details live in the left panel, no on-canvas callout.
+  // Selection feedback stays on the mark itself; details live in the left
+  // panel, with no additional on-canvas callout.
   group.appendChild(svgElement("circle", {
     cx: x, cy: y, r: event.displaced ? 5.5 : 10,
     fill: "transparent", "pointer-events": "all",

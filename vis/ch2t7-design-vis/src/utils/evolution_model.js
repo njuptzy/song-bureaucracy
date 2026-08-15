@@ -55,6 +55,13 @@ function effectiveYear(item) {
   return timeType === "bounded" ? (end ?? start) : start;
 }
 
+export function eventGlyphType(eventType) {
+  if (["establish", "restore"].includes(eventType)) return "establish";
+  if (eventType === "abolish") return "abolish";
+  if (eventType === "proposal_unimplemented") return "proposal_unimplemented";
+  return "record";
+}
+
 function normalizeTimepoints(data, entityMap) {
   const byId = new Map();
   const byEntity = new Map();
@@ -67,6 +74,7 @@ function normalizeTimepoints(data, entityMap) {
       const timeType = normalizedTimeType(source);
       const yearStart = finiteYear(firstDefined(source, ["year_start", "yearStart"]));
       const yearEnd = finiteYear(firstDefined(source, ["year_end", "yearEnd"])) ?? yearStart;
+      const eventType = source.event_type || source.eventType || classifyEventType(source.event);
       const item = {
         ...source,
         id: normalizeId(source.id),
@@ -79,7 +87,8 @@ function normalizeTimepoints(data, entityMap) {
         yearEnd,
         effectiveYear: effectiveYear({ time_type: timeType, year_start: yearStart, year_end: yearEnd }),
         revisionStatus: source._revision_status || source.revisionStatus || "",
-        eventType: source.event_type || source.eventType || classifyEventType(source.event),
+        eventType,
+        iconType: eventGlyphType(eventType),
         effect: ["before", "deleted"].includes(source._revision_status || source.revisionStatus)
           ? "ignore"
           : classifyExistenceEffect(source, entity),
