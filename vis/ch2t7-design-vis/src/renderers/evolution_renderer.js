@@ -716,10 +716,12 @@ function endpointClearance(point, arrowhead = false) {
   const triangle = ["establish", "abolish"].includes(point.iconType);
   // The endpoint is the arrow tip / relation stroke endpoint, so clearance
   // should follow the visible glyph edge instead of leaving a large dead gap.
-  // Use the selected circle radius as the safe envelope: otherwise a relation
-  // attached to a displaced or selected record visibly cuts into the ring.
+  // A normal record has r=2.6 and a 1px stroke, so its visible outer edge is
+  // 3.1 units from the centre. Selected marks render after relations and mask
+  // the covered part themselves; reserving their larger radius here would
+  // leave an obvious broken gap around every unselected hollow circle.
   if (triangle) return arrowhead ? 5.8 : 6;
-  return arrowhead ? 4.8 : 4.8;
+  return 3.1;
 }
 
 function insetPoint(point, toward, distance) {
