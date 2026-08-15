@@ -52,7 +52,7 @@ describe("layoutEvolutionModel", () => {
     }
   });
 
-  it("同年事件保留共同时间锚点，并优先沿所属轨道左右错开", () => {
+  it("同年事件保留共同时间锚点，并在锚点周围二维错层", () => {
     const model = buildEvolutionModel({
       entities: [entity(1)],
       timepoints: {
@@ -69,8 +69,7 @@ describe("layoutEvolutionModel", () => {
 
     assert.equal(new Set(events.map((item) => item.baseX)).size, 1);
     assert.equal(new Set(events.map((item) => `${item.displayX}:${item.displayY}`)).size, 3);
-    assert.ok(events.some((item) => item.offsetX !== 0));
-    assert.ok(events.every((item) => item.offsetY === 0));
+    assert.ok(events.some((item) => item.offsetY !== 0));
     for (const event of events) {
       assert.equal(event.displayX, event.baseX + event.offsetX);
       assert.equal(event.displayY, event.baseY + event.offsetY);
