@@ -40,6 +40,14 @@
       <button type="button" class="text-command" @click="$emit('cancel-connect')">取消连接</button>
     </div>
 
+    <section v-if="showEmptyEditor" class="selection-editor editor-empty" aria-label="演变校订区域">
+      <fieldset class="editor-frame">
+        <legend class="editor-heading editor-empty-heading">
+          <strong>{{ emptyEditorTitle }}</strong>
+        </legend>
+      </fieldset>
+    </section>
+
     <section v-if="!drawer && editMode && selection && !connectionMode" class="selection-editor" aria-label="选中事实编辑器">
       <fieldset class="editor-frame">
         <legend class="editor-heading">
@@ -230,6 +238,14 @@ const timepointActions = [
   { value: "insert", label: "新增相邻" },
   { value: "delete", label: "删除" },
 ];
+const showEmptyEditor = computed(() => {
+  if (!props.editMode || props.drawer) return false;
+  if (!props.connectionMode) return !props.selection;
+  return !(props.connectSource && props.connectTarget);
+});
+const emptyEditorTitle = computed(() => (
+  props.connectionMode ? "新建前后演变" : "演变校订"
+));
 const action = ref("update");
 const insertPosition = ref("after");
 const reason = ref("");
@@ -494,6 +510,7 @@ button { color: inherit; }
   scrollbar-width: thin;
 }
 .selection-editor { padding: 0; }
+.editor-empty { pointer-events: none; }
 .connection-editor { padding: 13px 10px 8px; overflow-y: auto; }
 .editor-frame {
   display: flex;
@@ -515,6 +532,7 @@ button { color: inherit; }
   padding: 0 8px;
   border: 0;
 }
+.editor-frame > .editor-empty-heading { width: max-content; }
 .editor-frame-scroll {
   flex: 1 1 auto;
   min-height: 0;
