@@ -36,30 +36,19 @@ test("普通圆点端精确接到空心圆外沿，不重叠也不留断口", ()
   assert.ok(Math.abs(Math.hypot(numbers.at(-2) - 160, numbers.at(-1) - 150) - 3.1) < 1e-9);
 });
 
-test("纯纵向错层不画冗余回指线，避免与同年关系连成穿点直线", () => {
-  assert.equal(eventStemGeometry({
+test("同年错层事件的回指线独立于事件图标计算，供底层先行绘制", () => {
+  assert.deepEqual(eventStemGeometry({
     id: 11,
     displaced: true,
     baseX: 200,
     baseY: 140,
     displayX: 200,
     y: 102,
-  }), null);
-});
-
-test("只有横坐标偏离真实年份时才绘制回指线", () => {
-  assert.deepEqual(eventStemGeometry({
-    id: 12,
-    displaced: true,
-    baseX: 200,
-    baseY: 140,
-    displayX: 212,
-    y: 128,
   }), {
     x1: 200,
     y1: 140,
-    x2: 212,
-    y2: 128,
+    x2: 200,
+    y2: 102,
     anchorX: 200,
     anchorY: 140,
   });
