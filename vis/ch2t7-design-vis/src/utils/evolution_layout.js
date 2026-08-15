@@ -259,9 +259,14 @@ function symmetricOffsets(step, limit) {
 
 function eventOrder(first, second) {
   return first.baseX - second.baseX
+    || eventLanePriority(first) - eventLanePriority(second)
     || (first.chainIndex ?? 0) - (second.chainIndex ?? 0)
     || (first.eventIndex ?? 0) - (second.eventIndex ?? 0)
     || String(first.id).localeCompare(String(second.id), "zh", { numeric: true });
+}
+
+function eventLanePriority(event) {
+  return ["establish", "abolish"].includes(event?.iconType) ? 0 : 1;
 }
 
 function eventMarksOverlap(first, second, gap = EVENT_MARK_GAP) {

@@ -83,6 +83,31 @@ describe("layoutEvolutionModel", () => {
     }
   });
 
+  it("同年罢废三角优先留在真实年份与机构轨道的交点", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1)],
+      timepoints: {
+        1: [
+          timepoint(11, 1082, "普通记载", { succ_id: 12 }),
+          timepoint(12, 1082, "罢废", {
+            prev_id: 11,
+            event_type: "abolish",
+            lifecycle_effect: "deactivate",
+          }),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+    const events = layoutEvolutionModel(model).lanes[0].events;
+    const record = events.find((event) => event.id === 11);
+    const abolish = events.find((event) => event.id === 12);
+
+    assert.equal(abolish.displayX, abolish.baseX);
+    assert.equal(abolish.displayY, abolish.baseY);
+    assert.equal(record.displayX, record.baseX);
+    assert.notEqual(record.displayY, record.baseY);
+  });
+
   it("邻近年份像素距离不足时也会错层，稀疏年份仍留在基线", () => {
     const model = buildEvolutionModel({
       entities: [entity(1)],
