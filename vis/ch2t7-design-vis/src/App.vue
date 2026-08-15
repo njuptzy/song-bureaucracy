@@ -89,32 +89,14 @@ function updateRevisionPanelGeometry() {
   const width = shell.clientWidth;
   const height = shell.clientHeight;
   if (!width || !height) return;
-  const comparison = canvasState.value?.viewMode === "comparison";
-  const viewportLeft = comparison ? width / 2 : 0;
-  const viewportWidth = comparison ? width / 2 : width;
-  const scale = Math.min(viewportWidth / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
-  const offsetX = viewportLeft + (viewportWidth - DESIGN_VIEWBOX.width * scale) / 2;
+  const scale = Math.min(width / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
+  const offsetX = (width - DESIGN_VIEWBOX.width * scale) / 2;
   const offsetY = (height - DESIGN_VIEWBOX.height * scale) / 2;
-  const panelScale = Math.min(width / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
-  const panelWidth = Math.min(
-    REVISION_PANEL_BOUNDS.width * panelScale,
-    Math.max(128, viewportWidth - 24),
-  );
-  const panelHeight = Math.min(
-    REVISION_PANEL_BOUNDS.height * panelScale,
-    Math.max(160, height - 96),
-  );
-  const panelLeft = comparison
-    ? viewportLeft + 16
-    : offsetX + REVISION_PANEL_BOUNDS.x * scale;
-  const panelTop = comparison
-    ? Math.max(64, (height - panelHeight) / 2)
-    : offsetY + REVISION_PANEL_BOUNDS.y * scale;
   revisionPanelStyle.value = {
-    "--revision-panel-left": `${panelLeft}px`,
-    "--revision-panel-top": `${panelTop}px`,
-    "--revision-panel-width": `${comparison ? panelWidth : REVISION_PANEL_BOUNDS.width * scale}px`,
-    "--revision-panel-height": `${comparison ? panelHeight : REVISION_PANEL_BOUNDS.height * scale}px`,
+    "--revision-panel-left": `${offsetX + REVISION_PANEL_BOUNDS.x * scale}px`,
+    "--revision-panel-top": `${offsetY + REVISION_PANEL_BOUNDS.y * scale}px`,
+    "--revision-panel-width": `${REVISION_PANEL_BOUNDS.width * scale}px`,
+    "--revision-panel-height": `${REVISION_PANEL_BOUNDS.height * scale}px`,
   };
 }
 

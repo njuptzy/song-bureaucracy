@@ -103,13 +103,16 @@ const hostRef = ref(null);
 const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
-const VIEW_MODES = ["hierarchy", "composition", "evolution", "timetree"];
+const VIEW_MODES = ["hierarchy", "composition", "evolution", "timetree", "comparison"];
 const viewMode = ref(VIEW_MODES.includes(props.fixedViewMode)
   ? props.fixedViewMode
   : VIEW_MODES.includes(initialState.viewMode)
     ? initialState.viewMode
     : "hierarchy");
 const viewModeLocked = computed(() => VIEW_MODES.includes(props.fixedViewMode));
+function isEvolutionCanvasMode() {
+  return viewMode.value === "evolution" || viewMode.value === "comparison";
+}
 const evolutionMode = ref(initialState.evolutionMode === "compare" ? "compare" : "single");
 const evolutionEntityIds = ref(Array.isArray(initialState.evolutionEntityIds)
   ? initialState.evolutionEntityIds.slice(0, 4)
@@ -337,7 +340,7 @@ function selectLinkedEntity(entityId) {
   expandedDetailId.value = null;
   inlineDetailOfficialId.value = null;
   selectedId.value = target.id;
-  if (viewMode.value === "evolution") {
+  if (isEvolutionCanvasMode()) {
     selectedEvolutionItem.value = null;
     evolutionEntityIds.value = evolutionMode.value === "single"
       ? [target.id]
@@ -570,6 +573,7 @@ const DESIGN_URL_BY_MODE = {
   composition: "/api/design/composition.svg",
   evolution: HIERARCHY_DESIGN_URL,
   timetree: HIERARCHY_DESIGN_URL,
+  comparison: HIERARCHY_DESIGN_URL,
 };
 
 function templateCategoryItems(svg) {
@@ -786,7 +790,7 @@ function inlineDetailValues(entity) {
 }
 
 function selectedEntity() {
-  if (viewMode.value === "evolution") {
+  if (isEvolutionCanvasMode()) {
     const evolutionSelection = entityMap.get(selectedId.value)
       || entityMap.get(evolutionEntityIds.value[0]);
     if (evolutionSelection?.id !== selectedId.value) {
@@ -2616,6 +2620,109 @@ function applyEvolutionTimelineSelection(kind, effectiveYear = null) {
   selectedRange.value = next.range;
 }
 
+const COMPARISON_PLOT_BOUNDS = {
+  x: 520,
+  y: 238,
+  width: 1278,
+  height: 610,
+};
+const COMPARISON_GAP = 18;
+const COMPARISON_VIEWBOX = {
+  x: 500,
+  y: 120,
+  width: 1340,
+  height: 750,
+};
+
+function createComparisonChildSvg() {
+  const child = svgCache.get(HIERARCHY_DESIGN_URL).cloneNode(true);
+  child.removeAttribute("width");
+  child.removeAttribute("height");
+  child.setAttribute(
+    "viewBox",
+    `${COMPARISON_VIEWBOX.x} ${COMPARISON_VIEWBOX.y} ${COMPARISON_VIEWBOX.width} ${COMPARISON_VIEWBOX.height}`
+  );
+  child.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  child.classList.add("comparison-child-svg");
+  return child;
+}
+
+function retainComparisonLayer(child, selector) {
+  [...child.children].forEach((element) => {
+    const tag = element.tagName.toLowerCase();
+    if (["defs", "style"].includes(tag) || element.matches(selector)) return;
+    element.remove();
+  });
+}
+
+function hideComparisonPlotExamples(svg) {
+  const area = COMPARISON_PLOT_BOUNDS;
+  for (const element of [...svg.children]) {
+    const tag = element.tagName.toLowerCase();
+    if (["defs", "style", "image"].includes(tag)) continue;
+    if (element.classList.contains("detail-panel-group")) continue;
+    const bounds = elementBounds(element);
+    if (!bounds) continue;
+    const overlaps = bounds.x < area.x + area.width
+      && bounds.x + bounds.width > area.x
+      && bounds.y < area.y + area.height
+      && bounds.y + bounds.height > area.y;
+    if (overlaps) element.style.display = "none";
+  }
+}
+
+function renderComparisonHeading(svg, text, x) {
+  const heading = svgElement("text", {
+    class: "comparison-pane-heading",
+    x,
+    y: COMPARISON_PLOT_BOUNDS.y - 13,
+    "text-anchor": "middle",
+  });
+  setText(heading, text);
+  svg.querySelector(".dynamic-comparison-layer")?.appendChild(heading);
+}
+
+function renderDynamicComparison(svg) {
+  hideEvolutionExamples(svg);
+  hideComparisonPlotExamples(svg);
+  svg.querySelector(".dynamic-comparison-layer")?.remove();
+
+  const layer = svgElement("g", { class: "dynamic-comparison-layer" });
+  const blockWidth = (COMPARISON_PLOT_BOUNDS.width - COMPARISON_GAP) / 2;
+  const leftX = COMPARISON_PLOT_BOUNDS.x;
+  const rightX = leftX + blockWidth + COMPARISON_GAP;
+  const leftSvg = createComparisonChildSvg();
+  const rightSvg = createComparisonChildSvg();
+  for (const [child, x] of [[leftSvg, leftX], [rightSvg, rightX]]) {
+    child.setAttribute("x", String(x));
+    child.setAttribute("y", String(COMPARISON_PLOT_BOUNDS.y));
+    child.setAttribute("width", String(blockWidth));
+    child.setAttribute("height", String(COMPARISON_PLOT_BOUNDS.height));
+    layer.appendChild(child);
+  }
+  const divider = svgElement("line", {
+    class: "comparison-pane-divider",
+    x1: String(leftX + blockWidth + COMPARISON_GAP / 2),
+    x2: String(leftX + blockWidth + COMPARISON_GAP / 2),
+    y1: String(COMPARISON_PLOT_BOUNDS.y),
+    y2: String(COMPARISON_PLOT_BOUNDS.y + COMPARISON_PLOT_BOUNDS.height),
+  });
+  layer.appendChild(divider);
+  svg.appendChild(layer);
+
+  // 先在各自的嵌套画板中运行原有渲染器，保留节点/事件处理器，
+  // 再移除设计稿示例，只留下动态层；不会复制整张页面。
+  renderDynamicHierarchy(leftSvg);
+  retainComparisonLayer(leftSvg, ".dynamic-tree-viewport");
+  renderDynamicEvolution(rightSvg);
+  retainComparisonLayer(rightSvg, ".dynamic-evolution-layer");
+
+  svg.__evolutionModel = rightSvg.__evolutionModel;
+  svg.__evolutionLayout = rightSvg.__evolutionLayout;
+  renderComparisonHeading(svg, "层级结构", leftX + blockWidth / 2);
+  renderComparisonHeading(svg, "时间沿革", rightX + blockWidth / 2);
+}
+
 function renderDynamicEvolution(svg) {
   hideEvolutionExamples(svg);
   const focusEntities = ensureEvolutionFocus();
@@ -2986,6 +3093,7 @@ function populateCenter(svg) {
   if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
   else if (viewMode.value === "composition") renderDynamicComposition(svg);
   else if (viewMode.value === "timetree") renderDynamicTimetree(svg);
+  else if (viewMode.value === "comparison") renderDynamicComparison(svg);
   else renderDynamicEvolution(svg);
 }
 
@@ -3440,7 +3548,7 @@ function updateEvolutionDetails(svg) {
 }
 
 function updateDetails(svg) {
-  if (viewMode.value === "evolution") {
+  if (isEvolutionCanvasMode()) {
     updateEvolutionDetails(svg);
     return;
   }
@@ -4209,7 +4317,7 @@ function bindTimelineRange(svg) {
     event.stopPropagation();
     timelineSelectionActive.value = false;
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
-    if (viewMode.value === "evolution") selectedEvolutionItem.value = null;
+    if (isEvolutionCanvasMode()) selectedEvolutionItem.value = null;
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
     flushTimelineRefresh();
@@ -4306,6 +4414,9 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   if (viewMode.value === "evolution") {
     svg.querySelector(".dynamic-evolution-layer")?.remove();
     svg.querySelectorAll("[data-evolution-def]").forEach((element) => element.remove());
+  }
+  if (viewMode.value === "comparison") {
+    svg.querySelector(".dynamic-comparison-layer")?.remove();
   }
   if (viewMode.value === "timetree") {
     svg.querySelector(".dynamic-timetree-layer")?.remove();
@@ -4414,5 +4525,23 @@ onUnmounted(() => {
 .svg-mount :deep(.timetree-offaxis-badge) { fill: #918069; font-size: 9px; letter-spacing: 0.5px; }
 .svg-mount :deep(.timetree-empty-hint) { fill: #918069; font-size: 14px; letter-spacing: 3px; }
 .svg-mount :deep(.timetree-scrollbar-thumb:hover) { fill-opacity: 0.5; }
+.svg-mount :deep(.dynamic-comparison-layer) { pointer-events: none; }
+.svg-mount :deep(.comparison-child-svg) { overflow: visible; }
+.svg-mount :deep(.comparison-child-svg .dynamic-tree-viewport),
+.svg-mount :deep(.comparison-child-svg .dynamic-evolution-layer) { pointer-events: all; }
+.svg-mount :deep(.comparison-pane-heading) {
+  fill: #563905;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;
+  font-size: 16px;
+  letter-spacing: 2px;
+  pointer-events: none;
+}
+.svg-mount :deep(.comparison-pane-divider) {
+  stroke: #563905;
+  stroke-opacity: 0.34;
+  stroke-width: 0.8px;
+  stroke-dasharray: 2 3;
+  pointer-events: none;
+}
 .template-message { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; color: #563905; background: #f5f3ec; letter-spacing: 3px; }
 </style>
