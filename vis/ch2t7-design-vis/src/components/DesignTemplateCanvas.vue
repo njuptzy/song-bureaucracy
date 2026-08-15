@@ -2691,6 +2691,9 @@ const COMPARISON_PLOT_BOUNDS = {
   height: 610,
 };
 const COMPARISON_GAP = 18;
+// 对照视图左右两块共用的等比例缩放入口：1 = 当前大小，1.1 = 放大 10%。
+// 只允许统一缩放，不能分别修改宽高，否则会破坏设计稿比例。
+const COMPARISON_PANE_SCALE = 1;
 const COMPARISON_VIEWBOX = {
   x: 500,
   y: 120,
@@ -2767,13 +2770,39 @@ function renderDynamicComparison(svg) {
   const rightX = leftX + blockWidth + COMPARISON_GAP;
   const leftSvg = createComparisonChildSvg();
   const rightSvg = createComparisonChildSvg();
-  for (const [child, x] of [[leftSvg, leftX], [rightSvg, rightX]]) {
-    child.setAttribute("x", String(x));
-    child.setAttribute("y", String(COMPARISON_PLOT_BOUNDS.y));
-    child.setAttribute("width", String(blockWidth));
-    child.setAttribute("height", String(COMPARISON_PLOT_BOUNDS.height));
-    layer.appendChild(child);
-  }
+  const paneScale = Math.max(0.1, Number(COMPARISON_PANE_SCALE) || 1);
+  const childWidth = blockWidth * paneScale;
+  const childHeight = COMPARISON_PLOT_BOUNDS.height * paneScale;
+  const createPaneViewport = (child, x) => {
+    const clipId = `comparison-pane-clip-${x}`;
+    const clip = svgElement("clipPath", {
+      id: clipId,
+      "clipPathUnits": "userSpaceOnUse",
+    });
+    clip.appendChild(svgElement("rect", {
+      x,
+      y: COMPARISON_PLOT_BOUNDS.y,
+      width: blockWidth,
+      height: COMPARISON_PLOT_BOUNDS.height,
+    }));
+    svg.querySelector("defs")?.appendChild(clip);
+    const viewport = svgElement("g", {
+      class: "comparison-pane-viewport",
+      "clip-path": `url(#${clipId})`,
+    });
+    child.setAttribute("x", String(x - (childWidth - blockWidth) / 2));
+    child.setAttribute("y", String(
+      COMPARISON_PLOT_BOUNDS.y - (childHeight - COMPARISON_PLOT_BOUNDS.height) / 2,
+    ));
+    child.setAttribute("width", String(childWidth));
+    child.setAttribute("height", String(childHeight));
+    viewport.appendChild(child);
+    return viewport;
+  };
+  layer.append(
+    createPaneViewport(leftSvg, leftX),
+    createPaneViewport(rightSvg, rightX),
+  );
   const divider = svgElement("line", {
     class: "comparison-pane-divider",
     x1: String(leftX + blockWidth + COMPARISON_GAP / 2),
