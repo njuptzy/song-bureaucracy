@@ -813,6 +813,33 @@ export function relationPath(source, target, options = {}) {
   return `M${start.x} ${start.y}C${sourceControlX} ${start.y} ${targetControlX} ${targetControlY} ${end.x} ${end.y}`;
 }
 
+function cubicMidpoint(path) {
+  const values = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+  if (values.length < 8) return null;
+  return {
+    x: (values[0] + 3 * values[2] + 3 * values[4] + values[6]) / 8,
+    y: (values[1] + 3 * values[3] + 3 * values[5] + values[7]) / 8,
+  };
+}
+
+export function relationLabelOverride(relation, source, target) {
+  const relationId = Number(relation?.id);
+  const isIncoming = relationId === 4009
+    && Number(source?.timepointId) === 4773
+    && Number(target?.timepointId) === 4325;
+  const isOutgoing = relationId === 4010
+    && Number(source?.timepointId) === 4325
+    && Number(target?.timepointId) === 4774;
+  if (!isIncoming && !isOutgoing) return null;
+  const path = relationPath(source, target, relationRouteOptions(relation, source, target));
+  const midpoint = cubicMidpoint(path);
+  if (!midpoint) return null;
+  return {
+    x: midpoint.x + (isIncoming ? 42 : -42),
+    y: midpoint.y + 4,
+  };
+}
+
 function renderRelation(parent, relation, selected, dimmed, handlers, suppressLabel = false) {
   if (!relation.drawable) return;
   const sources = relation.sourcePoints.filter((point) => point.x != null);
@@ -839,9 +866,10 @@ function renderRelation(parent, relation, selected, dimmed, handlers, suppressLa
   if (!suppressLabel && relation.labelVisible !== false) {
     const source = sources[0];
     const target = targets[0];
-    const labelX = relation.labelX ?? (source.x + target.x) / 2;
-    const labelY = relation.labelY ?? (source.y + target.y) / 2 - 7;
-    const leader = relation.leader;
+    const labelOverride = relationLabelOverride(relation, source, target);
+    const labelX = labelOverride?.x ?? relation.labelX ?? (source.x + target.x) / 2;
+    const labelY = labelOverride?.y ?? relation.labelY ?? (source.y + target.y) / 2 - 7;
+    const leader = labelOverride ? null : relation.leader;
     if (leader && Math.hypot(leader.x2 - leader.x1, leader.y2 - leader.y1) > 4) {
       group.appendChild(svgElement("line", {
         x1: leader.x1,

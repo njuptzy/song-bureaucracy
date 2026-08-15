@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   eventStemGeometry,
+  relationLabelOverride,
   relationPath,
   relationRouteOptions,
 } from "./evolution_renderer.js";
@@ -108,4 +109,40 @@ test("太常寺至宗正寺的目标曲线加深弯曲并绕开上方圆点", ()
     relationRouteOptions({ id: 9999 }, source, target),
     {},
   );
+});
+
+test("成对前后演变标签分别贴在两条曲线中段外侧", () => {
+  const incomingSource = {
+    x: 1165.2918996865203,
+    y: 784,
+    timepointId: 4773,
+    iconType: "record",
+  };
+  const incomingTarget = {
+    x: 1165.2918996865203,
+    y: 300,
+    timepointId: 4325,
+    iconType: "abolish",
+  };
+  const outgoingTarget = {
+    x: 1183.3467836990594,
+    y: 784,
+    timepointId: 4774,
+    iconType: "establish",
+  };
+  const incoming = relationLabelOverride(
+    { id: 4009 },
+    incomingSource,
+    incomingTarget,
+  );
+  const outgoing = relationLabelOverride(
+    { id: 4010 },
+    incomingTarget,
+    outgoingTarget,
+  );
+
+  assert.ok(incoming.x > 1200);
+  assert.ok(outgoing.x < 1130);
+  assert.ok(incoming.x - outgoing.x > 90);
+  assert.equal(relationLabelOverride({ id: 9999 }, incomingSource, incomingTarget), null);
 });
