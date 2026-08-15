@@ -1,5 +1,5 @@
 <template>
-  <div class="revision-ui" :class="{ 'is-editing': editMode }">
+  <div class="revision-ui" :class="{ 'is-editing': editMode }" :style="panelStyle">
     <nav class="revision-toolbar" aria-label="修订工具">
       <button
         class="toolbar-command edit-command"
@@ -214,6 +214,7 @@ const props = defineProps({
   connectionMode: { type: Boolean, default: false },
   connectSource: { type: Object, default: null },
   connectTarget: { type: Object, default: null },
+  panelStyle: { type: Object, default: () => ({}) },
 });
 const emit = defineEmits([
   "toggle-edit", "toggle-drawer", "clear-selection", "add-operation", "workspace-action",
@@ -471,17 +472,17 @@ button { color: inherit; }
 .guide-line { width: 25px; border-top: 1px dashed var(--ink-2); }
 .selection-editor, .connection-editor, .revision-drawer {
   position: absolute;
-  left: 4.25%;
-  top: 13.5%;
+  left: var(--revision-panel-left, 4.2708%);
+  top: var(--revision-panel-top, 13.4259%);
   right: auto;
   bottom: auto;
-  width: 20.5%;
-  height: 31.2%;
+  width: var(--revision-panel-width, 20.4688%);
+  height: var(--revision-panel-height, 31.2963%);
   max-height: none;
   overflow-x: hidden;
   overflow-y: auto;
   border: 0;
-  background: rgba(245,243,236,.985);
+  background: transparent;
   box-shadow: none;
   pointer-events: auto;
   scrollbar-color: rgba(86,57,5,.48) transparent;
@@ -502,9 +503,9 @@ button { color: inherit; }
 .field { display: grid; gap: 4px; min-width: 0; }
 .field-wide { grid-column: 1 / -1; }
 .field > span { color: var(--taupe); font-size: 10px; }
-.field input, .field textarea, .field select { width: 100%; min-width: 0; border: 1px solid rgba(86,57,5,.36); border-radius: 0; padding: 6px 7px; background: rgba(255,255,255,.58); color: var(--ink); resize: vertical; }
+.field input, .field textarea, .field select { width: 100%; min-width: 0; border: 1px solid rgba(86,57,5,.42); border-radius: 0; padding: 6px 7px; background: rgba(245,243,236,.34); color: var(--ink); resize: vertical; }
 .field input:focus, .field textarea:focus, .field select:focus { outline: 1px solid var(--ink-2); outline-offset: 1px; }
-.normalized-time { display: grid; gap: 2px; padding: 6px 8px; border-left: 2px solid var(--olive); background: rgba(145,128,105,.1); font-size: 11px; }
+.normalized-time { display: grid; gap: 2px; padding: 6px 8px; border-left: 1px solid var(--olive); background: rgba(145,128,105,.06); font-size: 11px; }
 .normalized-time small { color: var(--taupe); line-height: 1.35; }
 .evidence-section { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(86,57,5,.35); }
 .evidence-mode { display: flex; gap: 14px; font-size: 11px; }

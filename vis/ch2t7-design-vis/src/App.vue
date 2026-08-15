@@ -1,5 +1,5 @@
 <template>
-  <main class="application-shell">
+  <main ref="applicationShellRef" class="application-shell">
     <DesignTemplateCanvas
       v-if="data"
       :data="data"
@@ -22,6 +22,7 @@
       :connection-mode="connectionMode"
       :connect-source="connectSource"
       :connect-target="connectTarget"
+      :panel-style="revisionPanelStyle"
       @toggle-edit="toggleEditMode"
       @toggle-drawer="toggleDrawer"
       @clear-selection="selectedFact = null"
@@ -62,7 +63,30 @@ const commits = ref([]);
 const connectionMode = ref(false);
 const connectSource = ref(null);
 const connectTarget = ref(null);
+const applicationShellRef = ref(null);
+const revisionPanelStyle = ref({});
 let versionTimer = null;
+let panelResizeObserver = null;
+
+const DESIGN_VIEWBOX = { width: 1920, height: 1080 };
+const REVISION_PANEL_BOUNDS = { x: 82, y: 145, width: 393, height: 338 };
+
+function updateRevisionPanelGeometry() {
+  const shell = applicationShellRef.value;
+  if (!shell) return;
+  const width = shell.clientWidth;
+  const height = shell.clientHeight;
+  if (!width || !height) return;
+  const scale = Math.min(width / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
+  const offsetX = (width - DESIGN_VIEWBOX.width * scale) / 2;
+  const offsetY = (height - DESIGN_VIEWBOX.height * scale) / 2;
+  revisionPanelStyle.value = {
+    "--revision-panel-left": `${offsetX + REVISION_PANEL_BOUNDS.x * scale}px`,
+    "--revision-panel-top": `${offsetY + REVISION_PANEL_BOUNDS.y * scale}px`,
+    "--revision-panel-width": `${REVISION_PANEL_BOUNDS.width * scale}px`,
+    "--revision-panel-height": `${REVISION_PANEL_BOUNDS.height * scale}px`,
+  };
+}
 
 const isEvolutionView = computed(() => canvasState.value?.viewMode === "evolution");
 const revisionPanelVisible = computed(() => {
@@ -246,6 +270,9 @@ async function addConnection(payload) {
 }
 
 onMounted(async () => {
+  updateRevisionPanelGeometry();
+  panelResizeObserver = new ResizeObserver(updateRevisionPanelGeometry);
+  if (applicationShellRef.value) panelResizeObserver.observe(applicationShellRef.value);
   await refreshData(true);
   try {
     await Promise.all([refreshRevision(), loadCommits()]);
@@ -257,6 +284,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (versionTimer != null) window.clearInterval(versionTimer);
+  panelResizeObserver?.disconnect();
 });
 </script>
 
