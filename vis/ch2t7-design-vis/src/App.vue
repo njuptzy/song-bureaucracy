@@ -31,6 +31,7 @@
       @remove-group="removeGroup"
       @commit="commitDraft"
       @restore="restoreVersion"
+      @delete-commit="deleteCommit"
       @toggle-connect="toggleConnectionMode"
       @cancel-connect="cancelConnection"
       @add-connection="addConnection"
@@ -247,6 +248,23 @@ async function restoreVersion(targetHash) {
     await runRevisionAction(() => revisionPost("/api/revisions/restore", { target_hash: targetHash }));
     await refreshData(true);
     await Promise.all([refreshRevision(), loadCommits()]);
+  } catch { /* displayed */ }
+}
+
+async function deleteCommit(commit) {
+  const operationCount = Number(commit?.operation_count || 0);
+  const confirmed = window.confirm(
+    `删除“${commit?.summary || commit?.hash?.slice(0, 8)}”将撤销其 ${operationCount} 项数据库操作，`
+    + "并永久移除这条历史。此操作只能依靠 latest-rollback 应急备份恢复。继续？",
+  );
+  if (!confirmed) return;
+  try {
+    await runRevisionAction(() => revisionDelete(`/api/revisions/commits/${commit.hash}`));
+    revisionPreview.value = null;
+    await refreshData(true);
+    await Promise.all([refreshRevision(), loadCommits()]);
+    selectedFact.value = null;
+    cancelConnection();
   } catch { /* displayed */ }
 }
 

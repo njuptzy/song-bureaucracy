@@ -229,6 +229,77 @@ class RevisionStoreTest(unittest.TestCase):
         self.assertTrue(self.store.rollback_db.exists())
         self.assertTrue(self.store.rollback_revisions_db.exists())
 
+    def test_delete_latest_commit_reverts_database_and_removes_history(self):
+        baseline = self.store.state()["baseline"]
+        self.store.add_group({
+            "label": "校正甲司纪年",
+            "reason": "原时间录入错误",
+            "operations": [{
+                "action": "update",
+                "target_table": "Timepoints",
+                "target_id": 10,
+                "after": {"time": "1005年"},
+                "evidence": self.existing_evidence(),
+            }],
+        })
+        commit_hash = self.store.commit("校正甲司设置纪年")["commit"]["hash"]
+
+        result = self.store.delete_commit(commit_hash)
+
+        self.assertEqual(result["deleted_hash"], commit_hash)
+        self.assertEqual(result["head"], baseline)
+        self.assertEqual(self.store.state()["head"], baseline)
+        self.assertEqual(len(self.store.list_commits()["commits"]), 1)
+        with self.assertRaises(REVISION.RevisionError) as context:
+            self.store.get_commit(commit_hash)
+        self.assertEqual(context.exception.code, "COMMIT_NOT_FOUND")
+        with sqlite3.connect(self.database) as connection:
+            self.assertEqual(connection.execute("SELECT time FROM Timepoints WHERE id=10").fetchone()[0], "1000年")
+            self.assertEqual(connection.execute("SELECT year_start FROM NormalizedTimes WHERE timepoint_id=10").fetchone()[0], 1000)
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+            self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
+    def test_delete_commit_rejects_baseline_middle_history_and_nonempty_draft(self):
+        baseline = self.store.state()["baseline"]
+        with self.assertRaises(REVISION.RevisionError) as baseline_error:
+            self.store.delete_commit(baseline)
+        self.assertEqual(baseline_error.exception.code, "BASELINE_DELETE_FORBIDDEN")
+
+        def commit_time(raw_time, summary):
+            self.store.add_group({
+                "label": summary,
+                "reason": "测试连续提交",
+                "operations": [{
+                    "action": "update",
+                    "target_table": "Timepoints",
+                    "target_id": 10,
+                    "after": {"time": raw_time},
+                    "evidence": self.existing_evidence(),
+                }],
+            })
+            return self.store.commit(summary)["commit"]["hash"]
+
+        first_hash = commit_time("1005年", "第一次校正")
+        second_hash = commit_time("1006年", "第二次校正")
+        with self.assertRaises(REVISION.RevisionError) as middle_error:
+            self.store.delete_commit(first_hash)
+        self.assertEqual(middle_error.exception.code, "NOT_HEAD_COMMIT")
+
+        self.store.add_group({
+            "label": "未提交校正",
+            "reason": "测试草稿保护",
+            "operations": [{
+                "action": "update",
+                "target_table": "Timepoints",
+                "target_id": 10,
+                "after": {"time": "1007年"},
+                "evidence": self.existing_evidence(),
+            }],
+        })
+        with self.assertRaises(REVISION.RevisionError) as draft_error:
+            self.store.delete_commit(second_hash)
+        self.assertEqual(draft_error.exception.code, "DRAFT_NOT_EMPTY")
+
     def test_event_type_and_lifecycle_effect_are_editable_and_validated(self):
         self.store.add_group({
             "reason": "明确区分事件语义与存废影响",

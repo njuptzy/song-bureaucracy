@@ -62,6 +62,7 @@ src/components/DesignTemplateCanvas.vue
 - `/api/revisions/draft/operations|preview|undo|redo|discard`：持久草稿及增量预览
 - `/api/revisions/commit`：原子提交当前草稿
 - `/api/revisions/commits[/<hash>]`：线性提交历史与逐项差异
+- `DELETE /api/revisions/commits/<hash>`：撤销并永久删除当前最新提交；基线、中间提交或草稿非空时拒绝
 - `/api/revisions/restore-preview|restore`：预览并创建恢复提交
 - `/api/revisions/normalize-time`：只解析原文纪年，不写数据库
 - `/api/design/hierarchy.svg`：原始可编辑层级画板

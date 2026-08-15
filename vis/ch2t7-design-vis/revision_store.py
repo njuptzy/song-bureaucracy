@@ -1279,6 +1279,108 @@ class RevisionStore:
             )
             return {"commits": [dict(row) for row in rows], "head": self._meta(connection, "head")}
 
+    def delete_commit(self, commit_hash: str) -> dict:
+        """Undo and permanently remove the current HEAD commit."""
+        with self._lock, self._revision_connection() as connection:
+            self._assert_editable_state(connection)
+            connection.commit()
+            workspace = connection.execute(
+                "SELECT cursor FROM RevisionWorkspace WHERE id=1"
+            ).fetchone()
+            draft_count = connection.execute("SELECT COUNT(*) FROM DraftGroups").fetchone()[0]
+            if draft_count or workspace["cursor"]:
+                raise RevisionError(
+                    "工作区非空，不能删除提交历史",
+                    code="DRAFT_NOT_EMPTY",
+                    status=409,
+                )
+            commit_row = connection.execute(
+                "SELECT * FROM RevisionCommits WHERE hash=?", (commit_hash,)
+            ).fetchone()
+            if not commit_row:
+                raise RevisionError("提交不存在", code="COMMIT_NOT_FOUND", status=404)
+            if commit_row["is_baseline"]:
+                raise RevisionError("初始基线不能删除", code="BASELINE_DELETE_FORBIDDEN", status=409)
+            if commit_hash != self._meta(connection, "head"):
+                raise RevisionError(
+                    "只能删除当前最新提交；中间提交仍被后续历史依赖",
+                    code="NOT_HEAD_COMMIT",
+                    status=409,
+                )
+            parent_hash = commit_row["parent_hash"]
+            parent_row = connection.execute(
+                "SELECT result_fingerprint FROM RevisionCommits WHERE hash=?", (parent_hash,)
+            ).fetchone()
+            if not parent_row:
+                raise RevisionError("父提交不存在，不能删除", code="PARENT_COMMIT_NOT_FOUND", status=409)
+
+            inverse = []
+            rows = connection.execute(
+                "SELECT * FROM RevisionOperations WHERE commit_hash=? ORDER BY operation_order DESC",
+                (commit_hash,),
+            )
+            for row in rows:
+                action = {"insert": "delete", "delete": "insert", "update": "update"}[row["action"]]
+                before = json.loads(row["before_json"]) if row["before_json"] else None
+                after = json.loads(row["after_json"]) if row["after_json"] else None
+                inverse.append({
+                    "group_id": f"delete:{commit_hash[:12]}",
+                    "operation_order": len(inverse) + 1,
+                    "action": action,
+                    "target_table": row["target_table"],
+                    "target_id": row["target_id"],
+                    "before": after,
+                    "after": before,
+                    "automatic": True,
+                    "reason": f"删除提交 {commit_hash[:12]}",
+                })
+            if not inverse:
+                raise RevisionError("空提交不能删除", code="EMPTY_COMMIT", status=409)
+
+            self._backup()
+            connection.execute("ATTACH DATABASE ? AS data", (str(self.entries_db),))
+            try:
+                connection.execute("PRAGMA data.journal_mode = DELETE")
+                connection.execute("BEGIN IMMEDIATE")
+                realized = self._apply_operations(connection, inverse)
+                self._database_checks(connection, realized)
+                result_fingerprint = self._content_fingerprint(connection, "data")
+                if result_fingerprint != parent_row["result_fingerprint"]:
+                    raise RevisionError(
+                        "撤销后的数据库与父版本不一致，删除已取消",
+                        code="DELETE_RESULT_MISMATCH",
+                        status=409,
+                    )
+                connection.execute(
+                    "DELETE FROM RevisionOperationEvidence WHERE commit_hash=?", (commit_hash,)
+                )
+                connection.execute("DELETE FROM RevisionEvidence WHERE commit_hash=?", (commit_hash,))
+                connection.execute("DELETE FROM RevisionOperations WHERE commit_hash=?", (commit_hash,))
+                connection.execute("DELETE FROM RevisionCommits WHERE hash=?", (commit_hash,))
+                self._set_meta(connection, "head", parent_hash)
+                self._set_meta(connection, "expected_fingerprint", result_fingerprint)
+                connection.execute(
+                    """
+                    UPDATE RevisionWorkspace SET base_head=NULL,base_fingerprint=NULL,
+                        base_marker=NULL,cursor=0,updated_at=? WHERE id=1
+                    """,
+                    (utc_now(),),
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                connection.execute("DETACH DATABASE data")
+            marker = self._file_marker()
+            self._set_meta(connection, "expected_marker", marker)
+            connection.commit()
+            return {
+                "deleted_hash": commit_hash,
+                "head": parent_hash,
+                "state": self.state(),
+            }
+
     def get_commit(self, commit_hash: str) -> dict:
         with self._revision_connection() as connection:
             commit = connection.execute(

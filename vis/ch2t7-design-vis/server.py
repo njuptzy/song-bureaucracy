@@ -757,6 +757,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         path = urlparse(self.path).path
+        commit_match = re.fullmatch(r"/api/revisions/commits/([0-9a-f]{64})", path)
+        if commit_match:
+            self._revision_call(lambda: get_revision_store().delete_commit(commit_match.group(1)))
+            return
         match = re.fullmatch(r"/api/revisions/draft/operations/([A-Za-z0-9:_-]+)", path)
         if not match:
             self._send_json(404, {"error": "接口不存在", "code": "NOT_FOUND"})

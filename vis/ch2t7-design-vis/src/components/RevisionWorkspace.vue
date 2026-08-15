@@ -215,8 +215,11 @@
           <li v-for="commit in commits" :key="commit.hash" :class="{ head: commit.hash === state?.head }">
             <div class="history-line"><strong>{{ commit.summary }}</strong><code>{{ commit.hash.slice(0, 8) }}</code></div>
             <p>{{ formatDate(commit.created_at) }} · {{ commit.operation_count }} 项操作</p>
-            <button v-if="!commit.is_baseline && commit.hash !== state?.head" type="button" class="text-command" @click="$emit('restore', commit.hash)">恢复至此版本</button>
-            <button v-else-if="commit.is_baseline && commit.hash !== state?.head" type="button" class="text-command" @click="$emit('restore', commit.hash)">恢复至初始基线</button>
+            <div class="history-actions">
+              <button v-if="!commit.is_baseline && commit.hash !== state?.head" type="button" class="text-command" @click="$emit('restore', commit.hash)">恢复至此版本</button>
+              <button v-else-if="commit.is_baseline && commit.hash !== state?.head" type="button" class="text-command" @click="$emit('restore', commit.hash)">恢复至初始基线</button>
+              <button v-if="!commit.is_baseline && commit.hash === state?.head" type="button" class="text-command danger-command" :disabled="busy" @click="$emit('delete-commit', commit)">删除此提交</button>
+            </div>
           </li>
         </ol>
       </template>
@@ -246,7 +249,7 @@ const props = defineProps({
 });
 const emit = defineEmits([
   "toggle-edit", "toggle-drawer", "clear-selection", "add-operation", "workspace-action",
-  "remove-group", "commit", "restore", "toggle-connect", "cancel-connect", "add-connection",
+  "remove-group", "commit", "restore", "delete-commit", "toggle-connect", "cancel-connect", "add-connection",
 ]);
 
 const timepointActions = [
@@ -643,6 +646,9 @@ button { color: inherit; }
 .group-evidence cite { color: var(--taupe); font-style: normal; }
 .commit-section { flex: 0 0 auto; display: grid; gap: 9px; padding-top: 12px; border-top: 1px solid rgba(86,57,5,.35); }
 .history-line code { color: var(--taupe); font-size: 10px; }
+.history-actions { display: flex; align-items: center; gap: 12px; }
+.danger-command { color: #8a3c2a; }
+.danger-command:disabled { opacity: .35; cursor: not-allowed; }
 .history-list li.head { border-left: 2px solid #4a765c; padding-left: 9px; }
 .revision-toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 520px; padding: 9px 14px; border: 1px solid #a0432e; background: rgba(245,243,236,.98); color: #7b2f20; pointer-events: auto; }
 @media (max-width: 1100px) {
