@@ -2642,7 +2642,9 @@ function createComparisonChildSvg() {
     "viewBox",
     `${COMPARISON_VIEWBOX.x} ${COMPARISON_VIEWBOX.y} ${COMPARISON_VIEWBOX.width} ${COMPARISON_VIEWBOX.height}`
   );
-  child.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  // 对照区本身就是两个等宽内容槽位；让动态内容填满槽位，
+  // 不再把完整 4-01 画板的纵向空白一起缩进去。
+  child.setAttribute("preserveAspectRatio", "none");
   child.classList.add("comparison-child-svg");
   return child;
 }
@@ -2662,11 +2664,20 @@ function hideComparisonPlotExamples(svg) {
     if (["defs", "style", "image"].includes(tag)) continue;
     if (element.classList.contains("detail-panel-group")) continue;
     const bounds = elementBounds(element);
-    if (!bounds) continue;
-    const overlaps = bounds.x < area.x + area.width
+    const textPoints = [...element.querySelectorAll("text")]
+      .map((text) => position(text))
+      .filter(Boolean);
+    const overlaps = (bounds
+      && bounds.x < area.x + area.width
       && bounds.x + bounds.width > area.x
       && bounds.y < area.y + area.height
-      && bounds.y + bounds.height > area.y;
+      && bounds.y + bounds.height > area.y)
+      || textPoints.some((point) => (
+        point.x >= area.x - 20
+        && point.x <= area.x + area.width + 20
+        && point.y >= area.y - 20
+        && point.y <= area.y + area.height + 20
+      ));
     if (overlaps) element.style.display = "none";
   }
 }
