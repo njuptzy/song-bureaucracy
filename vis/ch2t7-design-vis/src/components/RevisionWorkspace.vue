@@ -536,9 +536,9 @@ button { color: inherit; }
 .field { display: grid; gap: 4px; min-width: 0; }
 .field-wide { grid-column: 1 / -1; }
 .field > span { color: var(--taupe); font-size: 10px; }
-.field input, .field textarea, .field select { width: 100%; min-width: 0; border: 1px solid rgba(86,57,5,.42); border-radius: 0; padding: 6px 7px; background: rgba(245,243,236,.34); color: var(--ink); resize: vertical; }
+.field input, .field textarea, .field select { width: 100%; min-width: 0; border: 1px solid rgba(86,57,5,.42); border-radius: 0; padding: 6px 7px; background: transparent; color: var(--ink); resize: vertical; }
 .field input:focus, .field textarea:focus, .field select:focus { outline: 1px solid var(--ink-2); outline-offset: 1px; }
-.normalized-time { display: grid; gap: 2px; padding: 6px 8px; border-left: 1px solid var(--olive); background: rgba(145,128,105,.06); font-size: 11px; }
+.normalized-time { display: grid; gap: 2px; padding: 6px 8px; border-left: 1px solid var(--olive); background: transparent; font-size: 11px; }
 .normalized-time small { color: var(--taupe); line-height: 1.35; }
 .evidence-section { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(86,57,5,.35); }
 .evidence-mode { display: flex; gap: 14px; font-size: 11px; }
