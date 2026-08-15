@@ -2305,6 +2305,70 @@ function renderDynamicHierarchy(svg) {
   }
 }
 
+function reconcileComparisonHierarchyExpansion(svg) {
+  // 对照视图只有原层级视图一半的横向空间。复用层级视图原有的
+  // expansionAfterLayout / institutionGroupsAfterLayout 判定，但把“半栏”
+  // 作为布局边界重新判断，不能把完整层级画板的 fit 结果直接当成可见。
+  const hasMultipleInstitutionGroups = expandedInstitutionGroupIds.length > 1;
+  const layoutFits = svg.__dynamicHierarchyFitsViewport !== false
+    && !hasMultipleInstitutionGroups;
+  let changed = false;
+
+  const institutionGroupFallback = lastExpandedInstitutionGroupId
+    ?? expandedInstitutionGroupIds.at(-1)
+    ?? null;
+  if (institutionGroupFallback != null) {
+    const nextInstitutionGroups = institutionGroupsAfterLayout({
+      candidateIds: expandedInstitutionGroupIds,
+      clickedId: institutionGroupFallback,
+      spaceAware: spaceAwareExpansion.value,
+      layoutFits,
+    });
+    if (nextInstitutionGroups.length !== expandedInstitutionGroupIds.length
+      || nextInstitutionGroups.some((id, index) => id !== expandedInstitutionGroupIds[index])) {
+      expandedInstitutionGroupIds = nextInstitutionGroups;
+      changed = true;
+    }
+  }
+
+  const subordinateFallback = lastExpandedSubordinateGroupId
+    ?? expandedSubordinateGroupIds.at(-1)
+    ?? null;
+  if (subordinateFallback != null) {
+    const nextSubordinateGroups = institutionGroupsAfterLayout({
+      candidateIds: expandedSubordinateGroupIds,
+      clickedId: subordinateFallback,
+      spaceAware: spaceAwareExpansion.value,
+      layoutFits,
+    });
+    if (nextSubordinateGroups.length !== expandedSubordinateGroupIds.length
+      || nextSubordinateGroups.some((id, index) => id !== expandedSubordinateGroupIds[index])) {
+      expandedSubordinateGroupIds = nextSubordinateGroups;
+      changed = true;
+    }
+  }
+
+  if (lastExpandedHierarchyId != null && expandedHierarchyPath.length) {
+    const fallbackPath = resolveHierarchyContext(
+      lastExpandedHierarchyId,
+      hierarchyEdgesForView(),
+      entityMap,
+    ).path;
+    const nextPath = expansionAfterLayout({
+      candidateIds: expandedHierarchyPath,
+      fallbackPath,
+      spaceAware: spaceAwareExpansion.value,
+      layoutFits,
+    });
+    if (nextPath.length !== expandedHierarchyPath.length
+      || nextPath.some((id, index) => id !== expandedHierarchyPath[index])) {
+      expandedHierarchyPath = nextPath;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function assignSlots(slots, entityIds) {
   const ordered = [...slots].sort((a, b) => {
     const pa = position(a);
@@ -2723,6 +2787,12 @@ function renderDynamicComparison(svg) {
   // 先在各自的嵌套画板中运行原有渲染器，保留节点/事件处理器，
   // 再移除设计稿示例，只留下动态层；不会复制整张页面。
   renderDynamicHierarchy(leftSvg);
+  if (reconcileComparisonHierarchyExpansion(leftSvg)) {
+    // 状态校正后只重绘左侧动态树，不触发整页刷新，也不复制旧的视口。
+    leftSvg.querySelector(".dynamic-tree-viewport")?.remove();
+    leftSvg.querySelector("#dynamic-tree-viewport-clip")?.remove();
+    renderDynamicHierarchy(leftSvg);
+  }
   retainComparisonLayer(leftSvg, ".dynamic-tree-viewport");
   renderDynamicEvolution(rightSvg);
   // 对照区只保留时间轴本体；对象选择器属于独立演变视图入口，
