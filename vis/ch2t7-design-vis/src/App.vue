@@ -1,12 +1,22 @@
 <template>
   <main ref="applicationShellRef" class="application-shell">
-    <DesignTemplateCanvas
-      v-if="data"
+    <ComparisonView
+      v-if="data && canvasState?.viewMode === 'comparison'"
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
+      @exit-comparison="exitComparisonView"
+    />
+    <DesignTemplateCanvas
+      v-else-if="data"
+      :data="data"
+      :initial-state="canvasState"
+      :revision-panel-active="revisionPanelVisible || editMode"
+      @state-change="handleCanvasStateChange"
+      @selection-change="handleSelectionChange"
+      @open-comparison="enterComparisonView"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
@@ -42,6 +52,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DesignTemplateCanvas from "./components/DesignTemplateCanvas.vue";
+import ComparisonView from "./components/ComparisonView.vue";
 import RevisionWorkspace from "./components/RevisionWorkspace.vue";
 import { readCanvasState, writeCanvasState } from "./utils/canvas_state";
 import { filterSongData } from "./utils/song_scope";
@@ -78,18 +89,39 @@ function updateRevisionPanelGeometry() {
   const width = shell.clientWidth;
   const height = shell.clientHeight;
   if (!width || !height) return;
-  const scale = Math.min(width / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
-  const offsetX = (width - DESIGN_VIEWBOX.width * scale) / 2;
+  const comparison = canvasState.value?.viewMode === "comparison";
+  const viewportLeft = comparison ? width / 2 : 0;
+  const viewportWidth = comparison ? width / 2 : width;
+  const scale = Math.min(viewportWidth / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
+  const offsetX = viewportLeft + (viewportWidth - DESIGN_VIEWBOX.width * scale) / 2;
   const offsetY = (height - DESIGN_VIEWBOX.height * scale) / 2;
+  const panelScale = Math.min(width / DESIGN_VIEWBOX.width, height / DESIGN_VIEWBOX.height);
+  const panelWidth = Math.min(
+    REVISION_PANEL_BOUNDS.width * panelScale,
+    Math.max(128, viewportWidth - 24),
+  );
+  const panelHeight = Math.min(
+    REVISION_PANEL_BOUNDS.height * panelScale,
+    Math.max(160, height - 96),
+  );
+  const panelLeft = comparison
+    ? viewportLeft + 16
+    : offsetX + REVISION_PANEL_BOUNDS.x * scale;
+  const panelTop = comparison
+    ? Math.max(64, (height - panelHeight) / 2)
+    : offsetY + REVISION_PANEL_BOUNDS.y * scale;
   revisionPanelStyle.value = {
-    "--revision-panel-left": `${offsetX + REVISION_PANEL_BOUNDS.x * scale}px`,
-    "--revision-panel-top": `${offsetY + REVISION_PANEL_BOUNDS.y * scale}px`,
-    "--revision-panel-width": `${REVISION_PANEL_BOUNDS.width * scale}px`,
-    "--revision-panel-height": `${REVISION_PANEL_BOUNDS.height * scale}px`,
+    "--revision-panel-left": `${panelLeft}px`,
+    "--revision-panel-top": `${panelTop}px`,
+    "--revision-panel-width": `${comparison ? panelWidth : REVISION_PANEL_BOUNDS.width * scale}px`,
+    "--revision-panel-height": `${comparison ? panelHeight : REVISION_PANEL_BOUNDS.height * scale}px`,
   };
 }
 
-const isEvolutionView = computed(() => canvasState.value?.viewMode === "evolution");
+const isEvolutionView = computed(() => (
+  canvasState.value?.viewMode === "evolution"
+  || canvasState.value?.viewMode === "comparison"
+));
 const revisionPanelVisible = computed(() => {
   if (!isEvolutionView.value) return false;
   if (revisionDrawer.value) return true;
@@ -101,6 +133,45 @@ const revisionPanelVisible = computed(() => {
 function handleCanvasStateChange(state) {
   canvasState.value = state;
   writeCanvasState(state);
+  updateRevisionPanelGeometry();
+}
+
+function enterComparisonView() {
+  const source = canvasState.value || {};
+  const hierarchyState = source.comparisonHierarchyState || {
+    ...source,
+    viewMode: "hierarchy",
+  };
+  const evolutionState = source.comparisonEvolutionState || {
+    ...source,
+    viewMode: "evolution",
+  };
+  handleCanvasStateChange({
+    ...source,
+    viewMode: "comparison",
+    comparisonReturnView: source.viewMode === "comparison" ? source.comparisonReturnView : source.viewMode,
+    comparisonHierarchyState: hierarchyState,
+    comparisonEvolutionState: evolutionState,
+  });
+}
+
+function exitComparisonView() {
+  const source = canvasState.value || {};
+  const returnMode = ["hierarchy", "composition", "evolution", "timetree"].includes(source.comparisonReturnView)
+    ? source.comparisonReturnView
+    : "hierarchy";
+  const next = returnMode === "evolution"
+    ? source.comparisonEvolutionState
+    : returnMode === "hierarchy"
+      ? source.comparisonHierarchyState
+      : source;
+  handleCanvasStateChange({
+    ...next,
+    viewMode: returnMode,
+    comparisonReturnView: returnMode,
+    comparisonHierarchyState: source.comparisonHierarchyState,
+    comparisonEvolutionState: source.comparisonEvolutionState,
+  });
 }
 
 function handleSelectionChange(selection) {

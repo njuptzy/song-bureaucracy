@@ -96,3 +96,33 @@ test("恢复前会过滤未知字段并规范非法取值", () => {
     selectedCategory: "地方机构",
   });
 });
+
+test("对照视图保存左右画布各自的状态", () => {
+  assert.deepEqual(sanitizeCanvasState({
+    viewMode: "comparison",
+    comparisonHierarchyState: {
+      viewMode: "hierarchy",
+      selectedCategory: "中央机构",
+      selectedId: 174,
+    },
+    comparisonEvolutionState: {
+      viewMode: "evolution",
+      evolutionMode: "single",
+      evolutionEntityIds: [174],
+      selectedRange: [1080, 1080],
+    },
+  }), {
+    viewMode: "comparison",
+    comparisonHierarchyState: {
+      viewMode: "hierarchy",
+      selectedId: 174,
+      selectedCategory: "中央机构",
+    },
+    comparisonEvolutionState: {
+      viewMode: "evolution",
+      evolutionMode: "single",
+      evolutionEntityIds: [174],
+      selectedRange: [1080, 1080],
+    },
+  });
+});

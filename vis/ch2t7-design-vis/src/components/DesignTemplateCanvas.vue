@@ -94,17 +94,22 @@ const props = defineProps({
   data: { type: Object, required: true },
   initialState: { type: Object, default: null },
   revisionPanelActive: { type: Boolean, default: false },
+  fixedViewMode: { type: String, default: "" },
 });
-const emit = defineEmits(["state-change", "selection-change"]);
+const emit = defineEmits(["state-change", "selection-change", "open-comparison"]);
 const initialState = props.initialState || {};
 
 const hostRef = ref(null);
 const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
-const viewMode = ref(["hierarchy", "composition", "evolution", "timetree"].includes(initialState.viewMode)
-  ? initialState.viewMode
-  : "hierarchy");
+const VIEW_MODES = ["hierarchy", "composition", "evolution", "timetree"];
+const viewMode = ref(VIEW_MODES.includes(props.fixedViewMode)
+  ? props.fixedViewMode
+  : VIEW_MODES.includes(initialState.viewMode)
+    ? initialState.viewMode
+    : "hierarchy");
+const viewModeLocked = computed(() => VIEW_MODES.includes(props.fixedViewMode));
 const evolutionMode = ref(initialState.evolutionMode === "compare" ? "compare" : "single");
 const evolutionEntityIds = ref(Array.isArray(initialState.evolutionEntityIds)
   ? initialState.evolutionEntityIds.slice(0, 4)
@@ -2181,6 +2186,7 @@ function renderDynamicHierarchy(svg) {
         onActivate: (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (viewModeLocked.value) return;
           detailPanelScrollOffset = 0;
           inlineDetailField.value = "duty";
           inlineCompositionScrollOffset = 0;
@@ -2944,6 +2950,7 @@ function renderDynamicTimetree(svg) {
       scheduleTimelineRefresh();
     },
     onOpenEvolution(entityId) {
+      if (viewModeLocked.value) return;
       selectedId.value = entityId;
       evolutionEntityIds.value = [entityId];
       evolutionMode.value = "single";
@@ -3696,6 +3703,7 @@ function bindSpaceAwareExpansionControl(svg) {
 }
 
 function enterEvolutionView() {
+  if (viewModeLocked.value) return;
   const compositionFocus = entityMap.get(compositionFocusId.value);
   const focus = compositionFocus || entityMap.get(selectedId.value) || graphFocusEntity();
   if (focus) {
@@ -3750,6 +3758,11 @@ function ensureTimetreeViewControl(svg) {
     svg.appendChild(control);
   }
   const active = viewMode.value === "timetree";
+  if (viewModeLocked.value) {
+    control.style.display = "none";
+    return;
+  }
+  control.style.display = "";
   const surface = control.querySelector("rect");
   const label = control.querySelector("text");
   surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
@@ -3798,12 +3811,63 @@ function ensureEvolutionViewControl(svg) {
     svg.appendChild(control);
   }
   const active = viewMode.value === "evolution";
+  if (viewModeLocked.value) {
+    control.style.display = "none";
+    return;
+  }
+  control.style.display = "";
   const surface = control.querySelector("rect");
   const label = control.querySelector("text");
   surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
   if (label) label.style.fontWeight = active ? "700" : "400";
   makeEvolutionControlInteractive(control, active);
+}
+
+function ensureComparisonViewControl(svg) {
+  let control = svg.querySelector(".comparison-view-control");
+  if (!control) {
+    control = svgElement("g", { class: "comparison-view-control" });
+    const surface = svgElement("rect", {
+      x: 1528.5,
+      y: 112,
+      width: 137.8,
+      height: 26,
+      rx: 2.7,
+      fill: "#a5a68d",
+      "fill-opacity": 0,
+      stroke: "#563905",
+      "stroke-width": 0.78,
+      "stroke-opacity": 0.42,
+    });
+    const template = findTextAt(svg, 1570.42, 98.84, 2);
+    const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
+    label.setAttribute("transform", "translate(1597.4 130.84)");
+    label.setAttribute("text-anchor", "middle");
+    setText(label, "层级·演变对照");
+    control.append(surface, label);
+    svg.appendChild(control);
+  }
+  const active = viewMode.value === "comparison";
+  const surface = control.querySelector("rect");
+  const label = control.querySelector("text");
+  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
+  if (label) label.style.fontWeight = active ? "700" : "400";
+  control.setAttribute("role", "button");
+  control.setAttribute("tabindex", active ? "-1" : "0");
+  control.setAttribute("aria-label", active ? "当前为层级与演变对照视图" : "打开层级与演变对照视图");
+  control.style.cursor = active ? "default" : "pointer";
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!active && !viewModeLocked.value) emit("open-comparison");
+  };
+  d3.select(control)
+    .on("click.comparison-view", active || viewModeLocked.value ? null : activate)
+    .on("keydown.comparison-view", active || viewModeLocked.value ? null : (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
 }
 
 function makeEvolutionControlInteractive(control, active) {
@@ -3825,8 +3889,12 @@ function makeEvolutionControlInteractive(control, active) {
 
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
+  if (viewModeLocked.value) {
+    svg.querySelector(".comparison-view-control")?.remove();
+  }
   ensureEvolutionViewControl(svg);
   ensureTimetreeViewControl(svg);
+  if (!viewModeLocked.value) ensureComparisonViewControl(svg);
   const categoryItems = templateCategoryItems(svg);
   const selectionTemplate = categoryItems
     .map(({ group }) => [...group.children].find(
@@ -3870,7 +3938,7 @@ function bindTemplateControls(svg) {
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
-        const canActivate = targetMode === "hierarchy"
+        const canActivate = !viewModeLocked.value && targetMode === "hierarchy"
           && (viewMode.value === "composition"
             || viewMode.value === "evolution"
             || viewMode.value === "timetree");
@@ -3887,7 +3955,7 @@ function bindTemplateControls(svg) {
           if (viewMode.value === "evolution" || viewMode.value === "timetree") {
             restoreHierarchyFocus();
           }
-          viewMode.value = "hierarchy";
+          if (!viewModeLocked.value) viewMode.value = "hierarchy";
         };
         this.style.cursor = canActivate ? "pointer" : "default";
         this.style.fontWeight = targetMode === viewMode.value ? "700" : "400";
