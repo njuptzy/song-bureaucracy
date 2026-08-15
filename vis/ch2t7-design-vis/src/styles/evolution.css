@@ -90,6 +90,29 @@
   stroke-width: 4px;
   stroke-linejoin: round;
   font-size: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease-out;
+}
+
+.dynamic-evolution-layer .evolution-relation-label-leader {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+
+.dynamic-evolution-layer .evolution-relation:hover .evolution-relation-label,
+.dynamic-evolution-layer .evolution-relation:focus-within .evolution-relation-label,
+.dynamic-evolution-layer .evolution-relation-group:hover .evolution-relation-label,
+.dynamic-evolution-layer .evolution-relation-group:focus-within .evolution-relation-label,
+.dynamic-evolution-layer .evolution-fan-group:hover .evolution-relation-label,
+.dynamic-evolution-layer .evolution-fan-group:focus-within .evolution-relation-label,
+.dynamic-evolution-layer .evolution-relation:hover .evolution-relation-label-leader,
+.dynamic-evolution-layer .evolution-relation:focus-within .evolution-relation-label-leader,
+.dynamic-evolution-layer .evolution-relation-group:hover .evolution-relation-label-leader,
+.dynamic-evolution-layer .evolution-relation-group:focus-within .evolution-relation-label-leader,
+.dynamic-evolution-layer .evolution-fan-group:hover .evolution-relation-label-leader,
+.dynamic-evolution-layer .evolution-fan-group:focus-within .evolution-relation-label-leader {
+  opacity: 1;
 }
 
 .dynamic-evolution-layer .evolution-relation-overflow-marker {
