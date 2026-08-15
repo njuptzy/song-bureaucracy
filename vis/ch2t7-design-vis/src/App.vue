@@ -4,7 +4,7 @@
       v-if="data"
       :data="data"
       :initial-state="canvasState"
-      :revision-panel-active="revisionPanelVisible"
+      :revision-panel-active="revisionPanelVisible || editMode"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
     />
