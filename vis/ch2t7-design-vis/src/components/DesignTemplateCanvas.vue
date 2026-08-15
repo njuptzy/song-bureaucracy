@@ -2526,6 +2526,9 @@ function hideEvolutionExamples(svg) {
   if (evolutionTemplateCache.has(svg)) return;
   [...svg.children].forEach((element) => {
     if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return;
+    if (normalizeText(element).startsWith("宋朝的职官体系是自秦朝以来")) {
+      element.classList.add("evolution-intro-copy");
+    }
     const point = position(element);
     const bounds = elementBounds(element);
     const x = point?.x ?? bounds?.x;
@@ -3956,6 +3959,9 @@ onUnmounted(() => {
 .design-template.revision-panel-active .svg-mount :deep(.evolution-selector-layer) {
   visibility: hidden;
   pointer-events: none;
+}
+.design-template.revision-panel-active .svg-mount :deep(.evolution-intro-copy) {
+  display: none;
 }
 .svg-mount :deep(.shared-category-label) {
   fill: #351704;

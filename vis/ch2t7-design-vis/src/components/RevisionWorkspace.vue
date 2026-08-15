@@ -472,11 +472,11 @@ button { color: inherit; }
 .selection-editor, .connection-editor, .revision-drawer {
   position: absolute;
   left: 4.25%;
-  top: 29.7%;
+  top: 13.5%;
   right: auto;
   bottom: auto;
   width: 20.5%;
-  height: 19%;
+  height: 31.2%;
   max-height: none;
   overflow-x: hidden;
   overflow-y: auto;
