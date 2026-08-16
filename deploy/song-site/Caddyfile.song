@@ -1,0 +1,49 @@
+song.zywingspan.com {
+	encode zstd gzip
+
+	route {
+		# 公网页面只读：用锁定状态替代真实修订工作区，避免暴露草稿和提交历史。
+		@revisionState {
+			method GET
+			path /api/revisions/state
+		}
+		header @revisionState Content-Type "application/json; charset=utf-8"
+		respond @revisionState `{"edit_locked":true,"lock_reason":"公网浏览版为只读，数据修订请在本地项目中进行。","draft":{"group_count":0}}` 200
+
+		@revisionPreview {
+			method GET
+			path /api/revisions/draft/preview
+		}
+		header @revisionPreview Content-Type "application/json; charset=utf-8"
+		respond @revisionPreview `{"state":{"edit_locked":true,"lock_reason":"公网浏览版为只读，数据修订请在本地项目中进行。","draft":{"group_count":0}},"differences":[],"affected_entity_ids":[],"affected_years":[]}` 200
+
+		@revisionCommits {
+			method GET
+			path /api/revisions/commits*
+		}
+		header @revisionCommits Content-Type "application/json; charset=utf-8"
+		respond @revisionCommits `{"commits":[]}` 200
+
+		@revisionWrite {
+			method POST PUT PATCH DELETE
+			path /api/revisions/*
+		}
+		header @revisionWrite Content-Type "application/json; charset=utf-8"
+		respond @revisionWrite `{"error":"公网浏览版不开放数据修订","code":"PUBLIC_READ_ONLY"}` 403
+
+		reverse_proxy 127.0.0.1:8650
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "SAMEORIGIN"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
