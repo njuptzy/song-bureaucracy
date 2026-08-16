@@ -4148,11 +4148,16 @@ function ensureTimetreeViewControl(svg) {
 }
 
 function ensureEvolutionViewControl(svg) {
+  // 层级模式中“空间展开”占据中间位置；其他模式隐藏该控件后，
+  // 将三个视图标签收拢成与原稿层级/编制按钮等距的一组。
+  const layout = viewMode.value === "hierarchy"
+    ? { surfaceX: 1248.5, labelX: 1311.4 }
+    : { surfaceX: 1398.5, labelX: 1461.4 };
   let control = svg.querySelector(".evolution-view-control");
   if (!control) {
     control = svgElement("g", { class: "evolution-view-control" });
     const surface = svgElement("rect", {
-      x: 1248.5,
+      x: layout.surfaceX,
       y: 80,
       width: 125.8,
       height: 26,
@@ -4165,7 +4170,7 @@ function ensureEvolutionViewControl(svg) {
     });
     const template = findTextAt(svg, 1570.42, 98.84, 2);
     const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
-    label.setAttribute("transform", "translate(1311.4 98.84)");
+    label.setAttribute("transform", `translate(${layout.labelX} 98.84)`);
     label.setAttribute("text-anchor", "middle");
     setText(label, "演变视图");
     control.append(surface, label);
@@ -4179,6 +4184,8 @@ function ensureEvolutionViewControl(svg) {
   control.style.display = "";
   const surface = control.querySelector("rect");
   const label = control.querySelector("text");
+  surface?.setAttribute("x", String(layout.surfaceX));
+  label?.setAttribute("transform", `translate(${layout.labelX} 98.84)`);
   surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
   if (label) label.style.fontWeight = active ? "700" : "400";
