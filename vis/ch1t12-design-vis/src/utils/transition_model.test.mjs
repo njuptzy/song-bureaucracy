@@ -5,6 +5,7 @@ import {
   buildStructuralChangeIndex,
   changeSummaryForEntities,
   changeSummaryForEntity,
+  changesForEntities,
   changesForEntity,
   resolveTransitionSelection,
 } from "./transition_model.js";
@@ -86,6 +87,13 @@ test("虚拟组聚合时同一关系不会按两个成员重复计数", () => {
   const index = buildStructuralChangeIndex(baseData);
   const summary = changeSummaryForEntities(index, [1, 2], 1080);
   assert.equal(summary.current.count, 4);
+});
+
+test("虚拟组演变轨按时间排序且不会重复列出成员之间的同一关系", () => {
+  const index = buildStructuralChangeIndex(baseData);
+  const changes = changesForEntities(index, [1, 2]);
+  assert.equal(changes.filter((change) => change.key === "explicit:relation:601").length, 1);
+  assert.deepEqual(changes.map((change) => change.eventYear), [1069, 1080, 1080, 1080, 1080, 1086]);
 });
 
 test("年度快照变化优先保留显式演变并识别改隶", () => {

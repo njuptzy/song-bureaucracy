@@ -351,7 +351,7 @@ export function changesForEntity(index, entityId) {
   return index?.byEntity?.get(normalizeId(entityId)) || [];
 }
 
-export function changeSummaryForEntities(index, entityIds, year) {
+export function changesForEntities(index, entityIds) {
   const keys = new Set();
   const changes = [];
   for (const entityId of entityIds || []) {
@@ -361,6 +361,11 @@ export function changeSummaryForEntities(index, entityIds, year) {
       changes.push(change);
     }
   }
+  return changes.sort(compareChanges);
+}
+
+export function changeSummaryForEntities(index, entityIds, year) {
+  const changes = changesForEntities(index, entityIds);
   const pastChanges = changes.filter((change) => change.eventYear < year);
   const currentChanges = changes.filter((change) => change.eventYear === year);
   const futureChanges = changes.filter((change) => change.eventYear > year);
@@ -514,4 +519,3 @@ export function resolveTransitionSelection({
   }
   return { entityId: currentId, reason: "context-only", change: matches[0] || null };
 }
-

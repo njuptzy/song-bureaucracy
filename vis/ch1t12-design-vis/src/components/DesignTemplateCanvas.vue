@@ -97,6 +97,7 @@ import {
   buildStructuralChangeIndex,
   changeSummaryForEntities,
   changeSummaryForEntity,
+  changesForEntities,
   changesForEntity,
   resolveTransitionSelection,
 } from "../utils/transition_model";
@@ -157,6 +158,7 @@ const pendingRange = ref([...selectedRange.value]);
 const timelineSelectionActive = ref(initialState.timelineSelectionActive ?? true);
 const selectedId = ref(initialState.selectedId ?? null);
 const changeTrackEntityId = ref(null);
+const changeTrackGroup = ref(null);
 const focusedTransition = ref(null);
 const compositionFocusId = ref(initialState.compositionFocusId ?? null);
 const selectedCategory = ref(initialState.selectedCategory || "中央机构");
@@ -1112,6 +1114,26 @@ function openEntityChangeTrack(entityId, event = null) {
   event?.stopPropagation?.();
   selectedId.value = entityId;
   changeTrackEntityId.value = entityId;
+  changeTrackGroup.value = null;
+  focusedTransition.value = null;
+  expandedChangeEvidenceKeys.clear();
+  detailPanelScrollOffset = 0;
+  pendingDetailSectionKey = "extra-1";
+  refreshTemplate();
+}
+
+function openGroupChangeTrack(nodeData, event = null) {
+  const memberEntityIds = [...new Set(nodeData.memberEntityIds || [])]
+    .filter((entityId) => entityMap.get(entityId)?.type === "机构");
+  if (!memberEntityIds.length) return;
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  changeTrackEntityId.value = null;
+  changeTrackGroup.value = {
+    id: nodeData.id,
+    title: nodeData.title,
+    memberEntityIds,
+  };
   focusedTransition.value = null;
   expandedChangeEvidenceKeys.clear();
   detailPanelScrollOffset = 0;
@@ -1151,8 +1173,8 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
     summary,
     node.data.isVirtual,
   ));
-  marker.setAttribute("role", node.data.isVirtual ? "note" : "button");
-  if (!node.data.isVirtual) marker.setAttribute("tabindex", "0");
+  marker.setAttribute("role", "button");
+  marker.setAttribute("tabindex", "0");
   marker.appendChild(svgElement("rect", {
     class: "node-change-indicator-hit-area",
     x: -6,
@@ -1180,15 +1202,15 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
     itemGroup.append(circle, label, title);
     marker.appendChild(itemGroup);
   });
-  if (!node.data.isVirtual) {
-    const activate = (event) => openEntityChangeTrack(node.data.id, event);
-    marker.style.cursor = "pointer";
-    d3.select(marker)
-      .on("click.change-indicator", activate)
-      .on("keydown.change-indicator", (event) => {
-        if (event.key === "Enter" || event.key === " ") activate(event);
-      });
-  }
+  const activate = node.data.isVirtual
+    ? (event) => openGroupChangeTrack(node.data, event)
+    : (event) => openEntityChangeTrack(node.data.id, event);
+  marker.style.cursor = "pointer";
+  d3.select(marker)
+    .on("click.change-indicator", activate)
+    .on("keydown.change-indicator", (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
   nodeGroup.appendChild(marker);
 }
 
@@ -2376,6 +2398,7 @@ function renderDynamicHierarchy(svg) {
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      changeTrackGroup.value = null;
       if (node.data.isSubordinateGroup) {
         const wasExpanded = expandedSubordinateGroupIds.includes(node.data.id);
         expandedSubordinateGroupIds = toggleInstitutionGroupIds(
@@ -2427,6 +2450,7 @@ function renderDynamicHierarchy(svg) {
         event.stopPropagation();
         detailPanelScrollOffset = 0;
         inlineCompositionScrollOffset = 0;
+        changeTrackGroup.value = null;
         expandedDetailId.value = null;
         inlineDetailOfficialId.value = null;
         selectedId.value = node.data.id;
@@ -4016,8 +4040,7 @@ function appendWrappedTrackText(element, text, lineIndex, className = "") {
   return line;
 }
 
-function renderTransitionTrack(svg, element, entityId) {
-  const items = changesForEntity(structuralChangeIndex, entityId);
+function renderTransitionTrackItems(svg, element, items) {
   element.replaceChildren();
   if (!items.length) {
     appendTrackTextLine(element, 0, [{ text: "当前机构暂无可定位的结构变化记录。" }]);
@@ -4099,6 +4122,14 @@ function renderTransitionTrack(svg, element, entityId) {
   return Math.max(1, line);
 }
 
+function renderTransitionTrack(svg, element, entityId) {
+  return renderTransitionTrackItems(
+    svg,
+    element,
+    changesForEntity(structuralChangeIndex, entityId),
+  );
+}
+
 function transitionSummaryText(entityId) {
   const items = changesForEntity(structuralChangeIndex, entityId);
   const summary = changeSummaryForEntity(
@@ -4113,9 +4144,92 @@ function transitionSummaryText(entityId) {
   return parts.join("；");
 }
 
+function groupTransitionSummaryText(group) {
+  const items = changesForEntities(structuralChangeIndex, group.memberEntityIds);
+  const summary = changeSummaryForEntities(
+    structuralChangeIndex,
+    group.memberEntityIds,
+    selectedRange.value[0],
+  );
+  const parts = [
+    `组内${group.memberEntityIds.length}个机构`,
+    `共${items.length}项结构变化`,
+  ];
+  if (summary.past) parts.push(`最近过去为${summary.past.year}年`);
+  if (summary.current) parts.push(`同年${summary.current.count}项`);
+  if (summary.future) parts.push(`最近未来为${summary.future.year}年`);
+  return parts.join("；");
+}
+
+function updateGroupChangeDetails(svg, group) {
+  INLINE_DETAIL_FIELDS.forEach((field) => {
+    const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
+    if (label) label.style.display = "none";
+    if (content) content.style.display = "none";
+  });
+  const detailSlots = layoutDetailHeader(
+    svg,
+    `${group.title} · 组内变化`,
+    selectedRangeLabel(),
+  );
+  let cursorY = 536.92 + detailSlots.contentOffsetY;
+  const summaryLabel = svg.querySelector("[data-detail-section-label='extra-1']");
+  const summaryContent = svg.querySelector("[data-detail-section-content='extra-1']");
+  if (summaryLabel && summaryContent) {
+    summaryLabel.style.display = "";
+    summaryContent.style.display = "";
+    summaryLabel.setAttribute("transform", `translate(100.33 ${cursorY})`);
+    setText(summaryLabel, "组内结构变化：");
+    summaryLabel.style.fill = "#866d6d";
+    cursorY += 25;
+    summaryContent.setAttribute("transform", `translate(101.29 ${cursorY})`);
+    const summaryLines = wrapText(
+      summaryContent,
+      groupTransitionSummaryText(group),
+      28,
+      18,
+      Infinity,
+    );
+    cursorY += Math.max(1, summaryLines) * 18 + 13;
+  }
+  const trackLabel = svg.querySelector("[data-detail-section-label='extra-2']");
+  const trackContent = svg.querySelector("[data-detail-section-content='extra-2']");
+  if (trackLabel && trackContent) {
+    trackLabel.style.display = "";
+    trackContent.style.display = "";
+    trackLabel.setAttribute("transform", `translate(100.33 ${cursorY})`);
+    setText(trackLabel, "组内演变轨：");
+    trackLabel.style.fill = "#866d6d";
+    cursorY += 25;
+    trackContent.setAttribute("transform", `translate(101.29 ${cursorY})`);
+    const trackLines = renderTransitionTrackItems(
+      svg,
+      trackContent,
+      changesForEntities(structuralChangeIndex, group.memberEntityIds),
+    );
+    cursorY += Math.max(1, trackLines) * 18 + 13;
+  }
+  const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+  if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY + 2);
+  if (pendingDetailSectionKey) {
+    const target = svg.querySelector(
+      `[data-detail-section-label='${pendingDetailSectionKey}']`,
+    );
+    const targetY = position(target)?.y;
+    if (Number.isFinite(targetY)) detailPanelScrollOffset = Math.max(0, targetY - 536.92);
+    pendingDetailSectionKey = null;
+  }
+  svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
+}
+
 function updateDetails(svg) {
   if (isEvolutionCanvasMode()) {
     updateEvolutionDetails(svg);
+    return;
+  }
+  if (changeTrackGroup.value) {
+    updateGroupChangeDetails(svg, changeTrackGroup.value);
     return;
   }
   const entity = selectedEntity();
