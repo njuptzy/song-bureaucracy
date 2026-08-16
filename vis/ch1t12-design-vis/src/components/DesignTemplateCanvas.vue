@@ -86,6 +86,7 @@ import {
   timetreeYearToX,
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
+import { detailHeaderLayout } from "../utils/detail_header";
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -520,13 +521,47 @@ function fitQuotaLabel(quota, person, edge, rect) {
   }
 }
 
-function constrainTextWidth(element, maxWidth) {
+function clearTextWidthConstraint(element) {
   if (!element) return;
   element.removeAttribute("textLength");
   element.removeAttribute("lengthAdjust");
-  if (element.getComputedTextLength() <= maxWidth) return;
-  element.setAttribute("textLength", String(maxWidth));
-  element.setAttribute("lengthAdjust", "spacingAndGlyphs");
+}
+
+function detailHeaderSlots(svg) {
+  const title = svg.querySelector("[data-detail-header-title]")
+    || findTextAt(svg, 99.85, 505.87);
+  const year = svg.querySelector("[data-detail-header-year]")
+    || findTextAt(svg, 189.74, 502.91);
+  if (title) title.dataset.detailHeaderTitle = "";
+  if (year) year.dataset.detailHeaderYear = "";
+  return { title, year };
+}
+
+function layoutDetailHeader(svg, titleText, yearText) {
+  const slots = detailHeaderSlots(svg);
+  setText(slots.title, titleText);
+  setText(slots.year, yearText);
+  clearTextWidthConstraint(slots.title);
+  clearTextWidthConstraint(slots.year);
+  if (!slots.title || !slots.year) return { ...slots, contentOffsetY: 0 };
+
+  slots.title.setAttribute("transform", "translate(99.85 505.87)");
+  slots.year.setAttribute("transform", "translate(189.74 502.91)");
+  const layout = detailHeaderLayout({
+    titleWidth: slots.title.getComputedTextLength(),
+    yearWidth: slots.year.getComputedTextLength(),
+  });
+  slots.year.setAttribute("transform", `translate(${layout.yearX} ${layout.yearY})`);
+
+  const topRightBorder = svg.querySelector(".detail-panel-group")?.__topRightBorder;
+  topRightBorder?.setAttribute(
+    "points",
+    `229.27 877.67 475.49 877.67 475.49 497.57 ${layout.borderStartX} 497.57`,
+  );
+  return {
+    ...slots,
+    contentOffsetY: layout.stacked ? 20 : 0,
+  };
 }
 
 function intervalOverlapsRange(start, end) {
@@ -3766,25 +3801,9 @@ function evolutionDetailPayload(svg) {
 function updateEvolutionDetails(svg) {
   const payload = evolutionDetailPayload(svg);
   if (!payload) return;
-  const title = findTextAt(svg, 99.85, 505.87);
-  const year = findTextAt(svg, 189.74, 502.91);
-  setText(title, payload.title);
-  setText(year, payload.year);
-  constrainTextWidth(title, 78);
-  constrainTextWidth(year, 270);
+  const detailHeader = layoutDetailHeader(svg, payload.title, payload.year);
 
-  const panelGroup = svg.querySelector(".detail-panel-group");
-  const topRightBorder = panelGroup?.__topRightBorder;
-  if (topRightBorder && year) {
-    const yearX = position(year)?.x ?? 189.74;
-    const lineStart = Math.max(308.55, Math.min(468, yearX + year.getComputedTextLength() + 8));
-    topRightBorder.setAttribute(
-      "points",
-      `229.27 877.67 475.49 877.67 475.49 497.57 ${lineStart} 497.57`,
-    );
-  }
-
-  let cursorY = 536.92;
+  let cursorY = 536.92 + detailHeader.contentOffsetY;
   DETAIL_PANEL_SECTION_KEYS.forEach((key, index) => {
     const label = svg.querySelector(`[data-detail-section-label='${key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${key}']`);
@@ -3819,20 +3838,16 @@ function updateDetails(svg) {
   }
   const entity = selectedEntity();
   if (!entity) {
-    const title = findTextAt(svg, 99.85, 505.87);
-    const year = findTextAt(svg, 189.74, 502.91);
-    setText(title, selectedCategory.value);
-    setText(year, selectedRangeLabel());
-    constrainTextWidth(title, 78);
-    constrainTextWidth(year, 270);
+    const detailHeader = layoutDetailHeader(svg, selectedCategory.value, selectedRangeLabel());
+    const contentOffsetY = detailHeader.contentOffsetY;
     const [firstField, ...hiddenFields] = INLINE_DETAIL_FIELDS;
     const label = svg.querySelector(`[data-detail-section-label='${firstField.key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${firstField.key}']`);
     if (label && content) {
       label.style.display = "";
       content.style.display = "";
-      label.setAttribute("transform", "translate(100.33 536.92)");
-      content.setAttribute("transform", "translate(101.29 561.92)");
+      label.setAttribute("transform", `translate(100.33 ${536.92 + contentOffsetY})`);
+      content.setAttribute("transform", `translate(101.29 ${561.92 + contentOffsetY})`);
       setText(label, "当前截面：");
       wrapText(
         content,
@@ -3855,7 +3870,7 @@ function updateDetails(svg) {
       if (extraContent) extraContent.style.display = "none";
     });
     const scrollContent = svg.querySelector(".detail-panel-scroll-content");
-    if (scrollContent) scrollContent.dataset.contentBottom = "650";
+    if (scrollContent) scrollContent.dataset.contentBottom = String(650 + contentOffsetY);
     detailPanelScrollOffset = 0;
     svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
     return;
@@ -3870,28 +3885,8 @@ function updateDetails(svg) {
     if (extraContent) extraContent.style.display = "none";
   });
 
-  const detailSlots = {
-    title: findTextAt(svg, 99.85, 505.87),
-    year: findTextAt(svg, 189.74, 502.91),
-  };
-  setText(detailSlots.title, entity.title);
-  setText(detailSlots.year, selectedRangeLabel());
-  constrainTextWidth(detailSlots.title, 78);
-  constrainTextWidth(detailSlots.year, 270);
-  const panelGroup = svg.querySelector(".detail-panel-group");
-  const topRightBorder = panelGroup?.__topRightBorder;
-  if (topRightBorder && detailSlots.year) {
-    const yearX = position(detailSlots.year)?.x ?? 189.74;
-    const lineStart = Math.max(
-      308.55,
-      Math.min(468, yearX + detailSlots.year.getComputedTextLength() + 8)
-    );
-    topRightBorder.setAttribute(
-      "points",
-      `229.27 877.67 475.49 877.67 475.49 497.57 ${lineStart} 497.57`
-    );
-  }
-  let cursorY = 536.92;
+  const detailSlots = layoutDetailHeader(svg, entity.title, selectedRangeLabel());
+  let cursorY = 536.92 + detailSlots.contentOffsetY;
   for (const field of INLINE_DETAIL_FIELDS) {
     const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
