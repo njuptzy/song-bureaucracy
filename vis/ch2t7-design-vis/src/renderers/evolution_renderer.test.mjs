@@ -83,8 +83,8 @@ test("同年错层事件的回指线独立于事件图标计算，供底层先�
 });
 
 test("时间链异常图标旁显示具体说明，窄空间退化为短标签", () => {
-  const anomalies = [{ type: "multiple_chain_heads" }];
-  assert.equal(laneAnomalySummary(anomalies), "多个时间链起点");
+  const anomalies = [{ type: "nonreciprocal_chain_link" }];
+  assert.equal(laneAnomalySummary(anomalies), "前后指针不一致");
   assert.equal(laneAnomalySummary(anomalies, 2), "异常");
   assert.equal(laneAnomalySummary([
     { type: "branching_timeline" },

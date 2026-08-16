@@ -116,6 +116,7 @@ function buildChains(entityId, timepoints) {
   const byId = new Map(timepoints.map((item) => [item.id, item]));
   const predecessors = new Map(timepoints.map((item) => [item.id, new Set()]));
   const successors = new Map(timepoints.map((item) => [item.id, new Set()]));
+  const checkedDirections = new Set();
 
   const link = (sourceId, targetId, field, ownerId) => {
     if (sourceId == null || targetId == null) return;
@@ -131,11 +132,59 @@ function buildChains(entityId, timepoints) {
     }
     successors.get(sourceId).add(targetId);
     predecessors.get(targetId).add(sourceId);
+    const directionKey = `${sourceId}->${targetId}`;
+    if (!checkedDirections.has(directionKey)) {
+      checkedDirections.add(directionKey);
+      const sourceYear = finiteYear(byId.get(sourceId)?.effectiveYear);
+      const targetYear = finiteYear(byId.get(targetId)?.effectiveYear);
+      if (sourceYear != null && targetYear != null && sourceYear > targetYear) {
+        anomalies.push({
+          type: "chronology_direction_conflict",
+          entityId,
+          sourceTimepointId: sourceId,
+          targetTimepointId: targetId,
+          sourceYear,
+          targetYear,
+        });
+      }
+    }
   };
 
   for (const item of timepoints) {
     link(item.prevId, item.id, "prev_id", item.id);
     link(item.id, item.succId, "succ_id", item.id);
+  }
+
+  // prev/succ 是可选的局部顺序证据；一旦两端都声明，就必须互相确认。
+  for (const item of timepoints) {
+    if (item.prevId != null && byId.has(item.prevId)) {
+      const previous = byId.get(item.prevId);
+      if (previous.succId !== item.id) {
+        anomalies.push({
+          type: "nonreciprocal_chain_link",
+          entityId,
+          timepointId: item.id,
+          field: "prev_id",
+          linkedTimepointId: item.prevId,
+          reciprocalField: "succ_id",
+          reciprocalValue: previous.succId,
+        });
+      }
+    }
+    if (item.succId != null && byId.has(item.succId)) {
+      const next = byId.get(item.succId);
+      if (next.prevId !== item.id) {
+        anomalies.push({
+          type: "nonreciprocal_chain_link",
+          entityId,
+          timepointId: item.id,
+          field: "succ_id",
+          linkedTimepointId: item.succId,
+          reciprocalField: "prev_id",
+          reciprocalValue: next.prevId,
+        });
+      }
+    }
   }
 
   for (const item of timepoints) {
@@ -161,9 +210,6 @@ function buildChains(entityId, timepoints) {
 
   const sortIds = (ids) => [...ids].sort((a, b) => compareTimepointOrder(byId.get(a), byId.get(b)));
   const heads = sortIds(timepoints.filter((item) => predecessors.get(item.id).size === 0).map((item) => item.id));
-  if (heads.length > 1) {
-    anomalies.push({ type: "multiple_chain_heads", entityId, headIds: heads });
-  }
 
   const pending = [...heads];
   const visited = new Set();

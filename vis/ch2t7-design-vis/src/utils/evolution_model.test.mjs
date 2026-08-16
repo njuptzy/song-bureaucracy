@@ -265,7 +265,7 @@ describe("buildEvolutionModel lifecycle", () => {
     assert.equal(model.anomalies.some((item) => item.type === "dangling_chain_link"), false);
   });
 
-  it("多个链头保持为断开的子链并报告异常", () => {
+  it("多个链头作为可选的局部顺序保留，不再视为异常", () => {
     const model = buildEvolutionModel({
       entities: [entity(1, "断链司")],
       timepoints: {
@@ -282,8 +282,27 @@ describe("buildEvolutionModel lifecycle", () => {
       model.lanes[0].segments.map(({ startYear, endYear }) => [startYear, endYear]),
       [[970, 980], [990, 1000]],
     );
-    const anomaly = model.anomalies.find((item) => item.type === "multiple_chain_heads");
-    assert.deepEqual(anomaly.headIds, [31, 33]);
+    assert.equal(
+      model.anomalies.some((item) => item.type === "multiple_chain_heads"),
+      false,
+    );
+  });
+
+  it("只警告不互认的链指针和违背明确年代的方向", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1, "逆序司")],
+      timepoints: {
+        1: [
+          timepoint(41, 1010, "后期记载", { succ_id: 42 }),
+          timepoint(42, 1000, "前期记载"),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+
+    const types = model.anomalies.map((item) => item.type);
+    assert.ok(types.includes("nonreciprocal_chain_link"));
+    assert.ok(types.includes("chronology_direction_conflict"));
   });
 });
 

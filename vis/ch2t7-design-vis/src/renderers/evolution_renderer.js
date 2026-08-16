@@ -547,9 +547,10 @@ function renderEvolutionLegend(parent, layout) {
 
 const LANE_ANOMALY_LABELS = new Map([
   ["dangling_chain_link", "链指针缺失"],
+  ["nonreciprocal_chain_link", "前后指针不一致"],
+  ["chronology_direction_conflict", "链方向逆序"],
   ["branching_timeline", "时间链分叉"],
   ["merging_timeline", "时间链汇合"],
-  ["multiple_chain_heads", "多个时间链起点"],
   ["timeline_cycle", "时间链循环"],
 ]);
 
