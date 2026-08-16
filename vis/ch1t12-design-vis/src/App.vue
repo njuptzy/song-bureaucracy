@@ -125,7 +125,12 @@ function handleSelectionChange(selection) {
 }
 
 function handleDetailEntityChange(entityId) {
-  activeDetailEntityId = Number.isFinite(Number(entityId)) ? Number(entityId) : null;
+  activeDetailEntityId = entityId !== null
+    && entityId !== undefined
+    && entityId !== ""
+    && Number.isFinite(Number(entityId))
+    ? Number(entityId)
+    : null;
   if (activeDetailEntityId != null) void loadEntityDetails(activeDetailEntityId);
 }
 

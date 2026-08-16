@@ -91,6 +91,15 @@ import {
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
 import { detailHeaderLayout } from "../utils/detail_header";
+import {
+  CHANGE_TYPE_LABELS,
+  buildSnapshotTransition,
+  buildStructuralChangeIndex,
+  changeSummaryForEntities,
+  changeSummaryForEntity,
+  changesForEntity,
+  resolveTransitionSelection,
+} from "../utils/transition_model";
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -144,8 +153,11 @@ const timetreeSelectedRelationId = ref(null);
 const selectedRange = ref(Array.isArray(initialState.selectedRange)
   ? initialState.selectedRange.slice(0, 2)
   : [1080, 1080]);
+const pendingRange = ref([...selectedRange.value]);
 const timelineSelectionActive = ref(initialState.timelineSelectionActive ?? true);
 const selectedId = ref(initialState.selectedId ?? null);
+const changeTrackEntityId = ref(null);
+const focusedTransition = ref(null);
 const compositionFocusId = ref(initialState.compositionFocusId ?? null);
 const selectedCategory = ref(initialState.selectedCategory || "中央机构");
 const expandedDetailId = ref(null);
@@ -174,6 +186,10 @@ let evolutionModelCacheKey = "";
 let evolutionModelCache = null;
 let evolutionLayoutCacheKey = "";
 let evolutionLayoutCache = null;
+let structuralChangeIndex = null;
+let activeTransitionAnimation = 0;
+let reduceMotionQuery = null;
+const expandedChangeEvidenceKeys = new Set();
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -224,6 +240,7 @@ function rebuildDataIndexes(data) {
   institutionGroupNames = data?.meta?.institutionGroupNames || {
     中央机构: CENTRAL_GROUP_NAMES,
   };
+  structuralChangeIndex = buildStructuralChangeIndex(data || {});
 }
 
 rebuildDataIndexes(props.data);
@@ -850,6 +867,8 @@ function selectedEntity() {
   }
   const selected = entityMap.get(selectedId.value);
   const activeEntityIds = currentSnapshot.value?.entityIds || null;
+  const keepsTransitionContext = selected?.id === changeTrackEntityId.value;
+  if (keepsTransitionContext) return selected;
   const fallback = selected && (!activeEntityIds || activeEntityIds.has(selected.id))
     ? null
     : categoryFocus(selectedCategory.value);
@@ -1025,12 +1044,16 @@ function categoryForestData(category) {
       treeForRoot: (id) => hierarchyTreeData(id, 2),
     })
     : [];
+  visibleRoots.forEach((group) => {
+    group.memberEntityIds = group.memberEntityIds.flatMap(hierarchySubtreeIds);
+  });
   return {
     id: virtualId,
     title: category,
     childCount: orderedRoots.length,
     hiddenCount: orderedRoots.length - visibleRoots.length,
     isVirtual: true,
+    memberEntityIds: orderedRoots.flatMap(hierarchySubtreeIds),
     children: visibleRoots,
   };
 }
@@ -1057,6 +1080,116 @@ function fitDynamicNodeLabel(label, fullTitle, polygonBounds) {
     "transform",
     `translate(${polygonBounds.x + polygonBounds.width / 2} ${polygonBounds.y + polygonBounds.height / 2})`
   );
+}
+
+function nodeStructuralChangeSummary(node) {
+  if (!timelineSelectionActive.value || selectedRange.value[0] !== selectedRange.value[1]) {
+    return null;
+  }
+  const year = selectedRange.value[0];
+  if (!node.data.isVirtual) {
+    return changeSummaryForEntity(structuralChangeIndex, node.data.id, year);
+  }
+  return changeSummaryForEntities(
+    structuralChangeIndex,
+    node.data.memberEntityIds || [],
+    year,
+  );
+}
+
+function changeSummaryAriaLabel(title, summary, isVirtual) {
+  const parts = [];
+  if (summary.past) parts.push(`最近过去变化在${summary.past.year}年，相距${summary.past.distance}年`);
+  if (summary.current) parts.push(`同年${summary.current.count}项变化`);
+  if (summary.future) parts.push(`最近未来变化在${summary.future.year}年，相距${summary.future.distance}年`);
+  return `${title}${isVirtual ? "组内" : ""}结构变化：${parts.join("；")}`;
+}
+
+function openEntityChangeTrack(entityId, event = null) {
+  const entity = entityMap.get(entityId);
+  if (!entity || entity.type !== "机构") return;
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  selectedId.value = entityId;
+  changeTrackEntityId.value = entityId;
+  focusedTransition.value = null;
+  expandedChangeEvidenceKeys.clear();
+  detailPanelScrollOffset = 0;
+  pendingDetailSectionKey = "extra-1";
+  refreshTemplate();
+}
+
+function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
+  const summary = nodeStructuralChangeSummary(node);
+  if (!summary || !summary.total || !hitBounds) return;
+  const items = [
+    summary.past ? {
+      kind: "past",
+      label: `-${summary.past.distance}`,
+      title: `最近过去变化：${summary.past.year}年（距今${summary.past.distance}年）`,
+    } : null,
+    summary.current ? {
+      kind: "current",
+      label: String(summary.current.count),
+      title: `当前年份有${summary.current.count}项结构变化`,
+    } : null,
+    summary.future ? {
+      kind: "future",
+      label: `+${summary.future.distance}`,
+      title: `最近未来变化：${summary.future.year}年（${summary.future.distance}年后）`,
+    } : null,
+  ].filter(Boolean);
+  const marker = svgElement("g", { class: "node-change-indicator" });
+  const markerWidth = Math.max(1, items.length - 1) * 13;
+  const centerX = hitBounds.x + hitBounds.width / 2;
+  marker.setAttribute(
+    "transform",
+    `translate(${centerX - markerWidth / 2} ${hitBounds.y - 8})`,
+  );
+  marker.setAttribute("aria-label", changeSummaryAriaLabel(
+    node.data.title,
+    summary,
+    node.data.isVirtual,
+  ));
+  marker.setAttribute("role", node.data.isVirtual ? "note" : "button");
+  if (!node.data.isVirtual) marker.setAttribute("tabindex", "0");
+  marker.appendChild(svgElement("rect", {
+    class: "node-change-indicator-hit-area",
+    x: -6,
+    y: -6,
+    width: markerWidth + 12,
+    height: 12,
+    fill: "transparent",
+    "pointer-events": "all",
+  }));
+  items.forEach((item, index) => {
+    const itemGroup = svgElement("g", {
+      class: `node-change-indicator-item is-${item.kind}`,
+      transform: `translate(${index * 13} 0)`,
+    });
+    const circle = svgElement("circle", { cx: 0, cy: 0, r: 5.2 });
+    const label = svgElement("text", {
+      x: 0,
+      y: 0.3,
+      "text-anchor": "middle",
+      "dominant-baseline": "central",
+    });
+    label.textContent = item.label;
+    const title = svgElement("title");
+    title.textContent = item.title;
+    itemGroup.append(circle, label, title);
+    marker.appendChild(itemGroup);
+  });
+  if (!node.data.isVirtual) {
+    const activate = (event) => openEntityChangeTrack(node.data.id, event);
+    marker.style.cursor = "pointer";
+    d3.select(marker)
+      .on("click.change-indicator", activate)
+      .on("keydown.change-indicator", (event) => {
+        if (event.key === "Enter" || event.key === " ") activate(event);
+      });
+  }
+  nodeGroup.appendChild(marker);
 }
 
 function appendCompositionNodeButton(nodeGroup, {
@@ -2168,6 +2301,7 @@ function renderDynamicHierarchy(svg) {
         nodeGroup.appendChild(bar);
       }
     }
+    appendNodeChangeIndicator(nodeGroup, node, hitBounds);
 
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
     const interactionHint = node.data.childCount
@@ -3816,6 +3950,169 @@ function updateEvolutionDetails(svg) {
   svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
 }
 
+function transitionEndpointLabel(change) {
+  const names = (ids) => ids.map((id) => titleOf(id)).join("、") || "未确定";
+  if (change.type === "reparent") {
+    return `${names([change.previousParentId])} → ${names([change.nextParentId])}`;
+  }
+  if (change.type === "create" || change.type === "restore") {
+    return `来源未定 → ${names(change.targetIds)}`;
+  }
+  if (change.type === "remove") return `${names(change.sourceIds)} → 后继未定`;
+  if (["evolve", "unclassified"].includes(change.type)) {
+    return `${names(change.sourceIds)} → ${names(change.targetIds)}`;
+  }
+  return "同一机构保持对象身份";
+}
+
+function transitionEvidence(change) {
+  const values = [...(change.citations || [])];
+  if (change.quotation && !values.some((item) => item.quotation === change.quotation)) {
+    values.unshift({ quotation: change.quotation, citation: "", note: "" });
+  }
+  return values;
+}
+
+function appendTrackTextLine(element, lineIndex, pieces) {
+  let first = true;
+  for (const piece of pieces) {
+    const span = svgElement("tspan");
+    if (first) {
+      span.setAttribute("x", "0");
+      span.setAttribute("y", String(lineIndex * 18));
+      first = false;
+    }
+    span.textContent = piece.text;
+    if (piece.className) span.classList.add(piece.className);
+    if (piece.title) {
+      const title = svgElement("title");
+      title.textContent = piece.title;
+      span.appendChild(title);
+    }
+    if (piece.onActivate) {
+      span.setAttribute("role", "button");
+      span.setAttribute("tabindex", "0");
+      span.style.cursor = "pointer";
+      d3.select(span)
+        .on("click.transition-track", piece.onActivate)
+        .on("keydown.transition-track", (event) => {
+          if (event.key === "Enter" || event.key === " ") piece.onActivate(event);
+        });
+    }
+    element.appendChild(span);
+  }
+}
+
+function appendWrappedTrackText(element, text, lineIndex, className = "") {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim() || "未载说明";
+  let offset = 0;
+  let line = lineIndex;
+  while (offset < normalized.length) {
+    const chunk = normalized.slice(offset, offset + 27);
+    appendTrackTextLine(element, line, [{ text: chunk, className }]);
+    offset += chunk.length;
+    line += 1;
+  }
+  return line;
+}
+
+function renderTransitionTrack(svg, element, entityId) {
+  const items = changesForEntity(structuralChangeIndex, entityId);
+  element.replaceChildren();
+  if (!items.length) {
+    appendTrackTextLine(element, 0, [{ text: "当前机构暂无可定位的结构变化记录。" }]);
+    return 1;
+  }
+  let line = 0;
+  items.forEach((change, index) => {
+    const active = focusedTransition.value?.key === change.key;
+    const yearLabel = change.eventYear != null ? `${change.eventYear}` : "未定";
+    appendTrackTextLine(element, line, [
+      { text: `${change.eventTime || `${yearLabel}年`} · `, className: active ? "is-focused" : "" },
+      { text: CHANGE_TYPE_LABELS[change.type] || "结构变化", className: "transition-track-type" },
+      { text: "  " },
+      {
+        text: `前往${yearLabel}年`,
+        className: "transition-track-action",
+        title: `跳转到${yearLabel}年制度截面`,
+        onActivate: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          commitTimelineRange([change.eventYear, change.eventYear], { focusedChange: change });
+        },
+      },
+    ]);
+    line += 1;
+    line = appendWrappedTrackText(element, change.eventText, line);
+    line = appendWrappedTrackText(
+      element,
+      transitionEndpointLabel(change),
+      line,
+      "transition-track-endpoints",
+    );
+    const evidence = transitionEvidence(change);
+    if (evidence.length) {
+      const evidenceExpanded = expandedChangeEvidenceKeys.has(change.key);
+      appendTrackTextLine(element, line, [{
+        text: evidenceExpanded ? "收起证据" : `查看证据（${evidence.length}）`,
+        className: "transition-track-action",
+        onActivate: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (evidenceExpanded) expandedChangeEvidenceKeys.delete(change.key);
+          else expandedChangeEvidenceKeys.add(change.key);
+          updateDetails(svg);
+        },
+      }]);
+      line += 1;
+      if (evidenceExpanded) {
+        for (const evidenceItem of evidence) {
+          if (evidenceItem.quotation) {
+            line = appendWrappedTrackText(
+              element,
+              `原文：${evidenceItem.quotation}`,
+              line,
+              "transition-track-evidence",
+            );
+          }
+          if (evidenceItem.citation) {
+            line = appendWrappedTrackText(
+              element,
+              `出处：${evidenceItem.citation}`,
+              line,
+              "transition-track-evidence",
+            );
+          }
+          if (evidenceItem.note) {
+            line = appendWrappedTrackText(
+              element,
+              `说明：${evidenceItem.note}`,
+              line,
+              "transition-track-evidence",
+            );
+          }
+        }
+      }
+    }
+    if (index < items.length - 1) line += 0.55;
+  });
+  return Math.max(1, line);
+}
+
+function transitionSummaryText(entityId) {
+  const items = changesForEntity(structuralChangeIndex, entityId);
+  const summary = changeSummaryForEntity(
+    structuralChangeIndex,
+    entityId,
+    selectedRange.value[0],
+  );
+  const parts = [`共${items.length}项结构变化`];
+  if (summary.past) parts.push(`最近过去为${summary.past.year}年`);
+  if (summary.current) parts.push(`同年${summary.current.count}项`);
+  if (summary.future) parts.push(`最近未来为${summary.future.year}年`);
+  return parts.join("；");
+}
+
 function updateDetails(svg) {
   if (isEvolutionCanvasMode()) {
     updateEvolutionDetails(svg);
@@ -3903,6 +4200,40 @@ function updateDetails(svg) {
       lines = wrapText(content, values[field.key], 28, 18, Infinity);
     }
     cursorY += Math.max(1, lines) * 18 + 13;
+  }
+  if (changeTrackEntityId.value === entity.id) {
+    const summaryLabel = svg.querySelector("[data-detail-section-label='extra-1']");
+    const summaryContent = svg.querySelector("[data-detail-section-content='extra-1']");
+    if (summaryLabel && summaryContent) {
+      summaryLabel.style.display = "";
+      summaryContent.style.display = "";
+      summaryLabel.setAttribute("transform", `translate(100.33 ${cursorY})`);
+      setText(summaryLabel, "结构变化：");
+      summaryLabel.style.fill = "#866d6d";
+      cursorY += 25;
+      summaryContent.setAttribute("transform", `translate(101.29 ${cursorY})`);
+      const summaryLines = wrapText(
+        summaryContent,
+        transitionSummaryText(entity.id),
+        28,
+        18,
+        Infinity,
+      );
+      cursorY += Math.max(1, summaryLines) * 18 + 13;
+    }
+    const trackLabel = svg.querySelector("[data-detail-section-label='extra-2']");
+    const trackContent = svg.querySelector("[data-detail-section-content='extra-2']");
+    if (trackLabel && trackContent) {
+      trackLabel.style.display = "";
+      trackContent.style.display = "";
+      trackLabel.setAttribute("transform", `translate(100.33 ${cursorY})`);
+      setText(trackLabel, "演变轨：");
+      trackLabel.style.fill = "#866d6d";
+      cursorY += 25;
+      trackContent.setAttribute("transform", `translate(101.29 ${cursorY})`);
+      const trackLines = renderTransitionTrack(svg, trackContent, entity.id);
+      cursorY += Math.max(1, trackLines) * 18 + 13;
+    }
   }
   cursorY += 2;
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
@@ -4385,6 +4716,255 @@ function bindTemplateControls(svg) {
 
 }
 
+function matrixAttributes(matrix) {
+  return {
+    a: matrix.a,
+    b: matrix.b,
+    c: matrix.c,
+    d: matrix.d,
+    e: matrix.e,
+    f: matrix.f,
+  };
+}
+
+function matrixTransformValue(matrix) {
+  return `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`;
+}
+
+function transformedCenter(node, matrix) {
+  const shape = node.querySelector("polygon, rect:not(.dynamic-tree-node-hit-area)");
+  const bounds = elementBounds(shape || node);
+  if (!bounds) return { x: matrix.e, y: matrix.f };
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  return {
+    x: matrix.a * x + matrix.c * y + matrix.e,
+    y: matrix.b * x + matrix.d * y + matrix.f,
+  };
+}
+
+function captureHierarchyFrame(svg, { cloneNodes = false } = {}) {
+  const nodes = new Map();
+  svg.querySelectorAll(".dynamic-tree-node[data-entity-id]").forEach((node) => {
+    const entityId = Number(node.dataset.entityId);
+    const matrix = node.getCTM?.();
+    if (!Number.isFinite(entityId) || !matrix) return;
+    let clone = null;
+    if (cloneNodes) {
+      clone = node.cloneNode(true);
+      clone.querySelectorAll(
+        ".node-change-indicator, .composition-detail-button, .dynamic-tree-node-hit-area, title",
+      ).forEach((element) => element.remove());
+      clone.removeAttribute("role");
+      clone.removeAttribute("tabindex");
+      clone.removeAttribute("aria-label");
+      clone.style.pointerEvents = "none";
+      clone.style.visibility = "visible";
+    }
+    const normalizedMatrix = matrixAttributes(matrix);
+    nodes.set(entityId, {
+      entityId,
+      matrix: normalizedMatrix,
+      center: transformedCenter(node, normalizedMatrix),
+      clone,
+    });
+  });
+  return { nodes };
+}
+
+function transitionLinePoints(parent, child) {
+  const middleY = (parent.y + child.y) / 2;
+  return `${parent.x},${parent.y} ${parent.x},${middleY} ${child.x},${middleY} ${child.x},${child.y}`;
+}
+
+function pulseTransitionTargets(frame, changes) {
+  const ids = new Set((changes || []).flatMap((change) => [
+    ...change.sourceIds,
+    ...change.targetIds,
+  ]));
+  for (const entityId of ids) {
+    const node = frame.nodes.get(entityId)?.node;
+    if (!node) continue;
+    node.classList.add("transition-target-highlight");
+    window.setTimeout(() => node.classList.remove("transition-target-highlight"), 700);
+  }
+}
+
+function playHierarchyTransition(svg, oldFrame, changes) {
+  const revision = ++activeTransitionAnimation;
+  svg.querySelector(".hierarchy-transition-layer")?.remove();
+  const newFrame = captureHierarchyFrame(svg);
+  newFrame.nodes.forEach((item, entityId) => {
+    item.node = svg.querySelector(`.dynamic-tree-node[data-entity-id='${entityId}']`);
+  });
+  if (!oldFrame?.nodes?.size || reduceMotionQuery?.matches) {
+    pulseTransitionTargets(newFrame, changes);
+    return;
+  }
+
+  const duration = 520;
+  const easing = d3.easeCubicOut;
+  const overlay = svgElement("g", {
+    class: "hierarchy-transition-layer",
+    "pointer-events": "none",
+  });
+  svg.appendChild(overlay);
+
+  const commonIds = [...oldFrame.nodes.keys()].filter((id) => newFrame.nodes.has(id));
+  const removedIds = [...oldFrame.nodes.keys()].filter((id) => !newFrame.nodes.has(id));
+  const createdIds = [...newFrame.nodes.keys()].filter((id) => !oldFrame.nodes.has(id));
+  for (const entityId of [...commonIds, ...createdIds]) {
+    const node = newFrame.nodes.get(entityId)?.node;
+    if (node) node.style.opacity = "0";
+  }
+
+  for (const entityId of commonIds) {
+    const oldItem = oldFrame.nodes.get(entityId);
+    const newItem = newFrame.nodes.get(entityId);
+    const clone = oldItem.clone;
+    if (!clone) continue;
+    clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
+    clone.style.opacity = "1";
+    overlay.appendChild(clone);
+    d3.select(clone)
+      .transition("hierarchy-time")
+      .duration(duration)
+      .ease(easing)
+      .attr("transform", matrixTransformValue(newItem.matrix));
+  }
+
+  for (const entityId of removedIds) {
+    const oldItem = oldFrame.nodes.get(entityId);
+    const clone = oldItem.clone;
+    if (!clone) continue;
+    clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
+    clone.style.opacity = "1";
+    overlay.appendChild(clone);
+    d3.select(clone)
+      .transition("hierarchy-time")
+      .duration(300)
+      .ease(easing)
+      .style("opacity", 0);
+  }
+
+  for (const entityId of createdIds) {
+    const node = newFrame.nodes.get(entityId)?.node;
+    if (!node) continue;
+    d3.select(node)
+      .transition("hierarchy-time")
+      .delay(110)
+      .duration(360)
+      .ease(easing)
+      .style("opacity", 1);
+  }
+
+  for (const change of changes || []) {
+    if (change.type === "reparent") {
+      const entityId = change.targetIds[0] ?? change.sourceIds[0];
+      const oldChild = oldFrame.nodes.get(entityId)?.center;
+      const newChild = newFrame.nodes.get(entityId)?.center;
+      const oldParent = oldFrame.nodes.get(change.previousParentId)?.center;
+      const newParent = newFrame.nodes.get(change.nextParentId)?.center;
+      if (!oldChild || !newChild || !oldParent || !newParent) continue;
+      const line = svgElement("polyline", {
+        class: "hierarchy-transition-link",
+        points: transitionLinePoints(oldParent, oldChild),
+      });
+      overlay.insertBefore(line, overlay.firstChild);
+      d3.select(line)
+        .transition("hierarchy-time")
+        .duration(duration)
+        .ease(easing)
+        .attr("points", transitionLinePoints(newParent, newChild));
+    }
+    if (["evolve", "unclassified"].includes(change.type)
+      && change.sourceIds.length === 1
+      && change.targetIds.length === 1) {
+      const source = oldFrame.nodes.get(change.sourceIds[0])?.center;
+      const target = newFrame.nodes.get(change.targetIds[0])?.center;
+      if (!source || !target) continue;
+      const line = svgElement("line", {
+        class: "hierarchy-transition-evolution-link",
+        x1: source.x,
+        y1: source.y,
+        x2: source.x,
+        y2: source.y,
+      });
+      overlay.insertBefore(line, overlay.firstChild);
+      d3.select(line)
+        .transition("hierarchy-time")
+        .duration(duration)
+        .ease(easing)
+        .attr("x2", target.x)
+        .attr("y2", target.y);
+    }
+  }
+
+  window.setTimeout(() => {
+    if (revision !== activeTransitionAnimation) return;
+    overlay.remove();
+    newFrame.nodes.forEach(({ node }) => {
+      if (node) node.style.opacity = "1";
+    });
+    pulseTransitionTargets(newFrame, changes);
+  }, duration + 30);
+}
+
+function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
+  const normalized = [
+    Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(nextRange[0]))),
+    Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(nextRange[1] ?? nextRange[0]))),
+  ].sort((a, b) => a - b);
+  const oldRange = [...selectedRange.value];
+  const oldYear = oldRange[0];
+  const nextYear = normalized[0];
+  pendingRange.value = [...normalized];
+  timelineSelectionActive.value = true;
+  if (oldRange[0] === normalized[0] && oldRange[1] === normalized[1]) {
+    focusedTransition.value = focusedChange;
+    const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+    if (svg) updateDetails(svg);
+    return;
+  }
+
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  const oldFrame = viewMode.value === "hierarchy" && svg
+    ? captureHierarchyFrame(svg, { cloneNodes: true })
+    : null;
+  const fromSnapshot = yearSnapshot(oldYear);
+  const toSnapshot = yearSnapshot(nextYear);
+  const currentEntityId = selectedId.value;
+  const changes = buildSnapshotTransition({
+    data: props.data,
+    index: structuralChangeIndex,
+    fromSnapshot,
+    toSnapshot,
+    fromYear: oldYear,
+    toYear: nextYear,
+    focusEntityId: currentEntityId,
+  });
+  const selection = resolveTransitionSelection({
+    changes,
+    currentEntityId,
+    targetSnapshot: toSnapshot,
+    fromYear: oldYear,
+    toYear: nextYear,
+  });
+
+  selectedRange.value = [...normalized];
+  focusedTransition.value = focusedChange || selection.change;
+  if (selection.entityId != null) selectedId.value = selection.entityId;
+  if (selection.reason === "one-to-one-evolution") {
+    if (changeTrackEntityId.value != null) changeTrackEntityId.value = selection.entityId;
+    const target = entityMap.get(selection.entityId);
+    if (target?.type === "机构") focusHierarchyContext(target, true);
+  } else if (selection.reason === "context-only" && currentEntityId != null) {
+    changeTrackEntityId.value = currentEntityId;
+  }
+  refreshTemplate();
+  if (oldFrame && svg) playHierarchyTransition(svg, oldFrame, changes);
+}
+
 function bindTimelineRange(svg) {
   const originalTriangle = [...svg.querySelectorAll("path")].find(
     (path) => (path.getAttribute("d") || "").startsWith("M837.34,1027.81")
@@ -4540,22 +5120,15 @@ function bindTimelineRange(svg) {
     if (!event.sourceEvent || !event.selection) return;
     const nextRange = rangeFromPointer(event);
     timelineSelectionActive.value = true;
+    pendingRange.value = nextRange;
     renderRange(nextRange);
-    if (
-      selectedRange.value[0] !== nextRange[0]
-      || selectedRange.value[1] !== nextRange[1]
-    ) {
-      selectedRange.value = nextRange;
-      scheduleTimelineRefresh();
-    }
   });
   brush.on("end", (event) => {
     if (!event.sourceEvent) return;
     const nextRange = rangeFromPointer(event);
-    timelineSelectionActive.value = true;
-    selectedRange.value = nextRange;
+    pendingRange.value = nextRange;
     moveBrush(nextRange);
-    flushTimelineRefresh();
+    commitTimelineRange(nextRange);
   });
 
   const cancelSelection = (event) => {
@@ -4563,6 +5136,8 @@ function bindTimelineRange(svg) {
     event.stopPropagation();
     timelineSelectionActive.value = false;
     selectedRange.value = [YEAR_MIN, YEAR_MAX];
+    pendingRange.value = [YEAR_MIN, YEAR_MAX];
+    focusedTransition.value = null;
     if (isEvolutionCanvasMode()) selectedEvolutionItem.value = null;
     brushLayer.call(brush.move, null);
     renderRange(selectedRange.value);
@@ -4574,13 +5149,13 @@ function bindTimelineRange(svg) {
       if (event.key === "Enter" || event.key === " ") cancelSelection(event);
     });
 
-  svg.__syncTimelineSelectionStyle = () => renderRange(selectedRange.value);
+  svg.__syncTimelineSelectionStyle = () => renderRange(pendingRange.value);
   svg.__moveTimelineSelection = () => {
-    if (timelineSelectionActive.value) moveBrush(selectedRange.value);
+    if (timelineSelectionActive.value) moveBrush(pendingRange.value);
     else brushLayer.call(brush.move, null);
   };
-  renderRange(selectedRange.value);
-  if (timelineSelectionActive.value) moveBrush(selectedRange.value);
+  renderRange(pendingRange.value);
+  if (timelineSelectionActive.value) moveBrush(pendingRange.value);
 }
 
 function installDesignFonts() {
@@ -4715,6 +5290,7 @@ function flushTimelineRefresh(rebindStatic = false) {
 
 watch(viewMode, renderTemplate);
 onMounted(async () => {
+  reduceMotionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)") || null;
   installDesignFonts();
   try {
     await document.fonts?.load('17.14px "FZQINGKBYSS-M--GB1-0"');
@@ -4724,6 +5300,7 @@ onMounted(async () => {
   renderTemplate();
 });
 onUnmounted(() => {
+  activeTransitionAnimation += 1;
   if (timelineRefreshFrame != null) window.cancelAnimationFrame(timelineRefreshFrame);
 });
 </script>
@@ -4791,6 +5368,117 @@ onUnmounted(() => {
   stroke: #563905;
   stroke-width: 1.2;
   stroke-dasharray: 3 2;
+}
+
+.svg-mount :deep(.node-change-indicator) {
+  pointer-events: all;
+}
+
+.svg-mount :deep(.node-change-indicator:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.node-change-indicator circle) {
+  fill: #f5f3ec;
+  stroke: #866d6d;
+  stroke-width: 0.8px;
+}
+
+.svg-mount :deep(.node-change-indicator .is-past circle) {
+  fill: #918069;
+  fill-opacity: 0.82;
+  stroke: #563905;
+}
+
+.svg-mount :deep(.node-change-indicator .is-current circle) {
+  fill: #866d6d;
+  stroke: #563905;
+}
+
+.svg-mount :deep(.node-change-indicator text) {
+  fill: #351704;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
+  font-size: 5.8px;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.svg-mount :deep(.node-change-indicator .is-past text),
+.svg-mount :deep(.node-change-indicator .is-current text) {
+  fill: #fffdf8;
+}
+
+.svg-mount :deep(.node-change-indicator:hover circle),
+.svg-mount :deep(.node-change-indicator:focus-visible circle) {
+  stroke-width: 1.35px;
+}
+
+.svg-mount :deep(.transition-track-type) {
+  fill: #866d6d;
+  font-weight: 700;
+}
+
+.svg-mount :deep(.transition-track-action) {
+  fill: #866d6d;
+  text-decoration: underline;
+}
+
+.svg-mount :deep(.transition-track-action:focus) {
+  outline: none;
+  fill: #563905;
+}
+
+.svg-mount :deep(.transition-track-endpoints) {
+  fill: #6f6253;
+}
+
+.svg-mount :deep(.transition-track-evidence) {
+  fill: #625545;
+}
+
+.svg-mount :deep(.is-focused) {
+  fill: #563905;
+  font-weight: 700;
+}
+
+.svg-mount :deep(.hierarchy-transition-layer) {
+  isolation: isolate;
+}
+
+.svg-mount :deep(.hierarchy-transition-link) {
+  fill: none;
+  stroke: #866d6d;
+  stroke-width: 1.3px;
+  stroke-dasharray: 4 2;
+}
+
+.svg-mount :deep(.hierarchy-transition-evolution-link) {
+  stroke: #866d6d;
+  stroke-width: 1.6px;
+  stroke-dasharray: 5 3;
+}
+
+.svg-mount :deep(.transition-target-highlight polygon),
+.svg-mount :deep(.transition-target-highlight > rect) {
+  animation: transition-target-pulse 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes transition-target-pulse {
+  0% {
+    stroke: #866d6d;
+    stroke-width: 2.2px;
+  }
+  100% {
+    stroke: #563905;
+    stroke-width: 0.75px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svg-mount :deep(.transition-target-highlight polygon),
+  .svg-mount :deep(.transition-target-highlight > rect) {
+    animation-duration: 120ms;
+  }
 }
 
 .svg-mount :deep(.composition-detail-button:focus) {

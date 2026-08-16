@@ -66,6 +66,7 @@ export function buildSubordinateGroupNodes({
         title: group,
         childCount: groupedChildIds.length,
         hiddenCount: isExpanded ? 0 : groupedChildIds.length,
+        memberEntityIds: [...groupedChildIds],
         isVirtual: true,
         isSubordinateGroup: true,
         children: isExpanded

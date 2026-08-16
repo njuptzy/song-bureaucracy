@@ -55,6 +55,7 @@ export function buildInstitutionGroupNodes({
         title: group,
         childCount: groupedRootIds.length,
         hiddenCount: expanded ? 0 : groupedRootIds.length,
+        memberEntityIds: [...groupedRootIds],
         isVirtual: true,
         isInstitutionGroup: true,
         children: expanded ? groupedRootIds.map(treeForRoot).filter(Boolean) : [],
