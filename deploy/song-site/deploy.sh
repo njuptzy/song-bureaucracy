@@ -22,8 +22,6 @@ tar -C "$repo_root" -cf - \
     vis/ch1t12-design-vis/revision_store.py \
     vis/backend/normalize_times.py \
     vis/backend/institution_categories.py \
-    data/database/song_bureaucracy_entries_ch1t12.db \
-    data/database/song_bureaucracy_dictionary_ch1t12.db \
     "vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面_画板 1 副本 4-01.svg" \
     "vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面_画板 1 副本 4-02.svg" \
     "vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面字体转曲_画板 1 副本 4-01.svg" \
