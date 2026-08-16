@@ -545,6 +545,28 @@ function renderEvolutionLegend(parent, layout) {
   parent.appendChild(group);
 }
 
+const LANE_ANOMALY_LABELS = new Map([
+  ["dangling_chain_link", "链指针缺失"],
+  ["branching_timeline", "时间链分叉"],
+  ["merging_timeline", "时间链汇合"],
+  ["multiple_chain_heads", "多个时间链起点"],
+  ["timeline_cycle", "时间链循环"],
+]);
+
+export function laneAnomalySummary(anomalies, maxChars = Number.POSITIVE_INFINITY) {
+  const items = Array.isArray(anomalies) ? anomalies : [];
+  if (!items.length) return "";
+  const descriptions = [...new Set(items.map(
+    (item) => LANE_ANOMALY_LABELS.get(item?.type) || "时间链异常"
+  ))];
+  const full = descriptions.length === 1
+    ? descriptions[0]
+    : `时间链异常×${items.length}`;
+  if (full.length <= maxChars) return full;
+  const compact = items.length > 1 ? `异常×${items.length}` : "异常";
+  return compact.length <= maxChars ? compact : "!";
+}
+
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
   // 书脊签条：一条墨色竖杠 + 竖排机构名，无框，给车道让出视觉重量。
@@ -580,15 +602,33 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   }));
   if (lane.anomalies?.length) {
     const alert = svgElement("g", { class: "evolution-lane-anomaly" });
+    // 异常说明使用签条左侧留白，与右侧竖排机构名并列，避免覆盖首字。
+    const iconX = lane.labelX + 6;
+    const iconY = y + 8;
+    const textX = iconX + 7;
+    const availableTextWidth = Math.max(0, x - textX - 3);
+    const summary = laneAnomalySummary(
+      lane.anomalies,
+      Math.max(1, Math.floor(availableTextWidth / 8.2)),
+    );
     alert.appendChild(svgElement("path", {
-      d: `M${x + 13} ${y - 4}L${x + 21} ${y + 10}H${x + 5}Z`,
+      d: `M${iconX} ${iconY - 6}L${iconX + 6} ${iconY + 5}H${iconX - 6}Z`,
       fill: COLORS.paper, stroke: COLORS.selected, "stroke-width": 0.8,
     }));
     alert.appendChild(svgElement("path", {
-      d: `M${x + 13} ${y}V${y + 5}M${x + 13} ${y + 7.5}V${y + 8}`,
+      d: `M${iconX} ${iconY - 2.5}V${iconY + 1.5}M${iconX} ${iconY + 3.5}V${iconY + 4}`,
       stroke: COLORS.selected, "stroke-width": 1,
     }));
-    addTitle(alert, `${lane.anomalies.length} 项时间链异常`);
+    appendText(alert, summary, {
+      x: textX,
+      y: iconY,
+      class: "evolution-lane-anomaly-label",
+      "dominant-baseline": "central",
+    });
+    const descriptions = [...new Set(lane.anomalies.map(
+      (item) => LANE_ANOMALY_LABELS.get(item?.type) || "时间链异常"
+    ))];
+    addTitle(alert, `${lane.anomalies.length} 项时间链异常：${descriptions.join("；")}`);
     group.appendChild(alert);
   }
   addTitle(group, `${lane.title}（${lane.type}）`);

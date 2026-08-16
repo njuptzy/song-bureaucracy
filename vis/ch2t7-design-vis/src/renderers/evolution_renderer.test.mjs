@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   eventStemGeometry,
+  laneAnomalySummary,
   relationLabelOverride,
   relationPath,
   relationRouteOptions,
@@ -79,6 +80,16 @@ test("同年错层事件的回指线独立于事件图标计算，供底层先�
     displayX: 200,
     y: 140,
   }), null);
+});
+
+test("时间链异常图标旁显示具体说明，窄空间退化为短标签", () => {
+  const anomalies = [{ type: "multiple_chain_heads" }];
+  assert.equal(laneAnomalySummary(anomalies), "多个时间链起点");
+  assert.equal(laneAnomalySummary(anomalies, 2), "异常");
+  assert.equal(laneAnomalySummary([
+    { type: "branching_timeline" },
+    { type: "timeline_cycle" },
+  ]), "时间链异常×2");
 });
 
 test("太常寺至宗正寺的目标曲线加深弯曲并绕开上方圆点", () => {

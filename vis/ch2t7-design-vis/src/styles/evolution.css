@@ -74,6 +74,13 @@
   dominant-baseline: central;
 }
 
+.dynamic-evolution-layer .evolution-lane-anomaly-label {
+  fill: #866d6d;
+  font-size: 8.2px;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
 .dynamic-evolution-layer .evolution-event-label {
   font-size: 8px;
   dominant-baseline: central;
