@@ -4196,9 +4196,11 @@ function ensureComparisonViewControl(svg) {
   let control = svg.querySelector(".comparison-view-control");
   if (!control) {
     control = svgElement("g", { class: "comparison-view-control" });
+    // 与时间线树、演变视图放在同一行；保留较宽按钮容纳完整名称，
+    // 右侧与时间线树保持和同组控件一致的 12.2px 间距。
     const surface = svgElement("rect", {
-      x: 1528.5,
-      y: 112,
+      x: 960.5,
+      y: 80,
       width: 137.8,
       height: 26,
       rx: 2.7,
@@ -4210,7 +4212,7 @@ function ensureComparisonViewControl(svg) {
     });
     const template = findTextAt(svg, 1570.42, 98.84, 2);
     const label = template?.cloneNode(true) || svgElement("text", { class: "cls-49" });
-    label.setAttribute("transform", "translate(1597.4 130.84)");
+    label.setAttribute("transform", "translate(1029.4 98.84)");
     label.setAttribute("text-anchor", "middle");
     setText(label, "层级·演变对照");
     control.append(surface, label);
