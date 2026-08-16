@@ -4611,6 +4611,22 @@ function installDesignFonts() {
   document.head.appendChild(style);
 }
 
+function softenCanvasBackground(svg) {
+  const viewBox = (svg.getAttribute("viewBox") || "")
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  if (viewBox.length !== 4 || !viewBox.every(Number.isFinite)) return;
+  const [, , viewWidth, viewHeight] = viewBox;
+  const backgroundImage = [...svg.querySelectorAll("image")].find((image) => (
+    Math.abs(Number(image.getAttribute("width")) - viewWidth) < 0.5
+    && Math.abs(Number(image.getAttribute("height")) - viewHeight) < 0.5
+  ));
+  if (!backgroundImage) return;
+  svg.style.backgroundColor = "#fbfaf7";
+  backgroundImage.setAttribute("opacity", "0.35");
+}
+
 async function loadSvgTemplate(url) {
   if (svgCache.has(url)) return;
   const response = await fetch(url, { cache: "force-cache" });
@@ -4621,6 +4637,7 @@ async function loadSvgTemplate(url) {
   if (parsedSvg.localName !== "svg" || parsed.querySelector("parsererror")) {
     throw new Error("原 SVG 无法解析");
   }
+  softenCanvasBackground(parsedSvg);
   svgCache.set(url, document.importNode(parsedSvg, true));
 }
 
