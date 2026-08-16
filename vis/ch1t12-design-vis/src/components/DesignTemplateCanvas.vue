@@ -574,10 +574,12 @@ function titleOf(entityId) {
 }
 
 const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
-const HIERARCHY_DESIGN_URL = "/api/design/hierarchy.svg";
+const DESIGN_ASSET_VERSION = encodeURIComponent(__APP_BUILD_ID__);
+const versionedDesignAsset = (path) => `${path}?v=${DESIGN_ASSET_VERSION}`;
+const HIERARCHY_DESIGN_URL = versionedDesignAsset("/api/design/hierarchy.svg");
 const DESIGN_URL_BY_MODE = {
   hierarchy: HIERARCHY_DESIGN_URL,
-  composition: "/api/design/composition.svg",
+  composition: versionedDesignAsset("/api/design/composition.svg"),
   evolution: HIERARCHY_DESIGN_URL,
   timetree: HIERARCHY_DESIGN_URL,
   comparison: HIERARCHY_DESIGN_URL,
@@ -4596,17 +4598,17 @@ function installDesignFonts() {
   const style = document.createElement("style");
   style.id = "ch1t12-design-fonts";
   style.textContent = `
-    @font-face { font-family: FZQINGKBYSS-M--GB1-0; src: url('/api/design/fzqing.ttf') format('truetype'); }
-    @font-face { font-family: FZQINGKBYSS-R--GB1-0; src: url('/api/design/fzqing.ttf') format('truetype'); }
-    @font-face { font-family: FZQingKeBenYueSongS; src: url('/api/design/fzqing.ttf') format('truetype'); }
-    @font-face { font-family: AdobeSongStd-Light-GBpc-EUC-H; src: url('/api/design/adobe-song.otf') format('opentype'); }
+    @font-face { font-family: FZQINGKBYSS-M--GB1-0; src: url('${versionedDesignAsset("/api/design/fzqing.ttf")}') format('truetype'); font-display: swap; }
+    @font-face { font-family: FZQINGKBYSS-R--GB1-0; src: url('${versionedDesignAsset("/api/design/fzqing.ttf")}') format('truetype'); font-display: swap; }
+    @font-face { font-family: FZQingKeBenYueSongS; src: url('${versionedDesignAsset("/api/design/fzqing.ttf")}') format('truetype'); font-display: swap; }
+    @font-face { font-family: AdobeSongStd-Light-GBpc-EUC-H; src: local('Songti SC'), local('STSong'), url('${versionedDesignAsset("/api/design/adobe-song.otf")}') format('opentype'); font-display: swap; }
   `;
   document.head.appendChild(style);
 }
 
 async function loadSvgTemplate(url) {
   if (svgCache.has(url)) return;
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: "force-cache" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const source = await response.text();
   const parsed = new DOMParser().parseFromString(source, "image/svg+xml");

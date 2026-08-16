@@ -119,8 +119,25 @@ function handleSelectionChange(selection) {
   connectTarget.value = selection;
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
+const DESIGN_ASSET_VERSION = encodeURIComponent(__APP_BUILD_ID__);
+
+function versionedDesignAsset(path) {
+  return `${path}?v=${DESIGN_ASSET_VERSION}`;
+}
+
+function warmInitialDesignAssets() {
+  const urls = [
+    versionedDesignAsset("/api/design/hierarchy.svg"),
+    versionedDesignAsset("/api/design/fzqing.ttf"),
+  ];
+  return Promise.allSettled(urls.map(async (url) => {
+    const response = await fetch(url, { cache: "force-cache" });
+    if (response.ok) await response.arrayBuffer();
+  }));
+}
+
+async function fetchJson(url, cache = "default") {
+  const response = await fetch(url, { cache });
   if (!response.ok) {
     let detail = "";
     try {
@@ -148,13 +165,14 @@ async function refreshRevision() {
 
 async function refreshData(force = false) {
   try {
-    const { version } = await fetchJson("/api/version");
+    const { version } = await fetchJson("/api/version", "no-store");
     if (!force && version === dataVersion.value) return;
     if (!force && revisionState.value?.draft?.group_count) {
       await refreshRevision();
       return;
     }
-    baseData.value = filterSongData(await fetchJson("/api/data"));
+    const dataUrl = `/data/song-bureaucracy.json?v=${encodeURIComponent(version)}`;
+    baseData.value = filterSongData(await fetchJson(dataUrl, "force-cache"));
     dataVersion.value = version;
     loadError.value = "";
     if (revisionState.value?.draft?.group_count) applyPreview();
@@ -292,13 +310,14 @@ onMounted(async () => {
   updateRevisionPanelGeometry();
   panelResizeObserver = new ResizeObserver(updateRevisionPanelGeometry);
   if (applicationShellRef.value) panelResizeObserver.observe(applicationShellRef.value);
+  void warmInitialDesignAssets();
   await refreshData(true);
   try {
     await Promise.all([refreshRevision(), loadCommits()]);
   } catch (reason) {
     revisionError.value = `版本工作区加载失败：${reason.message}`;
   }
-  versionTimer = window.setInterval(refreshData, 5000);
+  versionTimer = window.setInterval(refreshData, 30000);
 });
 
 onBeforeUnmount(() => {

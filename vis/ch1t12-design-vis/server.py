@@ -17,7 +17,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
@@ -622,11 +622,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 安静一点
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
-    def _send(self, code: int, body: bytes, content_type: str):
+    def _send(
+        self,
+        code: int,
+        body: bytes,
+        content_type: str,
+        cache_control: str = "no-store",
+    ):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(body)
 
@@ -665,7 +671,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(exc), "code": "INTERNAL_ERROR"})
 
     def do_GET(self):
-        path = urlparse(self.path).path
+        request_url = urlparse(self.path)
+        path = request_url.path
+        query = parse_qs(request_url.query)
         if path == "/api/revisions/state":
             self._revision_call(lambda: get_revision_store().state())
             return
@@ -692,11 +700,37 @@ class Handler(BaseHTTPRequestHandler):
                 ".ttf": "font/ttf",
                 ".otf": "font/otf",
             }.get(design_files[path].suffix.lower(), "application/octet-stream")
-            self._send(200, design_files[path].read_bytes(), content_type)
+            cache_control = (
+                "public, max-age=31536000, immutable"
+                if query.get("v")
+                else "public, max-age=300"
+            )
+            self._send(
+                200,
+                design_files[path].read_bytes(),
+                content_type,
+                cache_control=cache_control,
+            )
             return
-        if path == "/api/data":
+        if path in (
+            "/api/data",
+            "/api/data.json",
+            "/data/song-bureaucracy.json",
+        ):
             try:
-                self._send(200, get_payload(), "application/json; charset=utf-8")
+                requested_version = query.get("v", [""])[0]
+                current_version = _database_fingerprint()
+                cache_control = (
+                    "public, max-age=31536000, immutable"
+                    if requested_version == current_version
+                    else "no-store"
+                )
+                self._send(
+                    200,
+                    get_payload(),
+                    "application/json; charset=utf-8",
+                    cache_control=cache_control,
+                )
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -721,7 +755,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(503, "dist/ 不存在，请先运行 pnpm build".encode(), "text/plain; charset=utf-8")
                 return
         ctype = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
-        self._send(200, target.read_bytes(), ctype)
+        cache_control = "no-cache"
+        if path.startswith("/assets/"):
+            cache_control = "public, max-age=31536000, immutable"
+        elif target.name == "favicon.svg":
+            cache_control = "public, max-age=86400"
+        self._send(200, target.read_bytes(), ctype, cache_control=cache_control)
 
     def do_POST(self):
         path = urlparse(self.path).path
