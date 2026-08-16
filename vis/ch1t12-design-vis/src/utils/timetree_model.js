@@ -1,4 +1,5 @@
 import { groupInstitutionRootIds, institutionGroupId } from "./central_groups.js";
+import { compareInstitutionIdsBySourceOrder } from "./institution_order.js";
 
 // 时间线树视图严格复用层级视图的“类别根 → 制度组虚拟层 → 机构层级边”
 // 组织语义，仅把最终树坐标逆时针旋转 90°。
@@ -93,32 +94,13 @@ export function buildTimetreeRows({
     childIds.add(edge.child);
   }
   for (const ids of childrenByParent.values()) {
-    ids.sort((a, b) => (entityMap.get(a)?.title || "").localeCompare(
-      entityMap.get(b)?.title || "",
-      "zh",
-    ));
+    ids.sort((a, b) => compareInstitutionIdsBySourceOrder(entityMap, a, b));
   }
-
-  // 根节点排序沿用层级视图：下级越多越靠前，同名按中文标题。
-  const scoreCache = new Map();
-  const descendantScore = (entityId, visiting = new Set()) => {
-    if (scoreCache.has(entityId)) return scoreCache.get(entityId);
-    if (visiting.has(entityId)) return 0;
-    const nextVisiting = new Set(visiting).add(entityId);
-    const children = childrenByParent.get(entityId) || [];
-    const score = children.length + children.reduce(
-      (sum, childId) => sum + descendantScore(childId, nextVisiting),
-      0,
-    );
-    scoreCache.set(entityId, score);
-    return score;
-  };
 
   const rootIds = entities
     .filter((entity) => eligible(entity) && !childIds.has(entity.id))
     .map((entity) => entity.id)
-    .sort((a, b) => descendantScore(b) - descendantScore(a)
-      || (entityMap.get(a)?.title || "").localeCompare(entityMap.get(b)?.title || "", "zh"));
+    .sort((a, b) => compareInstitutionIdsBySourceOrder(entityMap, a, b));
 
   const rows = [];
   const visitEntity = (entityId, depth, visiting, parentKey = null) => {

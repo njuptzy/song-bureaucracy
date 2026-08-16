@@ -64,6 +64,10 @@ import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import { timelineSelectionForEvolutionItem } from "../utils/evolution_selection";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
+import {
+  compareInstitutionIdsBySourceOrder,
+  compareInstitutionsBySourceOrder,
+} from "../utils/institution_order";
 import { renderEvolutionOverlay } from "../renderers/evolution_renderer";
 import { renderTimetreeOverlay } from "../renderers/timetree_renderer";
 import {
@@ -618,6 +622,10 @@ function titleOf(entityId) {
   return entityMap.get(entityId)?.title || `#${entityId}`;
 }
 
+function compareInstitutionIds(firstId, secondId) {
+  return compareInstitutionIdsBySourceOrder(entityMap, firstId, secondId);
+}
+
 const CATEGORY_NAMES = ["内廷机构", "中央机构", "路级机构", "州县机构", "军队机构"];
 const DESIGN_ASSET_VERSION = encodeURIComponent(__APP_BUILD_ID__);
 const versionedDesignAsset = (path) => `${path}?v=${DESIGN_ASSET_VERSION}`;
@@ -771,19 +779,7 @@ function hierarchyRootEntities(category) {
 
 function categoryFocus(category) {
   const roots = hierarchyRootEntities(category);
-  const scoreCache = new Map();
-  const score = (entityId, visiting = new Set()) => {
-    if (scoreCache.has(entityId)) return scoreCache.get(entityId);
-    if (visiting.has(entityId)) return 0;
-    const nextVisiting = new Set(visiting).add(entityId);
-    const children = childrenFor(entityId).map((edge) => edge.child);
-    const value = children.length + children.reduce((sum, childId) => sum + score(childId, nextVisiting), 0);
-    scoreCache.set(entityId, value);
-    return value;
-  };
-  return [...roots].sort(
-    (a, b) => score(b.id) - score(a.id) || a.title.localeCompare(b.title, "zh")
-  )[0] || null;
+  return [...roots].sort(compareInstitutionsBySourceOrder)[0] || null;
 }
 
 function quotaText(edge) {
@@ -884,7 +880,7 @@ function hierarchyLevels(rootId, maxDepth) {
       const children = childrenFor(parentId)
         .map((edge) => edge.child)
         .filter((id) => !visited.has(id))
-        .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
+        .sort(compareInstitutionIds);
       for (const childId of children) {
         visited.add(childId);
         next.push(childId);
@@ -902,7 +898,7 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
   const allChildren = childrenFor(rootId)
     .map((edge) => edge.child)
     .filter((id) => !nextVisiting.has(id))
-    .sort((a, b) => titleOf(a).localeCompare(titleOf(b), "zh"));
+    .sort(compareInstitutionIds);
   const shouldExpand = expandedHierarchyPath.includes(rootId);
   const groupedChildren = shouldExpand
     ? buildSubordinateGroupNodes({
@@ -1002,21 +998,7 @@ function renderSubordinateGroupCandidate(clickedId) {
 
 function categoryForestData(category) {
   const roots = hierarchyRootEntities(category).map((entity) => entity.id);
-  const scoreCache = new Map();
-  const descendantScore = (entityId, visiting = new Set()) => {
-    if (scoreCache.has(entityId)) return scoreCache.get(entityId);
-    if (visiting.has(entityId)) return 0;
-    const nextVisiting = new Set(visiting).add(entityId);
-    const children = childrenFor(entityId).map((edge) => edge.child);
-    const score = children.length
-      + children.reduce((sum, childId) => sum + descendantScore(childId, nextVisiting), 0);
-    scoreCache.set(entityId, score);
-    return score;
-  };
-  const orderedRoots = roots.sort(
-    (a, b) => descendantScore(b) - descendantScore(a)
-      || titleOf(a).localeCompare(titleOf(b), "zh")
-  );
+  const orderedRoots = roots.sort(compareInstitutionIds);
   const availableGroupIds = new Set(orderedRoots.map((entityId) => {
     const entity = entityMap.get(entityId);
     return institutionGroupId(category, entityInstitutionGroup(entity, category));
@@ -2474,7 +2456,10 @@ function populateHierarchyCenter(svg) {
   const siblingSlots = [findTextAt(svg, 1735.2, 196.3, 2), findTextAt(svg, 1780.8, 196.3, 2)].filter(Boolean);
   const parentEdge = hierarchyEdgesForView().find((edge) => edge.child === focus.id);
   const siblings = parentEdge
-    ? childrenFor(parentEdge.parent).map((edge) => edge.child).filter((id) => id !== focus.id)
+    ? childrenFor(parentEdge.parent)
+      .map((edge) => edge.child)
+      .filter((id) => id !== focus.id)
+      .sort(compareInstitutionIds)
     : [];
   assignSlots(siblingSlots, siblings);
   const contextSlot = findTextAt(svg, 1446.2, 183, 2);

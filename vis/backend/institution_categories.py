@@ -298,6 +298,51 @@ def resolve_source_catalogs(
     return headword_catalogs or precise_catalogs or fallback_catalogs
 
 
+def resolve_source_order(
+    entity_title: str,
+    source_refs: Iterable[tuple[str, str]],
+    orders_by_reference,
+    orders_by_page,
+    orders_by_title,
+) -> tuple[int | None, str]:
+    """Resolve an institution's first dictionary position from provenance."""
+    headword_orders = set()
+    precise_orders = set()
+    fallback_orders = set()
+
+    for source_entry, source_page in source_refs:
+        exact = set(orders_by_reference.get((source_entry, source_page), ()))
+        if exact:
+            precise_orders.update(exact)
+            if source_entry == entity_title:
+                headword_orders.update(exact)
+            continue
+
+        # Title/page-only evidence is used only when it identifies one entry.
+        # A page commonly contains several dictionary entries, so choosing the
+        # first item from an ambiguous page would fabricate an order.
+        title_orders = set(orders_by_title.get(source_entry, ())) if source_entry else set()
+        page_orders = set(orders_by_page.get(source_page, ())) if source_page else set()
+        if len(title_orders) == 1 and len(page_orders) == 1 and title_orders != page_orders:
+            continue
+        if len(title_orders) == 1:
+            fallback_orders.update(title_orders)
+        if len(page_orders) == 1:
+            fallback_orders.update(page_orders)
+
+    if headword_orders:
+        return min(headword_orders), "辞典正式词头与页码精确匹配"
+    if precise_orders:
+        return min(precise_orders), "BuildRecords 词条与页码精确匹配"
+
+    formal_headword_orders = set(orders_by_title.get(entity_title, ()))
+    if len(formal_headword_orders) == 1:
+        return next(iter(formal_headword_orders)), "辞典正式词头唯一匹配"
+    if fallback_orders:
+        return min(fallback_orders), "BuildRecords 标题或页码唯一回退"
+    return None, "未匹配到可靠辞典顺序"
+
+
 def classify_institution(
     attr_categories: Iterable[str], source_catalogs: Iterable[str], title: str = ""
 ) -> tuple[str | None, str]:

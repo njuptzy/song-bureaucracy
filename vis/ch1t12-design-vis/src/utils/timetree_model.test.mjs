@@ -20,10 +20,10 @@ describe("buildTimetreeRows", () => {
   it("年度快照只保留当年存在的机构和层级边", () => {
     const rows = buildTimetreeRows({
       entities: [
-        entity(1, "中书门下"),
-        entity(2, "枢密院"),
-        entity(3, "后世新增机构"),
-        entity(4, "中书门下属司"),
+        entity(1, "中书门下", { source_order: 10 }),
+        entity(2, "枢密院", { source_order: 30 }),
+        entity(3, "后世新增机构", { source_order: 40 }),
+        entity(4, "中书门下属司", { source_order: 20 }),
       ],
       hierarchyEdges: [
         { parent: 1, child: 4 },
@@ -102,6 +102,31 @@ describe("buildTimetreeRows", () => {
         ["乙司", 2, false],
         ["丙司", 3, false],
       ],
+    );
+  });
+
+  it("根节点与同层下级都按辞典出现顺序排列", () => {
+    const rows = buildTimetreeRows({
+      entities: [
+        entity(1, "甲根", { source_order: 90 }),
+        entity(2, "乙根", { source_order: 10 }),
+        entity(3, "甲下级", { source_order: 70 }),
+        entity(4, "乙下级", { source_order: 30 }),
+      ],
+      hierarchyEdges: [
+        { parent: 2, child: 3 },
+        { parent: 2, child: 4 },
+      ],
+      category: "中央机构",
+      groupNames: [],
+      expandedIds: new Set([
+        timetreeCategoryKey("中央机构"),
+        timetreeEntityKey(2),
+      ]),
+    });
+    assert.deepEqual(
+      rows.filter((row) => row.entityId != null).map((row) => row.entityId),
+      [2, 4, 3, 1],
     );
   });
 

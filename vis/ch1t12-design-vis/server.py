@@ -32,6 +32,7 @@ from institution_categories import (  # noqa: E402
     classify_institution,
     classify_institution_group,
     resolve_source_catalogs,
+    resolve_source_order,
 )
 from revision_store import RevisionError, RevisionStore  # noqa: E402
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch1t12.db"
@@ -396,15 +397,22 @@ def build_payload(*, include_details: bool = True) -> dict:
     catalogs_by_title = {}
     catalogs_by_page = {}
     catalogs_by_reference = {}
-    query = f'SELECT title, catalog, page, text, fields FROM "{DICT_TABLE}"'
+    orders_by_title = {}
+    orders_by_page = {}
+    orders_by_reference = {}
+    query = f'SELECT id, title, catalog, page, text, fields FROM "{DICT_TABLE}"'
     for r in dictionary.execute(query):
         title = r["title"]
         page = str(r["page"] or "").strip()
+        source_order = int(r["id"])
         full_catalog = r["catalog"] or ""
         catalogs_by_title.setdefault(title, set()).add(full_catalog)
+        orders_by_title.setdefault(title, set()).add(source_order)
         if page:
             catalogs_by_page.setdefault(page, set()).add(full_catalog)
             catalogs_by_reference.setdefault((title, page), set()).add(full_catalog)
+            orders_by_page.setdefault(page, set()).add(source_order)
+            orders_by_reference.setdefault((title, page), set()).add(source_order)
         if title in dict_rows or not include_details:
             continue
         dict_rows[title] = _dictionary_row_payload(r)
@@ -419,6 +427,7 @@ def build_payload(*, include_details: bool = True) -> dict:
         sources_by_entity.setdefault(r["target_id"], set()).add((source, page))
 
     category_by_entity = {}
+    source_order_by_entity = {}
     source_catalogs_by_entity = {}
     attr_categories_by_entity = {}
     for entity in entities:
@@ -437,6 +446,13 @@ def build_payload(*, include_details: bool = True) -> dict:
             if item["attr_category"]
         })
         source_catalogs_by_entity[entity["id"]] = sorted(source_catalogs)
+        source_order_by_entity[entity["id"]] = resolve_source_order(
+            entity["title"],
+            sources_by_entity.get(entity["id"], ()),
+            orders_by_reference,
+            orders_by_page,
+            orders_by_title,
+        )
         attr_categories_by_entity[entity["id"]] = attr_categories
         category_by_entity[entity["id"]] = classify_institution(
             attr_categories, sorted(source_catalogs), entity["title"]
@@ -467,6 +483,28 @@ def build_payload(*, include_details: bool = True) -> dict:
                 category_by_entity[source_id] = (
                     target_category,
                     f"沿{relation_type}继承自实体 #{target_id}",
+                )
+                changed = True
+            source_order = source_order_by_entity.get(source_id, (None, ""))[0]
+            target_order = source_order_by_entity.get(target_id, (None, ""))[0]
+            if (
+                source_order is not None
+                and target_id in source_order_by_entity
+                and target_order is None
+            ):
+                source_order_by_entity[target_id] = (
+                    source_order,
+                    f"沿{relation_type}继承辞典顺序自实体 #{source_id}",
+                )
+                changed = True
+            elif (
+                target_order is not None
+                and source_id in source_order_by_entity
+                and source_order is None
+            ):
+                source_order_by_entity[source_id] = (
+                    target_order,
+                    f"沿{relation_type}继承辞典顺序自实体 #{target_id}",
                 )
                 changed = True
 
@@ -529,6 +567,9 @@ def build_payload(*, include_details: bool = True) -> dict:
         category, category_basis = category_by_entity[entity["id"]]
         entity["category"] = category
         entity["category_basis"] = category_basis
+        source_order, source_order_basis = source_order_by_entity[entity["id"]]
+        entity["source_order"] = source_order
+        entity["source_order_basis"] = source_order_basis
         category_counts[category] = category_counts.get(category, 0) + 1
         institution_group, institution_group_basis = institution_group_by_entity[entity["id"]]
         resolved_group = institution_group or f"其他{category}"
@@ -575,6 +616,11 @@ def build_payload(*, include_details: bool = True) -> dict:
             "categoryCounts": category_counts,
             "categoryUnresolved": len(unresolved_category_ids),
             "categoryUnresolvedIds": unresolved_category_ids,
+            "sourceOrderMatched": sum(
+                1
+                for order, _ in source_order_by_entity.values()
+                if order is not None
+            ),
             "institutionGroupNames": {
                 category: list(groups)
                 for category, groups in INSTITUTION_GROUP_NAMES.items()

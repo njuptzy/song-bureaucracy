@@ -5,6 +5,7 @@ from vis.backend.institution_categories import (
     classify_institution,
     classify_institution_group,
     resolve_source_catalogs,
+    resolve_source_order,
 )
 
 
@@ -125,6 +126,50 @@ class InstitutionCategoriesTest(unittest.TestCase):
             {"粮料院": {central}, "监当官": {county}},
         )
         self.assertEqual(catalogs, {central})
+
+    def test_source_order_prefers_exact_formal_headword(self):
+        order, basis = resolve_source_order(
+            "粮料院",
+            [("监当官", "614"), ("粮料院", "139")],
+            {("监当官", "614"): {4500}, ("粮料院", "139"): {900}},
+            {"139": {899, 900}, "614": {4499, 4500}},
+            {"粮料院": {900}, "监当官": {4500}},
+        )
+        self.assertEqual(order, 900)
+        self.assertIn("正式词头", basis)
+
+    def test_source_order_uses_precise_reference_before_ambiguous_title(self):
+        order, basis = resolve_source_order(
+            "经制司（军事机构）",
+            [("经制司", "510")],
+            {("经制司", "510"): {4000}},
+            {"510": {3999, 4000}},
+            {"经制司": {4000, 4200}},
+        )
+        self.assertEqual(order, 4000)
+        self.assertIn("精确匹配", basis)
+
+    def test_source_order_rejects_ambiguous_title_and_page_fallback(self):
+        order, basis = resolve_source_order(
+            "派生机构",
+            [("重名词条", "400")],
+            {},
+            {"400": {3200, 3201}},
+            {"重名词条": {3200, 3201}},
+        )
+        self.assertIsNone(order)
+        self.assertIn("未匹配", basis)
+
+    def test_source_order_rejects_conflicting_unique_fallbacks(self):
+        order, basis = resolve_source_order(
+            "派生机构",
+            [("唯一词条", "401")],
+            {},
+            {"401": {3201}},
+            {"唯一词条": {3200}},
+        )
+        self.assertIsNone(order)
+        self.assertIn("未匹配", basis)
 
     def test_central_groups_follow_dictionary_institutional_systems(self):
         cases = (
