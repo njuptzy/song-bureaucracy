@@ -112,6 +112,27 @@ test("年度快照变化优先保留显式演变并识别改隶", () => {
   assert.equal(changes.some((change) => change.type === "create" && change.targetIds[0] === 2), false);
 });
 
+test("年度快照不为上下级未变的持续实体生成伪位置变化", () => {
+  const changes = buildSnapshotTransition({
+    data: baseData,
+    fromSnapshot: snapshot([1, 3, 10], [
+      { parent: 10, child: 1 },
+      { parent: 10, child: 3 },
+    ]),
+    toSnapshot: snapshot([1, 3, 10, 11], [
+      { parent: 11, child: 1 },
+      { parent: 10, child: 3 },
+    ]),
+    fromYear: 1069,
+    toYear: 1080,
+  });
+  assert.equal(changes.some((change) => change.type === "move"), false);
+  assert.equal(changes.some((change) => (
+    change.type === "reparent" && change.targetIds[0] === 1
+  )), true);
+  assert.equal(changes.some((change) => change.targetIds[0] === 3), false);
+});
+
 test("无来源的新设只标为目标位置出现", () => {
   const data = { ...baseData, changeRelations: [] };
   const changes = buildSnapshotTransition({

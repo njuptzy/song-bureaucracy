@@ -450,14 +450,15 @@ export function buildSnapshotTransition({
     }
     const previousParentId = oldParents.get(entityId) ?? null;
     const nextParentId = newParents.get(entityId) ?? null;
+    if (previousParentId === nextParentId) continue;
     changes.push(makeChange(data, {
-      type: previousParentId !== nextParentId ? "reparent" : "move",
+      type: "reparent",
       sourceIds: [entityId],
       targetIds: [entityId],
       year: toYear,
       fromYear,
       toYear,
-      eventText: previousParentId !== nextParentId ? "层级归属发生变化" : "层级位置更新",
+      eventText: "层级归属发生变化",
       focusEntityId: focusEntityId ?? entityId,
       previousParentId,
       nextParentId,

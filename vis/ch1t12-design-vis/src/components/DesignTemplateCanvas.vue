@@ -190,6 +190,7 @@ let evolutionLayoutCacheKey = "";
 let evolutionLayoutCache = null;
 let structuralChangeIndex = null;
 let activeTransitionAnimation = 0;
+let activeTransitionTimer = null;
 let reduceMotionQuery = null;
 const expandedChangeEvidenceKeys = new Set();
 
@@ -4863,27 +4864,34 @@ function captureHierarchyFrame(svg, { cloneNodes = false } = {}) {
     const entityId = Number(node.dataset.entityId);
     const matrix = node.getCTM?.();
     if (!Number.isFinite(entityId) || !matrix) return;
-    let clone = null;
-    if (cloneNodes) {
-      clone = node.cloneNode(true);
-      clone.querySelectorAll(
-        ".node-change-indicator, .composition-detail-button, .dynamic-tree-node-hit-area, title",
-      ).forEach((element) => element.remove());
-      clone.removeAttribute("role");
-      clone.removeAttribute("tabindex");
-      clone.removeAttribute("aria-label");
-      clone.style.pointerEvents = "none";
-      clone.style.visibility = "visible";
-    }
     const normalizedMatrix = matrixAttributes(matrix);
     nodes.set(entityId, {
       entityId,
       matrix: normalizedMatrix,
       center: transformedCenter(node, normalizedMatrix),
-      clone,
+      cloneSource: cloneNodes ? node : null,
     });
   });
   return { nodes };
+}
+
+function cloneHierarchyTransitionNode(item) {
+  const clone = item?.cloneSource?.cloneNode(true);
+  if (!clone) return null;
+  clone.querySelectorAll(
+    ".node-change-indicator, .composition-detail-button, .dynamic-tree-node-hit-area, title",
+  ).forEach((element) => element.remove());
+  clone.removeAttribute("role");
+  clone.removeAttribute("tabindex");
+  clone.removeAttribute("aria-label");
+  clone.style.pointerEvents = "none";
+  clone.style.visibility = "visible";
+  return clone;
+}
+
+function hierarchyMatrixChanged(previous, next, threshold = 0.35) {
+  return ["a", "b", "c", "d", "e", "f"]
+    .some((key) => Math.abs(previous[key] - next[key]) > threshold);
 }
 
 function transitionLinePoints(parent, child) {
@@ -4904,9 +4912,23 @@ function pulseTransitionTargets(frame, changes) {
   }
 }
 
+function cancelHierarchyTransition(svg) {
+  activeTransitionAnimation += 1;
+  if (activeTransitionTimer != null) {
+    window.clearTimeout(activeTransitionTimer);
+    activeTransitionTimer = null;
+  }
+  d3.select(svg).selectAll(".dynamic-tree-node").interrupt("hierarchy-time");
+  const previousOverlay = svg.querySelector(".hierarchy-transition-layer");
+  if (previousOverlay) {
+    d3.select(previousOverlay).selectAll("*").interrupt("hierarchy-time");
+    previousOverlay.remove();
+  }
+}
+
 function playHierarchyTransition(svg, oldFrame, changes) {
+  cancelHierarchyTransition(svg);
   const revision = ++activeTransitionAnimation;
-  svg.querySelector(".hierarchy-transition-layer")?.remove();
   const newFrame = captureHierarchyFrame(svg);
   newFrame.nodes.forEach((item, entityId) => {
     item.node = svg.querySelector(`.dynamic-tree-node[data-entity-id='${entityId}']`);
@@ -4916,7 +4938,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     return;
   }
 
-  const duration = 520;
+  const duration = 360;
   const easing = d3.easeCubicOut;
   const overlay = svgElement("g", {
     class: "hierarchy-transition-layer",
@@ -4925,17 +4947,21 @@ function playHierarchyTransition(svg, oldFrame, changes) {
   svg.appendChild(overlay);
 
   const commonIds = [...oldFrame.nodes.keys()].filter((id) => newFrame.nodes.has(id));
+  const movedCommonIds = commonIds.filter((entityId) => hierarchyMatrixChanged(
+    oldFrame.nodes.get(entityId).matrix,
+    newFrame.nodes.get(entityId).matrix,
+  ));
   const removedIds = [...oldFrame.nodes.keys()].filter((id) => !newFrame.nodes.has(id));
   const createdIds = [...newFrame.nodes.keys()].filter((id) => !oldFrame.nodes.has(id));
-  for (const entityId of [...commonIds, ...createdIds]) {
+  for (const entityId of [...movedCommonIds, ...createdIds]) {
     const node = newFrame.nodes.get(entityId)?.node;
     if (node) node.style.opacity = "0";
   }
 
-  for (const entityId of commonIds) {
+  for (const entityId of movedCommonIds) {
     const oldItem = oldFrame.nodes.get(entityId);
     const newItem = newFrame.nodes.get(entityId);
-    const clone = oldItem.clone;
+    const clone = cloneHierarchyTransitionNode(oldItem);
     if (!clone) continue;
     clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
     clone.style.opacity = "1";
@@ -4949,14 +4975,14 @@ function playHierarchyTransition(svg, oldFrame, changes) {
 
   for (const entityId of removedIds) {
     const oldItem = oldFrame.nodes.get(entityId);
-    const clone = oldItem.clone;
+    const clone = cloneHierarchyTransitionNode(oldItem);
     if (!clone) continue;
     clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
     clone.style.opacity = "1";
     overlay.appendChild(clone);
     d3.select(clone)
       .transition("hierarchy-time")
-      .duration(300)
+      .duration(220)
       .ease(easing)
       .style("opacity", 0);
   }
@@ -4966,8 +4992,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     if (!node) continue;
     d3.select(node)
       .transition("hierarchy-time")
-      .delay(110)
-      .duration(360)
+      .delay(70)
+      .duration(250)
       .ease(easing)
       .style("opacity", 1);
   }
@@ -5014,8 +5040,9 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     }
   }
 
-  window.setTimeout(() => {
+  activeTransitionTimer = window.setTimeout(() => {
     if (revision !== activeTransitionAnimation) return;
+    activeTransitionTimer = null;
     overlay.remove();
     newFrame.nodes.forEach(({ node }) => {
       if (node) node.style.opacity = "1";
@@ -5358,6 +5385,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   }
 
   if (viewMode.value === "hierarchy") {
+    cancelHierarchyTransition(svg);
     svg.querySelector(".dynamic-tree-viewport")?.remove();
     svg.querySelectorAll(
       "clipPath[id^='dynamic-tree-'], clipPath[id^='inline-composition-']"
@@ -5414,7 +5442,12 @@ onMounted(async () => {
   renderTemplate();
 });
 onUnmounted(() => {
-  activeTransitionAnimation += 1;
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  if (svg) cancelHierarchyTransition(svg);
+  else {
+    activeTransitionAnimation += 1;
+    if (activeTransitionTimer != null) window.clearTimeout(activeTransitionTimer);
+  }
   if (timelineRefreshFrame != null) window.cancelAnimationFrame(timelineRefreshFrame);
 });
 </script>
