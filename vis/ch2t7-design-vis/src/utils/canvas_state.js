@@ -1,7 +1,7 @@
 export const CANVAS_STATE_STORAGE_KEY = "song-bureaucracy:canvas-state:v1";
 
 const CANVAS_STATE_VERSION = 1;
-const VIEW_MODES = new Set(["hierarchy", "composition", "evolution", "timetree", "comparison"]);
+const VIEW_MODES = new Set(["hierarchy", "composition", "evolution"]);
 const EVOLUTION_MODES = new Set(["single", "compare"]);
 const EVOLUTION_ITEM_KINDS = new Set(["timepoint", "relation"]);
 
@@ -78,21 +78,6 @@ export function sanitizeCanvasState(value) {
   if (typeof value.spaceAwareExpansion === "boolean") {
     state.spaceAwareExpansion = value.spaceAwareExpansion;
   }
-  if (["hierarchy", "composition", "evolution", "timetree"].includes(value.comparisonReturnView)) {
-    state.comparisonReturnView = value.comparisonReturnView;
-  }
-
-  // 对照视图保留左右两块画布各自的浏览位置；两块状态仍按普通画布
-  // 规则清洗，避免把临时 Vue 对象或完整数据树写入 localStorage。
-  for (const [key, mode] of [
-    ["comparisonHierarchyState", "hierarchy"],
-    ["comparisonEvolutionState", "evolution"],
-  ]) {
-    if (!value[key] || typeof value[key] !== "object" || Array.isArray(value[key])) continue;
-    const nested = sanitizeCanvasState({ ...value[key], viewMode: mode });
-    if (nested) state[key] = nested;
-  }
-
   return Object.keys(state).length ? state : null;
 }
 

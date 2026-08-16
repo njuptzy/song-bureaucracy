@@ -92,16 +92,15 @@ const props = defineProps({
   initialState: { type: Object, default: null },
   revisionPanelActive: { type: Boolean, default: false },
   fixedViewMode: { type: String, default: "" },
-  comparisonScale: { type: Number, default: null },
 });
-const emit = defineEmits(["state-change", "selection-change", "open-comparison"]);
+const emit = defineEmits(["state-change", "selection-change"]);
 const initialState = props.initialState || {};
 
 const hostRef = ref(null);
 const svgMountRef = ref(null);
 const loading = ref(true);
 const error = ref("");
-const VIEW_MODES = ["hierarchy", "composition", "evolution", "timetree", "comparison"];
+const VIEW_MODES = ["hierarchy", "composition", "evolution"];
 const viewMode = ref(VIEW_MODES.includes(props.fixedViewMode)
   ? props.fixedViewMode
   : VIEW_MODES.includes(initialState.viewMode)
@@ -109,7 +108,7 @@ const viewMode = ref(VIEW_MODES.includes(props.fixedViewMode)
     : "hierarchy");
 const viewModeLocked = computed(() => VIEW_MODES.includes(props.fixedViewMode));
 function isEvolutionCanvasMode() {
-  return viewMode.value === "evolution" || viewMode.value === "comparison";
+  return viewMode.value === "evolution";
 }
 const evolutionMode = ref(initialState.evolutionMode === "compare" ? "compare" : "single");
 const evolutionEntityIds = ref(Array.isArray(initialState.evolutionEntityIds)
@@ -260,10 +259,6 @@ const persistedCanvasState = computed(() => ({
   compositionFocusId: compositionFocusId.value,
   selectedCategory: selectedCategory.value,
   spaceAwareExpansion: spaceAwareExpansion.value,
-  comparisonPaneOffsets: {
-    hierarchy: { ...comparisonPaneOffsets.value.hierarchy },
-    evolution: { ...comparisonPaneOffsets.value.evolution },
-  },
 }));
 
 watch(persistedCanvasState, (state) => emit("state-change", state), {
@@ -3352,8 +3347,6 @@ function renderDynamicTimetree(svg) {
 function populateCenter(svg) {
   if (viewMode.value === "hierarchy") renderDynamicHierarchy(svg);
   else if (viewMode.value === "composition") renderDynamicComposition(svg);
-  else if (viewMode.value === "timetree") renderDynamicTimetree(svg);
-  else if (viewMode.value === "comparison") renderDynamicComparison(svg);
   else renderDynamicEvolution(svg);
 }
 
@@ -4259,12 +4252,9 @@ function makeEvolutionControlInteractive(control, active) {
 
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
-  if (viewModeLocked.value) {
-    svg.querySelector(".comparison-view-control")?.remove();
-  }
   ensureEvolutionViewControl(svg);
-  ensureTimetreeViewControl(svg);
-  if (!viewModeLocked.value) ensureComparisonViewControl(svg);
+  svg.querySelector(".timetree-view-control")?.remove();
+  svg.querySelector(".comparison-view-control")?.remove();
   const categoryItems = templateCategoryItems(svg);
   const selectionTemplate = categoryItems
     .map(({ group }) => [...group.children].find(
@@ -4303,15 +4293,14 @@ function bindTemplateControls(svg) {
   d3.select(svg)
     .selectAll("text")
     .each(function () {
-      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer, .evolution-view-control, .dynamic-timetree-layer, .timetree-view-control")) return;
+      if (this.closest(".dynamic-tree-layer, .dynamic-evolution-layer, .evolution-view-control")) return;
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
         const canActivate = !viewModeLocked.value && targetMode === "hierarchy"
           && (viewMode.value === "composition"
-            || viewMode.value === "evolution"
-            || viewMode.value === "timetree");
+            || viewMode.value === "evolution");
         const activateView = (event) => {
           event.stopPropagation();
           if (!canActivate) return;
@@ -4322,7 +4311,7 @@ function bindTemplateControls(svg) {
               focusHierarchyContext(focus, true);
             }
           }
-          if (viewMode.value === "evolution" || viewMode.value === "timetree") {
+          if (viewMode.value === "evolution") {
             restoreHierarchyFocus();
           }
           if (!viewModeLocked.value) viewMode.value = "hierarchy";
@@ -4351,7 +4340,7 @@ function bindTemplateControls(svg) {
       if (CATEGORY_NAMES.includes(text)) {
         const category = text;
         const group = this.parentElement;
-        const categoryInteractive = viewMode.value === "hierarchy" || viewMode.value === "timetree";
+        const categoryInteractive = viewMode.value === "hierarchy";
         if (!categoryInteractive) {
           this.style.cursor = "default";
           d3.select(this).on("click.category", null);
@@ -4370,10 +4359,6 @@ function bindTemplateControls(svg) {
           lastExpandedHierarchyId = null;
           hierarchyPanX = 0;
           hierarchyPanY = 0;
-          timetreeExpandedKeys.value = null;
-          timetreeScroll.value = 0;
-          timetreeSelectedEventId.value = null;
-          timetreeSelectedRelationId.value = null;
           selectedCategory.value = category;
           selectedId.value = null;
           expandedDetailId.value = null;
@@ -4677,13 +4662,6 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
     svg.querySelector(".dynamic-evolution-layer")?.remove();
     svg.querySelectorAll("[data-evolution-def]").forEach((element) => element.remove());
   }
-  if (viewMode.value === "comparison") {
-    svg.querySelector(".dynamic-comparison-layer")?.remove();
-  }
-  if (viewMode.value === "timetree") {
-    svg.querySelector(".dynamic-timetree-layer")?.remove();
-    svg.querySelectorAll("[data-timetree-def]").forEach((element) => element.remove());
-  }
 
   selectedEntity();
   populateCenter(svg);
@@ -4720,9 +4698,6 @@ function flushTimelineRefresh(rebindStatic = false) {
 }
 
 watch(viewMode, renderTemplate);
-watch(() => props.comparisonScale, () => {
-  if (viewMode.value === "comparison") refreshTemplate();
-});
 onMounted(async () => {
   installDesignFonts();
   try {

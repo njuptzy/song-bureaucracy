@@ -1,22 +1,12 @@
 <template>
   <main ref="applicationShellRef" class="application-shell">
-    <ComparisonView
-      v-if="data && canvasState?.viewMode === 'comparison'"
-      :data="data"
-      :initial-state="canvasState"
-      :revision-panel-active="revisionPanelVisible || editMode"
-      @state-change="handleCanvasStateChange"
-      @selection-change="handleSelectionChange"
-      @exit-comparison="exitComparisonView"
-    />
     <DesignTemplateCanvas
-      v-else-if="data"
+      v-if="data"
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
-      @open-comparison="enterComparisonView"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
@@ -52,7 +42,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import DesignTemplateCanvas from "./components/DesignTemplateCanvas.vue";
-import ComparisonView from "./components/ComparisonView.vue";
 import RevisionWorkspace from "./components/RevisionWorkspace.vue";
 import { readCanvasState, writeCanvasState } from "./utils/canvas_state";
 import { filterSongData } from "./utils/song_scope";
@@ -100,10 +89,7 @@ function updateRevisionPanelGeometry() {
   };
 }
 
-const isEvolutionView = computed(() => (
-  canvasState.value?.viewMode === "evolution"
-  || canvasState.value?.viewMode === "comparison"
-));
+const isEvolutionView = computed(() => canvasState.value?.viewMode === "evolution");
 const revisionPanelVisible = computed(() => {
   if (!isEvolutionView.value) return false;
   if (revisionDrawer.value) return true;
@@ -116,44 +102,6 @@ function handleCanvasStateChange(state) {
   canvasState.value = state;
   writeCanvasState(state);
   updateRevisionPanelGeometry();
-}
-
-function enterComparisonView() {
-  const source = canvasState.value || {};
-  const hierarchyState = source.comparisonHierarchyState || {
-    ...source,
-    viewMode: "hierarchy",
-  };
-  const evolutionState = source.comparisonEvolutionState || {
-    ...source,
-    viewMode: "evolution",
-  };
-  handleCanvasStateChange({
-    ...source,
-    viewMode: "comparison",
-    comparisonReturnView: source.viewMode === "comparison" ? source.comparisonReturnView : source.viewMode,
-    comparisonHierarchyState: hierarchyState,
-    comparisonEvolutionState: evolutionState,
-  });
-}
-
-function exitComparisonView() {
-  const source = canvasState.value || {};
-  const returnMode = ["hierarchy", "composition", "evolution", "timetree"].includes(source.comparisonReturnView)
-    ? source.comparisonReturnView
-    : "hierarchy";
-  const next = returnMode === "evolution"
-    ? source.comparisonEvolutionState
-    : returnMode === "hierarchy"
-      ? source.comparisonHierarchyState
-      : source;
-  handleCanvasStateChange({
-    ...next,
-    viewMode: returnMode,
-    comparisonReturnView: returnMode,
-    comparisonHierarchyState: source.comparisonHierarchyState,
-    comparisonEvolutionState: source.comparisonEvolutionState,
-  });
 }
 
 function handleSelectionChange(selection) {

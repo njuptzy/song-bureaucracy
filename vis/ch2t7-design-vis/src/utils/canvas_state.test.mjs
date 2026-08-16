@@ -97,32 +97,16 @@ test("恢复前会过滤未知字段并规范非法取值", () => {
   });
 });
 
-test("对照视图保存左右画布各自的状态", () => {
+test("已移除的时间线树与对照视图不会从旧状态恢复", () => {
   assert.deepEqual(sanitizeCanvasState({
     viewMode: "comparison",
-    comparisonHierarchyState: {
-      viewMode: "hierarchy",
-      selectedCategory: "中央机构",
-      selectedId: 174,
-    },
-    comparisonEvolutionState: {
-      viewMode: "evolution",
-      evolutionMode: "single",
-      evolutionEntityIds: [174],
-      selectedRange: [1080, 1080],
-    },
+    comparisonReturnView: "timetree",
+    comparisonHierarchyState: { viewMode: "hierarchy", selectedId: 174 },
+  }), null);
+  assert.deepEqual(sanitizeCanvasState({
+    viewMode: "timetree",
+    selectedId: 174,
   }), {
-    viewMode: "comparison",
-    comparisonHierarchyState: {
-      viewMode: "hierarchy",
-      selectedId: 174,
-      selectedCategory: "中央机构",
-    },
-    comparisonEvolutionState: {
-      viewMode: "evolution",
-      evolutionMode: "single",
-      evolutionEntityIds: [174],
-      selectedRange: [1080, 1080],
-    },
+    selectedId: 174,
   });
 });
