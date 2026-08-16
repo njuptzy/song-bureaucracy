@@ -4133,7 +4133,7 @@ function ensureTimetreeViewControl(svg) {
   control.style.display = "";
   const surface = control.querySelector("rect");
   const label = control.querySelector("text");
-  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("fill-opacity", active ? "0.30" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
   if (label) label.style.fontWeight = active ? "700" : "400";
   const activate = (event) => {
@@ -4193,7 +4193,7 @@ function ensureEvolutionViewControl(svg) {
   const label = control.querySelector("text");
   surface?.setAttribute("x", String(layout.surfaceX));
   label?.setAttribute("transform", `translate(${layout.labelX} 98.84)`);
-  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("fill-opacity", active ? "0.30" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
   if (label) label.style.fontWeight = active ? "700" : "400";
   makeEvolutionControlInteractive(control, active);
@@ -4228,7 +4228,7 @@ function ensureComparisonViewControl(svg) {
   const active = viewMode.value === "comparison";
   const surface = control.querySelector("rect");
   const label = control.querySelector("text");
-  surface?.setAttribute("fill-opacity", active ? "0.55" : "0");
+  surface?.setAttribute("fill-opacity", active ? "0.30" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
   if (label) label.style.fontWeight = active ? "700" : "400";
   control.setAttribute("role", "button");
