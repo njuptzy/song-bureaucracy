@@ -7,6 +7,7 @@
       :revision-panel-active="revisionPanelVisible || editMode"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
+      @detail-entity-change="handleDetailEntityChange"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
@@ -68,6 +69,9 @@ const applicationShellRef = ref(null);
 const revisionPanelStyle = ref({});
 let versionTimer = null;
 let panelResizeObserver = null;
+let activeDetailEntityId = null;
+const loadedDetailEntityIds = new Set();
+const pendingDetailRequests = new Map();
 
 const DESIGN_VIEWBOX = { width: 1920, height: 1080 };
 const REVISION_PANEL_BOUNDS = { x: 82, y: 145, width: 393, height: 338 };
@@ -106,6 +110,7 @@ function handleCanvasStateChange(state) {
 
 function handleSelectionChange(selection) {
   selectedFact.value = selection;
+  if (selection?.entityId != null) void loadEntityDetails(selection.entityId);
   if (editMode.value && selection && !connectionMode.value) {
     revisionDrawer.value = "";
   }
@@ -117,6 +122,11 @@ function handleSelectionChange(selection) {
   }
   if (String(connectSource.value.id) === String(selection.id)) return;
   connectTarget.value = selection;
+}
+
+function handleDetailEntityChange(entityId) {
+  activeDetailEntityId = Number.isFinite(Number(entityId)) ? Number(entityId) : null;
+  if (activeDetailEntityId != null) void loadEntityDetails(activeDetailEntityId);
 }
 
 const DESIGN_ASSET_VERSION = encodeURIComponent(__APP_BUILD_ID__);
@@ -156,6 +166,58 @@ function applyPreview(preview = revisionPreview.value) {
     : baseData.value;
 }
 
+function mergeEntityDetails(target, details) {
+  const entityId = String(details.entityId);
+  const quotations = details.timepointQuotations || {};
+  const timepoints = { ...(target.timepoints || {}) };
+  if (timepoints[entityId]) {
+    timepoints[entityId] = timepoints[entityId].map((item) => ({
+      ...item,
+      ...(Object.prototype.hasOwnProperty.call(quotations, item.id)
+        ? { quotation: quotations[item.id] }
+        : {}),
+    }));
+  }
+  const relationQuotations = details.relationQuotations || {};
+  const changeRelations = (target.changeRelations || []).map((relation) => ({
+    ...relation,
+    ...(Object.prototype.hasOwnProperty.call(relationQuotations, relation.id)
+      ? { quotation: relationQuotations[relation.id] }
+      : {}),
+  }));
+  return {
+    ...target,
+    detailUpdateEntityId: Number(details.entityId),
+    timepoints,
+    changeRelations,
+    citations: { ...(target.citations || {}), ...(details.citations || {}) },
+    dictionary: { ...(target.dictionary || {}), ...(details.dictionary || {}) },
+  };
+}
+
+async function loadEntityDetails(entityId) {
+  const numericId = Number(entityId);
+  if (!baseData.value || !Number.isFinite(numericId) || loadedDetailEntityIds.has(numericId)) return;
+  if (pendingDetailRequests.has(numericId)) return pendingDetailRequests.get(numericId);
+  const requestVersion = dataVersion.value;
+  const request = (async () => {
+    try {
+      const url = `/api/details/entity/${numericId}?v=${encodeURIComponent(requestVersion)}`;
+      const details = await fetchJson(url, "force-cache");
+      if (!baseData.value || requestVersion !== dataVersion.value) return;
+      baseData.value = mergeEntityDetails(baseData.value, details);
+      loadedDetailEntityIds.add(numericId);
+      applyPreview();
+    } catch (reason) {
+      revisionError.value = `词条详情加载失败：${reason.message}`;
+    } finally {
+      pendingDetailRequests.delete(numericId);
+    }
+  })();
+  pendingDetailRequests.set(numericId, request);
+  return request;
+}
+
 async function refreshRevision() {
   revisionState.value = await revisionRequest("/api/revisions/state");
   revisionPreview.value = await revisionRequest("/api/revisions/draft/preview");
@@ -171,12 +233,15 @@ async function refreshData(force = false) {
       await refreshRevision();
       return;
     }
-    const dataUrl = `/data/song-bureaucracy.json?v=${encodeURIComponent(version)}`;
+    const dataUrl = `/data/song-bureaucracy-core.json?v=${encodeURIComponent(version)}`;
     baseData.value = filterSongData(await fetchJson(dataUrl, "force-cache"));
     dataVersion.value = version;
+    loadedDetailEntityIds.clear();
+    pendingDetailRequests.clear();
     loadError.value = "";
     if (revisionState.value?.draft?.group_count) applyPreview();
     else data.value = baseData.value;
+    if (activeDetailEntityId != null) void loadEntityDetails(activeDetailEntityId);
   } catch (reason) {
     loadError.value = `数据加载失败：${reason.message}`;
   }

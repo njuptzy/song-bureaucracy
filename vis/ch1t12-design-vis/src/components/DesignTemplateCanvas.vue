@@ -93,7 +93,7 @@ const props = defineProps({
   revisionPanelActive: { type: Boolean, default: false },
   fixedViewMode: { type: String, default: "" },
 });
-const emit = defineEmits(["state-change", "selection-change"]);
+const emit = defineEmits(["state-change", "selection-change", "detail-entity-change"]);
 const initialState = props.initialState || {};
 
 const hostRef = ref(null);
@@ -266,8 +266,18 @@ watch(persistedCanvasState, (state) => emit("state-change", state), {
   deep: true,
 });
 
+watch(selectedId, (entityId) => emit("detail-entity-change", entityId), {
+  immediate: true,
+});
+
 watch(() => props.data, (data) => {
   rebuildDataIndexes(data);
+  const detailOnly = data?.detailUpdateEntityId != null && !data?.revisionPreview;
+  if (detailOnly) {
+    const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+    if (svg) updateDetails(svg);
+    return;
+  }
   const affectedEntityIds = new Set(data?.revisionPreview?.affectedEntityIds || []);
   const affectedYears = data?.revisionPreview?.affectedYears || [];
   if (!data?.revisionPreview) {

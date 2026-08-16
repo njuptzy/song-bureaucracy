@@ -5,7 +5,9 @@
     python3 server.py [--port 8650] [--entries-db PATH] [--dict-db PATH]
 
 接口:
-    GET /api/data   一次返回前端所需全部 JSON（启动后惰性构建并缓存）
+    GET /data/song-bureaucracy-core.json  返回首屏结构数据
+    GET /api/details/entity/{id}          按机构或官职返回原文与引文
+    GET /api/data                         兼容旧客户端的完整 JSON
     GET /           dist/index.html（需先 pnpm build）
 """
 
@@ -122,6 +124,8 @@ def _relationship_columns(entries: sqlite3.Connection) -> set[str]:
 def _build_change_relations(
     entries: sqlite3.Connection,
     normalized_by_id: dict[int, dict],
+    *,
+    include_quotation: bool = True,
 ) -> list[dict]:
     """Return atomic evolution/transfer edges without inferring time or grouping."""
     columns = _relationship_columns(entries)
@@ -149,8 +153,7 @@ def _build_change_relations(
     for row in rows:
         subtype = row["relation_subtype"] or None
         is_unclassified = row["relation_type"] == "前后演变" and subtype is None
-        relations.append(
-            {
+        relation = {
                 "id": row["rid"],
                 "relation_type": row["relation_type"],
                 "relation_subtype": subtype,
@@ -165,16 +168,44 @@ def _build_change_relations(
                 "source_time": dict(normalized_by_id.get(row["subject_id"]) or {}),
                 "target_time": dict(normalized_by_id.get(row["object_id"]) or {}),
                 "evidence_key": f"R{row['rid']}",
-                "quotation": row["quotation"] or "",
                 "change_event_id": row["change_event_id"],
                 "relation_group_id": row["relation_group_id"],
                 "relation_scope": row["relation_scope"] or None,
             }
-        )
+        if include_quotation:
+            relation["quotation"] = row["quotation"] or ""
+        relations.append(relation)
     return relations
 
 
-def build_payload() -> dict:
+def _dictionary_row_payload(row: sqlite3.Row) -> dict:
+    fields = {}
+    raw = row["fields"]
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                fields = parsed
+        except (ValueError, TypeError):
+            fields = {}
+    text = (row["text"] or "").strip()
+    full_catalog = row["catalog"] or ""
+    return {
+        "page": row["page"],
+        "catalog": full_catalog.split("/")[-1],
+        "summary": text[:SUMMARY_LEN],
+        "text": text,
+        "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
+        "aliases": _dict_section(fields, ("简称与别名", "简称", "别称")),
+        "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
+        "rank": _dict_section(fields, ("品位", "官品", "品阶", "品秩", "位遇", "序位")),
+        "children": _dict_section(fields, ("下级机构", "所辖机构", "所属机构")),
+        "office": _dict_section(fields, ("衙署", "办公地点")),
+        "composition": _dict_section(fields, ("编制", "官额", "吏额")),
+    }
+
+
+def build_payload(*, include_details: bool = True) -> dict:
     entries = _connect(ENTRIES_DB)
     dictionary = _connect(DICT_DB)
 
@@ -192,8 +223,7 @@ def build_payload() -> dict:
     ):
         normalized_payload = _normalized_time_payload(r["time"] or "")
         normalized_by_id[r["id"]] = normalized_payload
-        timepoints.setdefault(r["entity_id"], []).append(
-            {
+        timepoint = {
                 "id": r["id"],
                 "prev_id": r["prev_id"],
                 "succ_id": r["succ_id"],
@@ -204,10 +234,11 @@ def build_payload() -> dict:
                 "attr_category": r["attr_category"] or "",
                 "attr_officer_type": r["attr_officer_type"] or "",
                 "attr_grade": r["attr_grade"] or "",
-                "quotation": r["quotation"] or "",
                 **normalized_payload,
             }
-        )
+        if include_details:
+            timepoint["quotation"] = r["quotation"] or ""
+        timepoints.setdefault(r["entity_id"], []).append(timepoint)
 
     def entity_edges(relation_type: str):
         rows = entries.execute(
@@ -339,23 +370,26 @@ def build_payload() -> dict:
     # 演变视图读取逐条关系，不借用 periods_for() 将两端时间合并，也不从
     # 自由文本推断子类型或关系组。旧“前后演变”明确标为未分类；将来数据库
     # 增加结构化子类型和组字段后，接口会通过 PRAGMA 自动透传。
-    change_relations = _build_change_relations(entries, normalized_by_id)
+    change_relations = _build_change_relations(
+        entries, normalized_by_id, include_quotation=include_details
+    )
 
     citations = {}
-    for r in entries.execute(
-        "SELECT id, target_table, target_id, citation, quotation, note, conflict_flag"
-        " FROM Citations ORDER BY target_table, target_id, id"
-    ):
-        key = ("T" if r["target_table"] == "Timepoints" else "R") + str(r["target_id"])
-        citations.setdefault(key, []).append(
-            {
-                "id": r["id"],
-                "citation": r["citation"] or "",
-                "quotation": r["quotation"] or "",
-                "note": r["note"] or "",
-                "conflict_flag": r["conflict_flag"] or 0,
-            }
-        )
+    if include_details:
+        for r in entries.execute(
+            "SELECT id, target_table, target_id, citation, quotation, note, conflict_flag"
+            " FROM Citations ORDER BY target_table, target_id, id"
+        ):
+            key = ("T" if r["target_table"] == "Timepoints" else "R") + str(r["target_id"])
+            citations.setdefault(key, []).append(
+                {
+                    "id": r["id"],
+                    "citation": r["citation"] or "",
+                    "quotation": r["quotation"] or "",
+                    "note": r["note"] or "",
+                    "conflict_flag": r["conflict_flag"] or 0,
+                }
+            )
 
     # 辞典匹配：按 title 精确匹配当前辞典表，抽取摘要与 fields 中的职源/职掌
     dict_rows = {}
@@ -371,31 +405,9 @@ def build_payload() -> dict:
         if page:
             catalogs_by_page.setdefault(page, set()).add(full_catalog)
             catalogs_by_reference.setdefault((title, page), set()).add(full_catalog)
-        if title in dict_rows:
+        if title in dict_rows or not include_details:
             continue
-        fields = {}
-        raw = r["fields"]
-        if raw:
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, dict):
-                    fields = parsed
-            except (ValueError, TypeError):
-                fields = {}
-        text = (r["text"] or "").strip()
-        dict_rows[title] = {
-            "page": r["page"],
-            "catalog": full_catalog.split("/")[-1],
-            "summary": text[:SUMMARY_LEN],
-            "text": text,
-            "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
-            "aliases": _dict_section(fields, ("简称与别名", "简称", "别称")),
-            "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
-            "rank": _dict_section(fields, ("品位", "官品", "品阶", "品秩", "位遇", "序位")),
-            "children": _dict_section(fields, ("下级机构", "所辖机构", "所属机构")),
-            "office": _dict_section(fields, ("衙署", "办公地点")),
-            "composition": _dict_section(fields, ("编制", "官额", "吏额")),
-        }
+        dict_rows[title] = _dictionary_row_payload(r)
 
     sources_by_entity = {}
     for r in entries.execute(
@@ -583,15 +595,126 @@ def build_payload() -> dict:
     }
 
 
+def build_entity_details(entity_id: int) -> dict:
+    entries = _connect(ENTRIES_DB)
+    dictionary = _connect(DICT_DB)
+    try:
+        entity = entries.execute(
+            "SELECT id, title FROM Entities WHERE id = ?", (entity_id,)
+        ).fetchone()
+        if entity is None:
+            raise ValueError(f"机构或官职不存在: {entity_id}")
+
+        timepoint_rows = list(entries.execute(
+            "SELECT id, quotation FROM Timepoints WHERE entity_id = ? ORDER BY id",
+            (entity_id,),
+        ))
+        timepoint_ids = [row["id"] for row in timepoint_rows]
+        relation_rows = list(entries.execute(
+            """
+            SELECT DISTINCT r.id, r.quotation
+            FROM Relationships r
+            JOIN Timepoints s ON s.id = r.subject_id
+            JOIN Timepoints o ON o.id = r.object_id
+            WHERE s.entity_id = ? OR o.entity_id = ?
+            ORDER BY r.id
+            """,
+            (entity_id, entity_id),
+        ))
+        relation_ids = [row["id"] for row in relation_rows]
+
+        citations = {}
+        targets = [("Timepoints", target_id) for target_id in timepoint_ids]
+        targets.extend(("Relationships", target_id) for target_id in relation_ids)
+        for target_table, target_id in targets:
+            key = ("T" if target_table == "Timepoints" else "R") + str(target_id)
+            rows = entries.execute(
+                """
+                SELECT id, citation, quotation, note, conflict_flag
+                FROM Citations
+                WHERE target_table = ? AND target_id = ?
+                ORDER BY id
+                """,
+                (target_table, target_id),
+            )
+            values = [
+                {
+                    "id": row["id"],
+                    "citation": row["citation"] or "",
+                    "quotation": row["quotation"] or "",
+                    "note": row["note"] or "",
+                    "conflict_flag": row["conflict_flag"] or 0,
+                }
+                for row in rows
+            ]
+            if values:
+                citations[key] = values
+
+        dictionary_row = dictionary.execute(
+            f'SELECT title, catalog, page, text, fields FROM "{DICT_TABLE}" WHERE title = ? ORDER BY rowid LIMIT 1',
+            (entity["title"],),
+        ).fetchone()
+        return {
+            "entityId": entity_id,
+            "dictionary": {
+                entity["title"]: _dictionary_row_payload(dictionary_row)
+            } if dictionary_row else {},
+            "citations": citations,
+            "timepointQuotations": {
+                str(row["id"]): row["quotation"] or ""
+                for row in timepoint_rows if row["quotation"]
+            },
+            "relationQuotations": {
+                str(row["id"]): row["quotation"] or ""
+                for row in relation_rows if row["quotation"]
+            },
+        }
+    finally:
+        entries.close()
+        dictionary.close()
+
+
 def get_payload() -> bytes:
     fingerprint = _database_fingerprint()
     with _cache_lock:
         if _cache.get("fingerprint") != fingerprint:
+            _cache.clear()
+            _cache["fingerprint"] = fingerprint
             print("[server] 数据库已更新，重建 /api/data payload ...", flush=True)
             _cache["data"] = json.dumps(build_payload(), ensure_ascii=False).encode("utf-8")
-            _cache["fingerprint"] = fingerprint
             print(f"[server] payload 大小 {len(_cache['data']) / 1024 / 1024:.1f} MB", flush=True)
+        elif "data" not in _cache:
+            _cache["data"] = json.dumps(build_payload(), ensure_ascii=False).encode("utf-8")
         return _cache["data"]
+
+
+def get_core_payload() -> bytes:
+    fingerprint = _database_fingerprint()
+    with _cache_lock:
+        if _cache.get("fingerprint") != fingerprint:
+            _cache.clear()
+            _cache["fingerprint"] = fingerprint
+        if "core" not in _cache:
+            print("[server] 构建首屏核心数据 ...", flush=True)
+            _cache["core"] = json.dumps(
+                build_payload(include_details=False), ensure_ascii=False
+            ).encode("utf-8")
+            print(f"[server] 核心数据大小 {len(_cache['core']) / 1024 / 1024:.1f} MB", flush=True)
+        return _cache["core"]
+
+
+def get_entity_details_payload(entity_id: int) -> bytes:
+    fingerprint = _database_fingerprint()
+    with _cache_lock:
+        if _cache.get("fingerprint") != fingerprint:
+            _cache.clear()
+            _cache["fingerprint"] = fingerprint
+        details = _cache.setdefault("entity_details", {})
+        if entity_id not in details:
+            details[entity_id] = json.dumps(
+                build_entity_details(entity_id), ensure_ascii=False
+            ).encode("utf-8")
+        return details[entity_id]
 
 
 def get_version() -> bytes:
@@ -711,6 +834,43 @@ class Handler(BaseHTTPRequestHandler):
                 content_type,
                 cache_control=cache_control,
             )
+            return
+        detail_match = re.fullmatch(r"/api/details/entity/(\d+)", path)
+        if detail_match:
+            try:
+                requested_version = query.get("v", [""])[0]
+                current_version = _database_fingerprint()
+                self._send(
+                    200,
+                    get_entity_details_payload(int(detail_match.group(1))),
+                    "application/json; charset=utf-8",
+                    cache_control=(
+                        "public, max-age=31536000, immutable"
+                        if requested_version == current_version
+                        else "no-store"
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(404 if isinstance(exc, ValueError) else 500, {"error": str(exc)})
+            return
+        if path == "/data/song-bureaucracy-core.json":
+            try:
+                requested_version = query.get("v", [""])[0]
+                current_version = _database_fingerprint()
+                self._send(
+                    200,
+                    get_core_payload(),
+                    "application/json; charset=utf-8",
+                    cache_control=(
+                        "public, max-age=31536000, immutable"
+                        if requested_version == current_version
+                        else "no-store"
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                import traceback
+                traceback.print_exc()
+                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
             return
         if path in (
             "/api/data",
