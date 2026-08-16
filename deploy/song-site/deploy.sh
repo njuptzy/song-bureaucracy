@@ -31,8 +31,8 @@ rsync -a \
     "$repo_root/vis/backend/institution_categories.py" \
     "$remote_host:$remote_release/vis/backend/"
 rsync -a \
-    "$repo_root/data/database/song_bureaucracy_entries_ch2t7.db" \
-    "$repo_root/data/database/song_bureaucracy_dictionary_ch2t7.db" \
+    "$repo_root/data/database/song_bureaucracy_entries_ch1t12.db" \
+    "$repo_root/data/database/song_bureaucracy_dictionary_ch1t12.db" \
     "$remote_host:$remote_release/data/database/"
 rsync -a \
     "$repo_root/vis/宋代职官体系可视化打包文件 /svg格式/宋代职官体系可视化界面_画板 1 副本 4-01.svg" \

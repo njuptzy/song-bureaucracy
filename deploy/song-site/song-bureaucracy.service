@@ -9,7 +9,7 @@ User=songvis
 Group=songvis
 WorkingDirectory=/opt/song-bureaucracy/current/vis/ch2t7-design-vis
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3.11 /opt/song-bureaucracy/current/vis/ch2t7-design-vis/server.py --host 127.0.0.1 --port 8650 --entries-db /opt/song-bureaucracy/current/data/database/song_bureaucracy_entries_ch2t7.db --dict-db /opt/song-bureaucracy/current/data/database/song_bureaucracy_dictionary_ch2t7.db --dict-table chapter2t7 --revisions-db /var/lib/song-bureaucracy/song_bureaucracy_entries_ch2t7.revisions.db
+ExecStart=/usr/bin/python3.11 /opt/song-bureaucracy/current/vis/ch2t7-design-vis/server.py --host 127.0.0.1 --port 8650 --entries-db /opt/song-bureaucracy/current/data/database/song_bureaucracy_entries_ch1t12.db --dict-db /opt/song-bureaucracy/current/data/database/song_bureaucracy_dictionary_ch1t12.db --dict-table chapter1t12 --revisions-db /var/lib/song-bureaucracy/song_bureaucracy_entries_ch1t12.revisions.db
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
