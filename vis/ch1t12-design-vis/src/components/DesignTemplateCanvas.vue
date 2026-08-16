@@ -3828,7 +3828,7 @@ function updateEvolutionDetails(svg) {
   });
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY + 2);
-  panelGroup?.__updateDetailScroll?.();
+  svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
 }
 
 function updateDetails(svg) {
