@@ -4592,9 +4592,9 @@ function bindTimelineRange(svg) {
 }
 
 function installDesignFonts() {
-  if (document.getElementById("ch2t7-design-fonts")) return;
+  if (document.getElementById("ch1t12-design-fonts")) return;
   const style = document.createElement("style");
-  style.id = "ch2t7-design-fonts";
+  style.id = "ch1t12-design-fonts";
   style.textContent = `
     @font-face { font-family: FZQINGKBYSS-M--GB1-0; src: url('/api/design/fzqing.ttf') format('truetype'); }
     @font-face { font-family: FZQINGKBYSS-R--GB1-0; src: url('/api/design/fzqing.ttf') format('truetype'); }

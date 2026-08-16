@@ -1,11 +1,11 @@
-# ch2t7-design-vis · 原 SVG 模板驱动可视化
+# ch1t12-design-vis · 原 SVG 模板驱动可视化
 
-两张设计师 SVG 画板就是实际界面，不再由前端仿画。Vue 3 保存当前视图、实体与年份；D3 把 SVG 内已有的文字和图形槽位绑定到 ch2t7 的真实实体、关系、编制、时间点与辞典原文。
+两张设计师 SVG 画板就是实际界面，不再由前端仿画。Vue 3 保存当前视图、实体与年份；D3 把 SVG 内已有的文字和图形槽位绑定到 ch1t12 的真实实体、关系、编制、时间点与辞典原文。
 
 ## 数据与设计源
 
-- 结构化数据：`data/database/song_bureaucracy_entries_ch2t7.db`（只读）
-- 辞典原文：`data/database/song_bureaucracy_dictionary_ch2t7.db`（只读）
+- 结构化数据：`data/database/song_bureaucracy_entries_ch1t12.db`（只读）
+- 辞典原文：`data/database/song_bureaucracy_dictionary_ch1t12.db`（只读）
 - 层级画板：`svg格式/宋代职官体系可视化界面_画板 1 副本 4-01.svg`
 - 编制画板：`svg格式/宋代职官体系可视化界面_画板 1 副本 4-02.svg`
 - 字体直接读取设计包内 `FZQingKBYSJW-M.TTF` 与 `AdobeSongStd-Light.otf`
@@ -39,7 +39,7 @@
 ## 启动
 
 ```bash
-cd vis/ch2t7-design-vis
+cd vis/ch1t12-design-vis
 ./run.sh
 ```
 
@@ -57,7 +57,7 @@ src/components/DesignTemplateCanvas.vue
 
 ## 接口
 
-- `/api/data`：ch2t7 实体、时间点、层级关系、编制关系、引用和辞典原文
+- `/api/data`：ch1t12 实体、时间点、层级关系、编制关系、引用和辞典原文
 - `/api/revisions/state`：当前 HEAD、草稿游标和编辑锁
 - `/api/revisions/draft/operations|preview|undo|redo|discard`：持久草稿及增量预览
 - `/api/revisions/commit`：原子提交当前草稿

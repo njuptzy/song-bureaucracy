@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE_PATH = ROOT / "vis/ch2t7-design-vis/revision_store.py"
+MODULE_PATH = ROOT / "vis/ch1t12-design-vis/revision_store.py"
 SPEC = importlib.util.spec_from_file_location("revision_store", MODULE_PATH)
 REVISION = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

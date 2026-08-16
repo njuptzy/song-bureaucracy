@@ -10,8 +10,8 @@ from http.server import ThreadingHTTPServer
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVER_PATH = ROOT / "vis/ch2t7-design-vis/server.py"
-SPEC = importlib.util.spec_from_file_location("ch2t7_design_server", SERVER_PATH)
+SERVER_PATH = ROOT / "vis/ch1t12-design-vis/server.py"
+SPEC = importlib.util.spec_from_file_location("ch1t12_design_server", SERVER_PATH)
 SERVER = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(SERVER)
@@ -78,7 +78,7 @@ def normalized_times(connection: sqlite3.Connection) -> dict[int, dict]:
     }
 
 
-class Ch2t7DesignServerContractTest(unittest.TestCase):
+class Ch1t12DesignServerContractTest(unittest.TestCase):
     def test_normalized_time_payload_keeps_calendar_ordering_fields(self):
         payload = SERVER._normalized_time_payload("北宋太平兴国八年三月七日")
         self.assertEqual(payload["raw_time"], "北宋太平兴国八年三月七日")

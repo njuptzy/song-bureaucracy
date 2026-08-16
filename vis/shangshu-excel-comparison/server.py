@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 HERE = Path(__file__).resolve().parent
 VIS_ROOT = HERE.parent
 EXCEL_JSON = HERE / "excel_data.json"
-ORIGINAL_VIS = VIS_ROOT / "ch2t7-design-vis"
+ORIGINAL_VIS = VIS_ROOT / "ch1t12-design-vis"
 DIST_DIR = ORIGINAL_VIS / "dist"
 DESIGN_DIR = VIS_ROOT / "宋代职官体系可视化打包文件 /svg格式"
 DESIGN_FILES = {
@@ -724,7 +724,7 @@ def static_body(target: Path) -> bytes:
             "尚书省机构官职体系 · Excel".encode(),
         )
     elif target.suffix == ".js":
-        body = body.replace("正在读取 ch2t7 数据…".encode(), "正在读取 Excel 数据…".encode())
+        body = body.replace("正在读取 ch1t12 数据…".encode(), "正在读取 Excel 数据…".encode())
     return body
 
 

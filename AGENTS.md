@@ -7,13 +7,13 @@
 当前有两条主线：
 
 1. **数据抽取**：`process/extract/` 的逐批提取脚本 + `ew.EntryWriter` 写入累计结果库（现行路线）。
-2. **可视化**：`vis/ch2t7-design-vis/` 的原设计稿 SVG 驱动可视化，**这是当前的主要工作方向**。
+2. **可视化**：`vis/ch1t12-design-vis/` 的原设计稿 SVG 驱动可视化，**这是当前的主要工作方向**。
 
 ## 先看这里
 
-- 当前活跃开发：`vis/ch2t7-design-vis/`（可视化主线）和 `process/extract/`（提取主线）。
-- 累计结果库：`data/database/song_bureaucracy_entries_ch1t12.db`（7030 实体 / 15638 时间点 / 12611 关系，逐批脚本持续追加；十一至十二编已提交至第 521 条，共 606 条）。ch1t7 / ch1t10 是同路线的中间累计库。
-- 可视化主线数据源：`data/database/song_bureaucracy_entries_ch2t7.db`（4666 实体 / 10056 时间点 / 8281 关系，覆盖 ch2t7 辞典 3119 条中的约 2944 条）+ 辞典原文库 `song_bureaucracy_dictionary_ch2t7.db`。
+- 当前活跃开发：`vis/ch1t12-design-vis/`（可视化主线）和 `process/extract/`（提取主线）。
+- 累计结果库：`data/database/song_bureaucracy_entries_ch1t12.db`（7107 实体 / 15792 时间点 / 12789 关系，逐批脚本持续追加）。ch1t7 / ch1t10 是同路线的中间累计库。
+- 可视化主线数据源：`data/database/song_bureaucracy_entries_ch1t12.db` + 辞典原文库 `song_bureaucracy_dictionary_ch1t12.db`（辞典表 `chapter1t12`，当前 5252 条）；部署和本地运行均不得再根据旧目录名推断数据源。
 - 辞典源库（schema 相同，表名 = 编组名）：`song_bureaucracy_dictionary_ch1.db`（695 条）、`..._ch2t4.db`（1649 条）、`..._ch5t7.db`（1489 条）、`..._ch11t12.db`（606 条）；合并版 `..._ch1t7.db`（3814 条）、`..._ch1t10.db`（4647 条）、`..._ch1t12.db`（5253 条）、`..._ch2t7.db`（3119 条）。均在 `data/database/`。
 - 设计依据：`vis/resources/宋代职官可视化设计.pdf`（55 页，北大可视化实验室 2024 设计文档）+ `vis/宋代职官体系可视化打包文件/`（两张 SVG 画板 + 字体）。
 - 数据库改动前必须先做文件级备份（`data/database/` 已有大量 `before-*` 备份示例）；`data/database/` 的正式库作为云端快照被 git 跟踪，改动要随批提交。
@@ -28,7 +28,7 @@
 | `agent-v0612/records/<标签>/` | 两阶段管线的批跑产物 | 生成物，不要手工编辑 |
 | `agent_framework/` | 共享的 OpenRouter 客户端（`llm.py`） | 稳定 |
 | `prompts/` | `song_bureaucracy_entry_extraction_prompt.md`：逐条提取标准，**是 process/extract 脚本路线的事实规范**（ew.py 的保证即按此实现） | 提取路线的规范来源 |
-| `vis/ch2t7-design-vis/` | **可视化主线**：原设计稿两张 SVG 画板即界面，Vue 3 管状态、D3 绑真实数据进 SVG 槽位；只读 `server.py`（默认 127.0.0.1:8650，`./run.sh` 启动）；详见其 README.md | 活跃开发 |
+| `vis/ch1t12-design-vis/` | **可视化主线**：原设计稿两张 SVG 画板即界面，Vue 3 管状态、D3 绑真实数据进 SVG 槽位；只读 `server.py`（默认 127.0.0.1:8650，`./run.sh` 启动）；详见其 README.md | 活跃开发 |
 | `vis/song-bureaucracy-visualization-v2/` | 前一版可视化（Vue 3 + Vite）：时序事件 / 层级结构 / 年表三视图，数据源仍是 v0620 系 8–10 编库 | 仍维护，共享快照语义 |
 | `vis/shared/entity_lifecycle.js` | 两个前端共用的实体存废语义：建置/罢废动词分类、演变互斥、复归与断档判定 | 改动会影响两个前端，须同步测试 |
 | `vis/backend/` | 时间标准化、离线导出、实时只读服务、`institution_categories.py`（五大类 + 制度组分类）、`repair_ch2t7_1080_*.py`（1080 元丰改制专项修复，幂等） | 修改后必跑 `vis/tests/` |
@@ -62,10 +62,10 @@ BuildRecords 是第五张追溯表：`target_table / target_id / source_entry / 
 
 ### D. 可视化（`vis/`）
 
-主线 `vis/ch2t7-design-vis/`（详见其 README.md）：
+主线 `vis/ch1t12-design-vis/`（详见其 README.md）：
 
 - 设计稿两张 SVG 画板（层级画板 4-01、编制画板 4-02）**就是界面**，前端不仿画，只替换 SVG 文字槽位并绑定交互；字体直接读设计包的 TTF/OTF。
-- `server.py` 只读 API（默认 127.0.0.1:8650）：`/api/data`（ch2t7 实体、时间点、层级/编制关系、引用、辞典原文）、`/api/design/*.svg|ttf|otf`、`/api/health`。`./run.sh` 一键构建并启动。
+- `server.py` 只读 API（默认 127.0.0.1:8650）：`/api/data`（ch1t12 实体、时间点、层级/编制关系、引用、辞典原文）、`/api/design/*.svg|ttf|otf`、`/api/health`。`./run.sh` 一键构建并启动。
 - `src/components/DesignTemplateCanvas.vue`（约 3000 行）是核心：单年年末快照选择、层级/编制画板切换、五大类机构 + 制度组导航、虚拟分组（不冒充历史层级边）、空间展开模式、编制按钮展开、三司职能分组、行内详情卡。
 - 工具逻辑在 `src/utils/*.js`，各有对应 `.test.mjs`（共 83 个用例），测试命令见"验证方式"。
 - `node_modules` 与 legacy 项目共用软链，**不要在本目录跑 `pnpm install`**。
@@ -106,10 +106,10 @@ vis/data/song_bureaucracy_best.db（只读源，v0620 系 8–10 编库）
 python3 -m compileall -q agent-v0612 process/extract
 # 可视化数据层单元测试（改动 vis/backend/*.py 后必跑，共 44 个用例）
 python3 -m unittest vis.tests.test_live_visualization_data vis.tests.test_normalize_times vis.tests.test_institution_categories
-# ch2t7-design-vis 工具函数测试（改动其 src/utils 后必跑，共 83 个用例）
-cd vis/ch2t7-design-vis && node --test src/utils/*.test.mjs
+# ch1t12-design-vis 工具函数测试（改动其 src/utils 后必跑，共 83 个用例）
+cd vis/ch1t12-design-vis && node --test src/utils/*.test.mjs
 # 前端构建
-cd vis/ch2t7-design-vis && pnpm build
+cd vis/ch1t12-design-vis && pnpm build
 ```
 
 结果库检查（优先对副本执行）：
@@ -124,7 +124,7 @@ sqlite3 <结果库> '.tables'
 ## 修改约定
 
 - **修改代码前必须先做好 git 备份**（提交或暂存当前工作区改动，确保任何修改都可回退）。这条规则永远有效，任何会话、任何目录的代码改动都要遵守。
-- 提取相关改动落在 `process/extract/`；可视化主线改动落在 `vis/ch2t7-design-vis/`；共享快照语义改动落在 `vis/shared/` 且须同步两个前端。历史目录用于追溯思路，不要同步修改。
+- 提取相关改动落在 `process/extract/`；可视化主线改动落在 `vis/ch1t12-design-vis/`；共享快照语义改动落在 `vis/shared/` 且须同步两个前端。历史目录用于追溯思路，不要同步修改。
 - 关系必须明确方向，并为关系本身保存引用（quotation 必填）。
 - 数据库改动先做文件级备份；破坏性调试用数据库的临时副本。
 - 结果库一批一提交，备份文件不提交（`data/database/` 的 `before-*` 备份是本地安全网）。
@@ -132,8 +132,8 @@ sqlite3 <结果库> '.tables'
 
 ## 已知问题 / 注意事项
 
-1. 各前端（v2 与 ch2t7-design-vis）的 `node_modules` 都是指向 legacy 项目的共享符号链接，**不要跑 `pnpm install`**；依赖变更用 `pnpm install --lockfile-only`。
-2. ch2t7-design-vis 的 SVG 中只绑定了设计稿预留槽位的实体；设计稿没有槽位的实体不会凭空新增图形（见其 README "当前边界"）。
+1. 各前端（v2 与 ch1t12-design-vis）的 `node_modules` 都是指向 legacy 项目的共享符号链接，**不要跑 `pnpm install`**；依赖变更用 `pnpm install --lockfile-only`。
+2. ch1t12-design-vis 的 SVG 中只绑定了设计稿预留槽位的实体；设计稿没有槽位的实体不会凭空新增图形（见其 README "当前边界"）。
 3. ch11t12 辞典现有 606 条，提取已提交至第 521 条，剩余批次待续。
 4. v2 的离线快照 JSON 需手动重跑 `vis/backend/export_visualization_data.py` 才会更新。
 5. v0620-regen-test 库（v2 数据源）有 1 条辞典条目未被 BuildRecords 覆盖，属历史遗留。
@@ -145,6 +145,6 @@ sqlite3 <结果库> '.tables'
 - `agent-v0612/`（2026-06）：v0303 的修复版两阶段 LLM 管线。
 - `prompts/` 重生成路线（2026-06）：直接全量重建，引入 BuildRecords 追溯表。
 - `process/extract/` 脚本路线（2026-07 起）：按提取 prompt 逐批写确定性脚本，累计库 ch1t7 → ch1t10 → ch1t12；同期完成 ch2t7 库与 1080 年元丰改制专项修复。
-- `visualization/` → `vis/song-bureaucracy-visualization/`（v1）→ `vis/song-bureaucracy-visualization-v2/` → `vis/ch2t7-design-vis/`（2026-08，原设计稿 SVG 驱动，当前主线）。
+- `visualization/` → `vis/song-bureaucracy-visualization/`（v1）→ `vis/song-bureaucracy-visualization-v2/` → `vis/ch1t12-design-vis/`（2026-08，原设计稿 SVG 驱动，当前主线）。
 
-阅读历史文档时以版本号判断上下文；最终行为以 `process/extract/` 脚本、ch1t12 实际 schema 和 ch2t7-design-vis 源码为准。
+阅读历史文档时以版本号判断上下文；最终行为以 `process/extract/` 脚本、ch1t12 实际 schema 和 ch1t12-design-vis 源码为准。

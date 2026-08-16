@@ -32,9 +32,9 @@ from institution_categories import (  # noqa: E402
     resolve_source_catalogs,
 )
 from revision_store import RevisionError, RevisionStore  # noqa: E402
-ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch2t7.db"
-DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch2t7.db"
-DICT_TABLE = "chapter2t7"
+ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch1t12.db"
+DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch1t12.db"
+DICT_TABLE = "chapter1t12"
 DIST_DIR = HERE / "dist"
 DESIGN_DIR = REPO_ROOT / "vis/宋代职官体系可视化打包文件 /svg格式"
 DESIGN_HIERARCHY_SVG = DESIGN_DIR / "宋代职官体系可视化界面_画板 1 副本 4-01.svg"
@@ -617,7 +617,7 @@ CONTENT_TYPES = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Ch2t7DesignVis/0.1"
+    server_version = "Ch1t12DesignVis/0.1"
 
     def log_message(self, fmt, *args):  # 安静一点
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))

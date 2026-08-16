@@ -1,6 +1,6 @@
 # song.zywingspan.com 部署
 
-公网部署使用 `vis/ch2t7-design-vis`，数据源与当前本地 8050 服务一致：
+公网部署使用 `vis/ch1t12-design-vis`，数据源与当前本地 8050 服务一致：
 `song_bureaucracy_entries_ch1t12.db`、`song_bureaucracy_dictionary_ch1t12.db`
 和辞典表 `chapter1t12`。运行结构为：
 

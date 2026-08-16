@@ -6,7 +6,7 @@ remote_host="${SONG_DEPLOY_HOST:-pkuvis}"
 release_id="${SONG_RELEASE_ID:-$(date +%Y%m%d-%H%M%S)}"
 remote_release="/opt/song-bureaucracy/releases/${release_id}"
 
-cd "$repo_root/vis/ch2t7-design-vis"
+cd "$repo_root/vis/ch1t12-design-vis"
 if command -v pnpm >/dev/null 2>&1; then
     pnpm build
 else
@@ -17,9 +17,9 @@ ssh "$remote_host" "install -d -m 0755 '$remote_release'"
 
 # tar 流完整保留设计资源目录名末尾的空格，避免远端 shell 二次拆词。
 tar -C "$repo_root" -cf - \
-    vis/ch2t7-design-vis/dist \
-    vis/ch2t7-design-vis/server.py \
-    vis/ch2t7-design-vis/revision_store.py \
+    vis/ch1t12-design-vis/dist \
+    vis/ch1t12-design-vis/server.py \
+    vis/ch1t12-design-vis/revision_store.py \
     vis/backend/normalize_times.py \
     vis/backend/institution_categories.py \
     data/database/song_bureaucracy_entries_ch1t12.db \
