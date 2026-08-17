@@ -57,6 +57,9 @@ CHANGE_RELATION_OPTIONAL_COLUMNS = (
     "relation_group_id",
     "relation_scope",
 )
+# 数据库文件没有变化时，前端仍可能命中旧的 immutable 首屏缓存。
+# 每次改变首屏数据契约时递增此版本，确保新字段立即进入浏览器。
+PAYLOAD_SCHEMA_VERSION = "20260817-era-table-v1"
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -64,7 +67,7 @@ _revision_store = None
 
 
 def _database_fingerprint() -> str:
-    parts = []
+    parts = [PAYLOAD_SCHEMA_VERSION]
     for path in (ENTRIES_DB, DICT_DB):
         for candidate in (path, Path(f"{path}-wal")):
             try:
