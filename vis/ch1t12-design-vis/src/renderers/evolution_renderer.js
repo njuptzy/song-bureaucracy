@@ -795,27 +795,37 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     // 起止同年（"宋初"类锚定到单年）：模糊性由原文纪年表达，塌陷的区间
     // 装饰只会留下孤立刻度，不画。
     if (!degenerate) {
-    // Fuzzy intervals hang below the lane as a dashed span with solid end
-    // ticks — the mirror of the solid "range" bracket above it. The lane
-    // itself stays clear, so marks on it remain visible and clickable.
-    group.appendChild(svgElement("line", {
-      class: "evolution-event-bounded-span",
-      x1: startX, y1: y + 8.5, x2: endX, y2: y + 8.5,
-      stroke: COLORS.olive,
-      "stroke-width": 1.1,
-      "stroke-dasharray": "3 2",
-    }));
-    group.appendChild(svgElement("path", {
-      class: "evolution-event-bounded-span",
-      d: `M${startX} ${y + 5}V${y + 8.5}M${endX} ${y + 5}V${y + 8.5}`,
-      fill: "none",
-      stroke: COLORS.olive,
-      "stroke-width": 1.1,
-    }));
-    group.appendChild(svgElement("rect", {
-      x: Math.min(startX, endX), y: y + 4, width: Math.max(3, Math.abs(endX - startX)), height: 5.5,
-      fill: "transparent", "pointer-events": "all",
-    }));
+      // The icon represents the whole fuzzy interval, not its upper bound.
+      // Keep the bracket detached and point its centre back to a displaced icon.
+      const spanY = y + 10;
+      const middleX = (startX + endX) / 2;
+      group.appendChild(svgElement("line", {
+        class: "evolution-event-bounded-span",
+        x1: startX, y1: spanY, x2: endX, y2: spanY,
+        stroke: COLORS.olive,
+        "stroke-width": 1.1,
+        "stroke-dasharray": "3 2",
+      }));
+      group.appendChild(svgElement("path", {
+        class: "evolution-event-bounded-span",
+        d: `M${startX} ${y + 6.5}V${spanY}M${endX} ${y + 6.5}V${spanY}`,
+        fill: "none",
+        stroke: COLORS.olive,
+        "stroke-width": 1.1,
+      }));
+      group.appendChild(svgElement("line", {
+        class: "evolution-event-range-link",
+        x1: x, y1: y + 5.8, x2: middleX, y2: spanY - 1.5,
+        stroke: COLORS.olive,
+        "stroke-width": 0.65,
+        "stroke-opacity": 0.78,
+        "pointer-events": "none",
+      }));
+      group.appendChild(svgElement("rect", {
+        x: Math.min(startX, endX), y: y + 5.5,
+        width: Math.max(3, Math.abs(endX - startX)), height: 5.5,
+        fill: "transparent", "pointer-events": "all",
+      }));
     }
   }
   if (event.timeType === "range" && event.yearStart != null && event.yearEnd != null) {
@@ -825,11 +835,12 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       d: `M${startX} ${y - 13}V${y - 20}H${endX}V${y - 13}`,
       fill: "none", stroke: COLORS.olive, "stroke-width": 0.8,
     }));
-    // 归属连接茎：从记载点顶端升到括号下沿，不点开也能看出范围属于哪个点；
-    // 点被错层移出跨度时斜向接入括号最近的一端。
-    const stemTopX = Math.max(Math.min(startX, endX), Math.min(Math.max(startX, endX), x));
+    // The mark describes the complete period, so its leader points to the
+    // bracket midpoint and leaves a visible gap at both ends.
+    const middleX = (startX + endX) / 2;
     group.appendChild(svgElement("line", {
-      x1: x, y1: y - 4.2, x2: stemTopX, y2: y - 13,
+      class: "evolution-event-range-link",
+      x1: x, y1: y - 5.8, x2: middleX, y2: y - 11.5,
       stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.85,
       "pointer-events": "none",
     }));

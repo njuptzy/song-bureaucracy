@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { layoutEvolutionModel } from "./evolution_layout.js";
+import { evolutionEventVisualYear, layoutEvolutionModel } from "./evolution_layout.js";
 import { buildEvolutionModel } from "./evolution_model.js";
 
 const entity = (id, title = `实体${id}`) => ({ id, title, type: "机构" });
@@ -20,6 +20,47 @@ const timepoint = (id, year, event = "普通记载", overrides = {}) => ({
 });
 
 describe("layoutEvolutionModel", () => {
+  it("明确与模糊区间事件的图标锚在区间中点而不冒充端点", () => {
+    assert.equal(evolutionEventVisualYear({
+      timeType: "range", yearStart: 1000, yearEnd: 1020, effectiveYear: 1000,
+    }), 1010);
+    assert.equal(evolutionEventVisualYear({
+      timeType: "bounded", yearStart: 1100, yearEnd: 1130, effectiveYear: 1130,
+    }), 1115);
+    assert.equal(evolutionEventVisualYear({
+      timeType: "exact", yearStart: 1200, yearEnd: 1200, effectiveYear: 1200,
+    }), 1200);
+
+    const model = buildEvolutionModel({
+      entities: [entity(1)],
+      timepoints: {
+        1: [
+          timepoint(11, 1000, "时段记载", {
+            time_type: "range", year_start: 1000, year_end: 1020,
+          }),
+          timepoint(12, 1130, "模糊时段记载", {
+            time_type: "bounded", year_start: 1100, year_end: 1130,
+          }),
+        ],
+      },
+      changeRelations: [],
+    }, [1]);
+    const layout = layoutEvolutionModel(model);
+    const xOf = (year) => layout.yearScale.range[0]
+      + (year - layout.yearScale.domain[0])
+        / (layout.yearScale.domain[1] - layout.yearScale.domain[0])
+        * (layout.yearScale.range[1] - layout.yearScale.range[0]);
+    const range = layout.lanes[0].events.find((event) => event.id === 11);
+    const bounded = layout.lanes[0].events.find((event) => event.id === 12);
+
+    assert.equal(range.effectiveYear, 1000);
+    assert.equal(range.visualYear, 1010);
+    assert.equal(range.baseX, xOf(1010));
+    assert.equal(bounded.effectiveYear, 1130);
+    assert.equal(bounded.visualYear, 1115);
+    assert.equal(bounded.baseX, xOf(1115));
+  });
+
   it("所有轨道、标签、事件和存续段都留在给定边界内", () => {
     const model = buildEvolutionModel({
       entities: [entity(1), entity(2), entity(3)],

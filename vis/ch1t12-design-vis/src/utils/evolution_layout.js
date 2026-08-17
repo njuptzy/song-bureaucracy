@@ -274,6 +274,18 @@ function eventMarksOverlap(first, second, gap = EVENT_MARK_GAP) {
     && Math.abs(first.displayY - second.displayY) < gap;
 }
 
+export function evolutionEventVisualYear(event) {
+  const start = Number(event?.yearStart);
+  const end = Number(event?.yearEnd);
+  if (["range", "bounded"].includes(event?.timeType)
+    && Number.isFinite(start)
+    && Number.isFinite(end)
+    && start !== end) {
+    return (start + end) / 2;
+  }
+  return event?.effectiveYear;
+}
+
 function layoutLaneEvents(events, options) {
   const {
     laneY,
@@ -286,7 +298,8 @@ function layoutLaneEvents(events, options) {
   } = options;
   const ordered = (events || []).map((event) => ({
     ...event,
-    baseX: yearToX(event.effectiveYear),
+    visualYear: evolutionEventVisualYear(event),
+    baseX: yearToX(evolutionEventVisualYear(event)),
   })).sort(eventOrder);
   const boundaryAllowance = Math.max(0, Math.min(
     laneY - bounds.y - 5,
@@ -457,8 +470,10 @@ function layoutEvolutionLabels(labelItems, bounds, plotBounds) {
 
 /**
  * Lay out the rendering-neutral evolution model in SVG user-space coordinates.
- * `baseX`/`baseY` are always the exact timeline anchors. `displayX`/`displayY`
- * only add collision avoidance and must never be read back as historical data.
+ * `baseX`/`baseY` are visual timeline anchors. Exact events use their year;
+ * range and bounded events use the interval midpoint while retaining their
+ * original start/end years. `displayX`/`displayY` only add collision avoidance
+ * and must never be read back as historical data.
  */
 export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
   const bounds = normalizeBounds(requestedBounds);
