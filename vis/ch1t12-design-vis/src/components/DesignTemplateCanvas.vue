@@ -100,6 +100,11 @@ import {
 import { formatStandardTime } from "../utils/time_format";
 import { detailHeaderLayout } from "../utils/detail_header";
 import {
+  nodeChangeIndicatorAriaLabel,
+  nodeChangeIndicatorItems,
+  nodeChangeIndicatorLayout,
+} from "../utils/node_change_indicator";
+import {
   CHANGE_TYPE_LABELS,
   buildSnapshotTransition,
   buildStructuralChangeIndex,
@@ -1111,14 +1116,6 @@ function nodeStructuralChangeSummary(node) {
   );
 }
 
-function changeSummaryAriaLabel(title, summary, isVirtual) {
-  const parts = [];
-  if (summary.past) parts.push(`最近过去变化在${summary.past.year}年，相距${summary.past.distance}年`);
-  if (summary.current) parts.push(`同年${summary.current.count}项变化`);
-  if (summary.future) parts.push(`最近未来变化在${summary.future.year}年，相距${summary.future.distance}年`);
-  return `${title}${isVirtual ? "组内" : ""}结构变化：${parts.join("；")}`;
-}
-
 function openEntityChangeTrack(entityId, event = null) {
   const entity = entityMap.get(entityId);
   if (!entity || entity.type !== "机构") return;
@@ -1157,31 +1154,16 @@ function openGroupChangeTrack(nodeData, event = null) {
 function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
   const summary = nodeStructuralChangeSummary(node);
   if (!summary || !summary.total || !hitBounds) return;
-  const items = [
-    summary.past ? {
-      kind: "past",
-      label: `-${summary.past.distance}`,
-      title: `最近过去变化：${summary.past.year}年（距今${summary.past.distance}年）`,
-    } : null,
-    summary.current ? {
-      kind: "current",
-      label: String(summary.current.count),
-      title: `当前年份有${summary.current.count}项结构变化`,
-    } : null,
-    summary.future ? {
-      kind: "future",
-      label: `+${summary.future.distance}`,
-      title: `最近未来变化：${summary.future.year}年（${summary.future.distance}年后）`,
-    } : null,
-  ].filter(Boolean);
+  const items = nodeChangeIndicatorItems(summary);
+  if (!items.length) return;
+  const layout = nodeChangeIndicatorLayout(items);
   const marker = svgElement("g", { class: "node-change-indicator" });
-  const markerWidth = Math.max(1, items.length - 1) * 13;
   const centerX = hitBounds.x + hitBounds.width / 2;
   marker.setAttribute(
     "transform",
-    `translate(${centerX - markerWidth / 2} ${hitBounds.y - 8})`,
+    `translate(${centerX - layout.width / 2} ${hitBounds.y - layout.height - 6})`,
   );
-  marker.setAttribute("aria-label", changeSummaryAriaLabel(
+  marker.setAttribute("aria-label", nodeChangeIndicatorAriaLabel(
     node.data.title,
     summary,
     node.data.isVirtual,
@@ -1190,29 +1172,36 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
   marker.setAttribute("tabindex", "0");
   marker.appendChild(svgElement("rect", {
     class: "node-change-indicator-hit-area",
-    x: -6,
-    y: -6,
-    width: markerWidth + 12,
-    height: 12,
+    x: -4,
+    y: -4,
+    width: layout.width + 8,
+    height: layout.height + 8,
     fill: "transparent",
     "pointer-events": "all",
   }));
-  items.forEach((item, index) => {
+  layout.items.forEach((item) => {
     const itemGroup = svgElement("g", {
       class: `node-change-indicator-item is-${item.kind}`,
-      transform: `translate(${index * 13} 0)`,
+      transform: `translate(${item.x} 0)`,
     });
-    const circle = svgElement("circle", { cx: 0, cy: 0, r: 5.2 });
-    const label = svgElement("text", {
+    const surface = svgElement("rect", {
+      class: "node-change-indicator-surface",
       x: 0,
-      y: 0.3,
+      y: 0,
+      width: item.width,
+      height: layout.height,
+      rx: 2,
+    });
+    const label = svgElement("text", {
+      x: item.width / 2,
+      y: layout.height / 2 + 0.3,
       "text-anchor": "middle",
       "dominant-baseline": "central",
     });
     label.textContent = item.label;
     const title = svgElement("title");
     title.textContent = item.title;
-    itemGroup.append(circle, label, title);
+    itemGroup.append(surface, label, title);
     marker.appendChild(itemGroup);
   });
   const activate = node.data.isVirtual
@@ -5822,38 +5811,33 @@ onUnmounted(() => {
   outline: none;
 }
 
-.svg-mount :deep(.node-change-indicator circle) {
+.svg-mount :deep(.node-change-indicator-surface) {
   fill: #f5f3ec;
   stroke: #866d6d;
-  stroke-width: 0.8px;
+  stroke-width: 1px;
 }
 
-.svg-mount :deep(.node-change-indicator .is-past circle) {
+.svg-mount :deep(.node-change-indicator .is-past .node-change-indicator-surface) {
   fill: #918069;
-  fill-opacity: 0.82;
-  stroke: #563905;
-}
-
-.svg-mount :deep(.node-change-indicator .is-current circle) {
-  fill: #866d6d;
+  fill-opacity: 0.92;
   stroke: #563905;
 }
 
 .svg-mount :deep(.node-change-indicator text) {
   fill: #351704;
   font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
-  font-size: 5.8px;
+  font-size: 8.4px;
+  font-weight: 600;
   letter-spacing: 0;
   pointer-events: none;
 }
 
-.svg-mount :deep(.node-change-indicator .is-past text),
-.svg-mount :deep(.node-change-indicator .is-current text) {
+.svg-mount :deep(.node-change-indicator .is-past text) {
   fill: #fffdf8;
 }
 
-.svg-mount :deep(.node-change-indicator:hover circle),
-.svg-mount :deep(.node-change-indicator:focus-visible circle) {
+.svg-mount :deep(.node-change-indicator:hover .node-change-indicator-surface),
+.svg-mount :deep(.node-change-indicator:focus-visible .node-change-indicator-surface) {
   stroke-width: 1.35px;
 }
 
