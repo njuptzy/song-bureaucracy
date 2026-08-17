@@ -1541,7 +1541,7 @@ function renderSelectedActions(parent, options) {
   actions.forEach((action, index) => {
     const width = widths[index];
     const button = svgElement("g", {
-      class: `evolution-selection-action${action.kind === "hierarchy" ? " is-primary" : ""}`,
+      class: "evolution-selection-action",
       role: "button",
       tabindex: "0",
       "aria-label": action.label,
