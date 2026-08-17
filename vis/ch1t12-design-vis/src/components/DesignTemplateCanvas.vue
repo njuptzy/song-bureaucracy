@@ -5825,7 +5825,10 @@ function bindTimelineRange(svg) {
       label.setAttribute("class", "cls-44");
       label.setAttribute(
         "x",
-        String(Math.max(startX + 1.5, x - labelWidths[index] / 2)),
+        String(Math.min(
+          TIMELINE_X_MAX - labelWidths[index],
+          Math.max(startX + 3.5, x - labelWidths[index] / 2),
+        )),
       );
       label.setAttribute("y", String(labelY));
       label.setAttribute("text-anchor", "start");
