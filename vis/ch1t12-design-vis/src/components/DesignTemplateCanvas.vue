@@ -124,9 +124,10 @@ const props = defineProps({
   data: { type: Object, required: true },
   initialState: { type: Object, default: null },
   revisionPanelActive: { type: Boolean, default: false },
+  globalUndoAvailable: { type: Boolean, default: false },
   fixedViewMode: { type: String, default: "" },
 });
-const emit = defineEmits(["state-change", "selection-change", "detail-entity-change"]);
+const emit = defineEmits(["state-change", "selection-change", "detail-entity-change", "global-undo"]);
 const initialState = props.initialState || {};
 
 const hostRef = ref(null);
@@ -1723,11 +1724,10 @@ function renderDynamicHierarchy(svg) {
   const yearText = svgElement("text", {
     class: "cls-49",
     x: 960,
-    y: 112,
+    y: 94.2,
     "text-anchor": "middle",
-    "dominant-baseline": "middle",
   });
-  yearText.style.fontSize = "20px";
+  yearText.style.fontSize = "24px";
   yearText.style.fontWeight = "600";
   setText(yearText, yearLabel);
   yearMarker.appendChild(yearText);
@@ -2561,6 +2561,58 @@ function renderDynamicHierarchy(svg) {
       entityMap.get(expandedDetailNode.data.id)
     );
   }
+}
+
+function ensureGlobalUndoControl(svg) {
+  let control = svg.querySelector(".global-undo-control");
+  if (!control) {
+    control = svgElement("g", { class: "global-undo-control" });
+    const surface = svgElement("rect", {
+      x: 1833.53,
+      y: 79.99,
+      width: 28,
+      height: 25.96,
+      rx: 2.74,
+      ry: 2.74,
+      fill: "#fff",
+      "fill-opacity": 0,
+      stroke: "#563905",
+      "stroke-width": 0.78,
+      "stroke-opacity": 0.42,
+    });
+    const label = svgElement("text", {
+      class: "cls-49",
+      x: 1847.53,
+      y: 98.84,
+      "text-anchor": "middle",
+    });
+    label.style.fontFamily = "Arial, sans-serif";
+    label.style.fontSize = "17px";
+    setText(label, "↶");
+    control.append(surface, label);
+    svg.appendChild(control);
+  }
+  const active = props.globalUndoAvailable;
+  const surface = control.querySelector("rect");
+  const label = control.querySelector("text");
+  surface?.setAttribute("fill-opacity", active ? "0.16" : "0");
+  surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
+  if (label) label.style.opacity = active ? "1" : "0.34";
+  control.setAttribute("role", "button");
+  control.setAttribute("tabindex", active ? "0" : "-1");
+  control.setAttribute("aria-label", "撤回上一步修改");
+  control.setAttribute("aria-disabled", active ? "false" : "true");
+  control.style.cursor = active ? "pointer" : "default";
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (active) emit("global-undo");
+  };
+  d3.select(control)
+    .on("click.global-undo", active ? activate : null)
+    .on("keydown.global-undo", active ? (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    } : null);
 }
 
 function reconcileComparisonHierarchyExpansion(svg) {
@@ -5026,6 +5078,7 @@ function makeEvolutionControlInteractive(control, active) {
 function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
   ensureEvolutionViewControl(svg);
+  ensureGlobalUndoControl(svg);
   svg.querySelector(".timetree-view-control")?.remove();
   svg.querySelector(".comparison-view-control")?.remove();
   const categoryItems = templateCategoryItems(svg);
@@ -5868,6 +5921,10 @@ function flushTimelineRefresh(rebindStatic = false) {
 }
 
 watch(viewMode, renderTemplate);
+watch(() => props.globalUndoAvailable, () => {
+  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
+  if (svg) ensureGlobalUndoControl(svg);
+});
 onMounted(async () => {
   reduceMotionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)") || null;
   installDesignFonts();

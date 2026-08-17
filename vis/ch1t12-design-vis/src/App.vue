@@ -5,19 +5,13 @@
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
+      :global-undo-available="Boolean(!revisionBusy && revisionState?.draft?.can_undo)"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
       @detail-entity-change="handleDetailEntityChange"
+      @global-undo="workspaceAction('undo')"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
-    <button
-      v-if="baseData"
-      type="button"
-      class="global-undo-command"
-      :disabled="revisionBusy || !revisionState?.draft?.can_undo"
-      aria-label="撤回上一步修改"
-      @click="workspaceAction('undo')"
-    >↶</button>
     <RevisionWorkspace
       v-if="baseData && isEvolutionView"
       :edit-mode="editMode"
@@ -407,29 +401,4 @@ onBeforeUnmount(() => {
 <style scoped>
 .application-shell { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .loading { width: 100%; height: 100%; display: grid; place-items: center; color: var(--ink-2); letter-spacing: 4px; }
-.global-undo-command {
-  position: absolute;
-  top: 60px;
-  right: 24px;
-  z-index: 21;
-  display: inline-grid;
-  width: 32px;
-  height: 26px;
-  align-items: center;
-  justify-items: center;
-  border: 1px solid rgba(86,57,5,.42);
-  padding: 0;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-  letter-spacing: 0;
-  pointer-events: auto;
-  white-space: nowrap;
-  font-size: 16px;
-}
-.global-undo-command:hover:not(:disabled) { border-color: rgba(86,57,5,.78); color: var(--taupe); }
-.global-undo-command:focus-visible { outline: 1px dashed rgba(86,57,5,.78); outline-offset: 2px; }
-.global-undo-command:disabled { opacity: .36; cursor: not-allowed; }
-@media (max-width: 1100px) { .global-undo-command { right: 12px; } }
 </style>
