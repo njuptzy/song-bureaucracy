@@ -4843,8 +4843,12 @@ function bindHierarchyAnimationControl(svg) {
 function enterEvolutionView({ entityId = null, sourceView = viewMode.value } = {}) {
   if (viewModeLocked.value) return;
   const requested = entityId != null ? entityMap.get(entityId) : null;
+  // 顶部“演变视图”按钮没有显式传入 ID 时，应以用户刚点击的实体为准。
+  // compositionFocusId 记录的是编制视图的父机构，不能覆盖层级视图中
+  // 刚选中的下属机构（例如点击“补写所”后仍然沿用“秘书省”）。
+  const selected = entityMap.get(selectedId.value);
   const compositionFocus = entityMap.get(compositionFocusId.value);
-  const focus = requested || compositionFocus || entityMap.get(selectedId.value) || graphFocusEntity();
+  const focus = requested || selected || compositionFocus || graphFocusEntity();
   if (focus) {
     selectedId.value = focus.id;
     evolutionEntityIds.value = [focus.id];
