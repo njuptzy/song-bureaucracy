@@ -5757,11 +5757,11 @@ function bindTimelineRange(svg) {
     // 的 982.24 基线；不再用多行避让破坏时间轴的横向结构。若密集年号的
     // 起点距离不足，只把文字沿同一基线轻微错开，并用细引线回到真实起点。
     const labelY = 982.24;
-    const labelFontSize = 6.4;
+    const labelFontSize = 10;
     const labelGap = 1.2;
     const labelWidths = eraRecords.map((era) => Math.max(
       10,
-      era.name.length * labelFontSize * 0.82,
+      era.name.length * labelFontSize,
     ));
     const labelPositions = eraRecords.map((era) => yearScale(era.start));
     for (let pass = 0; pass < 5; pass += 1) {
@@ -5823,11 +5823,13 @@ function bindTimelineRange(svg) {
 
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-44");
-      label.setAttribute("x", String(x));
+      label.setAttribute(
+        "x",
+        String(Math.max(startX + 1.5, x - labelWidths[index] / 2)),
+      );
       label.setAttribute("y", String(labelY));
-      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("text-anchor", "start");
       label.setAttribute("pointer-events", "none");
-      label.style.fontSize = `${labelFontSize}px`;
       label.textContent = era.name;
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
       title.textContent = `${era.name}：${era.start}—${era.end}年`;
