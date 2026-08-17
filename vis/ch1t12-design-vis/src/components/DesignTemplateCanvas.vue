@@ -1721,11 +1721,17 @@ function renderDynamicHierarchy(svg) {
   if (!data) return;
   const yearMarker = svgElement("g", { class: "hierarchy-year-marker" });
   const yearLabel = formatSongYearLabel(currentCanvasYear());
+  const headerTitle = findTextAt(svg, 184.7, 94.2, 2);
+  const headerBounds = elementBounds(headerTitle);
+  const headerCenterY = headerBounds
+    ? headerBounds.y + headerBounds.height / 2
+    : 72;
   const yearText = svgElement("text", {
     class: "cls-49",
     x: 960,
-    y: 94.2,
+    y: headerCenterY,
     "text-anchor": "middle",
+    "dominant-baseline": "middle",
   });
   yearText.style.fontSize = "24px";
   yearText.style.fontWeight = "600";
