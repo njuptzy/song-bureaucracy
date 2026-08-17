@@ -482,7 +482,15 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-linejoin": "round",
     }));
   });
-  item(x + 214, "时间范围", (sample, itemX) => {
+  item(x + 210, "机构改隶", (sample, itemX) => {
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX} ${rowY - 4.6}L${itemX + 4.6} ${rowY}L${itemX} ${rowY + 4.6}L${itemX - 4.6} ${rowY}Z`,
+      fill: COLORS.paper,
+      stroke: COLORS.selected,
+      "stroke-width": 1.1,
+    }));
+  });
+  item(x + 282, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -490,7 +498,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 0.9,
     }));
   });
-  item(x + 282, "模糊纪年区间", (sample, itemX) => {
+  item(x + 350, "模糊纪年区间", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7, y1: rowY + 2, x2: itemX + 7, y2: rowY + 2,
       stroke: COLORS.olive,
@@ -504,7 +512,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 1.1,
     }));
   });
-  item(x + 372, "演变关系", (sample, itemX) => {
+  item(x + 440, "演变关系", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -515,7 +523,7 @@ function renderEvolutionLegend(parent, layout) {
       "marker-end": "url(#evolution-relation-arrow)",
     }));
   });
-  item(x + 440, "存续段", (sample, itemX) => {
+  item(x + 508, "存续段", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY,
@@ -525,7 +533,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-width": 2,
     }));
   });
-  item(x + 498, "密集点错层回指年份", (sample, itemX) => {
+  item(x + 566, "密集点错层回指年份", (sample, itemX) => {
     sample.appendChild(svgElement("line", {
       x1: itemX - 7,
       y1: rowY + 3,
@@ -745,7 +753,16 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       "pointer-events": "none",
     }));
   }
-  if (iconType === "establish" || iconType === "abolish") {
+  if (iconType === "affiliation_change") {
+    const size = selected ? 5.5 : 4.6;
+    group.appendChild(svgElement("path", {
+      d: `M${x} ${y - size}L${x + size} ${y}L${x} ${y + size}L${x - size} ${y}Z`,
+      fill: selected ? COLORS.selected : COLORS.paper,
+      stroke: COLORS.selected,
+      "stroke-width": selected ? 1.25 : 1.1,
+      "stroke-linejoin": "round",
+    }));
+  } else if (iconType === "establish" || iconType === "abolish") {
     // 建置/罢置用一对镜像实心三角形：建置 = 墨色正立三角（立起来），
     // 罢置 = 赭红倒三角（裁撤）；选中只换颜色和尺寸，不改变形状。
     const up = iconType === "establish";
@@ -782,6 +799,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
 
 function endpointClearance(point, arrowhead = false) {
   if (point?.timepointId == null) return 0;
+  if (point.iconType === "affiliation_change") return 5.2;
   const triangle = ["establish", "abolish"].includes(point.iconType);
   // The endpoint is the arrow tip / relation stroke endpoint, so clearance
   // should follow the visible glyph edge instead of leaving a large dead gap.

@@ -75,6 +75,35 @@ test("结构变化索引区分新设、撤销、恢复、改隶和明确关系",
   assert.equal(changesForEntity(index, 1)[1].citations[0].citation, "《某书》卷一");
 });
 
+test("同一年存在多个上级时不生成改隶记录", () => {
+  const data = {
+    entities: [
+      { id: 1, title: "甲司", type: "机构" },
+      { id: 2, title: "乙司", type: "机构" },
+      { id: 3, title: "丙司", type: "机构" },
+      { id: 4, title: "丁院", type: "机构" },
+    ],
+    timepoints: {
+      1: [{ id: 101, year_start: 1000, year_end: 1000, time_type: "exact", event: "甲司统属丁院", lifecycle_effect: "preserve" }],
+      2: [{ id: 201, year_start: 1050, year_end: 1050, time_type: "exact", event: "乙司统属丁院", lifecycle_effect: "preserve" }],
+      3: [{ id: 301, year_start: 1050, year_end: 1050, time_type: "exact", event: "丙司统属丁院", lifecycle_effect: "preserve" }],
+      4: [
+        { id: 401, year_start: 1000, year_end: 1000, time_type: "exact", event: "隶甲司", lifecycle_effect: "preserve" },
+        { id: 402, year_start: 1050, year_end: 1050, time_type: "exact", event: "同年有两项上下级记载", lifecycle_effect: "preserve" },
+      ],
+    },
+    hierarchyEdges: [
+      { id: 501, parent: 1, child: 4, states: [{ id: 501, subject_timepoint_id: 101, object_timepoint_id: 401 }] },
+      { id: 502, parent: 2, child: 4, states: [{ id: 502, subject_timepoint_id: 201, object_timepoint_id: 402 }] },
+      { id: 503, parent: 3, child: 4, states: [{ id: 503, subject_timepoint_id: 301, object_timepoint_id: 402 }] },
+    ],
+    changeRelations: [],
+  };
+
+  const index = buildStructuralChangeIndex(data);
+  assert.equal(changesForEntity(index, 4).some((change) => change.type === "reparent"), false);
+});
+
 test("变化提示返回最近过去、同年数量和最近未来", () => {
   const index = buildStructuralChangeIndex(baseData);
   const summary = changeSummaryForEntity(index, 1, 1080);

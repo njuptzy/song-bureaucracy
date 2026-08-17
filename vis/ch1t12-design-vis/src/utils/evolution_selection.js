@@ -41,7 +41,7 @@ export function evolutionSelectionFocus(selectedItem) {
     return {
       active: true,
       relationId: null,
-      timepointIds: Number.isFinite(selectedItem.id) ? [selectedItem.id] : [],
+      timepointIds: selectedItem.id == null ? [] : [selectedItem.id],
     };
   }
   if (selectedItem.kind !== "relation") {

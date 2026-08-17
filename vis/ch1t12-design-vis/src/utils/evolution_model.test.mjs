@@ -38,8 +38,103 @@ describe("eventGlyphType", () => {
     assert.equal(eventGlyphType("establish"), "establish");
     assert.equal(eventGlyphType("restore"), "establish");
     assert.equal(eventGlyphType("abolish"), "abolish");
+    assert.equal(eventGlyphType("affiliation_change"), "affiliation_change");
     assert.equal(eventGlyphType("unknown_event_type"), "record");
     assert.equal(eventGlyphType("duty_transfer"), "record");
+  });
+});
+
+describe("buildEvolutionModel hierarchy changes", () => {
+  const hierarchyData = {
+    entities: [
+      entity(1, "甲司"),
+      entity(2, "乙司"),
+      entity(3, "丙署"),
+    ],
+    timepoints: {
+      1: [timepoint(11, 1000, "甲司统属丙署")],
+      2: [timepoint(21, 1050, "乙司统属丙署")],
+      3: link([
+        timepoint(31, 1000, "隶甲司"),
+        timepoint(32, 1050, "改隶乙司", { quotation: "丙署自甲司改隶乙司" }),
+      ]),
+    },
+    hierarchyEdges: [
+      {
+        id: 101,
+        parent: 1,
+        child: 3,
+        states: [{ id: 101, subject_timepoint_id: 11, object_timepoint_id: 31 }],
+      },
+      {
+        id: 102,
+        parent: 2,
+        child: 3,
+        states: [{ id: 102, subject_timepoint_id: 21, object_timepoint_id: 32 }],
+      },
+    ],
+    changeRelations: [],
+  };
+
+  function hierarchyEvents(focusId) {
+    const model = buildEvolutionModel(hierarchyData, [focusId], { yearMin: 960, yearMax: 1279 });
+    assert.deepEqual(model.visibleEntityIds, [focusId]);
+    return model.lanes[0].events.filter((event) => event.structuralHierarchyChange);
+  }
+
+  it("被改隶机构显示原上级与新上级", () => {
+    const [event] = hierarchyEvents(3);
+    assert.equal(event.eventType, "affiliation_change");
+    assert.equal(event.iconType, "affiliation_change");
+    assert.equal(event.effectiveYear, 1050);
+    assert.equal(event.hierarchyRole, "subject");
+    assert.equal(event.event, "改隶乙司");
+    assert.equal(event.hierarchyChangeLabel, "机构改隶：甲司 → 乙司");
+    assert.equal(event.syntheticHierarchyChange, undefined);
+    assert.deepEqual(event.evidenceKeys, ["R101", "R102", "T32"]);
+  });
+
+  it("原上级和新上级分别显示下属迁出与迁入", () => {
+    const [former] = hierarchyEvents(1);
+    const [next] = hierarchyEvents(2);
+    assert.equal(former.hierarchyRole, "former_parent");
+    assert.equal(former.event, "下属迁出：丙署 → 乙司");
+    assert.equal(next.hierarchyRole, "new_parent");
+    assert.equal(next.event, "下属迁入：丙署 ← 甲司");
+  });
+
+  it("同一年存在多个上级时不推断改隶", () => {
+    const data = {
+      entities: [
+        entity(1, "甲司"),
+        entity(2, "乙司"),
+        entity(3, "丙署"),
+        entity(4, "丁院"),
+      ],
+      timepoints: {
+        1: [timepoint(11, 1000, "甲司统属丁院")],
+        2: [timepoint(21, 1050, "乙司统属丁院")],
+        3: [timepoint(31, 1050, "丙署统属丁院")],
+        4: link([
+          timepoint(41, 1000, "隶甲司"),
+          timepoint(42, 1050, "同年有两项上下级记载"),
+        ]),
+      },
+      hierarchyEdges: [
+        { id: 101, parent: 1, child: 4, states: [{ id: 101, subject_timepoint_id: 11, object_timepoint_id: 41 }] },
+        { id: 102, parent: 2, child: 4, states: [{ id: 102, subject_timepoint_id: 21, object_timepoint_id: 42 }] },
+        { id: 103, parent: 3, child: 4, states: [{ id: 103, subject_timepoint_id: 31, object_timepoint_id: 42 }] },
+      ],
+      changeRelations: [],
+    };
+
+    for (const focusId of [1, 2, 3, 4]) {
+      const model = buildEvolutionModel(data, [focusId], { yearMin: 960, yearMax: 1279 });
+      assert.equal(
+        model.lanes[0].events.some((event) => event.structuralHierarchyChange),
+        false,
+      );
+    }
   });
 });
 

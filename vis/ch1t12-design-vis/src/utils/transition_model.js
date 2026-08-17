@@ -253,13 +253,27 @@ function normalizeHierarchyChanges(data, timepointById, entityById) {
   const changes = [];
   for (const [entityId, records] of histories) {
     records.sort((a, b) => a.year - b.year || Number(a.relationId) - Number(b.relationId));
-    let previousParentId = null;
+    const recordsByYear = new Map();
     for (const record of records) {
-      if (previousParentId == null) {
-        previousParentId = record.parentId;
+      if (!recordsByYear.has(record.year)) recordsByYear.set(record.year, []);
+      recordsByYear.get(record.year).push(record);
+    }
+    let previousRecord = null;
+    for (const yearRecords of recordsByYear.values()) {
+      const parentIds = new Set(yearRecords.map((record) => record.parentId));
+      if (parentIds.size !== 1) {
+        previousRecord = null;
         continue;
       }
-      if (record.parentId === previousParentId) continue;
+      const record = yearRecords.at(-1);
+      if (!previousRecord) {
+        previousRecord = record;
+        continue;
+      }
+      if (record.parentId === previousRecord.parentId) {
+        previousRecord = record;
+        continue;
+      }
       const timepoint = timepointById.get(normalizeId(record.timepointId)) || {};
       changes.push(makeChange(data, {
         type: "reparent",
@@ -269,7 +283,7 @@ function normalizeHierarchyChanges(data, timepointById, entityById) {
         eventTime: timepoint.time || `${record.year}年`,
         eventText: changeEventText(
           timepoint,
-          `由${entityById.get(previousParentId)?.title || `#${previousParentId}`}改隶`
+          `由${entityById.get(previousRecord.parentId)?.title || `#${previousRecord.parentId}`}改隶`
             + `${entityById.get(record.parentId)?.title || `#${record.parentId}`}`,
         ),
         citationKeys: [
@@ -278,11 +292,11 @@ function normalizeHierarchyChanges(data, timepointById, entityById) {
         ],
         focusEntityId: entityId,
         relationId: record.relationId,
-        previousParentId,
+        previousParentId: previousRecord.parentId,
         nextParentId: record.parentId,
-        key: `reparent:${entityId}:${record.year}:${previousParentId}:${record.parentId}`,
+        key: `reparent:${entityId}:${record.year}:${previousRecord.parentId}:${record.parentId}`,
       }));
-      previousParentId = record.parentId;
+      previousRecord = record;
     }
   }
   return changes;

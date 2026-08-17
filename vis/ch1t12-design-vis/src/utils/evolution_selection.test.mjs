@@ -76,3 +76,15 @@ test("点击时间点时聚焦范围只包含该点", () => {
     timepointIds: [31],
   });
 });
+
+test("派生的层级变化事件使用字符串 ID 时仍保持自身高亮", () => {
+  assert.deepEqual(evolutionSelectionFocus({
+    kind: "timepoint",
+    id: "hierarchy:reparent:3:1050:1:2:subject",
+    item: { id: "hierarchy:reparent:3:1050:1:2:subject" },
+  }), {
+    active: true,
+    relationId: null,
+    timepointIds: ["hierarchy:reparent:3:1050:1:2:subject"],
+  });
+});

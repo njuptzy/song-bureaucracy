@@ -3800,17 +3800,31 @@ const EVOLUTION_TIME_TYPE_LABELS = {
   pre_song: "宋前资料",
 };
 
-function evidenceLines(key, fallbackQuotation = "") {
-  const citations = props.data.citations?.[key] || [];
-  const quotation = fallbackQuotation
-    || citations.map((item) => item.quotation).filter(Boolean).join("；");
-  const source = citations.map((item) => item.citation).filter(Boolean).join("；");
-  const note = citations.map((item) => item.note).filter(Boolean).join("；");
+function evidenceLinesForKeys(keys, fallbackQuotation = "") {
+  const seen = new Set();
+  const citations = (keys || []).flatMap((key) => props.data.citations?.[key] || [])
+    .filter((item) => {
+      const identity = [item.citation, item.quotation, item.note].filter(Boolean).join(":")
+        || item.id;
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+  const uniqueValues = (field) => [...new Set(
+    citations.map((item) => item[field]).filter(Boolean),
+  )];
+  const quotation = uniqueValues("quotation").join("；") || fallbackQuotation;
+  const source = uniqueValues("citation").join("；");
+  const note = uniqueValues("note").join("；");
   return {
     quotation: quotation || "当前记录没有可展示的逐字引文。",
     source: source || "当前记录没有单列出处。",
     note: note || "无补充校勘说明。",
   };
+}
+
+function evidenceLines(key, fallbackQuotation = "") {
+  return evidenceLinesForKeys([key], fallbackQuotation);
 }
 
 function memberTimeLabel(member) {
@@ -3848,6 +3862,33 @@ function evolutionDetailPayload(svg) {
   if (selected?.kind === "timepoint") {
     const event = selected.item;
     const entity = entityMap.get(event.entityId) || selectedEntity();
+    if (event.structuralHierarchyChange && event.hierarchyChange) {
+      const change = event.hierarchyChange;
+      const child = entityMap.get(change.childId);
+      const previousParent = entityMap.get(change.previousParentId);
+      const nextParent = entityMap.get(change.nextParentId);
+      const evidence = evidenceLinesForKeys(event.evidenceKeys, event.quotation);
+      const role = event.hierarchyRole === "subject"
+        ? "本机构的上级发生变化"
+        : event.hierarchyRole === "former_parent"
+          ? "本机构失去一个直属下属"
+          : "本机构新增一个直属下属";
+      return {
+        title: entity?.title || "层级变化",
+        year: eventTimeLabel(event),
+        sections: [
+          { label: "层级变化：", value: event.hierarchyChangeLabel || event.event },
+          { label: "本车道含义：", value: role },
+          { label: "变动机构：", value: child?.title || `#${change.childId}` },
+          { label: "原上级机构：", value: previousParent?.title || `#${change.previousParentId}` },
+          { label: "新上级机构：", value: nextParent?.title || `#${change.nextParentId}` },
+          { label: "判定说明：", value: "机构改隶。根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。" },
+          { label: "原文引文：", value: evidence.quotation },
+          { label: "出处：", value: evidence.source },
+          { label: "校勘说明：", value: evidence.note },
+        ],
+      };
+    }
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
     const related = (model?.relations || []).filter((relation) => (

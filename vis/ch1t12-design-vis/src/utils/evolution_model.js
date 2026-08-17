@@ -61,6 +61,7 @@ function effectiveYear(item) {
 export function eventGlyphType(eventType) {
   if (["establish", "restore"].includes(eventType)) return "establish";
   if (eventType === "abolish") return "abolish";
+  if (eventType === "affiliation_change") return "affiliation_change";
   return "record";
 }
 
@@ -440,6 +441,166 @@ function normalizeRelations(data, timepointById) {
   return assignRepeatedChangeEventGroups(relations);
 }
 
+function hierarchyStateYear(state, timepointById) {
+  const explicit = finiteYear(firstDefined(state, ["effective_year", "effectiveYear"]));
+  if (explicit != null) return explicit;
+  const years = [state.subject_timepoint_id, state.object_timepoint_id]
+    .map((id) => timepointById.get(normalizeId(id))?.effectiveYear)
+    .filter((year) => year != null);
+  return years.length ? Math.max(...years) : null;
+}
+
+function hierarchyChangeRecords(data, timepointById) {
+  const histories = new Map();
+  for (const edge of data?.hierarchyEdges || []) {
+    const states = edge.states?.length
+      ? edge.states
+      : (edge.periods || []).map((period) => ({ effective_year: period.start }));
+    for (const state of states) {
+      const year = hierarchyStateYear(state, timepointById);
+      if (year == null || edge.child == null || edge.parent == null) continue;
+      if (!histories.has(edge.child)) histories.set(edge.child, []);
+      histories.get(edge.child).push({
+        year,
+        parentId: normalizeId(edge.parent),
+        relationId: normalizeId(state.id ?? edge.id),
+        parentTimepointId: normalizeId(state.subject_timepoint_id),
+        childTimepointId: normalizeId(state.object_timepoint_id),
+      });
+    }
+  }
+
+  const changes = [];
+  for (const [childId, records] of histories) {
+    records.sort((first, second) => first.year - second.year
+      || String(first.relationId).localeCompare(String(second.relationId), "zh", { numeric: true }));
+    const recordsByYear = new Map();
+    for (const record of records) {
+      if (!recordsByYear.has(record.year)) recordsByYear.set(record.year, []);
+      recordsByYear.get(record.year).push(record);
+    }
+    let previous = null;
+    for (const yearRecords of recordsByYear.values()) {
+      const parentIds = new Set(yearRecords.map((record) => record.parentId));
+      if (parentIds.size !== 1) {
+        previous = null;
+        continue;
+      }
+      const record = yearRecords.at(-1);
+      if (!previous) {
+        previous = record;
+        continue;
+      }
+      if (record.parentId === previous.parentId) {
+        previous = record;
+        continue;
+      }
+      changes.push({
+        key: `reparent:${childId}:${record.year}:${previous.parentId}:${record.parentId}`,
+        childId: normalizeId(childId),
+        previousParentId: previous.parentId,
+        nextParentId: record.parentId,
+        year: record.year,
+        previousRelationId: previous.relationId,
+        relationId: record.relationId,
+        childTimepointId: record.childTimepointId,
+      });
+      previous = record;
+    }
+  }
+  return changes;
+}
+
+function hierarchyRoleEvent(change, role, entityMap, timepointById) {
+  const child = entityMap.get(change.childId);
+  const previousParent = entityMap.get(change.previousParentId);
+  const nextParent = entityMap.get(change.nextParentId);
+  const timepoint = timepointById.get(change.childTimepointId);
+  const entityId = role === "subject"
+    ? change.childId
+    : role === "former_parent" ? change.previousParentId : change.nextParentId;
+  const event = role === "subject"
+    ? `机构改隶：${previousParent?.title || `#${change.previousParentId}`} → ${nextParent?.title || `#${change.nextParentId}`}`
+    : role === "former_parent"
+      ? `下属迁出：${child?.title || `#${change.childId}`} → ${nextParent?.title || `#${change.nextParentId}`}`
+      : `下属迁入：${child?.title || `#${change.childId}`} ← ${previousParent?.title || `#${change.previousParentId}`}`;
+  return {
+    id: `hierarchy:${change.key}:${role}`,
+    entityId,
+    rawTime: timepoint?.rawTime || `${change.year}年`,
+    time: timepoint?.rawTime || `${change.year}年`,
+    timeType: timepoint?.timeType || "exact",
+    yearStart: timepoint?.yearStart ?? change.year,
+    yearEnd: timepoint?.yearEnd ?? change.year,
+    effectiveYear: change.year,
+    event,
+    eventType: "affiliation_change",
+    iconType: eventGlyphType("affiliation_change"),
+    effect: "preserve",
+    quotation: timepoint?.quotation || "",
+    relationEndpoint: false,
+    expanded: true,
+    structuralHierarchyChange: true,
+    syntheticHierarchyChange: true,
+    hierarchyRole: role,
+    hierarchyChange: { ...change },
+    hierarchyChangeLabel: event,
+    evidenceKeys: [...new Set([
+      change.previousRelationId != null ? `R${change.previousRelationId}` : null,
+      change.relationId != null ? `R${change.relationId}` : null,
+      change.childTimepointId != null ? `T${change.childTimepointId}` : null,
+    ].filter(Boolean))],
+    chainId: `hierarchy:${change.key}`,
+    chainIndex: Number.MAX_SAFE_INTEGER,
+    eventIndex: role === "subject" ? 0 : role === "former_parent" ? 1 : 2,
+  };
+}
+
+function appendHierarchyChangeEvents(lanes, data, entityMap, timepointById, yearMin, yearMax) {
+  const eventsByEntity = new Map();
+  const append = (event) => {
+    if (!entityMap.has(event.entityId)) return;
+    if (!eventsByEntity.has(event.entityId)) eventsByEntity.set(event.entityId, []);
+    eventsByEntity.get(event.entityId).push(event);
+  };
+  for (const change of hierarchyChangeRecords(data, timepointById)) {
+    const child = entityMap.get(change.childId);
+    if (child?.type !== "机构") continue;
+    append(hierarchyRoleEvent(change, "subject", entityMap, timepointById));
+    append(hierarchyRoleEvent(change, "former_parent", entityMap, timepointById));
+    append(hierarchyRoleEvent(change, "new_parent", entityMap, timepointById));
+  }
+  for (const lane of lanes) {
+    const events = (eventsByEntity.get(lane.entityId) || [])
+      .filter((event) => event.effectiveYear >= yearMin && event.effectiveYear <= yearMax);
+    for (const event of events) {
+      const existing = event.hierarchyRole === "subject"
+        ? lane.events.find((item) => (
+          item.id === event.hierarchyChange.childTimepointId
+          && item.eventType === "affiliation_change"
+        ))
+        : null;
+      if (!existing) {
+        lane.events.push(event);
+        continue;
+      }
+      Object.assign(existing, {
+        structuralHierarchyChange: true,
+        hierarchyRole: event.hierarchyRole,
+        hierarchyChange: event.hierarchyChange,
+        hierarchyChangeLabel: event.hierarchyChangeLabel,
+        evidenceKeys: [...new Set([
+          ...(existing.evidenceKeys || []),
+          ...event.evidenceKeys,
+        ])],
+      });
+    }
+    lane.events.sort((first, second) => first.effectiveYear - second.effectiveYear
+      || first.chainIndex - second.chainIndex
+      || first.eventIndex - second.eventIndex);
+  }
+}
+
 function endpointEntityIds(relation) {
   return relation.members.map((member) => member.entityId).filter((id) => id != null);
 }
@@ -795,6 +956,7 @@ export function buildEvolutionModel(data, focusEntityIds, options = {}) {
     relations,
     normalizedFocusIds,
   );
+  appendHierarchyChangeEvents(lanes, data, entityMap, timepointById, yearMin, yearMax);
   lanes.forEach((lane) => anomalies.push(...lane.anomalies));
 
   const offAxis = {
