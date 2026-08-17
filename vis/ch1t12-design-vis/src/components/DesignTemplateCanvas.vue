@@ -1161,7 +1161,7 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
   const centerX = hitBounds.x + hitBounds.width / 2;
   marker.setAttribute(
     "transform",
-    `translate(${centerX - layout.width / 2} ${hitBounds.y - layout.height - 6})`,
+    `translate(${centerX - layout.width / 2} ${hitBounds.y - layout.height - 10})`,
   );
   marker.setAttribute("aria-label", nodeChangeIndicatorAriaLabel(
     node.data.title,
