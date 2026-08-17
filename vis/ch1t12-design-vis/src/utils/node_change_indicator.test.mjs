@@ -24,19 +24,19 @@ test("节点变化标记只保留过去和未来，不显示同年数量", () =>
   );
 });
 
-test("左右标记使用圆气泡并按数字位数放大", () => {
+test("左右标记使用统一尺寸圆气泡并保持可读字号空间", () => {
   const layout = nodeChangeIndicatorLayout([
     { kind: "past", label: "-2" },
     { kind: "future", label: "+120" },
   ]);
-  assert.ok(layout.items[0].radius >= 7.5);
-  assert.ok(layout.items[1].radius > layout.items[0].radius);
+  assert.equal(layout.items[0].radius, 12.5);
+  assert.equal(layout.items[1].radius, layout.items[0].radius);
   assert.equal(
     layout.items[1].centerX - layout.items[1].radius
       - (layout.items[0].centerX + layout.items[0].radius),
     4,
   );
-  assert.equal(layout.height, layout.items[1].radius * 2);
+  assert.equal(layout.height, 25);
   assert.equal(layout.items[0].centerY, layout.items[1].centerY);
   assert.equal(layout.width, layout.items[1].centerX + layout.items[1].radius);
 });

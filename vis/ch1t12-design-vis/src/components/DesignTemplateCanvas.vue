@@ -5824,7 +5824,7 @@ onUnmounted(() => {
 .svg-mount :deep(.node-change-indicator text) {
   fill: #351704;
   font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
-  font-size: 7.2px;
+  font-size: 8.4px;
   font-weight: 600;
   letter-spacing: 0;
   pointer-events: none;

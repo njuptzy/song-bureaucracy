@@ -1,9 +1,6 @@
 export const NODE_CHANGE_INDICATOR_GEOMETRY = Object.freeze({
   gap: 4,
-  minimumRadius: 7.5,
-  maximumRadius: 11.5,
-  estimatedGlyphWidth: 4.6,
-  horizontalPadding: 5,
+  radius: 12.5,
 });
 
 export function nodeChangeIndicatorItems(summary) {
@@ -23,24 +20,20 @@ export function nodeChangeIndicatorItems(summary) {
 
 export function nodeChangeIndicatorLayout(items) {
   let cursorX = 0;
-  let maximumRadius = 0;
   const positionedItems = (items || []).map((item) => {
-    const estimatedDiameter = item.label.length * NODE_CHANGE_INDICATOR_GEOMETRY.estimatedGlyphWidth
-      + NODE_CHANGE_INDICATOR_GEOMETRY.horizontalPadding;
-    const radius = Math.max(
-      NODE_CHANGE_INDICATOR_GEOMETRY.minimumRadius,
-      Math.min(NODE_CHANGE_INDICATOR_GEOMETRY.maximumRadius, estimatedDiameter / 2),
-    );
+    const radius = NODE_CHANGE_INDICATOR_GEOMETRY.radius;
     const positioned = { ...item, centerX: cursorX + radius, radius };
     cursorX += radius * 2 + NODE_CHANGE_INDICATOR_GEOMETRY.gap;
-    maximumRadius = Math.max(maximumRadius, radius);
     return positioned;
   });
   return {
     width: Math.max(0, cursorX - (positionedItems.length ? NODE_CHANGE_INDICATOR_GEOMETRY.gap : 0)),
-    height: maximumRadius * 2,
-    centerY: maximumRadius,
-    items: positionedItems.map((item) => ({ ...item, centerY: maximumRadius })),
+    height: NODE_CHANGE_INDICATOR_GEOMETRY.radius * 2,
+    centerY: NODE_CHANGE_INDICATOR_GEOMETRY.radius,
+    items: positionedItems.map((item) => ({
+      ...item,
+      centerY: NODE_CHANGE_INDICATOR_GEOMETRY.radius,
+    })),
   };
 }
 
