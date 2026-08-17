@@ -190,7 +190,7 @@ let evolutionLayoutCacheKey = "";
 let evolutionLayoutCache = null;
 let structuralChangeIndex = null;
 let activeTransitionAnimation = 0;
-let activeTransitionTimer = null;
+let activeTransitionCleanupFrame = null;
 let reduceMotionQuery = null;
 const expandedChangeEvidenceKeys = new Set();
 const transitionTrackItemKeyCache = new WeakMap();
@@ -4954,9 +4954,9 @@ function transitionLinePoints(parent, child) {
 
 function cancelHierarchyTransition(svg) {
   activeTransitionAnimation += 1;
-  if (activeTransitionTimer != null) {
-    window.clearTimeout(activeTransitionTimer);
-    activeTransitionTimer = null;
+  if (activeTransitionCleanupFrame != null) {
+    window.cancelAnimationFrame(activeTransitionCleanupFrame);
+    activeTransitionCleanupFrame = null;
   }
   d3.select(svg)
     .selectAll(".dynamic-tree-node, .dynamic-tree-link")
@@ -4982,8 +4982,12 @@ function playHierarchyTransition(svg, oldFrame, changes) {
   const exitDuration = 320;
   const enterDelay = 440;
   const enterDuration = 560;
-  const totalDuration = enterDelay + enterDuration;
   const easing = d3.easeCubicOut;
+  const transitionPromises = [];
+  const trackTransition = (transition) => {
+    transitionPromises.push(transition.end());
+    return transition;
+  };
   const overlay = svgElement("g", {
     class: "hierarchy-transition-layer",
     "pointer-events": "none",
@@ -5028,10 +5032,10 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     overlay.appendChild(clone);
     const transition = d3.select(clone).transition("hierarchy-time");
     if (moves && !exits) transition.delay(enterDelay);
-    transition
+    trackTransition(transition
       .duration(exits ? exitDuration : Math.min(enterDuration, 260))
       .ease(easing)
-      .style("opacity", 0);
+      .style("opacity", 0));
   }
 
   for (const entityId of movedCommonIds) {
@@ -5042,12 +5046,12 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
     clone.style.opacity = "1";
     overlay.appendChild(clone);
-    d3.select(clone)
+    trackTransition(d3.select(clone)
       .transition("hierarchy-time")
       .delay(enterDelay)
       .duration(enterDuration)
       .ease(easing)
-      .attr("transform", matrixTransformValue(newItem.matrix));
+      .attr("transform", matrixTransformValue(newItem.matrix)));
   }
 
   for (const entityId of removedIds) {
@@ -5057,32 +5061,32 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
     clone.style.opacity = "1";
     overlay.appendChild(clone);
-    d3.select(clone)
+    trackTransition(d3.select(clone)
       .transition("hierarchy-time")
       .duration(exitDuration)
       .ease(easing)
       .attr("transform", matrixTransformValue(hierarchyExitMatrix(oldItem.matrix)))
-      .style("opacity", 0);
+      .style("opacity", 0));
   }
 
   for (const entityId of createdIds) {
     const node = newFrame.nodes.get(entityId)?.node;
     if (!node) continue;
-    d3.select(node)
+    trackTransition(d3.select(node)
       .transition("hierarchy-time")
       .delay(enterDelay)
       .duration(enterDuration)
       .ease(easing)
-      .style("opacity", 1);
+      .style("opacity", 1));
   }
 
   for (const link of newLinks) {
-    d3.select(link.node)
+    trackTransition(d3.select(link.node)
       .transition("hierarchy-time")
       .delay(enterDelay)
       .duration(enterDuration)
       .ease(easing)
-      .style("opacity", 1);
+      .style("opacity", 1));
   }
 
   for (const change of changes || []) {
@@ -5098,12 +5102,12 @@ function playHierarchyTransition(svg, oldFrame, changes) {
         points: transitionLinePoints(oldParent, oldChild),
       });
       overlay.insertBefore(line, overlay.firstChild);
-      d3.select(line)
+      trackTransition(d3.select(line)
         .transition("hierarchy-time")
         .delay(enterDelay)
         .duration(enterDuration)
         .ease(easing)
-        .attr("points", transitionLinePoints(newParent, newChild));
+        .attr("points", transitionLinePoints(newParent, newChild)));
     }
     if (["evolve", "unclassified"].includes(change.type)
       && change.sourceIds.length === 1
@@ -5119,25 +5123,28 @@ function playHierarchyTransition(svg, oldFrame, changes) {
         y2: source.y,
       });
       overlay.insertBefore(line, overlay.firstChild);
-      d3.select(line)
+      trackTransition(d3.select(line)
         .transition("hierarchy-time")
         .delay(enterDelay)
         .duration(enterDuration)
         .ease(easing)
         .attr("x2", target.x)
-        .attr("y2", target.y);
+        .attr("y2", target.y));
     }
   }
 
-  activeTransitionTimer = window.setTimeout(() => {
+  Promise.allSettled(transitionPromises).then(() => {
     if (revision !== activeTransitionAnimation) return;
-    activeTransitionTimer = null;
-    overlay.remove();
-    newFrame.nodes.forEach(({ node }) => {
-      if (node) node.style.opacity = "1";
+    activeTransitionCleanupFrame = window.requestAnimationFrame(() => {
+      if (revision !== activeTransitionAnimation) return;
+      activeTransitionCleanupFrame = null;
+      newFrame.nodes.forEach(({ node }) => {
+        if (node) node.style.opacity = "1";
+      });
+      newLinks.forEach((link) => link.node.style.removeProperty("opacity"));
+      overlay.remove();
     });
-    newLinks.forEach((link) => link.node.style.removeProperty("opacity"));
-  }, totalDuration + 30);
+  });
 }
 
 function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
@@ -5535,7 +5542,9 @@ onUnmounted(() => {
   if (svg) cancelHierarchyTransition(svg);
   else {
     activeTransitionAnimation += 1;
-    if (activeTransitionTimer != null) window.clearTimeout(activeTransitionTimer);
+    if (activeTransitionCleanupFrame != null) {
+      window.cancelAnimationFrame(activeTransitionCleanupFrame);
+    }
   }
   if (timelineRefreshFrame != null) window.cancelAnimationFrame(timelineRefreshFrame);
 });
