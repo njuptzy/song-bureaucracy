@@ -1522,17 +1522,20 @@ function renderSelectedActions(parent, options) {
   const buttonHeight = 21;
   const widths = actions.map((action) => Math.max(92, Array.from(action.label).length * 8.2 + 18));
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
-  const left = 82;
-  const right = 475;
+  const plot = options.layout?.plotBounds;
+  const left = plot
+    ? Math.max(plot.x + 260, plot.right - 990)
+    : 808;
+  const right = plot?.right ?? 1770;
   const headingWidth = 72;
   const minButtonX = left + headingWidth;
-  // The left selector column has a clear row above “演变对象”. Keeping the
-  // actions there avoids the already dense title/legend/pager band on the
-  // right and keeps the controls close to the selected-object list.
+  // Keep the actions in the same horizontal zone as the legend, but one row
+  // above it. This leaves the title, entry context, and time axis as separate
+  // reading bands and also remains stable inside the comparison child SVG.
   let x = Math.max(minButtonX, right - totalWidth);
   appendText(group, "选中操作", {
     x: left,
-    y: 271.2,
+    y: 166.2,
     class: "evolution-selection-actions-heading",
   });
   actions.forEach((action, index) => {
@@ -1545,7 +1548,7 @@ function renderSelectedActions(parent, options) {
     });
     button.appendChild(svgElement("rect", {
       x,
-      y: 257,
+      y: 152,
       width,
       height: buttonHeight,
       rx: 2.5,
@@ -1553,7 +1556,7 @@ function renderSelectedActions(parent, options) {
     }));
     appendText(button, action.label, {
       x: x + width / 2,
-      y: 271.2,
+      y: 166.2,
       class: "evolution-selection-action-label",
       "text-anchor": "middle",
     });
@@ -1601,12 +1604,12 @@ function renderMain(layer, layout, options) {
   }
   appendText(group, entryCopy, {
     x: 535,
-    y: 220,
+    y: 211,
     class: "evolution-entry-context",
   });
   renderLanePager(group, layout.laneWindow, options.handlers);
   group.appendChild(svgElement("line", {
-    x1: 535, y1: 202, x2: 1770, y2: 202, stroke: COLORS.line, "stroke-width": 0.72,
+    x1: 535, y1: 198, x2: 1770, y2: 198, stroke: COLORS.line, "stroke-width": 0.72,
   }));
   if (!layout.lanes.length) {
     appendText(group, "当前对象没有可展示的宋代时间节点", {
