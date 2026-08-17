@@ -226,8 +226,11 @@ const transitionTrackItemKeyCache = new WeakMap();
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
 const TIMELINE_SCALE_END = YEAR_MAX + 1;
-const TIMELINE_X_MIN = 221.63;
-const TIMELINE_X_MAX = 1546.36;
+// 直接沿用原设计稿年份刻度的两个端点：960 年 x=210.2，1280 年
+// x=1535.6。时间轴上的所有运行数据（年号、事件、范围选择）必须共用
+// 这条坐标映射，不能使用早期为了避开端帽而取的内缩范围。
+const TIMELINE_X_MIN = 210.2;
+const TIMELINE_X_MAX = 1535.6;
 const yearScale = d3.scaleLinear()
   .domain([YEAR_MIN, TIMELINE_SCALE_END])
   .range([TIMELINE_X_MIN, TIMELINE_X_MAX])
