@@ -21,15 +21,20 @@ const SONG_ERA_RANGES = [
   ["德祐", 1275, 1276], ["景炎", 1276, 1278], ["祥兴", 1278, 1279],
 ];
 
-export function songEraForYear(year) {
+export function songEraForYear(year, eras = null) {
   const numericYear = Number(year);
   if (!Number.isFinite(numericYear)) return "年代未明";
-  const matches = SONG_ERA_RANGES.filter(([, start, end]) => numericYear >= start && numericYear <= end);
+  const ranges = Array.isArray(eras) && eras.length
+    ? eras
+      .map((era) => [String(era?.name ?? "").trim(), Number(era?.start), Number(era?.end)])
+      .filter(([, start, end]) => Number.isFinite(start) && Number.isFinite(end) && start <= end)
+    : SONG_ERA_RANGES;
+  const matches = ranges.filter(([, start, end]) => numericYear >= start && numericYear <= end);
   return matches.at(-1)?.[0] || "年代未明";
 }
 
-export function formatSongYearLabel(year) {
+export function formatSongYearLabel(year, eras = null) {
   const numericYear = Number(year);
   if (!Number.isFinite(numericYear)) return "年代未明";
-  return `${songEraForYear(numericYear)}（${Math.round(numericYear)}年）`;
+  return `${songEraForYear(numericYear, eras)}（${Math.round(numericYear)}年）`;
 }

@@ -26,7 +26,7 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
-from normalize_times import normalize_time  # noqa: E402
+from normalize_times import ERA_YEARS, normalize_time  # noqa: E402
 from institution_categories import (  # noqa: E402
     INSTITUTION_GROUP_NAMES,
     classify_institution,
@@ -637,6 +637,13 @@ def build_payload(*, include_details: bool = True) -> dict:
             "source": ENTRIES_DB.name,
             "yearMin": 960,
             "yearMax": 1279,
+            # 年号范围与 normalize_times.py 共用同一份可追溯表，避免前端
+            # 重新维护一份静态列表，也避免把原设计 SVG 的示意文字当作数据。
+            "eras": [
+                {"name": name, "start": start, "end": end}
+                for name, (start, end) in ERA_YEARS.items()
+                if 960 <= start <= 1279
+            ],
         },
     }
 

@@ -103,6 +103,10 @@ import {
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
 import { formatSongYearLabel } from "../utils/song_era";
+import {
+  buildTimelineYearTicks,
+  normalizeTimelineEras,
+} from "../utils/timeline_data";
 import { detailHeaderLayout } from "../utils/detail_header";
 import {
   nodeChangeIndicatorAriaLabel,
@@ -1777,7 +1781,7 @@ function renderDynamicHierarchy(svg) {
   const data = categoryForestData(selectedCategory.value);
   if (!data) return;
   const yearMarker = svgElement("g", { class: "hierarchy-year-marker" });
-  const yearLabel = formatSongYearLabel(currentCanvasYear());
+  const yearLabel = formatSongYearLabel(currentCanvasYear(), props.data.meta?.eras);
   // 原稿标题基线为 94.2，42.86px 字号的可见字框中轴约为 78；
   // 使用固定中轴和与原稿文字一致的 central 基线，避免年号贴到上端。
   const headerCenterY = 78;
@@ -5690,8 +5694,108 @@ function bindTimelineRange(svg) {
   if (!originalTriangle || !originalYear) return;
   originalTriangle.style.display = "none";
   originalYear.style.display = "none";
+  const eraRecords = normalizeTimelineEras(props.data?.meta?.eras);
+  if (eraRecords.length) {
+    // 原 SVG 中的年份、年号是设计示意，不是运行数据。只有在服务端提供
+    // 完整年号表时才隐藏它们，避免旧 API 暂时缺字段时出现空时间轴。
+    [...svg.querySelectorAll("text")].forEach((text) => {
+      const point = position(text);
+      const className = text.getAttribute("class") || "";
+      const isStaticYear = (className === "cls-39" || className === "cls-46")
+        && Math.abs((point?.y ?? 0) - 1008.07) < 3;
+      if (isStaticYear || className === "cls-44") text.style.display = "none";
+    });
+  }
   // 设计稿的 1109 年标记由三段竖线和上下端帽组成，需与静态三角一起隐藏。
   originalGuideLine?.parentElement?.parentElement?.style.setProperty("display", "none");
+
+  if (eraRecords.length) {
+    const timelineDataLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    timelineDataLayer.classList.add("timeline-data-labels");
+    timelineDataLayer.setAttribute("data-source", "normalize_times.ERA_YEARS");
+    timelineDataLayer.setAttribute("aria-label", "依据完整年号数据绘制的年份和年号");
+
+    for (const year of buildTimelineYearTicks(YEAR_MIN, YEAR_MAX, 10)) {
+      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const x = yearScale(year);
+      tick.setAttribute("x1", String(x));
+      tick.setAttribute("x2", String(x));
+      tick.setAttribute("y1", "986.42");
+      tick.setAttribute("y2", "991.5");
+      tick.setAttribute("stroke", "#563905");
+      tick.setAttribute("stroke-width", year % 50 === 0 || year === YEAR_MIN || year === YEAR_MAX ? "1.1" : "0.65");
+      tick.setAttribute("opacity", year % 50 === 0 || year === YEAR_MIN || year === YEAR_MAX ? "0.82" : "0.55");
+      tick.setAttribute("pointer-events", "none");
+      timelineDataLayer.appendChild(tick);
+
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("class", "cls-39");
+      label.setAttribute("x", String(x));
+      label.setAttribute("y", "1008.07");
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("pointer-events", "none");
+      label.textContent = `${year}年`;
+      timelineDataLayer.appendChild(label);
+    }
+
+    // 57 个年号全部保留。标签只做视觉避让，横坐标仍严格取年号数据的起始年；
+    // 年号区间则用细线表达，避免把相邻年号合并成一个不存在的结论。
+    const labelRows = [948, 957, 975, 983];
+    const rowEndX = labelRows.map(() => -Infinity);
+    const rowEndWidth = labelRows.map(() => 0);
+    for (const era of eraRecords) {
+      const startX = yearScale(era.start);
+      const endX = yearScale(Math.min(YEAR_MAX + 1, era.end + 1));
+      const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      band.setAttribute("x", String(startX));
+      band.setAttribute("y", "942.2");
+      band.setAttribute("width", String(Math.max(1, endX - startX)));
+      band.setAttribute("height", "2.6");
+      band.setAttribute("fill", "#563905");
+      band.setAttribute("opacity", "0.42");
+      band.setAttribute("pointer-events", "none");
+      const bandTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      bandTitle.textContent = `${era.name}：${era.start}—${era.end}年`;
+      band.appendChild(bandTitle);
+      timelineDataLayer.appendChild(band);
+
+      const x = startX;
+      const width = Math.max(13, era.name.length * 7.2);
+      let rowIndex = rowEndX.findIndex((end, index) => (
+        x - width / 2 >= end + rowEndWidth[index] / 2 + 1.5
+      ));
+      if (rowIndex < 0) rowIndex = rowEndX.indexOf(Math.min(...rowEndX));
+      rowEndX[rowIndex] = x;
+      rowEndWidth[rowIndex] = width;
+
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      marker.setAttribute("x1", String(x));
+      marker.setAttribute("x2", String(x));
+      marker.setAttribute("y1", String(labelRows[rowIndex] - 6));
+      marker.setAttribute("y2", String(labelRows[rowIndex] + 1));
+      marker.setAttribute("stroke", "#563905");
+      marker.setAttribute("stroke-width", "0.6");
+      marker.setAttribute("opacity", "0.7");
+      marker.setAttribute("pointer-events", "none");
+      timelineDataLayer.appendChild(marker);
+
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("class", "cls-44");
+      label.setAttribute("x", String(x));
+      label.setAttribute("y", String(labelRows[rowIndex]));
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("pointer-events", "none");
+      label.style.fontSize = "8.5px";
+      label.textContent = era.name;
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = `${era.name}：${era.start}—${era.end}年`;
+      label.appendChild(title);
+      timelineDataLayer.appendChild(label);
+    }
+
+    // 让范围选择控件位于数据标签之上，但不改变数据标签的位置。
+    svg.appendChild(timelineDataLayer);
+  }
 
   const timelineLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   timelineLayer.classList.add("timeline-range-control");
