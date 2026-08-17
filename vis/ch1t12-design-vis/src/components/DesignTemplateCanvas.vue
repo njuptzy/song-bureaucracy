@@ -4987,11 +4987,9 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     return;
   }
 
-  // 切年分成两个清晰阶段：先清理旧快照，再显示新快照。
-  // 过渡期间不插值节点/连线的 transform，避免整组对象向上移动后
-  // 在最后一帧再被画布偏移“复位”。
-  const exitDuration = 700;
-  const enterDelay = 780;
+  // 旧快照在刷新时已经从正式图层移除，不再复制成过渡残影。
+  // 只保留一个短暂空档，再让新快照原地淡入；期间不插值任何 transform。
+  const enterDelay = 260;
   const enterDuration = 820;
   const easing = d3.easeCubicOut;
   const transitionPromises = [];
@@ -5010,9 +5008,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     oldFrame.nodes.get(entityId).matrix,
     newFrame.nodes.get(entityId).matrix,
   ));
-  const removedIds = [...oldFrame.nodes.keys()].filter((id) => !newFrame.nodes.has(id));
   const createdIds = [...newFrame.nodes.keys()].filter((id) => !oldFrame.nodes.has(id));
-  const removedIdSet = new Set(removedIds);
   const createdIdSet = new Set(createdIds);
   const phaseTwoIdSet = new Set(movedCommonIds);
   for (const change of changes || []) {
@@ -5032,53 +5028,6 @@ function playHierarchyTransition(svg, oldFrame, changes) {
   for (const entityId of [...movedCommonIds, ...createdIds]) {
     const node = newFrame.nodes.get(entityId)?.node;
     if (node) node.style.opacity = "0";
-  }
-
-  for (const oldLink of oldFrame.links || []) {
-    const exits = linkTouches(oldLink, removedIdSet);
-    const moves = linkTouches(oldLink, phaseTwoIdSet);
-    if (!exits && !moves) continue;
-    const clone = cloneHierarchyTransitionLink(oldLink);
-    if (!clone) continue;
-    overlay.appendChild(clone);
-    const transition = d3.select(clone).transition("hierarchy-time");
-    trackTransition(transition
-      .duration(exits ? exitDuration : Math.min(exitDuration, 420))
-      .ease(easing)
-      .style("opacity", 0));
-  }
-
-  for (const entityId of movedCommonIds) {
-    const oldItem = oldFrame.nodes.get(entityId);
-    const newItem = newFrame.nodes.get(entityId);
-    const clone = cloneHierarchyTransitionNode(oldItem);
-    if (!clone) continue;
-    clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
-    clone.style.opacity = "1";
-    overlay.appendChild(clone);
-    const transition = d3.select(clone)
-      .transition("hierarchy-time")
-      .delay(enterDelay)
-      .duration(enterDuration)
-      .ease(easing);
-    // 所有发生位置变化的节点都在旧位置原地淡出；新坐标上的正式节点
-    // 统一在第二阶段淡入。这样不论目标在上方还是下方，都不会发生
-    // “先平移、后复位”的视觉运动。
-    trackTransition(transition.style("opacity", 0));
-  }
-
-  for (const entityId of removedIds) {
-    const oldItem = oldFrame.nodes.get(entityId);
-    const clone = cloneHierarchyTransitionNode(oldItem);
-    if (!clone) continue;
-    clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
-    clone.style.opacity = "1";
-    overlay.appendChild(clone);
-    trackTransition(d3.select(clone)
-      .transition("hierarchy-time")
-      .duration(exitDuration)
-      .ease(easing)
-      .style("opacity", 0));
   }
 
   for (const entityId of createdIds) {
