@@ -4943,10 +4943,6 @@ function hierarchyMatrixChanged(previous, next, threshold = 0.35) {
     .some((key) => Math.abs(previous[key] - next[key]) > threshold);
 }
 
-function hierarchyExitMatrix(matrix, distance = 14) {
-  return { ...matrix, f: matrix.f - distance };
-}
-
 function transitionLinePoints(parent, child) {
   const middleY = (parent.y + child.y) / 2;
   return `${parent.x},${parent.y} ${parent.x},${middleY} ${child.x},${middleY} ${child.x},${child.y}`;
@@ -5065,7 +5061,6 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .transition("hierarchy-time")
       .duration(exitDuration)
       .ease(easing)
-      .attr("transform", matrixTransformValue(hierarchyExitMatrix(oldItem.matrix)))
       .style("opacity", 0));
   }
 
