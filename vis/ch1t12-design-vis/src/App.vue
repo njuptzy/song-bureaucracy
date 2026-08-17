@@ -2,7 +2,7 @@
   <main ref="applicationShellRef" class="application-shell">
     <DesignTemplateCanvas
       v-if="data"
-      :key="canvasInstanceKey"
+      ref="canvasRef"
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
@@ -67,7 +67,7 @@ const selectedFact = ref(null);
 const commits = ref([]);
 // 全局撤回记录界面导航，不调用修订工作区的数据库撤回接口。
 const navigationHistory = ref([]);
-const canvasInstanceKey = ref(0);
+const canvasRef = ref(null);
 let canvasStateEventSeen = false;
 let pendingNavigationRestoreSignature = "";
 const NAVIGATION_HISTORY_LIMIT = 100;
@@ -117,11 +117,9 @@ function handleCanvasStateChange(state) {
   const previousState = canvasState.value;
   const previousSignature = previousState ? JSON.stringify(previousState) : "";
 
-  // 撤回会重建画布；重建后的第一次同步就是目标状态，不能再次入栈。
+  // 撤回直接恢复同一个画布实例；恢复后的第一次同步不能再次入栈。
   if (pendingNavigationRestoreSignature) {
-    if (nextSignature === pendingNavigationRestoreSignature) {
-      pendingNavigationRestoreSignature = "";
-    }
+    pendingNavigationRestoreSignature = "";
     canvasStateEventSeen = true;
     canvasState.value = nextState;
     writeCanvasState(nextState);
@@ -150,14 +148,14 @@ function handleCanvasStateChange(state) {
 }
 
 function undoCanvasNavigation() {
-  if (revisionBusy.value || !navigationHistory.value.length) return;
+  if (revisionBusy.value || !navigationHistory.value.length || !canvasRef.value) return;
   const previousState = navigationHistory.value.at(-1);
   navigationHistory.value = navigationHistory.value.slice(0, -1);
   pendingNavigationRestoreSignature = JSON.stringify(previousState);
-  canvasState.value = JSON.parse(JSON.stringify(previousState));
-  writeCanvasState(canvasState.value);
-  // initialState 只在画布创建时读取；递增 key 让画布按上一个状态重建。
-  canvasInstanceKey.value += 1;
+  const restoredState = JSON.parse(JSON.stringify(previousState));
+  canvasRef.value.restoreCanvasState(restoredState);
+  canvasState.value = restoredState;
+  writeCanvasState(restoredState);
 }
 
 function handleSelectionChange(selection) {

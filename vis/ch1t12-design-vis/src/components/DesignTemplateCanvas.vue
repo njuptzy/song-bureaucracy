@@ -331,6 +331,63 @@ const persistedCanvasState = computed(() => ({
   spaceAwareExpansion: spaceAwareExpansion.value,
 }));
 
+function restoreCanvasState(state) {
+  if (!state || typeof state !== "object") return;
+  const nextViewMode = viewModeLocked.value
+    ? props.fixedViewMode
+    : VIEW_MODES.includes(state.viewMode)
+      ? state.viewMode
+      : viewMode.value;
+  const viewChanged = nextViewMode !== viewMode.value;
+
+  viewMode.value = nextViewMode;
+  evolutionMode.value = state.evolutionMode === "compare" ? "compare" : "single";
+  evolutionEntityIds.value = Array.isArray(state.evolutionEntityIds)
+    ? state.evolutionEntityIds.slice(0, 4)
+    : [];
+  selectedEvolutionItem.value = state.selectedEvolutionItem
+    ? { ...state.selectedEvolutionItem, item: null }
+    : null;
+  evolutionLanePage.value = Number.isFinite(state.evolutionLanePage)
+    ? Math.max(1, Math.floor(state.evolutionLanePage))
+    : 1;
+
+  const rawRange = Array.isArray(state.selectedRange) ? state.selectedRange : selectedRange.value;
+  const rangeStart = Number.isFinite(Number(rawRange[0])) ? Number(rawRange[0]) : YEAR_MIN;
+  const rangeEnd = Number.isFinite(Number(rawRange[1])) ? Number(rawRange[1]) : rangeStart;
+  const normalizedRange = [
+    Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(rangeStart))),
+    Math.max(YEAR_MIN, Math.min(YEAR_MAX, Math.round(rangeEnd))),
+  ].sort((a, b) => a - b);
+  selectedRange.value = normalizedRange;
+  pendingRange.value = [...normalizedRange];
+  timelineSelectionActive.value = state.timelineSelectionActive !== false;
+  selectedId.value = state.selectedId ?? null;
+  compositionFocusId.value = state.compositionFocusId ?? null;
+  if (typeof state.selectedCategory === "string" && state.selectedCategory.trim()) {
+    selectedCategory.value = state.selectedCategory.trim();
+  }
+  spaceAwareExpansion.value = state.spaceAwareExpansion === true;
+
+  // 这些是当前点击产生的临时高亮，不属于上一个画布状态。
+  evolutionSearchOpen.value = false;
+  hierarchyReturnNotice.value = null;
+  changeTrackEntityId.value = null;
+  changeTrackGroup.value = null;
+  focusedTransition.value = null;
+  expandedDetailId.value = null;
+  inlineDetailOfficialId.value = null;
+  collapsedHierarchyIds.clear();
+  expandedHierarchyPath = [];
+  lastExpandedHierarchyId = null;
+
+  if (!viewChanged) {
+    flushTimelineRefresh(true);
+  }
+}
+
+defineExpose({ restoreCanvasState });
+
 watch(persistedCanvasState, (state) => emit("state-change", state), {
   immediate: true,
   deep: true,
