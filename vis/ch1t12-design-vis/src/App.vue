@@ -15,10 +15,9 @@
       type="button"
       class="global-undo-command"
       :disabled="revisionBusy || !revisionState?.draft?.can_undo"
-      title="撤回上一步修改（所有视图可用）"
       aria-label="撤回上一步修改"
       @click="workspaceAction('undo')"
-    >↶ 撤回上一步</button>
+    >↶</button>
     <RevisionWorkspace
       v-if="baseData && isEvolutionView"
       :edit-mode="editMode"
@@ -413,11 +412,13 @@ onBeforeUnmount(() => {
   top: 60px;
   right: 24px;
   z-index: 21;
-  display: inline-flex;
-  height: 30px;
+  display: inline-grid;
+  width: 32px;
+  height: 26px;
   align-items: center;
+  justify-items: center;
   border: 1px solid rgba(86,57,5,.42);
-  padding: 0 11px;
+  padding: 0;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -425,6 +426,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0;
   pointer-events: auto;
   white-space: nowrap;
+  font-size: 16px;
 }
 .global-undo-command:hover:not(:disabled) { border-color: rgba(86,57,5,.78); color: var(--taupe); }
 .global-undo-command:focus-visible { outline: 1px dashed rgba(86,57,5,.78); outline-offset: 2px; }
