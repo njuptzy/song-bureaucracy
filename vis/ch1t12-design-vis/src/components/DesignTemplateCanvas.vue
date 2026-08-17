@@ -69,8 +69,12 @@ import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import {
   evolutionComparisonAfterAdd,
-  timelineSelectionForEvolutionItem,
 } from "../utils/evolution_selection";
+import {
+  evolutionSelectionComparison,
+  formatYearOffset,
+  resolveHierarchyReturnContext,
+} from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import {
   compareInstitutionIdsBySourceOrder,
@@ -170,6 +174,9 @@ const selectedRange = ref(Array.isArray(initialState.selectedRange)
 const pendingRange = ref([...selectedRange.value]);
 const timelineSelectionActive = ref(initialState.timelineSelectionActive ?? true);
 const selectedId = ref(initialState.selectedId ?? null);
+// 入口上下文只存在于本次层级 → 演变会话，不写入 localStorage。
+const evolutionEntryContext = ref(null);
+const hierarchyReturnNotice = ref(null);
 const changeTrackEntityId = ref(null);
 const changeTrackGroup = ref(null);
 const focusedTransition = ref(null);
@@ -286,6 +293,26 @@ function yearSnapshot(year) {
 const currentSnapshot = computed(() => (
   timelineSelectionActive.value ? yearSnapshot(selectedRange.value[0]) : null
 ));
+
+function currentCanvasYear() {
+  return Number.isFinite(Number(selectedRange.value[0]))
+    ? Math.round(Number(selectedRange.value[0]))
+    : YEAR_MIN;
+}
+
+function evolutionEntryYear() {
+  return evolutionEntryContext.value?.entryYear ?? currentCanvasYear();
+}
+
+function setEvolutionEntryContext(entityId, sourceView) {
+  const year = currentCanvasYear();
+  evolutionEntryContext.value = {
+    entryYear: year,
+    entryEntityId: entityId ?? null,
+    currentYear: year,
+    sourceView: sourceView || viewMode.value,
+  };
+}
 const persistedCanvasState = computed(() => ({
   viewMode: viewMode.value,
   evolutionMode: evolutionMode.value,
@@ -832,7 +859,7 @@ const INLINE_DETAIL_FIELDS = [
   { key: "office", label: "衙署：" },
   { key: "composition", label: "编制文本：" },
 ];
-const DETAIL_PANEL_EXTRA_KEYS = ["extra-1", "extra-2"];
+const DETAIL_PANEL_EXTRA_KEYS = ["extra-1", "extra-2", "extra-3"];
 const DETAIL_PANEL_SECTION_KEYS = [
   ...INLINE_DETAIL_FIELDS.map((field) => field.key),
   ...DETAIL_PANEL_EXTRA_KEYS,
@@ -2417,6 +2444,7 @@ function renderDynamicHierarchy(svg) {
     const toggleVirtualNode = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      hierarchyReturnNotice.value = null;
       changeTrackGroup.value = null;
       if (node.data.isSubordinateGroup) {
         const wasExpanded = expandedSubordinateGroupIds.includes(node.data.id);
@@ -2467,6 +2495,7 @@ function renderDynamicHierarchy(svg) {
         }
         event.preventDefault();
         event.stopPropagation();
+        hierarchyReturnNotice.value = null;
         detailPanelScrollOffset = 0;
         inlineCompositionScrollOffset = 0;
         changeTrackGroup.value = null;
@@ -2890,16 +2919,6 @@ function ensureEvolutionFocus() {
   return focusEntities;
 }
 
-function applyEvolutionTimelineSelection(kind, effectiveYear = null) {
-  const next = timelineSelectionForEvolutionItem(
-    kind,
-    effectiveYear,
-    [YEAR_MIN, YEAR_MAX],
-  );
-  timelineSelectionActive.value = next.active;
-  selectedRange.value = next.range;
-}
-
 const COMPARISON_PLOT_BOUNDS = {
   x: 520,
   y: 238,
@@ -3289,12 +3308,9 @@ function renderDynamicEvolution(svg) {
     onSelectEvent(event) {
       const current = selectedEvolutionItem.value;
       if (current?.kind === "timepoint" && current.id === event.id) {
-        // 再次点击已选中的事件 = 取消选择，并复位联动的时间线框选。
+        // 再次点击已选中的事件 = 取消选择；入口年份线保持不动。
         selectedEvolutionItem.value = null;
         emit("selection-change", null);
-        applyEvolutionTimelineSelection(null);
-        svg.__moveTimelineSelection?.();
-        svg.__syncTimelineSelectionStyle?.();
         refreshTemplate();
         return;
       }
@@ -3307,18 +3323,14 @@ function renderDynamicEvolution(svg) {
         item: { ...event },
       });
       detailPanelScrollOffset = 0;
-      applyEvolutionTimelineSelection("timepoint", event.effectiveYear);
       refreshTemplate();
     },
     onSelectRelation(relation) {
       const current = selectedEvolutionItem.value;
       if (current?.kind === "relation" && current.id === relation.id) {
-        // 再次点击已选中的关系 = 取消选择，并复位联动的时间线框选。
+        // 再次点击已选中的关系 = 取消选择；入口年份线保持不动。
         selectedEvolutionItem.value = null;
         emit("selection-change", null);
-        applyEvolutionTimelineSelection(null);
-        svg.__moveTimelineSelection?.();
-        svg.__syncTimelineSelectionStyle?.();
         refreshTemplate();
         return;
       }
@@ -3329,7 +3341,6 @@ function renderDynamicEvolution(svg) {
         item: { ...relation },
       });
       detailPanelScrollOffset = 0;
-      applyEvolutionTimelineSelection("relation");
       refreshTemplate();
     },
   };
@@ -3342,6 +3353,7 @@ function renderDynamicEvolution(svg) {
     selectedItem: selectedEvolutionItem.value,
     selectedRange: selectedRange.value,
     selectionActive: timelineSelectionActive.value,
+    entryContext: evolutionEntryContext.value,
     mode: evolutionMode.value,
     searchOpen: evolutionSearchOpen.value,
     handlers,
@@ -3522,12 +3534,7 @@ function renderDynamicTimetree(svg) {
     },
     onOpenEvolution(entityId) {
       if (viewModeLocked.value) return;
-      selectedId.value = entityId;
-      evolutionEntityIds.value = [entityId];
-      evolutionMode.value = "single";
-      selectedEvolutionItem.value = null;
-      evolutionLanePage.value = 1;
-      viewMode.value = "evolution";
+      enterEvolutionView({ entityId, sourceView: "timetree" });
     },
   };
 
@@ -3854,6 +3861,74 @@ function relationEndpointLabel(member) {
   return `${entity?.title || `#${member?.entityId}`}（${memberTimeLabel(member)}）`;
 }
 
+function evolutionComparisonText(comparison) {
+  if (!comparison) return "距入口年份未定";
+  if (comparison.kind === "timepoint") return comparison.label;
+  return comparison.endpoints.map((endpoint) => (
+    `${endpoint.role === "source" ? "来源" : "目标"} ${titleOf(endpoint.entityId)}：${endpoint.label}`
+  )).join("；") || "距入口年份未定";
+}
+
+function evolutionCurrentEntryText() {
+  const entryYear = evolutionEntryYear();
+  const currentYear = currentCanvasYear();
+  const suffix = entryYear === currentYear
+    ? ""
+    : `；当前年份：${currentYear}年（${formatYearOffset(entryYear, currentYear)}）`;
+  return `入口年份：${entryYear}年${suffix}`;
+}
+
+function selectedEvolutionJumpOptions() {
+  const selected = selectedEvolutionItem.value;
+  if (!selected?.item) return [];
+  const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
+  if (comparison?.kind === "timepoint" && comparison.year != null) {
+    return [{ year: comparison.year, label: `前往${comparison.year}年` }];
+  }
+  if (comparison?.kind !== "relation") return [];
+  const seen = new Set();
+  return comparison.endpoints
+    .filter((endpoint) => endpoint.year != null)
+    .filter((endpoint) => {
+      const key = `${endpoint.role}:${endpoint.year}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((endpoint) => ({
+      year: endpoint.year,
+      label: `前往${endpoint.role === "source" ? "来源" : "目标"}${endpoint.year}年`,
+    }));
+}
+
+function appendEvolutionAction(scrollContent, cursorY, labelText, titleText, onActivate) {
+  const action = svgElement("g", { class: "evolution-hierarchy-entry-control" });
+  const label = svgElement("text", {
+    x: 101.29,
+    y: cursorY,
+    class: "transition-track-action",
+    role: "button",
+    tabindex: "0",
+  });
+  setText(label, labelText);
+  label.style.cursor = "pointer";
+  const title = svgElement("title");
+  title.textContent = titleText;
+  action.append(label, title);
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onActivate(event);
+  };
+  d3.select(label)
+    .on("click.evolution-action", activate)
+    .on("keydown.evolution-action", (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
+  scrollContent.appendChild(action);
+  return cursorY + 25;
+}
+
 function evolutionDetailPayload(svg) {
   const model = svg.__evolutionModel;
   const selected = selectedEvolutionItem.value;
@@ -3866,6 +3941,7 @@ function evolutionDetailPayload(svg) {
       const previousParent = entityMap.get(change.previousParentId);
       const nextParent = entityMap.get(change.nextParentId);
       const evidence = evidenceLinesForKeys(event.evidenceKeys, event.quotation);
+      const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
       const role = event.hierarchyRole === "subject"
         ? "本机构的上级发生变化"
         : event.hierarchyRole === "former_parent"
@@ -3880,6 +3956,7 @@ function evolutionDetailPayload(svg) {
           { label: "变动机构：", value: child?.title || `#${change.childId}` },
           { label: "原上级机构：", value: previousParent?.title || `#${change.previousParentId}` },
           { label: "新上级机构：", value: nextParent?.title || `#${change.nextParentId}` },
+          { label: "距入口年份：", value: evolutionComparisonText(comparison) },
           { label: "判定说明：", value: "机构改隶。根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。" },
           { label: "原文引文：", value: evidence.quotation },
           { label: "出处：", value: evidence.source },
@@ -3889,6 +3966,7 @@ function evolutionDetailPayload(svg) {
     }
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
+    const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
     ));
@@ -3913,6 +3991,7 @@ function evolutionDetailPayload(svg) {
           label: "时间精度：",
           value: `${EVOLUTION_TIME_TYPE_LABELS[event.timeType] || event.timeType || "未标注"}${event.parse_note ? `；${event.parse_note}` : ""}`,
         },
+        { label: "距入口年份：", value: evolutionComparisonText(comparison) },
         {
           label: "相关关系：",
           value: related.length
@@ -3929,6 +4008,7 @@ function evolutionDetailPayload(svg) {
   if (selected?.kind === "relation") {
     const relation = selected.item;
     const evidence = evidenceLines(relation.evidenceKey || `R${relation.id}`, relation.quotation);
+    const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
     const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
     const endpointYears = [...new Set(
@@ -3942,6 +4022,7 @@ function evolutionDetailPayload(svg) {
         { label: "关系：", value: relation.label },
         { label: "来源：", value: sources || "来源端点未完整记录。" },
         { label: "目标：", value: targets || "目标端点未完整记录。" },
+        { label: "距入口年份：", value: evolutionComparisonText(comparison) },
         {
           label: "编码状态：",
           value: relation.implementationStatus === "unclassified"
@@ -3972,6 +4053,7 @@ function evolutionDetailPayload(svg) {
     year: `${timepoints.length} 个时间点`,
     sections: [
       { label: "实体类型：", value: entity.type },
+      { label: "入口上下文：", value: evolutionCurrentEntryText() },
       {
         label: "词条原文：",
         value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
@@ -4030,6 +4112,29 @@ function updateEvolutionDetails(svg) {
     cursorY += Math.max(1, lines) * 18 + 13;
   });
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+  scrollContent?.querySelectorAll(".evolution-hierarchy-entry-control")
+    .forEach((element) => element.remove());
+  if (scrollContent) {
+    for (const option of selectedEvolutionJumpOptions()) {
+      cursorY = appendEvolutionAction(
+        scrollContent,
+        cursorY,
+        option.label,
+        `只将当前年份线移动到${option.year}年，不改变入口年份`,
+        () => commitTimelineRange([option.year, option.year]),
+      );
+    }
+  }
+  const targetEntityId = evolutionReturnEntityId();
+  if (scrollContent && targetEntityId != null) {
+    cursorY = appendEvolutionAction(
+      scrollContent,
+      cursorY,
+      `在${currentCanvasYear()}年打开层级`,
+      `在${currentCanvasYear()}年打开${titleOf(targetEntityId)}的最小层级结构`,
+      () => openHierarchyFromEvolution({ entityId: targetEntityId, reason: "detail-entry" }),
+    );
+  }
   if (scrollContent) scrollContent.dataset.contentBottom = String(cursorY + 2);
   svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
 }
@@ -4255,6 +4360,10 @@ function updateGroupChangeDetails(svg, group) {
     `${group.title} · 组内变化`,
     selectedRangeLabel(),
   );
+  const unusedExtra = svg.querySelector("[data-detail-section-label='extra-3']");
+  const unusedExtraContent = svg.querySelector("[data-detail-section-content='extra-3']");
+  if (unusedExtra) unusedExtra.style.display = "none";
+  if (unusedExtraContent) unusedExtraContent.style.display = "none";
   let cursorY = 536.92 + detailSlots.contentOffsetY;
   const summaryLabel = svg.querySelector("[data-detail-section-label='extra-1']");
   const summaryContent = svg.querySelector("[data-detail-section-content='extra-1']");
@@ -4312,6 +4421,44 @@ function updateDetails(svg) {
   }
   if (changeTrackGroup.value) {
     updateGroupChangeDetails(svg, changeTrackGroup.value);
+    return;
+  }
+  if (hierarchyReturnNotice.value && !hierarchyReturnNotice.value.active) {
+    const notice = hierarchyReturnNotice.value;
+    const detailHeader = layoutDetailHeader(
+      svg,
+      notice.title || "返回层级",
+      selectedRangeLabel(),
+    );
+    const [firstField, ...hiddenFields] = INLINE_DETAIL_FIELDS;
+    const label = svg.querySelector(`[data-detail-section-label='${firstField.key}']`);
+    const content = svg.querySelector(`[data-detail-section-content='${firstField.key}']`);
+    if (label && content) {
+      label.style.display = "";
+      content.style.display = "";
+      label.setAttribute("transform", `translate(100.33 ${536.92 + detailHeader.contentOffsetY})`);
+      setText(label, "当前实体：");
+      content.setAttribute("transform", `translate(101.29 ${561.92 + detailHeader.contentOffsetY})`);
+      wrapText(
+        content,
+        `${notice.title}在${notice.year}年未确认存续，未生成虚假节点；已返回该年份可确认的最小层级结构。`,
+        28,
+        18,
+        Infinity,
+      );
+    }
+    hiddenFields.forEach((field) => {
+      svg.querySelector(`[data-detail-section-label='${field.key}']`)?.style.setProperty("display", "none");
+      svg.querySelector(`[data-detail-section-content='${field.key}']`)?.style.setProperty("display", "none");
+    });
+    DETAIL_PANEL_EXTRA_KEYS.forEach((key) => {
+      svg.querySelector(`[data-detail-section-label='${key}']`)?.style.setProperty("display", "none");
+      svg.querySelector(`[data-detail-section-content='${key}']`)?.style.setProperty("display", "none");
+    });
+    const scrollContent = svg.querySelector(".detail-panel-scroll-content");
+    if (scrollContent) scrollContent.dataset.contentBottom = String(650 + detailHeader.contentOffsetY);
+    detailPanelScrollOffset = 0;
+    svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
     return;
   }
   const entity = selectedEntity();
@@ -4693,14 +4840,17 @@ function bindHierarchyAnimationControl(svg) {
   sync();
 }
 
-function enterEvolutionView() {
+function enterEvolutionView({ entityId = null, sourceView = viewMode.value } = {}) {
   if (viewModeLocked.value) return;
+  const requested = entityId != null ? entityMap.get(entityId) : null;
   const compositionFocus = entityMap.get(compositionFocusId.value);
-  const focus = compositionFocus || entityMap.get(selectedId.value) || graphFocusEntity();
+  const focus = requested || compositionFocus || entityMap.get(selectedId.value) || graphFocusEntity();
   if (focus) {
     selectedId.value = focus.id;
     evolutionEntityIds.value = [focus.id];
   }
+  setEvolutionEntryContext(focus?.id ?? null, sourceView);
+  hierarchyReturnNotice.value = null;
   evolutionMode.value = "single";
   selectedEvolutionItem.value = null;
   evolutionLanePage.value = 1;
@@ -4709,17 +4859,49 @@ function enterEvolutionView() {
   viewMode.value = "evolution";
 }
 
-function restoreHierarchyFocus() {
-  const selected = entityMap.get(selectedId.value) || entityMap.get(evolutionEntityIds.value[0]);
-  if (!selected) return;
-  selectedId.value = selected.id;
-  if (selected.type === "机构") {
-    focusHierarchyContext(selected, true);
-    return;
+function evolutionReturnEntityId() {
+  const selectedItem = selectedEvolutionItem.value;
+  if (selectedItem?.kind === "timepoint" && selectedItem.item?.entityId != null) {
+    return selectedItem.item.entityId;
   }
-  const affiliation = props.data.staffEdges?.find((edge) => edge.official === selected.id);
-  const institution = affiliation ? entityMap.get(affiliation.org) : null;
-  if (institution) focusHierarchyContext(institution, true);
+  return selectedId.value ?? evolutionEntryContext.value?.entryEntityId ?? null;
+}
+
+function openHierarchyFromEvolution({ entityId = null, reason = "entry" } = {}) {
+  if (viewModeLocked.value) return;
+  const requestedId = entityId ?? evolutionReturnEntityId();
+  const requested = entityMap.get(requestedId);
+  if (!requested) return;
+  const year = currentCanvasYear();
+  const current = currentSnapshot.value;
+  const context = resolveHierarchyReturnContext({
+    entityId: requested.id,
+    entities: props.data.entities,
+    hierarchyEdges: hierarchyEdgesForView(),
+    staffEdges: [...staffEdgesForView(), ...(props.data.staffEdges || [])],
+    activeEntityIds: current?.entityIds || null,
+  });
+  if (!context) return;
+
+  const institution = entityMap.get(context.institutionId);
+  if (!institution) return;
+  selectedId.value = institution.id;
+  selectedEvolutionItem.value = null;
+  focusHierarchyContext(institution, true);
+  hierarchyReturnNotice.value = context.active
+    ? null
+    : {
+      requestedEntityId: requested.id,
+      institutionId: institution.id,
+      title: requested.title,
+      year,
+      reason,
+    };
+  viewMode.value = "hierarchy";
+}
+
+function restoreHierarchyFocus() {
+  openHierarchyFromEvolution({ reason: "top-entry" });
 }
 
 function ensureTimetreeViewControl(svg) {
@@ -4934,6 +5116,9 @@ function bindTemplateControls(svg) {
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
+        const returningFromEvolution = targetMode === "hierarchy"
+          && viewMode.value === "evolution";
+        const returnLabel = returningFromEvolution ? "返回层级" : "层级视图";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
         const canActivate = !viewModeLocked.value && targetMode === "hierarchy"
           && (viewMode.value === "composition"
@@ -4941,20 +5126,26 @@ function bindTemplateControls(svg) {
         const activateView = (event) => {
           event.stopPropagation();
           if (!canActivate) return;
-          if (compositionFocusId.value != null) {
+          if (viewMode.value === "evolution") {
+            openHierarchyFromEvolution({ reason: "top-entry" });
+          } else if (compositionFocusId.value != null) {
             const focus = entityMap.get(compositionFocusId.value);
             if (focus) {
               selectedId.value = focus.id;
               focusHierarchyContext(focus, true);
             }
           }
-          if (viewMode.value === "evolution") {
-            restoreHierarchyFocus();
-          }
           if (!viewModeLocked.value) viewMode.value = "hierarchy";
         };
+        if (targetMode === "hierarchy") setText(this, returnLabel);
         this.style.cursor = canActivate ? "pointer" : "default";
         this.style.fontWeight = targetMode === viewMode.value ? "700" : "400";
+        this.setAttribute(
+          "aria-label",
+          returningFromEvolution
+            ? `返回层级（${currentCanvasYear() === evolutionEntryYear() ? "入口年" : "当前年"}）`
+            : "层级视图",
+        );
         d3.select(this).on("click.view-mode", canActivate ? activateView : null);
         const bounds = elementBounds(this);
         if (canActivate && bounds && this.parentNode) {
@@ -5330,6 +5521,13 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
   const nextYear = normalized[0];
   pendingRange.value = [...normalized];
   timelineSelectionActive.value = true;
+  if (isEvolutionCanvasMode() && evolutionEntryContext.value) {
+    evolutionEntryContext.value = {
+      ...evolutionEntryContext.value,
+      currentYear: nextYear,
+    };
+  }
+  hierarchyReturnNotice.value = null;
   if (oldRange[0] === normalized[0] && oldRange[1] === normalized[1]) {
     focusedTransition.value = focusedChange;
     const svg = svgMountRef.value?.querySelector("svg.live-design-svg");

@@ -3,6 +3,9 @@ import {
   evolutionSelectionAnchors,
   evolutionSelectionFocus,
 } from "../utils/evolution_selection.js";
+import {
+  evolutionSelectionComparison,
+} from "../utils/evolution_context.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
@@ -384,7 +387,7 @@ function renderSelector(layer, options) {
   layer.appendChild(group);
 }
 
-function renderAxis(parent, layout, selectedRange, selectionActive, selectedItem) {
+function renderAxis(parent, layout, selectedRange, selectionActive, selectedItem, entryContext) {
   const { plotBounds, yearScale } = layout;
   const axisY = plotBounds.y - 25;
   parent.appendChild(svgElement("line", {
@@ -406,6 +409,28 @@ function renderAxis(parent, layout, selectedRange, selectionActive, selectedItem
     }));
     appendText(parent, String(year), {
       x, y: axisY - 11, class: "evolution-axis-label", "text-anchor": "middle",
+    });
+  }
+  const entryYear = Number(entryContext?.entryYear);
+  if (Number.isFinite(entryYear)) {
+    const entryX = scale(entryYear);
+    parent.appendChild(svgElement("line", {
+      class: "evolution-entry-year",
+      x1: entryX,
+      y1: plotBounds.y - 14,
+      x2: entryX,
+      y2: plotBounds.bottom + 14,
+      stroke: COLORS.olive,
+      "stroke-width": 1.1,
+      "stroke-dasharray": "5 3",
+      "pointer-events": "none",
+    }));
+    appendText(parent, `入口 ${entryYear}年`, {
+      x: entryX + 5,
+      y: axisY + 30,
+      class: "evolution-entry-year-label",
+      "text-anchor": "start",
+      "pointer-events": "none",
     });
   }
   const anchors = evolutionSelectionAnchors(selectedItem);
@@ -1455,6 +1480,22 @@ function renderMain(layer, layout, options) {
     class: "evolution-view-subheading",
     "text-anchor": "end",
   });
+  const entryYear = Number(options.entryContext?.entryYear);
+  const comparison = evolutionSelectionComparison(
+    options.selectedItem,
+    entryYear,
+  );
+  let entryCopy = Number.isFinite(entryYear) ? `入口：${entryYear}年` : "入口年份未记录";
+  if (comparison?.kind === "timepoint" && Number.isFinite(comparison.year)) {
+    entryCopy += ` · 当前事件：${comparison.year}年（${comparison.label}）`;
+  } else if (comparison?.kind === "relation") {
+    entryCopy += " · 当前关系已选中";
+  }
+  appendText(group, entryCopy, {
+    x: 535,
+    y: 220,
+    class: "evolution-entry-context",
+  });
   renderLanePager(group, layout.laneWindow, options.handlers);
   group.appendChild(svgElement("line", {
     x1: 535, y1: 202, x2: 1770, y2: 202, stroke: COLORS.line, "stroke-width": 0.72,
@@ -1466,7 +1507,14 @@ function renderMain(layer, layout, options) {
     layer.appendChild(group);
     return;
   }
-  renderAxis(group, layout, options.selectedRange, options.selectionActive, options.selectedItem);
+  renderAxis(
+    group,
+    layout,
+    options.selectedRange,
+    options.selectionActive,
+    options.selectedItem,
+    options.entryContext,
+  );
   renderEvolutionLegend(group, layout);
   const hasDrawableRelations = (layout.relations || []).some((relation) => relation.drawable)
     || (layout.relationGroups || []).some((relationGroup) => relationGroup.drawable);
