@@ -4952,19 +4952,6 @@ function transitionLinePoints(parent, child) {
   return `${parent.x},${parent.y} ${parent.x},${middleY} ${child.x},${middleY} ${child.x},${child.y}`;
 }
 
-function pulseTransitionTargets(frame, changes) {
-  const ids = new Set((changes || []).flatMap((change) => [
-    ...change.sourceIds,
-    ...change.targetIds,
-  ]));
-  for (const entityId of ids) {
-    const node = frame.nodes.get(entityId)?.node;
-    if (!node) continue;
-    node.classList.add("transition-target-highlight");
-    window.setTimeout(() => node.classList.remove("transition-target-highlight"), 700);
-  }
-}
-
 function cancelHierarchyTransition(svg) {
   activeTransitionAnimation += 1;
   if (activeTransitionTimer != null) {
@@ -4989,7 +4976,6 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     item.node = svg.querySelector(`.dynamic-tree-node[data-entity-id='${entityId}']`);
   });
   if (!oldFrame?.nodes?.size || reduceMotionQuery?.matches) {
-    pulseTransitionTargets(newFrame, changes);
     return;
   }
 
@@ -5151,7 +5137,6 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       if (node) node.style.opacity = "1";
     });
     newLinks.forEach((link) => link.node.style.removeProperty("opacity"));
-    pulseTransitionTargets(newFrame, changes);
   }, totalDuration + 30);
 }
 
@@ -5707,29 +5692,6 @@ onUnmounted(() => {
   stroke: #866d6d;
   stroke-width: 1.6px;
   stroke-dasharray: 5 3;
-}
-
-.svg-mount :deep(.transition-target-highlight polygon),
-.svg-mount :deep(.transition-target-highlight > rect) {
-  animation: transition-target-pulse 680ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes transition-target-pulse {
-  0% {
-    stroke: #866d6d;
-    stroke-width: 2.2px;
-  }
-  100% {
-    stroke: #563905;
-    stroke-width: 0.75px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .svg-mount :deep(.transition-target-highlight polygon),
-  .svg-mount :deep(.transition-target-highlight > rect) {
-    animation-duration: 120ms;
-  }
 }
 
 .svg-mount :deep(.composition-detail-button:focus) {
