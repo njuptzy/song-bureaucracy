@@ -1161,7 +1161,7 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
   const centerX = hitBounds.x + hitBounds.width / 2;
   marker.setAttribute(
     "transform",
-    `translate(${centerX - layout.width / 2} ${hitBounds.y - layout.height - 10})`,
+    `translate(${centerX - layout.width / 2} ${hitBounds.y - layout.height - 6})`,
   );
   marker.setAttribute("aria-label", nodeChangeIndicatorAriaLabel(
     node.data.title,
@@ -5824,7 +5824,7 @@ onUnmounted(() => {
 .svg-mount :deep(.node-change-indicator text) {
   fill: #351704;
   font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
-  font-size: 9.4px;
+  font-size: 8.8px;
   font-weight: 700;
   letter-spacing: 0;
   pointer-events: none;

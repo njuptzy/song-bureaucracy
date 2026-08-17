@@ -29,14 +29,14 @@ test("左右标记使用统一尺寸圆气泡并保持可读字号空间", () =>
     { kind: "past", label: "-2" },
     { kind: "future", label: "+120" },
   ]);
-  assert.equal(layout.items[0].radius, 11.5);
+  assert.equal(layout.items[0].radius, 10.5);
   assert.equal(layout.items[1].radius, layout.items[0].radius);
   assert.equal(
     layout.items[1].centerX - layout.items[1].radius
       - (layout.items[0].centerX + layout.items[0].radius),
     4,
   );
-  assert.equal(layout.height, 23);
+  assert.equal(layout.height, 21);
   assert.equal(layout.items[0].centerY, layout.items[1].centerY);
   assert.equal(layout.width, layout.items[1].centerX + layout.items[1].radius);
 });
