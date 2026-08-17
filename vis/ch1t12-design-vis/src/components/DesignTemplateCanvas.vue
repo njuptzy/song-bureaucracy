@@ -1694,6 +1694,7 @@ function renderDynamicHierarchy(svg) {
   // 变化气泡位于子节点上方；为真实层级之间预留独立空隙，
   // 避免第三层气泡侵入第二层节点的底部区域。
   const depthGap = 150;
+  const institutionDepthY = 295;
   const expandedComposition = expandedDetailId.value != null
     ? inlineCompositionGeometry(expandedDetailId.value)
     : null;
@@ -1851,7 +1852,7 @@ function renderDynamicHierarchy(svg) {
     const y = node.depth === 0
       ? 147.15
       : node.depth >= 2
-        ? 305 + (node.depth - 2) * depthGap
+        ? institutionDepthY + (node.depth - 2) * depthGap
         : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
       const width = virtualNodeWidth(node);

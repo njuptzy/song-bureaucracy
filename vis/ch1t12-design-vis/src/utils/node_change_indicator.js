@@ -1,6 +1,6 @@
 export const NODE_CHANGE_INDICATOR_GEOMETRY = Object.freeze({
   gap: 4,
-  radius: 10.5,
+  radius: 9.5,
 });
 
 export function nodeChangeIndicatorItems(summary) {
