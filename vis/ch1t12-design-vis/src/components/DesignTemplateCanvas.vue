@@ -102,6 +102,7 @@ import {
   timetreeYearToX,
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
+import { formatSongYearLabel } from "../utils/song_era";
 import { detailHeaderLayout } from "../utils/detail_header";
 import {
   nodeChangeIndicatorAriaLabel,
@@ -1704,6 +1705,7 @@ function hierarchyTemplates(svg) {
 
 function renderDynamicHierarchy(svg) {
   svg.__dynamicHierarchyFitsViewport = true;
+  svg.querySelector(".hierarchy-year-marker")?.remove();
   const templates = hierarchyTemplates(svg);
   if (!templates) return;
   const {
@@ -1716,6 +1718,20 @@ function renderDynamicHierarchy(svg) {
 
   const data = categoryForestData(selectedCategory.value);
   if (!data) return;
+  const yearMarker = svgElement("g", { class: "hierarchy-year-marker" });
+  const yearLabel = formatSongYearLabel(currentCanvasYear());
+  const yearText = svgElement("text", {
+    class: "cls-49",
+    x: 1165,
+    y: 112,
+    "text-anchor": "middle",
+    "dominant-baseline": "middle",
+  });
+  yearText.style.fontSize = "20px";
+  yearText.style.fontWeight = "600";
+  setText(yearText, yearLabel);
+  yearMarker.appendChild(yearText);
+  svg.appendChild(yearMarker);
   const root = d3.hierarchy(data);
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
   // 变化气泡位于子节点上方；为真实层级之间预留独立空隙，
