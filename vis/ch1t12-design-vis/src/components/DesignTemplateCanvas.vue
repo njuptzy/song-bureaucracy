@@ -1182,19 +1182,17 @@ function appendNodeChangeIndicator(nodeGroup, node, hitBounds) {
   layout.items.forEach((item) => {
     const itemGroup = svgElement("g", {
       class: `node-change-indicator-item is-${item.kind}`,
-      transform: `translate(${item.x} 0)`,
+      transform: `translate(${item.centerX} ${item.centerY})`,
     });
-    const surface = svgElement("rect", {
+    const surface = svgElement("circle", {
       class: "node-change-indicator-surface",
-      x: 0,
-      y: 0,
-      width: item.width,
-      height: layout.height,
-      rx: 2,
+      cx: 0,
+      cy: 0,
+      r: item.radius,
     });
     const label = svgElement("text", {
-      x: item.width / 2,
-      y: layout.height / 2 + 0.3,
+      x: 0,
+      y: 0.3,
       "text-anchor": "middle",
       "dominant-baseline": "central",
     });
@@ -5826,7 +5824,7 @@ onUnmounted(() => {
 .svg-mount :deep(.node-change-indicator text) {
   fill: #351704;
   font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
-  font-size: 8.4px;
+  font-size: 7.2px;
   font-weight: 600;
   letter-spacing: 0;
   pointer-events: none;

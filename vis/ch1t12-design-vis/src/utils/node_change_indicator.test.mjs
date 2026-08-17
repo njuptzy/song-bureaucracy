@@ -14,8 +14,8 @@ test("节点变化标记只保留过去和未来，不显示同年数量", () =>
     future: { year: 1095, distance: 15 },
   };
   assert.deepEqual(nodeChangeIndicatorItems(summary).map(({ kind, label }) => ({ kind, label })), [
-    { kind: "past", label: "前10" },
-    { kind: "future", label: "后15" },
+    { kind: "past", label: "-10" },
+    { kind: "future", label: "+15" },
   ]);
   assert.equal(nodeChangeIndicatorItems({ current: summary.current }).length, 0);
   assert.equal(
@@ -24,14 +24,19 @@ test("节点变化标记只保留过去和未来，不显示同年数量", () =>
   );
 });
 
-test("左右标记使用可读文字块并保持固定间距", () => {
+test("左右标记使用圆气泡并按数字位数放大", () => {
   const layout = nodeChangeIndicatorLayout([
-    { kind: "past", label: "前2" },
-    { kind: "future", label: "后120" },
+    { kind: "past", label: "-2" },
+    { kind: "future", label: "+120" },
   ]);
-  assert.equal(layout.height, 14);
-  assert.ok(layout.items[0].width >= 24);
-  assert.ok(layout.items[1].width > layout.items[0].width);
-  assert.equal(layout.items[1].x, layout.items[0].width + 3);
-  assert.equal(layout.width, layout.items[1].x + layout.items[1].width);
+  assert.ok(layout.items[0].radius >= 7.5);
+  assert.ok(layout.items[1].radius > layout.items[0].radius);
+  assert.equal(
+    layout.items[1].centerX - layout.items[1].radius
+      - (layout.items[0].centerX + layout.items[0].radius),
+    4,
+  );
+  assert.equal(layout.height, layout.items[1].radius * 2);
+  assert.equal(layout.items[0].centerY, layout.items[1].centerY);
+  assert.equal(layout.width, layout.items[1].centerX + layout.items[1].radius);
 });

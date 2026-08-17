@@ -1,22 +1,21 @@
 export const NODE_CHANGE_INDICATOR_GEOMETRY = Object.freeze({
-  height: 14,
-  gap: 3,
-  minimumWidth: 24,
-  maximumWidth: 42,
-  horizontalPadding: 8,
-  estimatedGlyphWidth: 7.2,
+  gap: 4,
+  minimumRadius: 7.5,
+  maximumRadius: 11.5,
+  estimatedGlyphWidth: 4.6,
+  horizontalPadding: 5,
 });
 
 export function nodeChangeIndicatorItems(summary) {
   return [
     summary?.past ? {
       kind: "past",
-      label: `前${summary.past.distance}`,
+      label: `-${summary.past.distance}`,
       title: `最近过去变化：${summary.past.year}年（距今${summary.past.distance}年）`,
     } : null,
     summary?.future ? {
       kind: "future",
-      label: `后${summary.future.distance}`,
+      label: `+${summary.future.distance}`,
       title: `最近未来变化：${summary.future.year}年（${summary.future.distance}年后）`,
     } : null,
   ].filter(Boolean);
@@ -24,21 +23,24 @@ export function nodeChangeIndicatorItems(summary) {
 
 export function nodeChangeIndicatorLayout(items) {
   let cursorX = 0;
+  let maximumRadius = 0;
   const positionedItems = (items || []).map((item) => {
-    const estimatedWidth = item.label.length * NODE_CHANGE_INDICATOR_GEOMETRY.estimatedGlyphWidth
+    const estimatedDiameter = item.label.length * NODE_CHANGE_INDICATOR_GEOMETRY.estimatedGlyphWidth
       + NODE_CHANGE_INDICATOR_GEOMETRY.horizontalPadding;
-    const width = Math.max(
-      NODE_CHANGE_INDICATOR_GEOMETRY.minimumWidth,
-      Math.min(NODE_CHANGE_INDICATOR_GEOMETRY.maximumWidth, estimatedWidth),
+    const radius = Math.max(
+      NODE_CHANGE_INDICATOR_GEOMETRY.minimumRadius,
+      Math.min(NODE_CHANGE_INDICATOR_GEOMETRY.maximumRadius, estimatedDiameter / 2),
     );
-    const positioned = { ...item, x: cursorX, width };
-    cursorX += width + NODE_CHANGE_INDICATOR_GEOMETRY.gap;
+    const positioned = { ...item, centerX: cursorX + radius, radius };
+    cursorX += radius * 2 + NODE_CHANGE_INDICATOR_GEOMETRY.gap;
+    maximumRadius = Math.max(maximumRadius, radius);
     return positioned;
   });
   return {
     width: Math.max(0, cursorX - (positionedItems.length ? NODE_CHANGE_INDICATOR_GEOMETRY.gap : 0)),
-    height: NODE_CHANGE_INDICATOR_GEOMETRY.height,
-    items: positionedItems,
+    height: maximumRadius * 2,
+    centerY: maximumRadius,
+    items: positionedItems.map((item) => ({ ...item, centerY: maximumRadius })),
   };
 }
 
