@@ -2570,8 +2570,24 @@ function renderDynamicHierarchy(svg) {
 function ensureGlobalUndoControl(svg) {
   let control = svg.querySelector(".global-undo-control");
   if (!control) {
-    control = svgElement("g", { class: "global-undo-control" });
+    control = svgElement("g", {
+      class: "global-undo-control",
+      "pointer-events": "all",
+    });
+    // 可见边框很小，不能把它本身当作唯一点击区域；用独立透明层承接点击，
+    // 避免点击落到底层 SVG 画板。
+    const hitArea = svgElement("rect", {
+      class: "global-undo-hit-area",
+      x: 1828,
+      y: 75,
+      width: 39,
+      height: 36,
+      rx: 3,
+      fill: "transparent",
+      "pointer-events": "all",
+    });
     const surface = svgElement("rect", {
+      class: "global-undo-surface",
       x: 1833.53,
       y: 79.99,
       width: 28,
@@ -2593,11 +2609,11 @@ function ensureGlobalUndoControl(svg) {
     label.style.fontFamily = "Arial, sans-serif";
     label.style.fontSize = "17px";
     setText(label, "↶");
-    control.append(surface, label);
+    control.append(hitArea, surface, label);
     svg.appendChild(control);
   }
   const active = props.globalUndoAvailable;
-  const surface = control.querySelector("rect");
+  const surface = control.querySelector(".global-undo-surface");
   const label = control.querySelector("text");
   surface?.setAttribute("fill-opacity", active ? "0.16" : "0");
   surface?.setAttribute("stroke-opacity", active ? "0.8" : "0.42");
@@ -2607,6 +2623,7 @@ function ensureGlobalUndoControl(svg) {
   control.setAttribute("aria-label", "撤回上一步修改");
   control.setAttribute("aria-disabled", active ? "false" : "true");
   control.style.cursor = active ? "pointer" : "default";
+  control.style.pointerEvents = active ? "all" : "none";
   const activate = (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2617,6 +2634,8 @@ function ensureGlobalUndoControl(svg) {
     .on("keydown.global-undo", active ? (event) => {
       if (event.key === "Enter" || event.key === " ") activate(event);
     } : null);
+  // 把按钮放到 SVG 最上层，避免动态层或原稿元素覆盖透明命中区。
+  svg.appendChild(control);
 }
 
 function reconcileComparisonHierarchyExpansion(svg) {
