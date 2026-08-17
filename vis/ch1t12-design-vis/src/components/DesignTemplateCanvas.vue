@@ -5743,7 +5743,9 @@ function bindTimelineRange(svg) {
 
     // 57 个年号全部保留。标签只做视觉避让，横坐标仍严格取年号数据的起始年；
     // 年号区间则用细线表达，避免把相邻年号合并成一个不存在的结论。
-    const labelRows = [948, 957, 975, 983];
+    // 皇帝标签的基线是 964.71；年号必须全部落在其下方、年份刻度上方。
+    // 这里压缩为四条窄行，仍保留每一条年号记录，不把年号移回事件标题区。
+    const labelRows = [982.24, 989.4, 996.6, 1003.8];
     const rowEndX = labelRows.map(() => -Infinity);
     const rowEndWidth = labelRows.map(() => 0);
     for (const era of eraRecords) {
@@ -5788,7 +5790,7 @@ function bindTimelineRange(svg) {
       label.setAttribute("y", String(labelRows[rowIndex]));
       label.setAttribute("text-anchor", "middle");
       label.setAttribute("pointer-events", "none");
-      label.style.fontSize = "8.5px";
+      label.style.fontSize = "7.2px";
       label.textContent = era.name;
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
       title.textContent = `${era.name}：${era.start}—${era.end}年`;
