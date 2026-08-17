@@ -5042,12 +5042,17 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     clone.setAttribute("transform", matrixTransformValue(oldItem.matrix));
     clone.style.opacity = "1";
     overlay.appendChild(clone);
-    trackTransition(d3.select(clone)
+    const transition = d3.select(clone)
       .transition("hierarchy-time")
       .delay(enterDelay)
       .duration(enterDuration)
-      .ease(easing)
-      .attr("transform", matrixTransformValue(newItem.matrix)));
+      .ease(easing);
+    if (newItem.matrix.f < oldItem.matrix.f - 0.35) {
+      // 向上重排时不做反直觉的“先上移再复位”：旧位置淡出，目标位置由正式节点淡入。
+      trackTransition(transition.style("opacity", 0));
+    } else {
+      trackTransition(transition.attr("transform", matrixTransformValue(newItem.matrix)));
+    }
   }
 
   for (const entityId of removedIds) {
