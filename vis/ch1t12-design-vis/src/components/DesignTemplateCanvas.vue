@@ -5708,6 +5708,18 @@ function bindTimelineRange(svg) {
         && Math.abs((point?.y ?? 0) - 1008.07) < 3;
       if (isStaticYear || className === "cls-44") text.style.display = "none";
     });
+    // cls-36 是原稿示意年号的分隔竖线；它们与真实年号起点不一致，
+    // 必须和示意文字一起移除，后面再按 ERA_YEARS 重新绘制。
+    [...svg.querySelectorAll("line")].forEach((line) => {
+      const className = line.getAttribute("class") || "";
+      const y1 = Number(line.getAttribute("y1"));
+      const y2 = Number(line.getAttribute("y2"));
+      if (className.split(/\s+/).includes("cls-36")
+        && Math.abs(y1 - 973.55) < 0.1
+        && Math.abs(y2 - 984.96) < 0.1) {
+        line.style.display = "none";
+      }
+    });
   }
   // 设计稿的 1109 年标记由三段竖线和上下端帽组成，需与静态三角一起隐藏。
   originalGuideLine?.parentElement?.parentElement?.style.setProperty("display", "none");
@@ -5799,16 +5811,30 @@ function bindTimelineRange(svg) {
 
       const x = labelPositions[index];
 
-      const marker = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      marker.setAttribute("x1", String(startX));
-      marker.setAttribute("x2", String(x));
-      marker.setAttribute("y1", String(labelY - 6));
-      marker.setAttribute("y2", String(labelY - 1));
-      marker.setAttribute("stroke", "#563905");
-      marker.setAttribute("stroke-width", "0.6");
-      marker.setAttribute("opacity", "0.7");
-      marker.setAttribute("pointer-events", "none");
-      timelineDataLayer.appendChild(marker);
+      // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
+      const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      separator.setAttribute("x1", String(startX));
+      separator.setAttribute("x2", String(startX));
+      separator.setAttribute("y1", String(labelY - 7));
+      separator.setAttribute("y2", String(labelY + 3));
+      separator.setAttribute("stroke", "#563905");
+      separator.setAttribute("stroke-width", "0.6");
+      separator.setAttribute("opacity", "0.72");
+      separator.setAttribute("pointer-events", "none");
+      timelineDataLayer.appendChild(separator);
+
+      if (Math.abs(startX - x) > 0.5) {
+        const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        leader.setAttribute("x1", String(startX));
+        leader.setAttribute("x2", String(x));
+        leader.setAttribute("y1", String(labelY - 6));
+        leader.setAttribute("y2", String(labelY - 2));
+        leader.setAttribute("stroke", "#563905");
+        leader.setAttribute("stroke-width", "0.45");
+        leader.setAttribute("opacity", "0.5");
+        leader.setAttribute("pointer-events", "none");
+        timelineDataLayer.appendChild(leader);
+      }
 
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-44");
