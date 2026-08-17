@@ -36,6 +36,7 @@ test("保存并恢复当前视图、机构和时间状态", () => {
     compositionFocusId: 174,
     selectedCategory: "中央机构",
     spaceAwareExpansion: false,
+    hierarchyAnimationEnabled: true,
   };
 
   assert.equal(writeCanvasState(state, storage), true);

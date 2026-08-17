@@ -46,6 +46,10 @@ import {
   toggleInstitutionGroupIds,
 } from "../utils/hierarchy_expansion";
 import {
+  HIERARCHY_HEADER_LAYOUT,
+  hierarchyAnimationShouldRun,
+} from "../utils/hierarchy_animation";
+import {
   resolveHierarchyContext,
   resolveVisibleSelection,
 } from "../utils/hierarchy_navigation";
@@ -170,6 +174,7 @@ const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
 const inlineDetailOfficialId = ref(null);
 const spaceAwareExpansion = ref(initialState.spaceAwareExpansion ?? false);
+const hierarchyAnimationEnabled = ref(false);
 const svgCache = new Map();
 const hierarchyTemplateCache = new WeakMap();
 const yearSnapshotCache = new Map();
@@ -4489,7 +4494,10 @@ function bindSpaceAwareExpansionControl(svg) {
     const ns = "http://www.w3.org/2000/svg";
     control = document.createElementNS(ns, "g");
     control.classList.add("space-aware-expansion-control");
-    control.setAttribute("transform", "translate(1392 73)");
+    control.setAttribute(
+      "transform",
+      `translate(${HIERARCHY_HEADER_LAYOUT.spaceControlX} ${HIERARCHY_HEADER_LAYOUT.settingsY})`,
+    );
     control.setAttribute("role", "switch");
     control.setAttribute("tabindex", "0");
     control.style.cursor = "pointer";
@@ -4498,8 +4506,8 @@ function bindSpaceAwareExpansionControl(svg) {
     outline.dataset.controlPart = "outline";
     outline.setAttribute("x", "0");
     outline.setAttribute("y", "0");
-    outline.setAttribute("width", "126");
-    outline.setAttribute("height", "36");
+    outline.setAttribute("width", String(HIERARCHY_HEADER_LAYOUT.controlWidth));
+    outline.setAttribute("height", String(HIERARCHY_HEADER_LAYOUT.settingsHeight));
     outline.setAttribute("fill", "#563905");
     outline.setAttribute("stroke", "#563905");
 
@@ -4584,6 +4592,114 @@ function bindSpaceAwareExpansionControl(svg) {
     })
     .on("mouseleave.space-aware-expansion", sync);
   svg.__syncSpaceAwareExpansionControl = sync;
+  sync();
+}
+
+function bindHierarchyAnimationControl(svg) {
+  let control = svg.querySelector(".hierarchy-animation-control");
+  if (!control) {
+    const ns = "http://www.w3.org/2000/svg";
+    control = document.createElementNS(ns, "g");
+    control.classList.add("hierarchy-animation-control");
+    control.setAttribute(
+      "transform",
+      `translate(${HIERARCHY_HEADER_LAYOUT.animationControlX} ${HIERARCHY_HEADER_LAYOUT.settingsY})`,
+    );
+    control.setAttribute("role", "switch");
+    control.setAttribute("tabindex", "0");
+    control.style.cursor = "pointer";
+
+    const outline = document.createElementNS(ns, "rect");
+    outline.dataset.controlPart = "outline";
+    outline.setAttribute("x", "0");
+    outline.setAttribute("y", "0");
+    outline.setAttribute("width", String(HIERARCHY_HEADER_LAYOUT.controlWidth));
+    outline.setAttribute("height", String(HIERARCHY_HEADER_LAYOUT.settingsHeight));
+    outline.setAttribute("fill", "#563905");
+    outline.setAttribute("stroke", "#563905");
+
+    const track = document.createElementNS(ns, "rect");
+    track.dataset.controlPart = "track";
+    track.setAttribute("x", "12");
+    track.setAttribute("y", "11.5");
+    track.setAttribute("width", "30");
+    track.setAttribute("height", "13");
+    track.setAttribute("rx", "6.5");
+    track.setAttribute("fill", "none");
+    track.setAttribute("stroke", "#563905");
+    track.setAttribute("stroke-width", "0.9");
+
+    const thumb = document.createElementNS(ns, "circle");
+    thumb.dataset.controlPart = "thumb";
+    thumb.setAttribute("cy", "18");
+    thumb.setAttribute("r", "4.5");
+    thumb.setAttribute("fill", "#563905");
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", "cls-49");
+    label.setAttribute("x", "51");
+    label.setAttribute("y", "18");
+    label.setAttribute("dominant-baseline", "central");
+    label.textContent = "层级动画";
+
+    const title = document.createElementNS(ns, "title");
+    control.append(outline, track, thumb, label, title);
+    svg.appendChild(control);
+  }
+
+  const sync = () => {
+    const reduceMotion = Boolean(reduceMotionQuery?.matches);
+    const enabled = hierarchyAnimationEnabled.value && !reduceMotion;
+    const outline = control.querySelector("[data-control-part='outline']");
+    const track = control.querySelector("[data-control-part='track']");
+    const thumb = control.querySelector("[data-control-part='thumb']");
+    control.style.display = viewMode.value === "hierarchy" ? "" : "none";
+    control.style.cursor = reduceMotion ? "not-allowed" : "pointer";
+    control.setAttribute("tabindex", reduceMotion ? "-1" : "0");
+    control.setAttribute("aria-disabled", String(reduceMotion));
+    control.setAttribute("aria-checked", String(enabled));
+    control.setAttribute(
+      "aria-label",
+      reduceMotion
+        ? "系统已开启减少动态，层级动画不可用"
+        : (enabled ? "关闭层级动画，时间切换立即完成" : "开启层级动画，展示机构退出、移动和新增")
+    );
+    outline.setAttribute("fill-opacity", enabled ? "0.12" : "0");
+    outline.setAttribute("stroke-width", enabled ? "1.35" : "0.8");
+    track.setAttribute("fill", enabled ? "#563905" : "none");
+    track.setAttribute("fill-opacity", enabled ? "0.16" : "0");
+    thumb.setAttribute("cx", enabled ? "35.5" : "18.5");
+    thumb.setAttribute("fill-opacity", reduceMotion ? "0.38" : "1");
+    control.querySelector("title").textContent = reduceMotion
+      ? "系统减少动态已开启：年份切换将直接完成"
+      : (enabled
+        ? "层级动画已开启：依次展示退出、平移和新增"
+        : "层级动画已关闭：年份切换直接完成");
+  };
+
+  const toggle = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (reduceMotionQuery?.matches) return;
+    hierarchyAnimationEnabled.value = !hierarchyAnimationEnabled.value;
+    if (!hierarchyAnimationEnabled.value) {
+      cancelHierarchyTransition(svg);
+      refreshTemplate();
+    }
+    sync();
+  };
+  d3.select(control)
+    .on("click.hierarchy-animation", toggle)
+    .on("keydown.hierarchy-animation", (event) => {
+      if (event.key === "Enter" || event.key === " ") toggle(event);
+    })
+    .on("mouseenter.hierarchy-animation", () => {
+      if (!reduceMotionQuery?.matches) {
+        control.querySelector("[data-control-part='outline']")?.setAttribute("stroke-width", "1.35");
+      }
+    })
+    .on("mouseleave.hierarchy-animation", sync);
+  svg.__syncHierarchyAnimationControl = sync;
   sync();
 }
 
@@ -4672,17 +4788,17 @@ function ensureTimetreeViewControl(svg) {
 }
 
 function ensureEvolutionViewControl(svg) {
-  // 层级模式中“空间展开”占据中间位置；其他模式隐藏该控件后，
-  // 将三个视图标签收拢成与原稿层级/编制按钮等距的一组。
-  const layout = viewMode.value === "hierarchy"
-    ? { surfaceX: 1248.5, labelX: 1311.4 }
-    : { surfaceX: 1398.5, labelX: 1461.4 };
+  // 三个视图始终等距排列；层级设置独立放在上一行，不再挤占视图位置。
+  const layout = {
+    surfaceX: HIERARCHY_HEADER_LAYOUT.evolutionViewX,
+    labelX: HIERARCHY_HEADER_LAYOUT.evolutionViewLabelX,
+  };
   let control = svg.querySelector(".evolution-view-control");
   if (!control) {
     control = svgElement("g", { class: "evolution-view-control" });
     const surface = svgElement("rect", {
       x: layout.surfaceX,
-      y: 80,
+      y: HIERARCHY_HEADER_LAYOUT.viewRowY,
       width: 125.8,
       height: 26,
       rx: 2.7,
@@ -4914,6 +5030,7 @@ function bindTemplateControls(svg) {
     });
 
   bindSpaceAwareExpansionControl(svg);
+  bindHierarchyAnimationControl(svg);
 
 }
 
@@ -5231,7 +5348,13 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
   }
 
   const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
-  const oldFrame = viewMode.value === "hierarchy" && svg
+  const animateHierarchy = hierarchyAnimationShouldRun({
+    enabled: hierarchyAnimationEnabled.value,
+    viewMode: viewMode.value,
+    hasSvg: Boolean(svg),
+    reduceMotion: Boolean(reduceMotionQuery?.matches),
+  });
+  const oldFrame = animateHierarchy
     ? captureHierarchyFrame(svg, { cloneNodes: true })
     : null;
   const fromSnapshot = yearSnapshot(oldYear);
@@ -5579,6 +5702,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   svg.__syncTimelineSelectionStyle?.();
   svg.__moveTimelineSelection?.();
   svg.__syncSpaceAwareExpansionControl?.();
+  svg.__syncHierarchyAnimationControl?.();
 }
 
 function scheduleTimelineRefresh({ rebindStatic = false } = {}) {
@@ -5820,7 +5944,12 @@ onUnmounted(() => {
   outline: none;
 }
 
-.svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]) {
+.svg-mount :deep(.hierarchy-animation-control:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.space-aware-expansion-control:focus-visible [data-control-part="outline"]),
+.svg-mount :deep(.hierarchy-animation-control:focus-visible [data-control-part="outline"]) {
   stroke-width: 1.35;
   stroke-dasharray: 3 2;
 }
