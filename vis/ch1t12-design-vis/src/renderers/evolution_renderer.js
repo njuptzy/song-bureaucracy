@@ -1484,18 +1484,6 @@ function renderMain(layer, layout, options) {
         x1: segment.startX, y1: segment.y, x2: segment.endX, y2: segment.y,
         stroke: COLORS.line, "stroke-width": 2.1,
       }));
-      if (!segment.openStart) {
-        segmentGroup.appendChild(svgElement("line", {
-          x1: segment.startX, y1: segment.y - 7, x2: segment.startX, y2: segment.y + 7,
-          stroke: COLORS.line, "stroke-width": 1,
-        }));
-      }
-      if (!segment.openEnd) {
-        segmentGroup.appendChild(svgElement("line", {
-          x1: segment.endX, y1: segment.y - 7, x2: segment.endX, y2: segment.y + 7,
-          stroke: COLORS.line, "stroke-width": 1,
-        }));
-      }
       group.appendChild(segmentGroup);
     }
     renderLaneLabel(
