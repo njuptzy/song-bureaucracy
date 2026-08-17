@@ -55,6 +55,24 @@ export function evolutionLaneIdentityTemplate(entityType) {
     : LANE_IDENTITY_TEMPLATES.institution;
 }
 
+export function evolutionLaneIdentityLayout(entityType, height, labelX, labelMaxWidth) {
+  const template = evolutionLaneIdentityTemplate(entityType);
+  const scale = height / template.bounds.height;
+  const width = template.bounds.width * scale;
+  const institution = LANE_IDENTITY_TEMPLATES.institution;
+  const institutionWidth = institution.bounds.width * (height / institution.bounds.height);
+  const centerX = labelX + Math.max(
+    institutionWidth / 2,
+    labelMaxWidth - 8 - institutionWidth / 2,
+  );
+  return {
+    scale,
+    width,
+    centerX,
+    x: centerX - width / 2,
+  };
+}
+
 function svgElement(tag, attrs = {}) {
   const element = document.createElementNS(SVG_NS, tag);
   for (const [name, value] of Object.entries(attrs)) {
@@ -603,9 +621,12 @@ export function laneAnomalySummary(anomalies, maxChars = Number.POSITIVE_INFINIT
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
   const template = evolutionLaneIdentityTemplate(lane.type);
-  const scale = height / template.bounds.height;
-  const width = template.bounds.width * scale;
-  const x = lane.labelX + Math.max(0, lane.labelMaxWidth - width - 8);
+  const { scale, width, x } = evolutionLaneIdentityLayout(
+    lane.type,
+    height,
+    lane.labelX,
+    lane.labelMaxWidth,
+  );
   const y = lane.y - height / 2;
   const group = svgElement("g", {
     class: `evolution-lane-label evolution-lane-label--${lane.type === "官职" ? "official" : "institution"}${selected ? " is-selected" : ""}`,

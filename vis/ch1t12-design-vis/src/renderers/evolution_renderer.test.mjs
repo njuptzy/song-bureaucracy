@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  evolutionLaneIdentityLayout,
   evolutionLaneIdentityTemplate,
   eventStemGeometry,
   laneAnomalySummary,
@@ -26,6 +27,15 @@ test("演变轨道官职图标直接复用原设计 SVG 的官职框和帽形 po
     bodyStrokeWidth: 0.51,
     capStrokeWidth: 0.84,
   });
+});
+
+test("机构牌和官职牌使用同一条竖直中心轴", () => {
+  const institution = evolutionLaneIdentityLayout("机构", 102, 520, 112);
+  const official = evolutionLaneIdentityLayout("官职", 102, 520, 112);
+
+  assert.equal(institution.centerX, official.centerX);
+  assert.equal(institution.x + institution.width / 2, institution.centerX);
+  assert.equal(official.x + official.width / 2, official.centerX);
 });
 
 function endpoint(x, y, iconType = "record") {
