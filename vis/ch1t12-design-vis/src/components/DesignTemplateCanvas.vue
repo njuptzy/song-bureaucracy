@@ -5741,14 +5741,47 @@ function bindTimelineRange(svg) {
       timelineDataLayer.appendChild(label);
     }
 
-    // 57 个年号全部保留。标签只做视觉避让，横坐标仍严格取年号数据的起始年；
-    // 年号区间则用细线表达，避免把相邻年号合并成一个不存在的结论。
-    // 皇帝标签的基线是 964.71；年号必须全部落在其下方、年份刻度上方。
-    // 这里压缩为四条窄行，仍保留每一条年号记录，不把年号移回事件标题区。
-    const labelRows = [982.24, 989.4, 996.6, 1003.8];
-    const rowEndX = labelRows.map(() => -Infinity);
-    const rowEndWidth = labelRows.map(() => 0);
-    for (const era of eraRecords) {
+    // 57 个年号全部保留。原稿的帝系标签基线是 964.71，年号统一放在其下方
+    // 的 982.24 基线；不再用多行避让破坏时间轴的横向结构。若密集年号的
+    // 起点距离不足，只把文字沿同一基线轻微错开，并用细引线回到真实起点。
+    const labelY = 982.24;
+    const labelFontSize = 6.4;
+    const labelGap = 1.2;
+    const labelWidths = eraRecords.map((era) => Math.max(
+      10,
+      era.name.length * labelFontSize * 0.82,
+    ));
+    const labelPositions = eraRecords.map((era) => yearScale(era.start));
+    for (let pass = 0; pass < 5; pass += 1) {
+      labelPositions[0] = Math.max(
+        labelPositions[0],
+        TIMELINE_X_MIN + labelWidths[0] / 2,
+      );
+      for (let index = 1; index < labelPositions.length; index += 1) {
+        labelPositions[index] = Math.max(
+          labelPositions[index],
+          labelPositions[index - 1]
+            + (labelWidths[index - 1] + labelWidths[index]) / 2
+            + labelGap,
+        );
+      }
+      const last = labelPositions.length - 1;
+      labelPositions[last] = Math.min(
+        labelPositions[last],
+        TIMELINE_X_MAX - labelWidths[last] / 2,
+      );
+      for (let index = last - 1; index >= 0; index -= 1) {
+        labelPositions[index] = Math.min(
+          labelPositions[index],
+          labelPositions[index + 1]
+            - (labelWidths[index] + labelWidths[index + 1]) / 2
+            - labelGap,
+        );
+      }
+    }
+
+    for (let index = 0; index < eraRecords.length; index += 1) {
+      const era = eraRecords[index];
       const startX = yearScale(era.start);
       const endX = yearScale(Math.min(YEAR_MAX + 1, era.end + 1));
       const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -5764,20 +5797,13 @@ function bindTimelineRange(svg) {
       band.appendChild(bandTitle);
       timelineDataLayer.appendChild(band);
 
-      const x = startX;
-      const width = Math.max(13, era.name.length * 7.2);
-      let rowIndex = rowEndX.findIndex((end, index) => (
-        x - width / 2 >= end + rowEndWidth[index] / 2 + 1.5
-      ));
-      if (rowIndex < 0) rowIndex = rowEndX.indexOf(Math.min(...rowEndX));
-      rowEndX[rowIndex] = x;
-      rowEndWidth[rowIndex] = width;
+      const x = labelPositions[index];
 
       const marker = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      marker.setAttribute("x1", String(x));
+      marker.setAttribute("x1", String(startX));
       marker.setAttribute("x2", String(x));
-      marker.setAttribute("y1", String(labelRows[rowIndex] - 6));
-      marker.setAttribute("y2", String(labelRows[rowIndex] + 1));
+      marker.setAttribute("y1", String(labelY - 6));
+      marker.setAttribute("y2", String(labelY - 1));
       marker.setAttribute("stroke", "#563905");
       marker.setAttribute("stroke-width", "0.6");
       marker.setAttribute("opacity", "0.7");
@@ -5787,10 +5813,10 @@ function bindTimelineRange(svg) {
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-44");
       label.setAttribute("x", String(x));
-      label.setAttribute("y", String(labelRows[rowIndex]));
+      label.setAttribute("y", String(labelY));
       label.setAttribute("text-anchor", "middle");
       label.setAttribute("pointer-events", "none");
-      label.style.fontSize = "7.2px";
+      label.style.fontSize = `${labelFontSize}px`;
       label.textContent = era.name;
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
       title.textContent = `${era.name}：${era.start}—${era.end}年`;
