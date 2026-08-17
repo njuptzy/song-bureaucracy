@@ -365,7 +365,15 @@ export function changesForEntities(index, entityIds) {
 }
 
 export function changeSummaryForEntities(index, entityIds, year) {
-  const changes = changesForEntities(index, entityIds);
+  const keys = new Set();
+  const changes = [];
+  for (const entityId of entityIds || []) {
+    for (const change of changesForEntity(index, entityId)) {
+      if (keys.has(change.key)) continue;
+      keys.add(change.key);
+      changes.push(change);
+    }
+  }
   const pastChanges = changes.filter((change) => change.eventYear < year);
   const currentChanges = changes.filter((change) => change.eventYear === year);
   const futureChanges = changes.filter((change) => change.eventYear > year);
