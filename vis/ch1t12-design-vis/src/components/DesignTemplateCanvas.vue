@@ -1693,7 +1693,7 @@ function renderDynamicHierarchy(svg) {
   const area = { left: 500, right: 1830, top: 130, bottom: 850 };
   // 变化气泡位于子节点上方；为真实层级之间预留独立空隙，
   // 避免第三层气泡侵入第二层节点的底部区域。
-  const depthGap = 160;
+  const depthGap = 150;
   const expandedComposition = expandedDetailId.value != null
     ? inlineCompositionGeometry(expandedDetailId.value)
     : null;
