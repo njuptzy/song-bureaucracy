@@ -31,6 +31,30 @@ const RELATION_STROKE = {
   selectedOpacity: 1,
 };
 
+// Extracted verbatim from the original 4-01 design SVG. Keep these source
+// coordinates intact: evolution lane identities must reuse the design assets,
+// not approximate their silhouettes with newly drawn paths.
+const LANE_IDENTITY_TEMPLATES = Object.freeze({
+  institution: Object.freeze({
+    bounds: Object.freeze({ x: 747.3, y: 160.96, width: 33.22, height: 126.85 }),
+    points: "776.76 162.84 776.76 160.96 768.66 160.96 759.16 160.96 751.06 160.96 751.06 162.84 751.05 164.72 749.18 164.72 747.3 164.72 747.3 287.81 780.52 287.81 780.52 164.72 778.64 164.72 776.76 164.72 776.76 162.84",
+    strokeWidth: 2,
+  }),
+  official: Object.freeze({
+    bounds: Object.freeze({ x: 794.72, y: 168.45, width: 15.42, height: 110.6 }),
+    body: Object.freeze({ x: 794.72, y: 177.46, width: 15.42, height: 101.59 }),
+    capPoints: "796.71 169.86 798.15 168.45 807.28 168.45 808.73 169.86 808.73 175.37 796.71 175.37 796.71 169.86",
+    bodyStrokeWidth: 0.51,
+    capStrokeWidth: 0.84,
+  }),
+});
+
+export function evolutionLaneIdentityTemplate(entityType) {
+  return entityType === "官职"
+    ? LANE_IDENTITY_TEMPLATES.official
+    : LANE_IDENTITY_TEMPLATES.institution;
+}
+
 function svgElement(tag, attrs = {}) {
   const element = document.createElementNS(SVG_NS, tag);
   for (const [name, value] of Object.entries(attrs)) {
@@ -578,35 +602,71 @@ export function laneAnomalySummary(anomalies, maxChars = Number.POSITIVE_INFINIT
 
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
-  // 书脊签条：一条墨色竖杠 + 竖排机构名，无框，给车道让出视觉重量。
-  const width = 20;
+  const template = evolutionLaneIdentityTemplate(lane.type);
+  const scale = height / template.bounds.height;
+  const width = template.bounds.width * scale;
   const x = lane.labelX + Math.max(0, lane.labelMaxWidth - width - 8);
   const y = lane.y - height / 2;
   const group = svgElement("g", {
-    class: `evolution-lane-label${selected ? " is-selected" : ""}`,
+    class: `evolution-lane-label evolution-lane-label--${lane.type === "官职" ? "official" : "institution"}${selected ? " is-selected" : ""}`,
     "data-entity-id": lane.entityId,
+    "data-entity-type": lane.type,
   });
-  group.appendChild(svgElement("line", {
-    x1: x + 3, y1: y, x2: x + 3, y2: y + height,
-    stroke: selected ? COLORS.selected : COLORS.line,
-    "stroke-width": selected ? 3.4 : 2.4,
-    "stroke-linecap": "round",
-    "stroke-opacity": selected ? 1 : 0.85,
-    "pointer-events": "none",
-  }));
-  const maxChars = Math.max(2, Math.floor((height - 8) / 10.5) + 1);
-  appendVerticalText(group, lane.title, {
-    x: x + 12,
-    y: y + 5,
+
+  const sourceTransform = `translate(${x} ${y}) scale(${scale}) translate(${-template.bounds.x} ${-template.bounds.y})`;
+  if (lane.type === "官职") {
+    group.appendChild(svgElement("rect", {
+      ...template.body,
+      transform: sourceTransform,
+      fill: COLORS.ink,
+      "fill-opacity": selected ? 0.17 : 0.1,
+      stroke: selected ? COLORS.selected : COLORS.olive,
+      "stroke-width": selected ? template.bodyStrokeWidth * 1.8 : template.bodyStrokeWidth,
+      "pointer-events": "none",
+    }));
+    group.appendChild(svgElement("polygon", {
+      points: template.capPoints,
+      transform: sourceTransform,
+      fill: "#878089",
+      "fill-opacity": selected ? 0.82 : 0.6,
+      stroke: selected ? COLORS.selected : COLORS.line,
+      "stroke-width": selected ? template.capStrokeWidth * 1.45 : template.capStrokeWidth,
+      "pointer-events": "none",
+    }));
+  } else {
+    group.appendChild(svgElement("polygon", {
+      points: template.points,
+      transform: sourceTransform,
+      fill: selected ? COLORS.ink : "none",
+      "fill-opacity": selected ? 0.12 : 0,
+      stroke: selected ? COLORS.selected : COLORS.line,
+      "stroke-width": selected ? template.strokeWidth * 1.35 : template.strokeWidth,
+      "pointer-events": "none",
+    }));
+  }
+
+  const bodyTop = lane.type === "官职"
+    ? y + (template.body.y - template.bounds.y) * scale
+    : y + 5 * scale;
+  const bodyBottom = lane.type === "官职"
+    ? y + (template.body.y + template.body.height - template.bounds.y) * scale
+    : y + height;
+  const textPitch = Math.min(10.5, Math.max(8, (bodyBottom - bodyTop - 6) / 6));
+  const maxChars = Math.max(2, Math.floor((bodyBottom - bodyTop - 8) / textPitch) + 1);
+  const displayTitle = shortened(lane.title, maxChars);
+  const textHeight = Math.max(0, (Array.from(displayTitle).length - 1) * textPitch);
+  appendVerticalText(group, displayTitle, {
+    x: x + width / 2,
+    y: bodyTop + (bodyBottom - bodyTop - textHeight) / 2,
     class: "evolution-lane-title",
     "text-anchor": "middle",
   }, {
     maxChars,
-    pitch: 10.5,
+    pitch: textPitch,
   });
-  // 无框后补一块透明命中区，保证整条签条可点。
+
   group.appendChild(svgElement("rect", {
-    x: x - 2, y, width: width + 6, height,
+    x: x - 3, y: y - 2, width: width + 6, height: height + 4,
     fill: "transparent", "pointer-events": "all",
   }));
   if (lane.anomalies?.length) {

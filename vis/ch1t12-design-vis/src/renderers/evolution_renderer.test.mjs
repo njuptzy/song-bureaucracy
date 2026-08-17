@@ -2,12 +2,31 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  evolutionLaneIdentityTemplate,
   eventStemGeometry,
   laneAnomalySummary,
   relationLabelOverride,
   relationPath,
   relationRouteOptions,
 } from "./evolution_renderer.js";
+
+test("演变轨道机构图标直接复用原设计 SVG 的尚书省 polygon", () => {
+  assert.deepEqual(evolutionLaneIdentityTemplate("机构"), {
+    bounds: { x: 747.3, y: 160.96, width: 33.22, height: 126.85 },
+    points: "776.76 162.84 776.76 160.96 768.66 160.96 759.16 160.96 751.06 160.96 751.06 162.84 751.05 164.72 749.18 164.72 747.3 164.72 747.3 287.81 780.52 287.81 780.52 164.72 778.64 164.72 776.76 164.72 776.76 162.84",
+    strokeWidth: 2,
+  });
+});
+
+test("演变轨道官职图标直接复用原设计 SVG 的官职框和帽形 polygon", () => {
+  assert.deepEqual(evolutionLaneIdentityTemplate("官职"), {
+    bounds: { x: 794.72, y: 168.45, width: 15.42, height: 110.6 },
+    body: { x: 794.72, y: 177.46, width: 15.42, height: 101.59 },
+    capPoints: "796.71 169.86 798.15 168.45 807.28 168.45 808.73 169.86 808.73 175.37 796.71 175.37 796.71 169.86",
+    bodyStrokeWidth: 0.51,
+    capStrokeWidth: 0.84,
+  });
+});
 
 function endpoint(x, y, iconType = "record") {
   return { x, y, timepointId: `${x}:${y}`, iconType };
