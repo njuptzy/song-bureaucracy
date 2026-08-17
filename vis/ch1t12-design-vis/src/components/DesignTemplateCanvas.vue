@@ -1722,14 +1722,14 @@ function renderDynamicHierarchy(svg) {
   const yearMarker = svgElement("g", { class: "hierarchy-year-marker" });
   const yearLabel = formatSongYearLabel(currentCanvasYear());
   // 原稿标题基线为 94.2，42.86px 字号的可见字框中轴约为 78；
-  // 使用固定中轴和 central 基线，避免字体异步测量把年号推到上端或画布外。
+  // 使用固定中轴和与原稿文字一致的 central 基线，避免年号贴到上端。
   const headerCenterY = 78;
   const yearText = svgElement("text", {
     class: "cls-49",
     x: 960,
     y: headerCenterY,
     "text-anchor": "middle",
-    "dominant-baseline": "middle",
+    "dominant-baseline": "central",
   });
   yearText.style.fontSize = "24px";
   yearText.style.fontWeight = "600";
