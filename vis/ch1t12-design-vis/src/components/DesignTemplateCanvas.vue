@@ -5813,28 +5813,13 @@ function bindTimelineRange(svg) {
 
       // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
       const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      separator.setAttribute("class", "cls-36");
       separator.setAttribute("x1", String(startX));
       separator.setAttribute("x2", String(startX));
-      separator.setAttribute("y1", String(labelY - 7));
-      separator.setAttribute("y2", String(labelY + 3));
-      separator.setAttribute("stroke", "#563905");
-      separator.setAttribute("stroke-width", "0.6");
-      separator.setAttribute("opacity", "0.72");
+      separator.setAttribute("y1", "973.55");
+      separator.setAttribute("y2", "984.96");
       separator.setAttribute("pointer-events", "none");
       timelineDataLayer.appendChild(separator);
-
-      if (Math.abs(startX - x) > 0.5) {
-        const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        leader.setAttribute("x1", String(startX));
-        leader.setAttribute("x2", String(x));
-        leader.setAttribute("y1", String(labelY - 6));
-        leader.setAttribute("y2", String(labelY - 2));
-        leader.setAttribute("stroke", "#563905");
-        leader.setAttribute("stroke-width", "0.45");
-        leader.setAttribute("opacity", "0.5");
-        leader.setAttribute("pointer-events", "none");
-        timelineDataLayer.appendChild(leader);
-      }
 
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-44");
