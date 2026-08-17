@@ -1724,6 +1724,10 @@ function renderDynamicHierarchy(svg) {
   const headerTitle = findTextAt(svg, 184.7, 94.2, 2);
   const headerBounds = elementBounds(headerTitle);
   const headerCenterY = headerBounds
+    && headerBounds.height > 1
+    && Number.isFinite(headerBounds.y)
+    && headerBounds.y > 20
+    && Number.isFinite(headerBounds.height)
     ? headerBounds.y + headerBounds.height / 2
     : 72;
   const yearText = svgElement("text", {
