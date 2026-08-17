@@ -2620,7 +2620,7 @@ function ensureGlobalUndoControl(svg) {
   if (label) label.style.opacity = active ? "1" : "0.34";
   control.setAttribute("role", "button");
   control.setAttribute("tabindex", active ? "0" : "-1");
-  control.setAttribute("aria-label", "撤回上一步修改");
+  control.setAttribute("aria-label", "撤回上一步界面操作");
   control.setAttribute("aria-disabled", active ? "false" : "true");
   control.style.cursor = active ? "pointer" : "default";
   control.style.pointerEvents = active ? "all" : "none";

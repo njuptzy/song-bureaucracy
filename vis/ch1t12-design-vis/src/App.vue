@@ -2,14 +2,15 @@
   <main ref="applicationShellRef" class="application-shell">
     <DesignTemplateCanvas
       v-if="data"
+      :key="canvasInstanceKey"
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
-      :global-undo-available="Boolean(!revisionBusy && revisionState?.draft?.can_undo)"
+      :global-undo-available="Boolean(!revisionBusy && navigationHistory.length)"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"
       @detail-entity-change="handleDetailEntityChange"
-      @global-undo="workspaceAction('undo')"
+      @global-undo="undoCanvasNavigation"
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
@@ -64,6 +65,12 @@ const revisionBusy = ref(false);
 const editMode = ref(false);
 const selectedFact = ref(null);
 const commits = ref([]);
+// 全局撤回记录界面导航，不调用修订工作区的数据库撤回接口。
+const navigationHistory = ref([]);
+const canvasInstanceKey = ref(0);
+let canvasStateEventSeen = false;
+let pendingNavigationRestoreSignature = "";
+const NAVIGATION_HISTORY_LIMIT = 100;
 const connectionMode = ref(false);
 const connectSource = ref(null);
 const connectTarget = ref(null);
@@ -105,9 +112,52 @@ const revisionPanelVisible = computed(() => {
 });
 
 function handleCanvasStateChange(state) {
-  canvasState.value = state;
-  writeCanvasState(state);
+  const nextState = state || {};
+  const nextSignature = JSON.stringify(nextState);
+  const previousState = canvasState.value;
+  const previousSignature = previousState ? JSON.stringify(previousState) : "";
+
+  // 撤回会重建画布；重建后的第一次同步就是目标状态，不能再次入栈。
+  if (pendingNavigationRestoreSignature) {
+    if (nextSignature === pendingNavigationRestoreSignature) {
+      pendingNavigationRestoreSignature = "";
+    }
+    canvasStateEventSeen = true;
+    canvasState.value = nextState;
+    writeCanvasState(nextState);
+    updateRevisionPanelGeometry();
+    return;
+  }
+
+  // 首次挂载只建立当前状态，不生成一条“撤回到空状态”的记录。
+  if (!canvasStateEventSeen) {
+    canvasStateEventSeen = true;
+    canvasState.value = nextState;
+    writeCanvasState(nextState);
+    updateRevisionPanelGeometry();
+    return;
+  }
+
+  if (previousState && nextSignature !== previousSignature) {
+    navigationHistory.value = [
+      ...navigationHistory.value,
+      JSON.parse(JSON.stringify(previousState)),
+    ].slice(-NAVIGATION_HISTORY_LIMIT);
+  }
+  canvasState.value = nextState;
+  writeCanvasState(nextState);
   updateRevisionPanelGeometry();
+}
+
+function undoCanvasNavigation() {
+  if (revisionBusy.value || !navigationHistory.value.length) return;
+  const previousState = navigationHistory.value.at(-1);
+  navigationHistory.value = navigationHistory.value.slice(0, -1);
+  pendingNavigationRestoreSignature = JSON.stringify(previousState);
+  canvasState.value = JSON.parse(JSON.stringify(previousState));
+  writeCanvasState(canvasState.value);
+  // initialState 只在画布创建时读取；递增 key 让画布按上一个状态重建。
+  canvasInstanceKey.value += 1;
 }
 
 function handleSelectionChange(selection) {
