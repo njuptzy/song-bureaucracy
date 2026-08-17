@@ -1722,7 +1722,7 @@ function renderDynamicHierarchy(svg) {
   const yearLabel = formatSongYearLabel(currentCanvasYear());
   const yearText = svgElement("text", {
     class: "cls-49",
-    x: 1165,
+    x: 960,
     y: 112,
     "text-anchor": "middle",
     "dominant-baseline": "middle",
