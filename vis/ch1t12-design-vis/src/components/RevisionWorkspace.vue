@@ -29,15 +29,6 @@
       >提交历史</button>
     </nav>
 
-    <button
-      type="button"
-      class="global-undo-command toolbar-command"
-      :disabled="busy || !state?.draft?.can_undo"
-      title="撤回上一步修改（所有视图可用）"
-      aria-label="撤回上一步修改"
-      @click="$emit('workspace-action', 'undo')"
-    >↶ 撤回上一步</button>
-
     <div v-if="state?.edit_locked" class="revision-lock" role="alert">
       {{ state.lock_reason }}
     </div>
@@ -537,10 +528,6 @@ button { color: inherit; }
 .toolbar-command:disabled { opacity: .45; cursor: not-allowed; }
 .command-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 6px; border: 1px solid currentColor; font-size: 11px; }
 .draft-count { display: inline-grid; min-width: 16px; height: 16px; margin-left: 7px; place-items: center; border: 1px solid currentColor; border-radius: 0; background: transparent; color: inherit; font-size: 9px; }
-.global-undo-command { position: absolute; top: 60px; right: 24px; display: inline-flex; height: 30px; align-items: center; border: 1px solid rgba(86,57,5,.42); padding: 0 11px; background: transparent; pointer-events: auto; }
-.global-undo-command:hover:not(:disabled) { border-color: rgba(86,57,5,.78); color: var(--taupe); }
-.global-undo-command:focus-visible { outline: 1px dashed rgba(86,57,5,.78); outline-offset: 2px; }
-.global-undo-command:disabled { opacity: .36; cursor: not-allowed; }
 .revision-lock, .connection-guide { position: absolute; top: 60px; right: 24px; pointer-events: auto; }
 .revision-lock { max-width: 440px; padding: 8px 12px; border-left: 3px solid #a0432e; background: rgba(245,243,236,.97); color: #7b2f20; }
 .connection-guide { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(86,57,5,.45); background: rgba(245,243,236,.96); }
