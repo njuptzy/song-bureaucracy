@@ -2150,15 +2150,32 @@ function renderDynamicHierarchy(svg) {
       !node.data.isVirtual && node.data.id === expandedDetailId.value
     ))
   );
-  if (expandedLayout && !panOverride) {
-    const detailLeft = expandedLayout.left + nextPanX;
-    const detailRight = expandedLayout.right + nextPanX;
-    const detailTop = expandedLayout.top + nextPanY;
-    const detailBottom = expandedLayout.bottom + nextPanY;
-    if (detailLeft < area.left) nextPanX += area.left - detailLeft;
-    if (detailRight > area.right) nextPanX -= detailRight - area.right;
-    if (detailTop < area.top) nextPanY += area.top - detailTop;
-    if (detailBottom > area.bottom) nextPanY -= detailBottom - area.bottom;
+  // 先独立算出新布局最终应该使用的 pan。切年过渡时，目标图层直接
+  // 使用这个最终值；旧节点副本再从旧屏幕坐标一次性平移到新屏幕坐标，
+  // 不会出现“先把整棵树向上推，再恢复”的第二段运动。
+  let targetPanX = nextPanX;
+  let targetPanY = nextPanY;
+  if (expandedLayout) {
+    const detailLeft = expandedLayout.left + targetPanX;
+    const detailRight = expandedLayout.right + targetPanX;
+    const detailTop = expandedLayout.top + targetPanY;
+    const detailBottom = expandedLayout.bottom + targetPanY;
+    if (detailLeft < area.left) targetPanX += area.left - detailLeft;
+    if (detailRight > area.right) targetPanX -= detailRight - area.right;
+    if (detailTop < area.top) targetPanY += area.top - detailTop;
+    if (detailBottom > area.bottom) targetPanY -= detailBottom - area.bottom;
+  }
+  targetPanX = Math.max(minPan, Math.min(maxPan, targetPanX));
+  targetPanY = Math.max(minPanY, Math.min(maxPanY, targetPanY));
+  svg.__dynamicHierarchyPanTarget = { x: targetPanX, y: targetPanY };
+  if (panOverride?.prepareTarget) {
+    nextPanX = targetPanX;
+    nextPanY = targetPanY;
+    svg.__dynamicHierarchyTransitionPrepared = true;
+  } else {
+    nextPanX = targetPanX;
+    nextPanY = targetPanY;
+    svg.__dynamicHierarchyTransitionPrepared = false;
   }
   applyHierarchyPan(nextPanX, nextPanY);
 
@@ -4979,6 +4996,8 @@ function cancelHierarchyTransition(svg) {
 function playHierarchyTransition(svg, oldFrame, changes) {
   cancelHierarchyTransition(svg);
   const revision = ++activeTransitionAnimation;
+  const transitionPrepared = Boolean(svg.__dynamicHierarchyTransitionPrepared);
+  svg.__dynamicHierarchyTransitionPrepared = false;
   const newFrame = captureHierarchyFrame(svg);
   newFrame.nodes.forEach((item, entityId) => {
     item.node = svg.querySelector(`.dynamic-tree-node[data-entity-id='${entityId}']`);
@@ -5027,10 +5046,17 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       targetId: Number(link.dataset.targetEntityId),
     }))
     .filter((link) => linkTouches(link, createdIdSet) || linkTouches(link, phaseTwoIdSet));
-  for (const link of newLinks) link.node.style.opacity = "0";
-  for (const entityId of [...movedCommonIds, ...createdIds]) {
-    const node = newFrame.nodes.get(entityId)?.node;
-    if (node) node.style.opacity = "0";
+  const allNewLinks = [...svg.querySelectorAll(".dynamic-tree-link[data-source-entity-id]")]
+    .map((node) => ({ node }));
+  const linksToReveal = transitionPrepared ? allNewLinks : newLinks;
+  for (const link of linksToReveal) link.node.style.opacity = "0";
+  const nodesToReveal = transitionPrepared
+    ? [...newFrame.nodes.values()]
+    : [...movedCommonIds, ...createdIds]
+      .map((entityId) => newFrame.nodes.get(entityId))
+      .filter(Boolean);
+  for (const item of nodesToReveal) {
+    if (item.node) item.node.style.opacity = "0";
   }
 
   for (const oldLink of oldFrame.links || []) {
@@ -5079,10 +5105,9 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .style("opacity", 0));
   }
 
-  for (const entityId of createdIds) {
-    const node = newFrame.nodes.get(entityId)?.node;
-    if (!node) continue;
-    trackTransition(d3.select(node)
+  for (const item of nodesToReveal) {
+    if (!item.node) continue;
+    trackTransition(d3.select(item.node)
       .transition("hierarchy-time")
       .delay(enterDelay)
       .duration(enterDuration)
@@ -5090,7 +5115,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .style("opacity", 1));
   }
 
-  for (const link of newLinks) {
+  for (const link of linksToReveal) {
     trackTransition(d3.select(link.node)
       .transition("hierarchy-time")
       .delay(enterDelay)
@@ -5148,10 +5173,10 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     activeTransitionCleanupFrame = window.requestAnimationFrame(() => {
       if (revision !== activeTransitionAnimation) return;
       activeTransitionCleanupFrame = null;
-      newFrame.nodes.forEach(({ node }) => {
+      nodesToReveal.forEach(({ node }) => {
         if (node) node.style.opacity = "1";
       });
-      newLinks.forEach((link) => link.node.style.removeProperty("opacity"));
+      linksToReveal.forEach((link) => link.node.style.removeProperty("opacity"));
       overlay.remove();
     });
   });
@@ -5209,7 +5234,11 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
     changeTrackEntityId.value = currentEntityId;
   }
   if (oldFrame && svg) {
-    hierarchyPanTransitionOverride = { x: hierarchyPanX, y: hierarchyPanY };
+    hierarchyPanTransitionOverride = {
+      x: hierarchyPanX,
+      y: hierarchyPanY,
+      prepareTarget: true,
+    };
     try {
       refreshTemplate();
     } finally {
