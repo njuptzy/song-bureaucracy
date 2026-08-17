@@ -4987,11 +4987,13 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     return;
   }
 
-  // 两阶段过渡：先处理退出内容，再让持续/新增内容直接走旧坐标到新坐标。
-  // hierarchyPanTransitionOverride 保证这段插值不会叠加一次额外的整体上移。
-  const exitDuration = 700;
-  const enterDelay = 780;
-  const enterDuration = 820;
+  // 三阶段过渡：退出 → 直接平移 → 新内容出现。
+  // hierarchyPanTransitionOverride 保证平移不会叠加一次额外的整体上移。
+  const exitDuration = 1400;
+  const moveDelay = exitDuration + 260;
+  const moveDuration = 1600;
+  const enterDelay = moveDelay + moveDuration + 260;
+  const enterDuration = 1400;
   const easing = d3.easeCubicOut;
   const transitionPromises = [];
   const trackTransition = (transition) => {
@@ -5041,9 +5043,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     if (!clone) continue;
     overlay.appendChild(clone);
     const transition = d3.select(clone).transition("hierarchy-time");
-    if (moves && !exits) transition.delay(enterDelay);
     trackTransition(transition
-      .duration(exits ? exitDuration : Math.min(enterDuration, 260))
+      .duration(exitDuration)
       .ease(easing)
       .style("opacity", 0));
   }
@@ -5059,8 +5060,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     // 直接从旧坐标插值到新坐标；不再先做一个额外的向上位移。
     trackTransition(d3.select(clone)
       .transition("hierarchy-time")
-      .delay(enterDelay)
-      .duration(enterDuration)
+      .delay(moveDelay)
+      .duration(moveDuration)
       .ease(easing)
       .attr("transform", matrixTransformValue(newItem.matrix)));
   }
@@ -5079,7 +5080,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .style("opacity", 0));
   }
 
-  for (const entityId of createdIds) {
+  const revealIds = [...new Set([...movedCommonIds, ...createdIds])];
+  for (const entityId of revealIds) {
     const node = newFrame.nodes.get(entityId)?.node;
     if (!node) continue;
     trackTransition(d3.select(node)
@@ -5114,8 +5116,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       overlay.insertBefore(line, overlay.firstChild);
       trackTransition(d3.select(line)
         .transition("hierarchy-time")
-        .delay(enterDelay)
-        .duration(enterDuration)
+        .delay(moveDelay)
+        .duration(moveDuration)
         .ease(easing)
         .attr("points", transitionLinePoints(newParent, newChild)));
     }
@@ -5135,8 +5137,8 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       overlay.insertBefore(line, overlay.firstChild);
       trackTransition(d3.select(line)
         .transition("hierarchy-time")
-        .delay(enterDelay)
-        .duration(enterDuration)
+        .delay(moveDelay)
+        .duration(moveDuration)
         .ease(easing)
         .attr("x2", target.x)
         .attr("y2", target.y));
