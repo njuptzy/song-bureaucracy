@@ -1522,7 +1522,19 @@ function renderSelectedActions(parent, options) {
   const buttonHeight = 21;
   const widths = actions.map((action) => Math.max(92, Array.from(action.label).length * 8.2 + 18));
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
-  let x = 1770 - totalWidth;
+  const left = 82;
+  const right = 475;
+  const headingWidth = 72;
+  const minButtonX = left + headingWidth;
+  // The left selector column has a clear row above “演变对象”. Keeping the
+  // actions there avoids the already dense title/legend/pager band on the
+  // right and keeps the controls close to the selected-object list.
+  let x = Math.max(minButtonX, right - totalWidth);
+  appendText(group, "选中操作", {
+    x: left,
+    y: 271.2,
+    class: "evolution-selection-actions-heading",
+  });
   actions.forEach((action, index) => {
     const width = widths[index];
     const button = svgElement("g", {
@@ -1533,7 +1545,7 @@ function renderSelectedActions(parent, options) {
     });
     button.appendChild(svgElement("rect", {
       x,
-      y: 207,
+      y: 257,
       width,
       height: buttonHeight,
       rx: 2.5,
@@ -1541,7 +1553,7 @@ function renderSelectedActions(parent, options) {
     }));
     appendText(button, action.label, {
       x: x + width / 2,
-      y: 221.2,
+      y: 271.2,
       class: "evolution-selection-action-label",
       "text-anchor": "middle",
     });
@@ -1592,7 +1604,6 @@ function renderMain(layer, layout, options) {
     y: 220,
     class: "evolution-entry-context",
   });
-  renderSelectedActions(group, options);
   renderLanePager(group, layout.laneWindow, options.handlers);
   group.appendChild(svgElement("line", {
     x1: 535, y1: 202, x2: 1770, y2: 202, stroke: COLORS.line, "stroke-width": 0.72,
@@ -1728,6 +1739,7 @@ export function renderEvolutionOverlay(svg, options) {
   const layer = svgElement("g", { class: "dynamic-evolution-layer" });
   layer.style.pointerEvents = "none";
   renderSelector(layer, options);
+  renderSelectedActions(layer, options);
   renderMain(layer, options.layout, options);
   svg.appendChild(layer);
   return layer;

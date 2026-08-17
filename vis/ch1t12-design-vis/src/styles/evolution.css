@@ -84,6 +84,12 @@
   pointer-events: none;
 }
 
+.dynamic-evolution-layer .evolution-selection-actions-heading {
+  fill: #866d6d;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 11px;
+}
+
 .dynamic-evolution-layer .evolution-selection-action {
   pointer-events: all;
 }
