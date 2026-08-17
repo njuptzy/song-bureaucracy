@@ -7,6 +7,7 @@ import {
   horizontalRangesFit,
   panFromScrollbarOffset,
   panScrollbarGeometry,
+  relativeAffineMatrix,
   virtualBusRange,
 } from "./hierarchy_layout.js";
 
@@ -60,4 +61,26 @@ test("机构树溢出时滚动条覆盖完整平移范围", () => {
   assert.equal(left.thumbOffset, 0);
   assert.equal(right.thumbOffset, right.thumbTravel);
   assert.equal(panFromScrollbarOffset(right.thumbTravel, right.thumbTravel, -1000, 0), -1000);
+});
+
+test("过渡节点矩阵移除根 SVG 已包含的缩放与居中偏移", () => {
+  const rootMatrix = { a: 0.5, b: 0, c: 0, d: 0.5, e: 100, f: 50 };
+  const elementMatrix = { a: 0.5, b: 0, c: 0, d: 0.5, e: 250, f: 150 };
+
+  assert.deepEqual(relativeAffineMatrix(rootMatrix, elementMatrix), {
+    a: 1,
+    b: 0,
+    c: 0,
+    d: 1,
+    e: 300,
+    f: 200,
+  });
+});
+
+test("根 SVG 为单位矩阵时保留节点原始变换", () => {
+  const matrix = { a: 1, b: 0, c: 0, d: 1, e: 42, f: -18 };
+  assert.deepEqual(relativeAffineMatrix(
+    { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+    matrix,
+  ), matrix);
 });

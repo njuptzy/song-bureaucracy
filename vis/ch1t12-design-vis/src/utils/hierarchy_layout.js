@@ -56,3 +56,39 @@ export function panFromScrollbarOffset(offset, thumbTravel, minPan, maxPan) {
   const clampedOffset = Math.max(0, Math.min(thumbTravel, offset));
   return maxPan - clampedOffset / thumbTravel * (maxPan - minPan);
 }
+
+function matrixAttributes(matrix) {
+  return {
+    a: matrix.a,
+    b: matrix.b,
+    c: matrix.c,
+    d: matrix.d,
+    e: matrix.e,
+    f: matrix.f,
+  };
+}
+
+export function relativeAffineMatrix(rootMatrix, elementMatrix) {
+  if (!elementMatrix) return null;
+  if (!rootMatrix) return matrixAttributes(elementMatrix);
+  const determinant = rootMatrix.a * rootMatrix.d - rootMatrix.b * rootMatrix.c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) {
+    return matrixAttributes(elementMatrix);
+  }
+  const inverse = {
+    a: rootMatrix.d / determinant,
+    b: -rootMatrix.b / determinant,
+    c: -rootMatrix.c / determinant,
+    d: rootMatrix.a / determinant,
+    e: (rootMatrix.c * rootMatrix.f - rootMatrix.d * rootMatrix.e) / determinant,
+    f: (rootMatrix.b * rootMatrix.e - rootMatrix.a * rootMatrix.f) / determinant,
+  };
+  return {
+    a: inverse.a * elementMatrix.a + inverse.c * elementMatrix.b,
+    b: inverse.b * elementMatrix.a + inverse.d * elementMatrix.b,
+    c: inverse.a * elementMatrix.c + inverse.c * elementMatrix.d,
+    d: inverse.b * elementMatrix.c + inverse.d * elementMatrix.d,
+    e: inverse.a * elementMatrix.e + inverse.c * elementMatrix.f + inverse.e,
+    f: inverse.b * elementMatrix.e + inverse.d * elementMatrix.f + inverse.f,
+  };
+}

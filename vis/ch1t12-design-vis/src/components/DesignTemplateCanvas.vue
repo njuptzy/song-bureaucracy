@@ -31,6 +31,7 @@ import {
   horizontalRangesFit,
   panFromScrollbarOffset,
   panScrollbarGeometry,
+  relativeAffineMatrix,
   virtualBusRange,
 } from "../utils/hierarchy_layout";
 import {
@@ -4872,17 +4873,6 @@ function bindTemplateControls(svg) {
 
 }
 
-function matrixAttributes(matrix) {
-  return {
-    a: matrix.a,
-    b: matrix.b,
-    c: matrix.c,
-    d: matrix.d,
-    e: matrix.e,
-    f: matrix.f,
-  };
-}
-
 function matrixTransformValue(matrix) {
   return `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`;
 }
@@ -4901,24 +4891,24 @@ function transformedCenter(node, matrix) {
 
 function captureHierarchyFrame(svg, { cloneNodes = false } = {}) {
   const nodes = new Map();
+  const rootMatrix = svg.getCTM?.();
   svg.querySelectorAll(".dynamic-tree-node[data-entity-id]").forEach((node) => {
     const entityId = Number(node.dataset.entityId);
-    const matrix = node.getCTM?.();
+    const matrix = relativeAffineMatrix(rootMatrix, node.getCTM?.());
     if (!Number.isFinite(entityId) || !matrix) return;
-    const normalizedMatrix = matrixAttributes(matrix);
     nodes.set(entityId, {
       entityId,
-      matrix: normalizedMatrix,
-      center: transformedCenter(node, normalizedMatrix),
+      matrix,
+      center: transformedCenter(node, matrix),
       cloneSource: cloneNodes ? node : null,
     });
   });
   const links = cloneNodes
     ? [...svg.querySelectorAll(".dynamic-tree-link[data-source-entity-id]")].map((link) => {
-      const matrix = link.getCTM?.();
+      const matrix = relativeAffineMatrix(rootMatrix, link.getCTM?.());
       return matrix ? {
         cloneSource: link,
-        matrix: matrixAttributes(matrix),
+        matrix,
         sourceId: Number(link.dataset.sourceEntityId),
         targetId: Number(link.dataset.targetEntityId),
       } : null;
