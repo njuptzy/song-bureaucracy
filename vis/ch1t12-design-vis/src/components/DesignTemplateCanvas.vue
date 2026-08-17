@@ -175,6 +175,7 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
+let hierarchyPanTransitionOverride = null;
 let expandedInstitutionGroupIds = [];
 let lastExpandedInstitutionGroupId = null;
 let expandedSubordinateGroupIds = [];
@@ -2032,8 +2033,18 @@ function renderDynamicHierarchy(svg) {
     }
   };
   const applyHierarchyPan = (nextPanX, nextPanY = hierarchyPanY) => {
-    hierarchyPanX = Math.max(minPan, Math.min(maxPan, nextPanX));
-    hierarchyPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
+    // 切年过渡必须沿用切换前的画布偏移。新年份的内容范围不同，
+    // 如果此处立即按新范围 clamp，会在正式节点生成的瞬间把整棵树
+    // 向上/向下推一段距离，过渡层随后只能表现为“最后一帧跳动”。
+    // 过渡结束后 hierarchyPanTransitionOverride 已清空，用户拖拽和
+    // 滚轮仍然走正常边界裁剪。
+    if (hierarchyPanTransitionOverride) {
+      hierarchyPanX = nextPanX;
+      hierarchyPanY = nextPanY;
+    } else {
+      hierarchyPanX = Math.max(minPan, Math.min(maxPan, nextPanX));
+      hierarchyPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
+    }
     layer.setAttribute("transform", `translate(${hierarchyPanX} ${hierarchyPanY})`);
     updatePanControls();
   };
@@ -2131,14 +2142,15 @@ function renderDynamicHierarchy(svg) {
         })
     );
   }
-  let nextPanX = hierarchyPanX;
-  let nextPanY = hierarchyPanY;
+  const panOverride = hierarchyPanTransitionOverride;
+  let nextPanX = panOverride?.x ?? hierarchyPanX;
+  let nextPanY = panOverride?.y ?? hierarchyPanY;
   const expandedLayout = nodeLayout.get(
     root.descendants().find((node) => (
       !node.data.isVirtual && node.data.id === expandedDetailId.value
     ))
   );
-  if (expandedLayout) {
+  if (expandedLayout && !panOverride) {
     const detailLeft = expandedLayout.left + nextPanX;
     const detailRight = expandedLayout.right + nextPanX;
     const detailTop = expandedLayout.top + nextPanY;
@@ -5198,7 +5210,16 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
   } else if (selection.reason === "context-only" && currentEntityId != null) {
     changeTrackEntityId.value = currentEntityId;
   }
-  refreshTemplate();
+  if (oldFrame && svg) {
+    hierarchyPanTransitionOverride = { x: hierarchyPanX, y: hierarchyPanY };
+    try {
+      refreshTemplate();
+    } finally {
+      hierarchyPanTransitionOverride = null;
+    }
+  } else {
+    refreshTemplate();
+  }
   if (oldFrame && svg) playHierarchyTransition(svg, oldFrame, changes);
 }
 
