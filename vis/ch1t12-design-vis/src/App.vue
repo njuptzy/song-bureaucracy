@@ -11,7 +11,7 @@
     />
     <div v-else class="loading">{{ loadError || "正在读取职官数据…" }}</div>
     <RevisionWorkspace
-      v-if="baseData && isEvolutionView"
+      v-if="baseData"
       :edit-mode="editMode"
       :drawer="revisionDrawer"
       :state="revisionState"
