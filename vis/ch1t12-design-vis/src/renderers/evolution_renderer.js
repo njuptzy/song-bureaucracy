@@ -225,7 +225,7 @@ function renderAddNode(parent, index, onActivate) {
   appendText(group, "添加", {
     x: 23, y: 61, class: "evolution-selector-count", "text-anchor": "middle",
   });
-  makeInteractive(group, "添加演变对比对象", onActivate);
+  makeInteractive(group, "添加并进入演变对比", onActivate);
   parent.appendChild(group);
 }
 

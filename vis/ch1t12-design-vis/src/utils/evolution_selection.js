@@ -6,6 +6,17 @@ export function timelineSelectionForEvolutionItem(kind, effectiveYear, fullRange
   return { active: false, range };
 }
 
+export function evolutionComparisonAfterAdd(entityIds, entityId, limit = 4) {
+  const maxItems = Math.max(1, Math.floor(Number(limit) || 4));
+  const current = [...new Set((entityIds || []).filter((id) => id != null))]
+    .filter((id) => id !== entityId);
+  return {
+    mode: "compare",
+    entityIds: [...current.slice(0, maxItems - 1), entityId],
+    activeEntityId: entityId,
+  };
+}
+
 export function evolutionSelectionAnchors(selectedItem) {
   const item = selectedItem?.item;
   if (!item) return [];

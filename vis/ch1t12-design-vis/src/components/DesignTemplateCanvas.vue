@@ -63,7 +63,10 @@ import {
 import { buildEvolutionLanes, buildEvolutionModel } from "../utils/evolution_model";
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
-import { timelineSelectionForEvolutionItem } from "../utils/evolution_selection";
+import {
+  evolutionComparisonAfterAdd,
+  timelineSelectionForEvolutionItem,
+} from "../utils/evolution_selection";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import {
   compareInstitutionIdsBySourceOrder,
@@ -3251,10 +3254,10 @@ function renderDynamicEvolution(svg) {
       refreshTemplate();
     },
     onAddEntity(entityId) {
-      evolutionEntityIds.value = evolutionMode.value === "single"
-        ? [entityId]
-        : [...new Set([...evolutionEntityIds.value, entityId])].slice(0, 4);
-      selectedId.value = entityId;
+      const next = evolutionComparisonAfterAdd(evolutionEntityIds.value, entityId);
+      evolutionMode.value = next.mode;
+      evolutionEntityIds.value = next.entityIds;
+      selectedId.value = next.activeEntityId;
       selectedEvolutionItem.value = null;
       evolutionLanePage.value = 1;
       evolutionSearchOpen.value = false;

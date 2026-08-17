@@ -2,10 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  evolutionComparisonAfterAdd,
   evolutionSelectionAnchors,
   evolutionSelectionFocus,
   timelineSelectionForEvolutionItem,
 } from "./evolution_selection.js";
+
+test("添加对象会保留当前实体并直接进入对比模式", () => {
+  assert.deepEqual(evolutionComparisonAfterAdd([174], 201), {
+    mode: "compare",
+    entityIds: [174, 201],
+    activeEntityId: 201,
+  });
+});
+
+test("对比对象去重并始终限制为四个", () => {
+  assert.deepEqual(evolutionComparisonAfterAdd([1, 2, 2, 3, 4], 5), {
+    mode: "compare",
+    entityIds: [1, 2, 3, 5],
+    activeEntityId: 5,
+  });
+});
 
 test("时间点选择联动到单年快照", () => {
   assert.deepEqual(
