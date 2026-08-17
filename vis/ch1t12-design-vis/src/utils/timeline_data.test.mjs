@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTimelineYearTicks,
+  layoutTimelineEraLabels,
   normalizeTimelineEras,
   timelineEraForYear,
 } from "./timeline_data.js";
@@ -30,3 +31,39 @@ test("年份刻度以服务端实际范围为边界", () => {
   assert.deepEqual(buildTimelineYearTicks(960, 1279, 10).slice(-3), [1260, 1270, 1279]);
 });
 
+test("过短年号隐藏文字但保留真实时间段", () => {
+  const eras = [
+    { name: "建隆", start: 960, end: 963 },
+    { name: "开宝", start: 968, end: 976 },
+  ];
+  const layout = layoutTimelineEraLabels(eras, (year) => year * 4, {
+    fontSize: 10,
+    padding: 2,
+  });
+  assert.equal(layout[0].labelVisible, false);
+  assert.equal(layout[0].labelHiddenReason, "short-range");
+  assert.equal(layout[0].startX, 3840);
+  assert.equal(layout[0].endX, 3856);
+  assert.equal(layout[1].labelVisible, true);
+  assert.equal(layout[1].labelX, (3872 + 3908) / 2);
+});
+
+test("可见年号在自己的区间内，不与相邻文字相撞", () => {
+  const eras = [
+    { name: "甲", start: 1, end: 10 },
+    { name: "乙", start: 11, end: 20 },
+  ];
+  const layout = layoutTimelineEraLabels(eras, (year) => year * 10, {
+    fontSize: 10,
+    padding: 2,
+  });
+  for (const item of layout) {
+    assert.equal(item.labelVisible, true);
+    assert.ok(item.labelX - item.labelWidth / 2 >= item.startX);
+    assert.ok(item.labelX + item.labelWidth / 2 <= item.endX);
+  }
+  assert.ok(
+    layout[1].labelX - layout[1].labelWidth / 2
+      > layout[0].labelX + layout[0].labelWidth / 2,
+  );
+});

@@ -105,6 +105,7 @@ import { formatStandardTime } from "../utils/time_format";
 import { formatSongYearLabel } from "../utils/song_era";
 import {
   buildTimelineYearTicks,
+  layoutTimelineEraLabels,
   normalizeTimelineEras,
 } from "../utils/timeline_data";
 import { detailHeaderLayout } from "../utils/detail_header";
@@ -5753,49 +5754,18 @@ function bindTimelineRange(svg) {
       timelineDataLayer.appendChild(label);
     }
 
-    // 57 个年号全部保留。原稿的帝系标签基线是 964.71，年号统一放在其下方
-    // 的 982.24 基线；不再用多行避让破坏时间轴的横向结构。若密集年号的
-    // 起点距离不足，只把文字沿同一基线轻微错开，并用细引线回到真实起点。
+    // 年号区间和起始竖线全部保留。只有文字能完整放进自己的真实时间段，
+    // 且不会与相邻可见文字相撞时才显示；短年号只用竖线和时间段表示。
     const labelY = 982.24;
     const labelFontSize = 10;
-    const labelGap = 1.2;
-    const labelWidths = eraRecords.map((era) => Math.max(
-      10,
-      era.name.length * labelFontSize,
-    ));
-    const labelPositions = eraRecords.map((era) => yearScale(era.start));
-    for (let pass = 0; pass < 5; pass += 1) {
-      labelPositions[0] = Math.max(
-        labelPositions[0],
-        TIMELINE_X_MIN + labelWidths[0] / 2,
-      );
-      for (let index = 1; index < labelPositions.length; index += 1) {
-        labelPositions[index] = Math.max(
-          labelPositions[index],
-          labelPositions[index - 1]
-            + (labelWidths[index - 1] + labelWidths[index]) / 2
-            + labelGap,
-        );
-      }
-      const last = labelPositions.length - 1;
-      labelPositions[last] = Math.min(
-        labelPositions[last],
-        TIMELINE_X_MAX - labelWidths[last] / 2,
-      );
-      for (let index = last - 1; index >= 0; index -= 1) {
-        labelPositions[index] = Math.min(
-          labelPositions[index],
-          labelPositions[index + 1]
-            - (labelWidths[index] + labelWidths[index + 1]) / 2
-            - labelGap,
-        );
-      }
-    }
+    const eraLabels = layoutTimelineEraLabels(
+      eraRecords,
+      (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
+      { fontSize: labelFontSize, padding: 2, gap: 1.2 },
+    );
 
-    for (let index = 0; index < eraRecords.length; index += 1) {
-      const era = eraRecords[index];
-      const startX = yearScale(era.start);
-      const endX = yearScale(Math.min(YEAR_MAX + 1, era.end + 1));
+    for (const era of eraLabels) {
+      const { startX, endX } = era;
       const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       band.setAttribute("x", String(startX));
       band.setAttribute("y", "942.2");
@@ -5809,8 +5779,6 @@ function bindTimelineRange(svg) {
       band.appendChild(bandTitle);
       timelineDataLayer.appendChild(band);
 
-      const x = labelPositions[index];
-
       // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
       const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
       separator.setAttribute("class", "cls-36");
@@ -5821,17 +5789,13 @@ function bindTimelineRange(svg) {
       separator.setAttribute("pointer-events", "none");
       timelineDataLayer.appendChild(separator);
 
+      if (!era.labelVisible) continue;
+
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-44");
-      label.setAttribute(
-        "x",
-        String(Math.min(
-          TIMELINE_X_MAX - labelWidths[index],
-          Math.max(startX + 3.5, x - labelWidths[index] / 2),
-        )),
-      );
+      label.setAttribute("x", String(era.labelX));
       label.setAttribute("y", String(labelY));
-      label.setAttribute("text-anchor", "start");
+      label.setAttribute("text-anchor", "middle");
       label.setAttribute("pointer-events", "none");
       label.textContent = era.name;
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");

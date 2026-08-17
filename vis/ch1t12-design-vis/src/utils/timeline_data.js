@@ -40,3 +40,55 @@ export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
   return [...ticks].sort((left, right) => left - right);
 }
 
+/**
+ * 为年号文字分配各自的真实时间段。
+ *
+ * 年号的起止竖线和时间段始终保留；只有当文字在自己的时间段内放不下，
+ * 或会与前一个可见标签相撞时，才隐藏文字。这样短年号不会被硬挤到邻近
+ * 年号上方，但用户仍能通过竖线和时间段知道该年号占据了哪一段时间。
+ */
+export function layoutTimelineEraLabels(eras, xOf, options = {}) {
+  const fontSize = Number(options.fontSize) > 0 ? Number(options.fontSize) : 10;
+  const padding = Number.isFinite(Number(options.padding))
+    ? Math.max(0, Number(options.padding))
+    : 2;
+  const gap = Number.isFinite(Number(options.gap))
+    ? Math.max(0, Number(options.gap))
+    : 1.2;
+  const records = normalizeTimelineEras(eras);
+  const laidOut = records.map((era) => {
+    const startX = Number(xOf(era.start));
+    const endX = Number(xOf(era.end + 1));
+    const validGeometry = Number.isFinite(startX) && Number.isFinite(endX);
+    const safeStartX = validGeometry ? startX : 0;
+    const safeEndX = validGeometry ? Math.max(startX, endX) : 0;
+    const slotWidth = Math.max(0, safeEndX - safeStartX);
+    const labelWidth = Math.max(fontSize, era.name.length * fontSize);
+    const labelX = safeStartX + slotWidth / 2;
+    const fitsSlot = validGeometry && slotWidth >= labelWidth + padding * 2;
+    return {
+      ...era,
+      startX: safeStartX,
+      endX: safeEndX,
+      slotWidth,
+      labelWidth,
+      labelX,
+      labelVisible: fitsSlot,
+      labelHiddenReason: fitsSlot ? null : "short-range",
+    };
+  });
+
+  let previousRight = Number.NEGATIVE_INFINITY;
+  for (const item of laidOut) {
+    if (!item.labelVisible) continue;
+    const left = item.labelX - item.labelWidth / 2;
+    const right = item.labelX + item.labelWidth / 2;
+    if (left < previousRight + gap) {
+      item.labelVisible = false;
+      item.labelHiddenReason = "collision";
+      continue;
+    }
+    previousRight = right;
+  }
+  return laidOut;
+}
