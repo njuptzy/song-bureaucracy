@@ -9,7 +9,44 @@ import {
   relationLabelOverride,
   relationPath,
   relationRouteOptions,
+  selectedEvolutionActionOptions,
 } from "./evolution_renderer.js";
+
+test("选中演变事件时在主视图提供年份跳转和层级入口", () => {
+  const actions = selectedEvolutionActionOptions(
+    { kind: "timepoint", item: { effectiveYear: 1080 } },
+    1069,
+    1069,
+    123,
+  );
+  assert.deepEqual(actions, [
+    { kind: "year", year: 1080, label: "前往1080年" },
+    { kind: "hierarchy", year: 1069, entityId: 123, label: "在1069年打开层级" },
+  ]);
+});
+
+test("选中多端点关系时保留来源和目标的独立年份按钮", () => {
+  const actions = selectedEvolutionActionOptions(
+    {
+      kind: "relation",
+      item: {
+        sourcePoints: [{ entityId: 1, timepointId: 11, effectiveYear: 1069 }],
+        targetPoints: [
+          { entityId: 2, timepointId: 21, effectiveYear: 1080 },
+          { entityId: 3, timepointId: 31, effectiveYear: 1080 },
+        ],
+      },
+    },
+    1069,
+    1069,
+    1,
+  );
+  assert.deepEqual(actions, [
+    { kind: "year", year: 1069, label: "前往来源1069年" },
+    { kind: "year", year: 1080, label: "前往目标1080年" },
+    { kind: "hierarchy", year: 1069, entityId: 1, label: "在1069年打开层级" },
+  ]);
+});
 
 test("演变轨道机构图标直接复用原设计 SVG 的尚书省 polygon", () => {
   assert.deepEqual(evolutionLaneIdentityTemplate("机构"), {

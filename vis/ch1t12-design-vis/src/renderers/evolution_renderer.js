@@ -1462,6 +1462,102 @@ function renderLanePager(parent, laneWindow, handlers) {
   parent.appendChild(group);
 }
 
+/**
+ * Return the actions that belong to the currently selected evolution item.
+ * These are deliberately kept outside the evidence/detail panel: selecting
+ * an event should expose the next navigation step without requiring a second
+ * scroll interaction.
+ */
+export function selectedEvolutionActionOptions(
+  selectedItem,
+  entryYear,
+  currentYear,
+  hierarchyEntityId = null,
+) {
+  if (!selectedItem) return [];
+  const comparison = evolutionSelectionComparison(selectedItem, entryYear);
+  const actions = [];
+  if (comparison?.kind === "timepoint" && comparison.year != null) {
+    actions.push({
+      kind: "year",
+      year: comparison.year,
+      label: `前往${comparison.year}年`,
+    });
+  } else if (comparison?.kind === "relation") {
+    const seen = new Set();
+    for (const endpoint of comparison.endpoints) {
+      if (endpoint.year == null) continue;
+      const key = `${endpoint.role}:${endpoint.year}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      actions.push({
+        kind: "year",
+        year: endpoint.year,
+        label: `前往${endpoint.role === "source" ? "来源" : "目标"}${endpoint.year}年`,
+      });
+    }
+  }
+  if (hierarchyEntityId != null && Number.isFinite(Number(currentYear))) {
+    actions.push({
+      kind: "hierarchy",
+      year: Number(currentYear),
+      entityId: hierarchyEntityId,
+      label: `在${currentYear}年打开层级`,
+    });
+  }
+  return actions;
+}
+
+function renderSelectedActions(parent, options) {
+  const actions = selectedEvolutionActionOptions(
+    options.selectedItem,
+    options.entryContext?.entryYear,
+    options.selectedRange?.[0],
+    options.hierarchyEntityId ?? options.activeEntityId,
+  );
+  if (!actions.length) return;
+
+  const group = svgElement("g", { class: "evolution-selection-actions" });
+  const gap = 6;
+  const buttonHeight = 21;
+  const widths = actions.map((action) => Math.max(92, Array.from(action.label).length * 8.2 + 18));
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
+  let x = 1770 - totalWidth;
+  actions.forEach((action, index) => {
+    const width = widths[index];
+    const button = svgElement("g", {
+      class: `evolution-selection-action${action.kind === "hierarchy" ? " is-primary" : ""}`,
+      role: "button",
+      tabindex: "0",
+      "aria-label": action.label,
+    });
+    button.appendChild(svgElement("rect", {
+      x,
+      y: 207,
+      width,
+      height: buttonHeight,
+      rx: 2.5,
+      class: "evolution-selection-action-surface",
+    }));
+    appendText(button, action.label, {
+      x: x + width / 2,
+      y: 221.2,
+      class: "evolution-selection-action-label",
+      "text-anchor": "middle",
+    });
+    addTitle(button, action.kind === "year"
+      ? `只移动当前年份线到${action.year}年，不改变入口年份`
+      : `在${action.year}年打开该实体的最小层级结构`);
+    makeInteractive(button, action.label, () => {
+      if (action.kind === "year") options.handlers.onCommitYear?.(action.year);
+      else options.handlers.onOpenHierarchy?.(action.entityId);
+    });
+    group.appendChild(button);
+    x += width + gap;
+  });
+  parent.appendChild(group);
+}
+
 function renderMain(layer, layout, options) {
   const group = svgElement("g", {
     class: "evolution-main-layer",
@@ -1496,6 +1592,7 @@ function renderMain(layer, layout, options) {
     y: 220,
     class: "evolution-entry-context",
   });
+  renderSelectedActions(group, options);
   renderLanePager(group, layout.laneWindow, options.handlers);
   group.appendChild(svgElement("line", {
     x1: 535, y1: 202, x2: 1770, y2: 202, stroke: COLORS.line, "stroke-width": 0.72,

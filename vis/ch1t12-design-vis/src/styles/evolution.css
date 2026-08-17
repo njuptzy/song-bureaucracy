@@ -80,6 +80,47 @@
   stroke-linejoin: round;
 }
 
+.dynamic-evolution-layer .evolution-selection-actions {
+  pointer-events: none;
+}
+
+.dynamic-evolution-layer .evolution-selection-action {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-selection-action-surface {
+  fill: #f5f3ec;
+  stroke: #918069;
+  stroke-width: 0.8px;
+}
+
+.dynamic-evolution-layer .evolution-selection-action-label {
+  fill: #563905;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 9.5px;
+}
+
+.dynamic-evolution-layer .evolution-selection-action.is-primary .evolution-selection-action-surface {
+  fill: #866d6d;
+  stroke: #563905;
+}
+
+.dynamic-evolution-layer .evolution-selection-action.is-primary .evolution-selection-action-label {
+  fill: #f5f3ec;
+}
+
+.dynamic-evolution-layer .evolution-selection-action:hover .evolution-selection-action-surface,
+.dynamic-evolution-layer .evolution-selection-action:focus-visible .evolution-selection-action-surface {
+  fill: #e7e0d4;
+  stroke: #563905;
+  stroke-width: 1.1px;
+}
+
+.dynamic-evolution-layer .evolution-selection-action.is-primary:hover .evolution-selection-action-surface,
+.dynamic-evolution-layer .evolution-selection-action.is-primary:focus-visible .evolution-selection-action-surface {
+  fill: #705959;
+}
+
 .dynamic-evolution-layer .evolution-lane-pager-label {
   font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
   font-size: 10.5px;
