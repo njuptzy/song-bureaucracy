@@ -4943,7 +4943,7 @@ function hierarchyMatrixChanged(previous, next, threshold = 0.35) {
     .some((key) => Math.abs(previous[key] - next[key]) > threshold);
 }
 
-function hierarchyExitMatrix(matrix, distance = 10) {
+function hierarchyExitMatrix(matrix, distance = 14) {
   return { ...matrix, f: matrix.f - distance };
 }
 
@@ -4993,9 +4993,9 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     return;
   }
 
-  const exitDuration = 130;
-  const enterDelay = 150;
-  const enterDuration = 210;
+  const exitDuration = 320;
+  const enterDelay = 440;
+  const enterDuration = 560;
   const totalDuration = enterDelay + enterDuration;
   const easing = d3.easeCubicOut;
   const overlay = svgElement("g", {
@@ -5043,7 +5043,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
     const transition = d3.select(clone).transition("hierarchy-time");
     if (moves && !exits) transition.delay(enterDelay);
     transition
-      .duration(exits ? exitDuration : Math.min(enterDuration, 120))
+      .duration(exits ? exitDuration : Math.min(enterDuration, 260))
       .ease(easing)
       .style("opacity", 0);
   }
