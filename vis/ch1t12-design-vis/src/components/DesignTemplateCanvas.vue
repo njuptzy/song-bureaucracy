@@ -4992,6 +4992,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
   const exitDuration = 1400;
   const moveDelay = exitDuration + 260;
   const moveDuration = 1600;
+  const moveEnd = moveDelay + moveDuration;
   const enterDelay = moveDelay + moveDuration + 260;
   const enterDuration = 1400;
   const easing = d3.easeCubicOut;
@@ -5063,7 +5064,21 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .delay(moveDelay)
       .duration(moveDuration)
       .ease(easing)
-      .attr("transform", matrixTransformValue(newItem.matrix)));
+      .attr("transform", matrixTransformValue(newItem.matrix))
+      .on("end.handoff", function () {
+        this.style.opacity = "0";
+      }));
+  }
+
+  // 平移副本到位后与正式节点做同帧交接；第三阶段只负责真正的新设节点。
+  for (const entityId of movedCommonIds) {
+    const node = newFrame.nodes.get(entityId)?.node;
+    if (!node) continue;
+    trackTransition(d3.select(node)
+      .transition("hierarchy-time")
+      .delay(moveEnd)
+      .duration(0)
+      .style("opacity", 1));
   }
 
   for (const entityId of removedIds) {
@@ -5080,8 +5095,7 @@ function playHierarchyTransition(svg, oldFrame, changes) {
       .style("opacity", 0));
   }
 
-  const revealIds = [...new Set([...movedCommonIds, ...createdIds])];
-  for (const entityId of revealIds) {
+  for (const entityId of createdIds) {
     const node = newFrame.nodes.get(entityId)?.node;
     if (!node) continue;
     trackTransition(d3.select(node)
@@ -5119,7 +5133,10 @@ function playHierarchyTransition(svg, oldFrame, changes) {
         .delay(moveDelay)
         .duration(moveDuration)
         .ease(easing)
-        .attr("points", transitionLinePoints(newParent, newChild)));
+        .attr("points", transitionLinePoints(newParent, newChild))
+        .on("end.handoff", function () {
+          this.style.opacity = "0";
+        }));
     }
     if (["evolve", "unclassified"].includes(change.type)
       && change.sourceIds.length === 1
@@ -5141,7 +5158,10 @@ function playHierarchyTransition(svg, oldFrame, changes) {
         .duration(moveDuration)
         .ease(easing)
         .attr("x2", target.x)
-        .attr("y2", target.y));
+        .attr("y2", target.y)
+        .on("end.handoff", function () {
+          this.style.opacity = "0";
+        }));
     }
   }
 
