@@ -120,6 +120,18 @@ export function panFromScrollbarOffset(offset, thumbTravel, minPan, maxPan) {
   return maxPan - clampedOffset / thumbTravel * (maxPan - minPan);
 }
 
+export function isHorizontalWheelGesture({
+  deltaX = 0,
+  deltaY = 0,
+  shiftKey = false,
+  ctrlKey = false,
+} = {}) {
+  if (ctrlKey) return false;
+  const horizontalDelta = Math.abs(Number(deltaX) || 0);
+  const verticalDelta = Math.abs(Number(deltaY) || 0);
+  return Boolean(shiftKey) || (horizontalDelta > 0 && horizontalDelta >= verticalDelta);
+}
+
 function matrixAttributes(matrix) {
   return {
     a: matrix.a,

@@ -6,6 +6,7 @@ import {
   buildHierarchyEdgeIndex,
   fitRangeShift,
   horizontalRangesFit,
+  isHorizontalWheelGesture,
   packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
@@ -89,6 +90,13 @@ test("机构树溢出时滚动条覆盖完整平移范围", () => {
   assert.equal(left.thumbOffset, 0);
   assert.equal(right.thumbOffset, right.thumbTravel);
   assert.equal(panFromScrollbarOffset(right.thumbTravel, right.thumbTravel, -1000, 0), -1000);
+});
+
+test("识别横向触控板手势但不拦截缩放手势", () => {
+  assert.equal(isHorizontalWheelGesture({ deltaX: -42, deltaY: 3 }), true);
+  assert.equal(isHorizontalWheelGesture({ deltaX: 0, deltaY: -42, shiftKey: true }), true);
+  assert.equal(isHorizontalWheelGesture({ deltaX: 3, deltaY: -42 }), false);
+  assert.equal(isHorizontalWheelGesture({ deltaX: -42, deltaY: 3, ctrlKey: true }), false);
 });
 
 test("过渡节点矩阵移除根 SVG 已包含的缩放与居中偏移", () => {

@@ -29,6 +29,7 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
+  isHorizontalWheelGesture,
   packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
@@ -2313,8 +2314,15 @@ function renderDynamicHierarchy(svg) {
         dragSurface.style.cursor = "grab";
       }))
     .on("wheel.tree-pan", (event) => {
+      const horizontalGesture = isHorizontalWheelGesture(event);
+      if (horizontalGesture) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (event.ctrlKey) return;
       if (contentWidth <= viewportWidth && contentHeight <= viewportHeight) return;
       event.preventDefault();
+      event.stopPropagation();
       if (contentHeight > viewportHeight && !event.shiftKey && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
         applyHierarchyPan(hierarchyPanX, hierarchyPanY - event.deltaY);
       } else {
