@@ -43,11 +43,18 @@ test("虚拟分组总线同时覆盖来源节点和全部目标节点", () => {
 });
 
 test("公共总线和制度组子树总线使用不同高度", () => {
-  const commonBusY = virtualBusY(180, 220, 0);
-  const branchBusY = virtualBusY(260, 100, 1);
-  assert.equal(commonBusY, 182);
-  assert.equal(branchBusY, 198);
+  const commonBusY = virtualBusY(100, 200, 0);
+  const branchBusY = virtualBusY(200, 300, 1);
+  assert.equal(commonBusY, 132);
+  assert.equal(branchBusY, 250);
   assert.ok(commonBusY < branchBusY);
+});
+
+test("制度组总线位于父子节点之间，不压到首层节点顶部", () => {
+  const busY = virtualBusY(57, 103, 1);
+  assert.equal(busY, 80);
+  assert.ok(busY - 57 >= 12);
+  assert.ok(103 - busY >= 12);
 });
 
 test("下属虚拟组内保持紧凑，两个虚拟组之间保留独立边界", () => {

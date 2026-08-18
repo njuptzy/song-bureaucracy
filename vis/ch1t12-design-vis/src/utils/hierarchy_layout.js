@@ -9,7 +9,20 @@ export function virtualBusRange(sourceX, targetXs) {
 
 export function virtualBusY(sourceBottom, targetTop, depth = 0, offset = 18) {
   const midpoint = (sourceBottom + targetTop) / 2;
-  return midpoint + (depth === 0 ? -Math.abs(offset) : Math.abs(offset));
+  // 制度组与首层机构之间的垂直间隔很窄，向下错层会把总线压到
+  // 机构顶部的装饰边框上；该层使用真正的中点，深层总线再错层。
+  const signedOffset = depth === 0
+    ? -Math.abs(offset)
+    : depth === 1
+      ? 0
+      : Math.abs(offset);
+  const low = Math.min(sourceBottom, targetTop);
+  const high = Math.max(sourceBottom, targetTop);
+  const clearance = Math.min(12, Math.max(0, (high - low) / 3));
+  return Math.max(
+    low + clearance,
+    Math.min(high - clearance, midpoint + signedOffset),
+  );
 }
 
 export function subordinateGroupAncestorId(node) {
