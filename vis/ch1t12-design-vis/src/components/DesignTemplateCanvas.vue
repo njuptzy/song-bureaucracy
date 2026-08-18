@@ -2001,14 +2001,13 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  // 多个制度组同时展开时，只按完整子树范围避让。
-  // 每个分支的所有节点一起平移，保持分支内部的相对位置；制度组标题本身
-  // 仍固定在导航行，不再出现子树互相穿插或单独拖动某个节点的情况。
+  // 多个制度组同时展开时，只按“点击节点 + 同方向后代”的完整范围避让。
+  // 点击的制度组标题、后代节点和连线一起平移，保持整个方向上的相对位置。
   if (spaceAwareExpansion.value && expandedInstitutionGroupNodes.length > 1) {
     const branchRanges = expandedInstitutionGroupNodes
       .map((institutionGroupNode) => {
-        const descendants = institutionGroupNode.descendants().slice(1);
-        const bounds = descendants
+        const branchNodes = institutionGroupNode.descendants();
+        const bounds = branchNodes
           .map((node) => nodeLayout.get(node))
           .filter(Boolean)
           .map((layout) => ({
@@ -2040,7 +2039,7 @@ function renderDynamicHierarchy(svg) {
       if (!originalRange || !group) continue;
       const delta = packedRange.left - originalRange.left;
       if (!delta) continue;
-      group.descendants().slice(1).forEach((node) => {
+      group.descendants().forEach((node) => {
         shiftLayout(nodeLayout.get(node), delta);
       });
     }
