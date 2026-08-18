@@ -27,6 +27,7 @@ import {
 } from "../utils/subordinate_groups";
 import {
   anchorBranchToGroup,
+  buildHierarchyEdgeIndex,
   fitRangeShift,
   horizontalRangesFit,
   panFromScrollbarOffset,
@@ -214,6 +215,11 @@ let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
 let hierarchyPanTransitionOverride = null;
+let hierarchyEdgeIndexCache = {
+  sourceEdges: null,
+  collectiveIds: null,
+  index: buildHierarchyEdgeIndex(),
+};
 let expandedInstitutionGroupIds = [];
 let lastExpandedInstitutionGroupId = null;
 let expandedSubordinateGroupIds = [];
@@ -741,10 +747,24 @@ function entityActive(entityId) {
 }
 
 function hierarchyEdgesForView() {
-  return hierarchyEdgesWithoutCollectives(
-    currentSnapshot.value?.hierarchyEdges || props.data.hierarchyEdges,
-    collectiveEntityIds,
-  );
+  return hierarchyEdgeIndexForView().edges;
+}
+
+function hierarchyEdgeIndexForView() {
+  const sourceEdges = currentSnapshot.value?.hierarchyEdges || props.data.hierarchyEdges || [];
+  if (
+    hierarchyEdgeIndexCache.sourceEdges !== sourceEdges
+    || hierarchyEdgeIndexCache.collectiveIds !== collectiveEntityIds
+  ) {
+    hierarchyEdgeIndexCache = {
+      sourceEdges,
+      collectiveIds: collectiveEntityIds,
+      index: buildHierarchyEdgeIndex(
+        hierarchyEdgesWithoutCollectives(sourceEdges, collectiveEntityIds),
+      ),
+    };
+  }
+  return hierarchyEdgeIndexCache.index;
 }
 
 function staffEdgesForView() {
@@ -756,7 +776,7 @@ function staffFor(entityId) {
 }
 
 function childrenFor(entityId) {
-  return hierarchyEdgesForView().filter((edge) => edge.parent === entityId);
+  return hierarchyEdgeIndexForView().childrenFor(entityId);
 }
 
 function titleOf(entityId) {
@@ -1072,17 +1092,7 @@ function hierarchyExpansionPath(node) {
 }
 
 function hierarchySubtreeIds(rootId) {
-  const result = [];
-  const queue = [rootId];
-  const visited = new Set();
-  while (queue.length) {
-    const entityId = queue.shift();
-    if (visited.has(entityId)) continue;
-    visited.add(entityId);
-    result.push(entityId);
-    childrenFor(entityId).forEach((edge) => queue.push(edge.child));
-  }
-  return result;
+  return hierarchyEdgeIndexForView().subtreeIds(rootId);
 }
 
 function renderExpansionCandidate(fallbackPath) {
@@ -1850,6 +1860,8 @@ function renderDynamicHierarchy(svg) {
         + (a.parent === b.parent ? 18 : 30);
       return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
     })(root);
+  const hierarchyNodes = root.descendants();
+  const hierarchyLinks = root.links();
 
   // 制度组是稳定导航层，必须完整铺在中央区域；下方机构树单独按当前组定位。
   // 不能直接用整棵不对称树的坐标，否则展开某组时会把其他制度组推出画布。
@@ -1939,7 +1951,20 @@ function renderDynamicHierarchy(svg) {
   clipRect.setAttribute("width", String(area.right - area.left));
   clipRect.setAttribute("height", String(area.bottom - area.top));
   clipPath.appendChild(clipRect);
-  svg.querySelector("defs")?.appendChild(clipPath);
+  const defs = svg.querySelector("defs");
+  defs?.appendChild(clipPath);
+
+  const nodeLabelClipId = "dynamic-tree-node-label-clip";
+  const nodeLabelClipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+  nodeLabelClipPath.id = nodeLabelClipId;
+  nodeLabelClipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+  const nodeLabelClipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  nodeLabelClipRect.setAttribute("x", String(templatePolygonBounds.x + 3));
+  nodeLabelClipRect.setAttribute("y", String(templatePolygonBounds.y + 2));
+  nodeLabelClipRect.setAttribute("width", String(templatePolygonBounds.width - 6));
+  nodeLabelClipRect.setAttribute("height", String(templatePolygonBounds.height - 4));
+  nodeLabelClipPath.appendChild(nodeLabelClipRect);
+  defs?.appendChild(nodeLabelClipPath);
 
   const viewport = document.createElementNS("http://www.w3.org/2000/svg", "g");
   viewport.classList.add("dynamic-tree-viewport");
@@ -1956,9 +1981,8 @@ function renderDynamicHierarchy(svg) {
   const layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   layer.classList.add("dynamic-tree-layer");
   viewport.appendChild(layer);
-  svg.appendChild(viewport);
 
-  const nodeLayout = new Map(root.descendants().map((node) => {
+  const nodeLayout = new Map(hierarchyNodes.map((node) => {
     let x;
     if (node.depth === 0) {
       x = areaCenterX;
@@ -2271,7 +2295,7 @@ function renderDynamicHierarchy(svg) {
   let nextPanX = panOverride?.x ?? hierarchyPanX;
   let nextPanY = panOverride?.y ?? hierarchyPanY;
   const expandedLayout = nodeLayout.get(
-    root.descendants().find((node) => (
+    hierarchyNodes.find((node) => (
       !node.data.isVirtual && node.data.id === expandedDetailId.value
     ))
   );
@@ -2326,7 +2350,7 @@ function renderDynamicHierarchy(svg) {
   };
 
   // 每个虚拟节点使用独立横向总线，虚拟分组不冒充数据库中的历史层级边。
-  const virtualParents = root.descendants().filter((node) => (
+  const virtualParents = hierarchyNodes.filter((node) => (
     node.data.isVirtual && node.children?.length
   ));
   for (const virtualParent of virtualParents) {
@@ -2345,7 +2369,7 @@ function renderDynamicHierarchy(svg) {
   }
 
   // 更深层级严格从父节点外框底边连到子节点外框顶边。
-  for (const link of root.links().filter((item) => !item.source.data.isVirtual)) {
+  for (const link of hierarchyLinks.filter((item) => !item.source.data.isVirtual)) {
     const source = nodeLayout.get(link.source);
     const target = nodeLayout.get(link.target);
     const middleY = (source.bottom + target.top) / 2;
@@ -2355,9 +2379,8 @@ function renderDynamicHierarchy(svg) {
     );
   }
 
-  let nodeIndex = 0;
   let expandedDetailNode = null;
-  for (const node of root.descendants()) {
+  for (const node of hierarchyNodes) {
     const layout = nodeLayout.get(node);
     const nodeGroup = node.data.isVirtual
       ? document.createElementNS("http://www.w3.org/2000/svg", "g")
@@ -2413,8 +2436,7 @@ function renderDynamicHierarchy(svg) {
     }
     layer.appendChild(nodeGroup);
 
-    const templatePolygon = node.data.isVirtual ? null : nodeGroup.querySelector("polygon");
-    const polygonBounds = templatePolygon ? elementBounds(templatePolygon) : null;
+    const polygonBounds = node.data.isVirtual ? null : templatePolygonBounds;
     const hitBounds = node.data.isVirtual
       ? { x: -layout.width / 2, y: -layout.height / 2, width: layout.width, height: layout.height }
       : polygonBounds;
@@ -2436,20 +2458,8 @@ function renderDynamicHierarchy(svg) {
       nodeGroup.style.visibility = "hidden";
     }
     if (label && polygonBounds) {
-      const clipId = `dynamic-tree-node-clip-${nodeIndex}`;
-      nodeIndex += 1;
-      const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
-      clipPath.id = clipId;
-      clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
-      const clipRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      clipRect.setAttribute("x", String(polygonBounds.x + 3));
-      clipRect.setAttribute("y", String(polygonBounds.y + 2));
-      clipRect.setAttribute("width", String(polygonBounds.width - 6));
-      clipRect.setAttribute("height", String(polygonBounds.height - 4));
-      clipPath.appendChild(clipRect);
-      svg.querySelector("defs")?.appendChild(clipPath);
       const labelClipGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      labelClipGroup.setAttribute("clip-path", `url(#${clipId})`);
+      labelClipGroup.setAttribute("clip-path", `url(#${nodeLabelClipId})`);
       label.parentNode.insertBefore(labelClipGroup, label);
       labelClipGroup.appendChild(label);
     }
@@ -2644,6 +2654,7 @@ function renderDynamicHierarchy(svg) {
       entityMap.get(expandedDetailNode.data.id)
     );
   }
+  svg.appendChild(viewport);
 }
 
 function ensureGlobalUndoControl(svg) {

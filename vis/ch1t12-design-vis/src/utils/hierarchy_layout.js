@@ -28,6 +28,42 @@ export function horizontalRangesFit(ranges, viewportLeft, viewportRight, gap = 1
   ));
 }
 
+export function buildHierarchyEdgeIndex(edges = []) {
+  const normalizedEdges = Array.isArray(edges) ? edges : [];
+  const childrenByParent = new Map();
+  for (const edge of normalizedEdges) {
+    if (edge?.parent == null) continue;
+    const children = childrenByParent.get(edge.parent);
+    if (children) children.push(edge);
+    else childrenByParent.set(edge.parent, [edge]);
+  }
+
+  const subtreeIdsByRoot = new Map();
+  return {
+    edges: normalizedEdges,
+    childrenFor(parentId) {
+      return childrenByParent.get(parentId) || [];
+    },
+    subtreeIds(rootId) {
+      if (subtreeIdsByRoot.has(rootId)) return subtreeIdsByRoot.get(rootId);
+      const result = [];
+      const queue = [rootId];
+      const visited = new Set();
+      for (let cursor = 0; cursor < queue.length; cursor += 1) {
+        const entityId = queue[cursor];
+        if (visited.has(entityId)) continue;
+        visited.add(entityId);
+        result.push(entityId);
+        for (const edge of childrenByParent.get(entityId) || []) {
+          if (!visited.has(edge.child)) queue.push(edge.child);
+        }
+      }
+      subtreeIdsByRoot.set(rootId, result);
+      return result;
+    },
+  };
+}
+
 export function panScrollbarGeometry({
   viewportSize,
   contentSize,

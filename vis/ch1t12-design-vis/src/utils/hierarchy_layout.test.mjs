@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   anchorBranchToGroup,
+  buildHierarchyEdgeIndex,
   fitRangeShift,
   horizontalRangesFit,
   panFromScrollbarOffset,
@@ -10,6 +11,21 @@ import {
   relativeAffineMatrix,
   virtualBusRange,
 } from "./hierarchy_layout.js";
+
+test("层级边按上级建立索引并缓存子树，避免每个节点扫描全部关系", () => {
+  const edges = [
+    { parent: 1, child: 2 },
+    { parent: 1, child: 3 },
+    { parent: 2, child: 4 },
+    { parent: 4, child: 1 },
+  ];
+  const index = buildHierarchyEdgeIndex(edges);
+
+  assert.deepEqual(index.childrenFor(1), edges.slice(0, 2));
+  assert.deepEqual(index.childrenFor(99), []);
+  assert.deepEqual(index.subtreeIds(1), [1, 2, 3, 4]);
+  assert.equal(index.subtreeIds(1), index.subtreeIds(1));
+});
 
 test("展开的大机构锚定在所属制度组正下方", () => {
   const branchCenter = anchorBranchToGroup(620, 300, 650);
