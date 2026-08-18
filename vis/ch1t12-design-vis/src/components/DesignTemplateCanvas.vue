@@ -31,6 +31,7 @@ import {
   fitRangeShift,
   hierarchyNodeGap,
   isHorizontalWheelGesture,
+  packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   relativeAffineMatrix,
@@ -1999,6 +2000,51 @@ function renderDynamicHierarchy(svg) {
       ),
     }];
   }));
+
+  // 多个制度组同时展开时，只按完整子树范围避让。
+  // 每个分支的所有节点一起平移，保持分支内部的相对位置；制度组标题本身
+  // 仍固定在导航行，不再出现子树互相穿插或单独拖动某个节点的情况。
+  if (spaceAwareExpansion.value && expandedInstitutionGroupNodes.length > 1) {
+    const branchRanges = expandedInstitutionGroupNodes
+      .map((institutionGroupNode) => {
+        const descendants = institutionGroupNode.descendants().slice(1);
+        const bounds = descendants
+          .map((node) => nodeLayout.get(node))
+          .filter(Boolean)
+          .map((layout) => ({
+            left: layout.left ?? layout.x - (layout.width || 34) / 2,
+            right: layout.right ?? layout.x + (layout.width || 34) / 2,
+          }));
+        if (!bounds.length) return null;
+        return {
+          id: institutionGroupNode.data.id,
+          left: Math.min(...bounds.map((bound) => bound.left)),
+          right: Math.max(...bounds.map((bound) => bound.right)),
+        };
+      })
+      .filter(Boolean);
+    const packedRanges = packHorizontalRanges(branchRanges, 24);
+    const originalRangeById = new Map(branchRanges.map((range) => [range.id, range]));
+    const groupById = new Map(
+      expandedInstitutionGroupNodes.map((node) => [node.data.id, node]),
+    );
+    const shiftLayout = (layout, delta) => {
+      if (!layout || !delta) return;
+      layout.x += delta;
+      if (layout.left != null) layout.left += delta;
+      if (layout.right != null) layout.right += delta;
+    };
+    for (const packedRange of packedRanges) {
+      const originalRange = originalRangeById.get(packedRange.id);
+      const group = groupById.get(packedRange.id);
+      if (!originalRange || !group) continue;
+      const delta = packedRange.left - originalRange.left;
+      if (!delta) continue;
+      group.descendants().slice(1).forEach((node) => {
+        shiftLayout(nodeLayout.get(node), delta);
+      });
+    }
+  }
 
   if (!spaceAwareExpansion.value && focusedBranchNode?.children?.length) {
     const descendantLayouts = focusedBranchNode.descendants()
