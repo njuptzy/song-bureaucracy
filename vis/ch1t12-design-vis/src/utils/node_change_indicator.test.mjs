@@ -20,7 +20,11 @@ test("节点变化标记只保留过去和未来，不显示同年数量", () =>
   assert.equal(nodeChangeIndicatorItems({ current: summary.current }).length, 0);
   assert.equal(
     nodeChangeIndicatorAriaLabel("三司", summary),
-    "三司前后结构变化：最近过去变化在1070年，相距10年；最近未来变化在1095年，相距15年",
+    "三司前后结构变化：最近过去结构变化在1070年，相距10年；最近未来结构变化在1095年，相距15年",
+  );
+  assert.equal(
+    nodeChangeIndicatorItems(summary)[0].title,
+    "最近过去结构变化：1070年（距今10年）",
   );
 });
 

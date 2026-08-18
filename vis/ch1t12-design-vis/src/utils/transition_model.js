@@ -2,15 +2,17 @@ const CHANGE_TYPE_ORDER = new Map([
   ["evolve", 0],
   ["unclassified", 1],
   ["reparent", 2],
-  ["restore", 3],
-  ["create", 4],
-  ["remove", 5],
-  ["move", 6],
+  ["reorganize", 3],
+  ["restore", 4],
+  ["create", 5],
+  ["remove", 6],
+  ["move", 7],
 ]);
 
 export const CHANGE_TYPE_LABELS = Object.freeze({
   move: "位置变化",
   reparent: "隶属变化",
+  reorganize: "改置",
   create: "新设",
   remove: "撤销",
   restore: "恢复",
@@ -149,6 +151,10 @@ function makeChange(data, source) {
 
 function addChange(byEntity, change) {
   const ids = new Set([...change.sourceIds, ...change.targetIds]);
+  if (change.type === "reparent") {
+    ids.add(change.previousParentId);
+    ids.add(change.nextParentId);
+  }
   for (const entityId of ids) {
     if (entityId == null) continue;
     if (!byEntity.has(entityId)) byEntity.set(entityId, []);
@@ -333,6 +339,45 @@ function normalizeLifecycleChanges(data, timepointById) {
   return changes;
 }
 
+function claimedTimepointIds(changes) {
+  return new Set((changes || []).flatMap((change) => (
+    (change.citationKeys || [])
+      .filter((key) => String(key).startsWith("T"))
+      .map((key) => normalizeId(String(key).slice(1)))
+  )));
+}
+
+function normalizeRecordedStructuralChanges(data, timepointById, claimedIds = new Set()) {
+  const changes = [];
+  for (const timepoint of timepointById.values()) {
+    const eventType = String(timepoint.event_type ?? timepoint.eventType ?? "");
+    const type = eventType === "reorganize"
+      ? "reorganize"
+      : eventType === "affiliation_change"
+        ? "reparent"
+        : null;
+    const year = endpointYear(timepoint);
+    const entityId = normalizeId(timepoint.entity_id ?? timepoint.entityId);
+    if (!type || year == null || entityId == null || claimedIds.has(normalizeId(timepoint.id))) {
+      continue;
+    }
+    changes.push(makeChange(data, {
+      type,
+      sourceIds: [entityId],
+      targetIds: [entityId],
+      year,
+      eventTime: timepoint.time || `${year}年`,
+      eventText: changeEventText(timepoint, CHANGE_TYPE_LABELS[type]),
+      citationKeys: timepoint.id != null ? [`T${timepoint.id}`] : [],
+      quotation: timepoint.quotation || "",
+      certainty: "explicit",
+      focusEntityId: entityId,
+      key: `recorded-structure:${entityId}:${timepoint.id ?? year}:${type}`,
+    }));
+  }
+  return changes;
+}
+
 function compareChanges(a, b) {
   return a.eventYear - b.eventYear
     || (CHANGE_TYPE_ORDER.get(a.type) ?? 99) - (CHANGE_TYPE_ORDER.get(b.type) ?? 99)
@@ -350,10 +395,19 @@ export function buildStructuralChangeIndex(data) {
       });
     }
   }
+  const explicitChanges = normalizeExplicitRelations(data, timepointById);
+  const hierarchyChanges = normalizeHierarchyChanges(data, timepointById, entityById);
+  const lifecycleChanges = normalizeLifecycleChanges(data, timepointById);
+  const recordedStructuralChanges = normalizeRecordedStructuralChanges(
+    data,
+    timepointById,
+    claimedTimepointIds([...hierarchyChanges, ...lifecycleChanges]),
+  );
   const changes = [
-    ...normalizeExplicitRelations(data, timepointById),
-    ...normalizeHierarchyChanges(data, timepointById, entityById),
-    ...normalizeLifecycleChanges(data, timepointById),
+    ...explicitChanges,
+    ...hierarchyChanges,
+    ...recordedStructuralChanges,
+    ...lifecycleChanges,
   ].sort(compareChanges);
   const byEntity = new Map();
   changes.forEach((change) => addChange(byEntity, change));

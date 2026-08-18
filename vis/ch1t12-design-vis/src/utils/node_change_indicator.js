@@ -8,12 +8,12 @@ export function nodeChangeIndicatorItems(summary) {
     summary?.past ? {
       kind: "past",
       label: `-${summary.past.distance}`,
-      title: `最近过去变化：${summary.past.year}年（距今${summary.past.distance}年）`,
+      title: `最近过去结构变化：${summary.past.year}年（距今${summary.past.distance}年）`,
     } : null,
     summary?.future ? {
       kind: "future",
       label: `+${summary.future.distance}`,
-      title: `最近未来变化：${summary.future.year}年（${summary.future.distance}年后）`,
+      title: `最近未来结构变化：${summary.future.year}年（${summary.future.distance}年后）`,
     } : null,
   ].filter(Boolean);
 }
@@ -40,10 +40,10 @@ export function nodeChangeIndicatorLayout(items) {
 export function nodeChangeIndicatorAriaLabel(title, summary, isVirtual = false) {
   const parts = [];
   if (summary?.past) {
-    parts.push(`最近过去变化在${summary.past.year}年，相距${summary.past.distance}年`);
+    parts.push(`最近过去结构变化在${summary.past.year}年，相距${summary.past.distance}年`);
   }
   if (summary?.future) {
-    parts.push(`最近未来变化在${summary.future.year}年，相距${summary.future.distance}年`);
+    parts.push(`最近未来结构变化在${summary.future.year}年，相距${summary.future.distance}年`);
   }
   return `${title}${isVirtual ? "组内" : ""}前后结构变化：${parts.join("；")}`;
 }
