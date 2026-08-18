@@ -4053,6 +4053,7 @@ function evolutionDetailPayload(svg) {
       const child = entityMap.get(change.childId);
       const previousParent = entityMap.get(change.previousParentId);
       const nextParent = entityMap.get(change.nextParentId);
+      const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
       const evidence = evidenceLinesForKeys(event.evidenceKeys, event.quotation);
       const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
       const role = event.hierarchyRole === "subject"
@@ -4060,20 +4061,40 @@ function evolutionDetailPayload(svg) {
         : event.hierarchyRole === "former_parent"
           ? "本机构失去一个直属下属"
           : "本机构新增一个直属下属";
+      const hierarchySummary = [
+        event.hierarchyChangeLabel || event.event,
+        `本车道含义：${role}`,
+        `变动机构：${child?.title || `#${change.childId}`}`,
+        `原上级机构：${previousParent?.title || `#${change.previousParentId}`}`,
+        `新上级机构：${nextParent?.title || `#${change.nextParentId}`}`,
+      ].join("；");
+      const derivationNote = "机构改隶根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。";
       return {
         title: entity?.title || "层级变化",
         year: eventTimeLabel(event),
         sections: [
-          { label: "层级变化：", value: event.hierarchyChangeLabel || event.event },
-          { label: "本车道含义：", value: role },
-          { label: "变动机构：", value: child?.title || `#${change.childId}` },
-          { label: "原上级机构：", value: previousParent?.title || `#${change.previousParentId}` },
-          { label: "新上级机构：", value: nextParent?.title || `#${change.nextParentId}` },
+          { label: "事件：", value: event.event || event.hierarchyChangeLabel || "机构改隶" },
+          {
+            label: "事件类型：",
+            value: EVOLUTION_EVENT_TYPE_LABELS[event.eventType] || "隶属变化",
+          },
+          {
+            label: "词条原文：",
+            value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
+          },
+          {
+            label: "存废判定：",
+            value: `${EVOLUTION_EFFECT_LABELS[event.effect] || event.effect || "普通记载"}。关系箭头不参与这一判定。`,
+          },
+          {
+            label: "时间精度：",
+            value: `${EVOLUTION_TIME_TYPE_LABELS[event.timeType] || event.timeType || "未标注"}${event.parse_note ? `；${event.parse_note}` : ""}`,
+          },
           { label: "距入口年份：", value: evolutionComparisonText(comparison) },
-          { label: "判定说明：", value: "机构改隶。根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。" },
+          { label: "相关关系：", value: hierarchySummary },
           { label: "原文引文：", value: evidence.quotation },
           { label: "出处：", value: evidence.source },
-          { label: "校勘说明：", value: evidence.note },
+          { label: "校勘说明：", value: `${derivationNote}${evidence.note ? `；${evidence.note}` : ""}` },
         ],
       };
     }
