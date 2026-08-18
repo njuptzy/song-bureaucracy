@@ -1805,8 +1805,7 @@ function renderDynamicHierarchy(svg) {
     "text-anchor": "middle",
     "dominant-baseline": "central",
   });
-  yearText.style.fontSize = "24px";
-  yearText.style.fontWeight = "600";
+  yearText.style.fontSize = "42.86px";
   setText(yearText, yearLabel);
   yearMarker.appendChild(yearText);
   svg.appendChild(yearMarker);
