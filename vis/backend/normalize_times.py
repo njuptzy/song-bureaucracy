@@ -31,6 +31,10 @@ REFERENCE_SOURCES = {
         "中央研究院数位文化中心：两千年中西历转换",
         "https://sinocal.sinica.edu.tw/",
     ),
+    "emperor_reign_table": (
+        "《宋史》本纪一至四十七（帝王次序与在位边界；公元年与年号表交叉核对）",
+        "https://zh.wikisource.org/wiki/宋史",
+    ),
 }
 
 
@@ -145,6 +149,29 @@ ERA_YEARS: dict[str, tuple[int, int]] = {
     "景炎": (1276, 1278),
     "祥兴": (1278, 1279),
 }
+
+# 宋代时间轴按年末截面显示在位君主。交接发生在同一公元年时，相邻记录
+# 可共享边界年；前端以后一位君主的起始年作为前一段的视觉右边界。
+SONG_EMPEROR_REIGNS: tuple[dict[str, str | int], ...] = (
+    {"name": "太祖", "personal_name": "赵匡胤", "start": 960, "end": 976, "phase": "北宋"},
+    {"name": "太宗", "personal_name": "赵炅", "start": 976, "end": 997, "phase": "北宋"},
+    {"name": "真宗", "personal_name": "赵恒", "start": 997, "end": 1022, "phase": "北宋"},
+    {"name": "仁宗", "personal_name": "赵祯", "start": 1022, "end": 1063, "phase": "北宋"},
+    {"name": "英宗", "personal_name": "赵曙", "start": 1063, "end": 1067, "phase": "北宋"},
+    {"name": "神宗", "personal_name": "赵顼", "start": 1067, "end": 1085, "phase": "北宋"},
+    {"name": "哲宗", "personal_name": "赵煦", "start": 1085, "end": 1100, "phase": "北宋"},
+    {"name": "徽宗", "personal_name": "赵佶", "start": 1100, "end": 1125, "phase": "北宋"},
+    {"name": "钦宗", "personal_name": "赵桓", "start": 1126, "end": 1127, "phase": "北宋"},
+    {"name": "高宗", "personal_name": "赵构", "start": 1127, "end": 1162, "phase": "南宋"},
+    {"name": "孝宗", "personal_name": "赵昚", "start": 1162, "end": 1189, "phase": "南宋"},
+    {"name": "光宗", "personal_name": "赵惇", "start": 1189, "end": 1194, "phase": "南宋"},
+    {"name": "宁宗", "personal_name": "赵扩", "start": 1194, "end": 1224, "phase": "南宋"},
+    {"name": "理宗", "personal_name": "赵昀", "start": 1224, "end": 1264, "phase": "南宋"},
+    {"name": "度宗", "personal_name": "赵禥", "start": 1264, "end": 1274, "phase": "南宋"},
+    {"name": "恭帝", "personal_name": "赵㬎", "start": 1274, "end": 1276, "phase": "南宋"},
+    {"name": "端宗", "personal_name": "赵昰", "start": 1276, "end": 1278, "phase": "南宋"},
+    {"name": "帝昺", "personal_name": "赵昺", "start": 1278, "end": 1279, "phase": "南宋"},
+)
 
 ERA_PATTERN = re.compile(
     "|".join(re.escape(name) for name in sorted(ERA_YEARS, key=len, reverse=True))

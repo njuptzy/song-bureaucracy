@@ -26,7 +26,12 @@ REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO_ROOT / "vis/backend"))
 
-from normalize_times import ERA_YEARS, normalize_time  # noqa: E402
+from normalize_times import (  # noqa: E402
+    ERA_YEARS,
+    REFERENCE_SOURCES,
+    SONG_EMPEROR_REIGNS,
+    normalize_time,
+)
 from institution_categories import (  # noqa: E402
     INSTITUTION_GROUP_NAMES,
     classify_institution,
@@ -59,7 +64,7 @@ CHANGE_RELATION_OPTIONAL_COLUMNS = (
 )
 # 数据库文件没有变化时，前端仍可能命中旧的 immutable 首屏缓存。
 # 每次改变首屏数据契约时递增此版本，确保新字段立即进入浏览器。
-PAYLOAD_SCHEMA_VERSION = "20260817-era-table-v1"
+PAYLOAD_SCHEMA_VERSION = "20260818-emperor-reigns-v1"
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -647,6 +652,11 @@ def build_payload(*, include_details: bool = True) -> dict:
                 for name, (start, end) in ERA_YEARS.items()
                 if 960 <= start <= 1279
             ],
+            "emperorReigns": [dict(reign) for reign in SONG_EMPEROR_REIGNS],
+            "emperorReignsSource": {
+                "title": REFERENCE_SOURCES["emperor_reign_table"][0],
+                "url": REFERENCE_SOURCES["emperor_reign_table"][1],
+            },
         },
     }
 

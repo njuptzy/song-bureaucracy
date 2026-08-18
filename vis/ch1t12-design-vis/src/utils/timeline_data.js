@@ -20,6 +20,24 @@ export function normalizeTimelineEras(eras) {
     .sort((left, right) => left.start - right.start || left.end - right.end || left.name.localeCompare(right.name, "zh-CN"));
 }
 
+export function normalizeTimelineEmperorReigns(reigns) {
+  if (!Array.isArray(reigns)) return [];
+  return reigns
+    .map((reign) => ({
+      name: String(reign?.name ?? "").trim(),
+      personalName: String(reign?.personalName ?? reign?.personal_name ?? "").trim(),
+      start: finiteNumber(reign?.start),
+      end: finiteNumber(reign?.end),
+      phase: String(reign?.phase ?? "").trim(),
+    }))
+    .filter((reign) => (
+      reign.name && reign.start != null && reign.end != null && reign.start <= reign.end
+    ))
+    .sort((left, right) => (
+      left.start - right.start || left.end - right.end || left.name.localeCompare(right.name, "zh-CN")
+    ));
+}
+
 export function timelineEraForYear(year, eras) {
   const numericYear = finiteNumber(year);
   if (numericYear == null) return null;
@@ -109,4 +127,50 @@ export function layoutTimelineEraLabels(eras, xOf, options = {}) {
     }
   }
   return laidOut;
+}
+
+/**
+ * 在位区间的分隔线始终使用真实即位年份；名称只在自己的区间内显示。
+ * 短区间使用省略号或留空，避免把名称推入相邻君主的区间。
+ */
+export function layoutTimelineEmperorLabels(reigns, xOf, options = {}) {
+  const fontSize = Number(options.fontSize) > 0 ? Number(options.fontSize) : 14.26;
+  const padding = Number.isFinite(Number(options.padding))
+    ? Math.max(0, Number(options.padding))
+    : 0;
+  const records = normalizeTimelineEmperorReigns(reigns);
+
+  return records.map((reign, index) => {
+    const nextStart = records[index + 1]?.start;
+    const boundaryYear = Number.isFinite(nextStart) && nextStart > reign.start
+      ? nextStart
+      : reign.end + 1;
+    const startX = Number(xOf(reign.start));
+    const endX = Number(xOf(boundaryYear));
+    const validGeometry = Number.isFinite(startX) && Number.isFinite(endX) && endX >= startX;
+    const safeStartX = validGeometry ? startX : 0;
+    const safeEndX = validGeometry ? endX : 0;
+    const labelSlotWidth = Math.max(0, safeEndX - safeStartX - padding * 2);
+    const maxCharacters = Math.floor(labelSlotWidth / fontSize);
+    const codePoints = Array.from(reign.name);
+    let labelText = reign.name;
+    if (maxCharacters <= 0) {
+      labelText = "";
+    } else if (codePoints.length > maxCharacters) {
+      labelText = maxCharacters === 1
+        ? "…"
+        : `${codePoints.slice(0, maxCharacters - 1).join("")}…`;
+    }
+    return {
+      ...reign,
+      boundaryYear,
+      startX: safeStartX,
+      endX: safeEndX,
+      slotWidth: Math.max(0, safeEndX - safeStartX),
+      labelSlotWidth,
+      labelText,
+      labelVisible: validGeometry && Boolean(labelText),
+      labelX: safeStartX + Math.max(0, safeEndX - safeStartX) / 2,
+    };
+  });
 }

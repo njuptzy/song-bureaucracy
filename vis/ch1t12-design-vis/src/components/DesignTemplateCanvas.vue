@@ -106,7 +106,9 @@ import { formatSongYearLabel } from "../utils/song_era";
 import {
   buildTimelineYearTicks,
   layoutTimelineEraLabels,
+  layoutTimelineEmperorLabels,
   normalizeTimelineEras,
+  normalizeTimelineEmperorReigns,
 } from "../utils/timeline_data";
 import { detailHeaderLayout } from "../utils/detail_header";
 import {
@@ -5700,6 +5702,7 @@ function bindTimelineRange(svg) {
   originalTriangle.style.display = "none";
   originalYear.style.display = "none";
   const eraRecords = normalizeTimelineEras(props.data?.meta?.eras);
+  const emperorRecords = normalizeTimelineEmperorReigns(props.data?.meta?.emperorReigns);
   if (eraRecords.length) {
     // 原 SVG 中的年份、年号是设计示意，不是运行数据。只有在服务端提供
     // 完整年号表时才隐藏它们，避免旧 API 暂时缺字段时出现空时间轴。
@@ -5723,62 +5726,125 @@ function bindTimelineRange(svg) {
       }
     });
   }
+  if (emperorRecords.length) {
+    // 设计稿中的帝王名称及分隔线仅为示意，按完整在位数据重新绘制。
+    [...svg.querySelectorAll("text")].forEach((text) => {
+      const point = position(text);
+      if ((text.getAttribute("class") || "") === "cls-58"
+        && Math.abs((point?.y ?? 0) - 964.71) < 1) {
+        text.style.display = "none";
+      }
+    });
+    [...svg.querySelectorAll("line")].forEach((line) => {
+      const className = line.getAttribute("class") || "";
+      const y1 = Number(line.getAttribute("y1"));
+      const y2 = Number(line.getAttribute("y2"));
+      if (className.split(/\s+/).includes("cls-26")
+        && Math.abs(y1 - 951.49) < 0.1
+        && Math.abs(y2 - 969.8) < 0.1) {
+        line.style.display = "none";
+      }
+    });
+  }
   // 设计稿的 1109 年标记由三段竖线和上下端帽组成，需与静态三角一起隐藏。
   originalGuideLine?.parentElement?.parentElement?.style.setProperty("display", "none");
 
-  if (eraRecords.length) {
+  if (eraRecords.length || emperorRecords.length) {
     const timelineDataLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
     timelineDataLayer.classList.add("timeline-data-labels");
-    timelineDataLayer.setAttribute("data-source", "normalize_times.ERA_YEARS");
-    timelineDataLayer.setAttribute("aria-label", "依据完整年号数据绘制的年份和年号");
+    const timelineSources = [];
+    if (emperorRecords.length) timelineSources.push("normalize_times.SONG_EMPEROR_REIGNS");
+    if (eraRecords.length) timelineSources.push("normalize_times.ERA_YEARS");
+    timelineDataLayer.setAttribute("data-source", timelineSources.join(","));
+    timelineDataLayer.setAttribute("aria-label", "依据完整帝王在位与年号数据绘制的时间轴");
 
-    for (const year of buildTimelineYearTicks(YEAR_MIN, YEAR_MAX, 10)) {
-      const x = yearScale(year);
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("class", "cls-39");
-      label.setAttribute("x", String(x));
-      label.setAttribute("y", "1008.07");
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("pointer-events", "none");
-      label.textContent = `${year}年`;
-      timelineDataLayer.appendChild(label);
+    if (emperorRecords.length) {
+      const emperorLabels = layoutTimelineEmperorLabels(
+        emperorRecords,
+        (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
+        { fontSize: 14.26, padding: 0 },
+      );
+      const boundaryXs = emperorLabels.map((reign) => reign.startX);
+      const finalBoundaryX = emperorLabels.at(-1)?.endX;
+      if (Number.isFinite(finalBoundaryX)) boundaryXs.push(finalBoundaryX);
+
+      for (const x of [...new Set(boundaryXs)]) {
+        const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        separator.setAttribute("class", "cls-26");
+        separator.setAttribute("x1", String(x));
+        separator.setAttribute("x2", String(x));
+        separator.setAttribute("y1", "951.49");
+        separator.setAttribute("y2", "969.8");
+        separator.setAttribute("pointer-events", "none");
+        timelineDataLayer.appendChild(separator);
+      }
+
+      for (const reign of emperorLabels) {
+        if (!reign.labelVisible) continue;
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("class", "cls-58");
+        label.setAttribute("x", String(reign.labelX));
+        label.setAttribute("y", "964.71");
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("pointer-events", "none");
+        label.textContent = reign.labelText;
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        const personalName = reign.personalName ? `（${reign.personalName}）` : "";
+        title.textContent = `${reign.name}${personalName}：${reign.start}—${reign.end}年`;
+        label.appendChild(title);
+        timelineDataLayer.appendChild(label);
+      }
     }
 
-    // 年号区间和起始竖线全部保留。起止年份跨度不足 4 年的年号不显示文字，
-    // 达到年限但名称过长时在自己的时间格内显示省略号，不按字数改变年限阈值。
-    const labelY = 982.24;
-    const labelFontSize = 10;
-    const eraLabels = layoutTimelineEraLabels(
-      eraRecords,
-      (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
-      { minYears: 4, fontSize: labelFontSize, padding: 0 },
-    );
+    if (eraRecords.length) {
+      for (const year of buildTimelineYearTicks(YEAR_MIN, YEAR_MAX, 10)) {
+        const x = yearScale(year);
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("class", "cls-39");
+        label.setAttribute("x", String(x));
+        label.setAttribute("y", "1008.07");
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("pointer-events", "none");
+        label.textContent = `${year}年`;
+        timelineDataLayer.appendChild(label);
+      }
 
-    for (const era of eraLabels) {
-      const { startX, endX } = era;
-      // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
-      const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      separator.setAttribute("class", "cls-36");
-      separator.setAttribute("x1", String(startX));
-      separator.setAttribute("x2", String(startX));
-      separator.setAttribute("y1", "973.55");
-      separator.setAttribute("y2", "984.96");
-      separator.setAttribute("pointer-events", "none");
-      timelineDataLayer.appendChild(separator);
+      // 年号区间和起始竖线全部保留。起止年份跨度不足 4 年的年号不显示文字，
+      // 达到年限但名称过长时在自己的时间格内显示省略号，不按字数改变年限阈值。
+      const labelY = 982.24;
+      const labelFontSize = 10;
+      const eraLabels = layoutTimelineEraLabels(
+        eraRecords,
+        (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
+        { minYears: 4, fontSize: labelFontSize, padding: 0 },
+      );
 
-      if (!era.labelVisible) continue;
+      for (const era of eraLabels) {
+        const { startX } = era;
+        // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
+        const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        separator.setAttribute("class", "cls-36");
+        separator.setAttribute("x1", String(startX));
+        separator.setAttribute("x2", String(startX));
+        separator.setAttribute("y1", "973.55");
+        separator.setAttribute("y2", "984.96");
+        separator.setAttribute("pointer-events", "none");
+        timelineDataLayer.appendChild(separator);
 
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("class", "cls-44");
-      label.setAttribute("x", String(era.labelX));
-      label.setAttribute("y", String(labelY));
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("pointer-events", "none");
-      label.textContent = era.labelText;
-      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      title.textContent = `${era.name}：${era.start}—${era.end}年`;
-      label.appendChild(title);
-      timelineDataLayer.appendChild(label);
+        if (!era.labelVisible) continue;
+
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("class", "cls-44");
+        label.setAttribute("x", String(era.labelX));
+        label.setAttribute("y", String(labelY));
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("pointer-events", "none");
+        label.textContent = era.labelText;
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = `${era.name}：${era.start}—${era.end}年`;
+        label.appendChild(title);
+        timelineDataLayer.appendChild(label);
+      }
     }
 
     // 让范围选择控件位于数据标签之上，但不改变数据标签的位置。

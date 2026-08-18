@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   buildTimelineYearTicks,
   layoutTimelineEraLabels,
+  layoutTimelineEmperorLabels,
   normalizeTimelineEras,
+  normalizeTimelineEmperorReigns,
   timelineEraForYear,
 } from "./timeline_data.js";
 
@@ -114,4 +116,29 @@ test("年号文字不越过自己的起始竖线", () => {
     padding: 0,
   });
   assert.ok(layout[0].labelX - layout[0].labelWidth / 2 >= layout[0].startX);
+});
+
+test("帝王在位数据按真实起始年排序并保留姓名", () => {
+  const reigns = normalizeTimelineEmperorReigns([
+    { name: "神宗", personal_name: "赵顼", start: 1067, end: 1085, phase: "北宋" },
+    { name: "英宗", personal_name: "赵曙", start: 1063, end: 1067, phase: "北宋" },
+  ]);
+  assert.deepEqual(reigns.map((reign) => [reign.name, reign.personalName, reign.start]), [
+    ["英宗", "赵曙", 1063],
+    ["神宗", "赵顼", 1067],
+  ]);
+});
+
+test("帝王分隔线绑定下一位即位年且短区间不与相邻名称重叠", () => {
+  const layout = layoutTimelineEmperorLabels([
+    { name: "仁宗", start: 1022, end: 1063 },
+    { name: "英宗", start: 1063, end: 1067 },
+    { name: "神宗", start: 1067, end: 1085 },
+  ], (year) => year * 4, { fontSize: 14.26, padding: 0 });
+  assert.equal(layout[0].boundaryYear, 1063);
+  assert.equal(layout[0].endX, 1063 * 4);
+  assert.equal(layout[1].labelText, "…");
+  assert.equal(layout[1].labelX, (1063 * 4 + 1067 * 4) / 2);
+  assert.equal(layout[2].boundaryYear, 1086);
+  assert.equal(layout[2].labelText, "神宗");
 });

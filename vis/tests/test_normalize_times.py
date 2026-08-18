@@ -1,9 +1,27 @@
 import unittest
 
-from vis.backend.normalize_times import chinese_number, normalize_time
+from vis.backend.normalize_times import (
+    SONG_EMPEROR_REIGNS,
+    chinese_number,
+    normalize_time,
+)
 
 
 class NormalizeTimesTest(unittest.TestCase):
+    def test_song_emperor_reigns_are_complete_and_ordered(self):
+        self.assertEqual(
+            [reign["name"] for reign in SONG_EMPEROR_REIGNS],
+            [
+                "太祖", "太宗", "真宗", "仁宗", "英宗", "神宗",
+                "哲宗", "徽宗", "钦宗", "高宗", "孝宗", "光宗",
+                "宁宗", "理宗", "度宗", "恭帝", "端宗", "帝昺",
+            ],
+        )
+        self.assertEqual(SONG_EMPEROR_REIGNS[0]["start"], 960)
+        self.assertEqual(SONG_EMPEROR_REIGNS[-1]["end"], 1279)
+        for previous, current in zip(SONG_EMPEROR_REIGNS, SONG_EMPEROR_REIGNS[1:]):
+            self.assertLessEqual(current["start"], previous["end"] + 1)
+
     def test_chinese_numbers(self):
         self.assertEqual(chinese_number("元"), 1)
         self.assertEqual(chinese_number("十"), 10)
