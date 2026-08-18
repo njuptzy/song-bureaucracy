@@ -83,6 +83,14 @@ export function formatTimelineRegnalYear(year, eras) {
   return regnalYear ? `${era.name}${regnalYear}` : "年号未明";
 }
 
+export function formatTimelineHeader(year, eras, reigns) {
+  const numericYear = finiteNumber(year);
+  if (numericYear == null) return "年代未明";
+  const emperor = formatTimelineEmperor(numericYear, reigns);
+  const regnalYear = formatTimelineRegnalYear(numericYear, eras);
+  return `${emperor} ${regnalYear}（${Math.round(numericYear)}年）`;
+}
+
 export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
   const min = Math.ceil(Number(yearMin));
   const max = Math.floor(Number(yearMax));

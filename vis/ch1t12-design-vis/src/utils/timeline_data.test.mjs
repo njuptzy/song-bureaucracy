@@ -4,6 +4,7 @@ import {
   buildTimelineYearTicks,
   formatChineseRegnalYear,
   formatTimelineEmperor,
+  formatTimelineHeader,
   formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
@@ -74,6 +75,26 @@ test("交界年选择后生效的年号，缺失记录时不猜测", () => {
   ];
   assert.equal(formatTimelineRegnalYear(1127, eras), "建炎元年");
   assert.equal(formatTimelineRegnalYear(1200, eras), "年号未明");
+});
+
+test("顶部年份标题包含帝号、年号年次和公元年", () => {
+  const eras = [
+    { name: "熙宁", start: 1068, end: 1077 },
+    { name: "靖康", start: 1126, end: 1127 },
+    { name: "建炎", start: 1127, end: 1130 },
+    { name: "景炎", start: 1276, end: 1278 },
+    { name: "祥兴", start: 1278, end: 1279 },
+  ];
+  const reigns = [
+    { name: "神宗", start: 1067, end: 1085 },
+    { name: "钦宗", start: 1126, end: 1127 },
+    { name: "高宗", start: 1127, end: 1162 },
+    { name: "端宗", start: 1276, end: 1278 },
+    { name: "帝昺", start: 1278, end: 1279 },
+  ];
+  assert.equal(formatTimelineHeader(1069, eras, reigns), "神宗 熙宁二年（1069年）");
+  assert.equal(formatTimelineHeader(1127, eras, reigns), "高宗 建炎元年（1127年）");
+  assert.equal(formatTimelineHeader(1278, eras, reigns), "帝昺 祥兴元年（1278年）");
 });
 
 test("年份刻度以服务端实际范围为边界", () => {

@@ -102,10 +102,10 @@ import {
   timetreeYearToX,
 } from "../utils/timetree_layout";
 import { formatStandardTime } from "../utils/time_format";
-import { formatSongYearLabel } from "../utils/song_era";
 import {
   buildTimelineYearTicks,
   formatTimelineEmperor,
+  formatTimelineHeader,
   formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
@@ -1790,7 +1790,11 @@ function renderDynamicHierarchy(svg) {
   const data = categoryForestData(selectedCategory.value);
   if (!data) return;
   const yearMarker = svgElement("g", { class: "hierarchy-year-marker" });
-  const yearLabel = formatSongYearLabel(currentCanvasYear(), props.data.meta?.eras);
+  const yearLabel = formatTimelineHeader(
+    currentCanvasYear(),
+    props.data.meta?.eras,
+    props.data.meta?.emperorReigns,
+  );
   // 原稿标题基线为 94.2，42.86px 字号的可见字框中轴约为 78；
   // 使用固定中轴和与原稿文字一致的 central 基线，避免年号贴到上端。
   const headerCenterY = 78;
