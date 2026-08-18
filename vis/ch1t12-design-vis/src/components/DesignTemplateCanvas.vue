@@ -2041,7 +2041,8 @@ function renderDynamicHierarchy(svg) {
         return range ? { id: institutionGroupNode.data.id, ...range } : null;
       })
       .filter(Boolean);
-    const packedInstitutionRanges = packHorizontalRanges(institutionRanges, 56);
+    // 只保留能够辨认分组的最小横向断口；高度错层已经负责避免总线重合。
+    const packedInstitutionRanges = packHorizontalRanges(institutionRanges, 24);
     const originalRangeById = new Map(institutionRanges.map((range) => [range.id, range]));
     const packedLeft = d3.min(packedInstitutionRanges, (range) => range.left);
     const packedRight = d3.max(packedInstitutionRanges, (range) => range.right);
