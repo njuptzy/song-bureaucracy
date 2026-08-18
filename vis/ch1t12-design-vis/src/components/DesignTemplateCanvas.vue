@@ -29,6 +29,7 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
+  hierarchyNodeGap,
   isHorizontalWheelGesture,
   packHorizontalRanges,
   panFromScrollbarOffset,
@@ -1826,9 +1827,11 @@ function renderDynamicHierarchy(svg) {
     .separation((a, b) => {
       // D3 在同层按“右节点 a、左节点 b”询问间距；详情只向右展开，
       // 因此只把 b 的右宽度和 a 的左宽度计入，不能在左侧镜像留白。
+      // 不同下属虚拟组必须形成独立的视觉分区，避免各组总线首尾相接。
+      const structuralGap = hierarchyNodeGap(a, b);
       const requiredDistance = nodeRightExtent(b)
         + nodeLeftExtent(a)
-        + (a.parent === b.parent ? 18 : 30);
+        + structuralGap;
       return Math.max(a.parent === b.parent ? 1 : 1.25, requiredDistance / 52);
     })(root);
   const hierarchyNodes = root.descendants();

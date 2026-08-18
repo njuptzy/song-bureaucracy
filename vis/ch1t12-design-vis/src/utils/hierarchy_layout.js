@@ -7,6 +7,28 @@ export function virtualBusRange(sourceX, targetXs) {
   return [Math.min(...xs), Math.max(...xs)];
 }
 
+export function subordinateGroupAncestorId(node) {
+  let current = node;
+  while (current) {
+    if (current.data?.isSubordinateGroup) return current.data.id ?? null;
+    current = current.parent;
+  }
+  return null;
+}
+
+export function hierarchyNodeGap(
+  a,
+  b,
+  { sibling = 18, cousin = 30, subordinateGroup = 64 } = {},
+) {
+  const aGroupId = subordinateGroupAncestorId(a);
+  const bGroupId = subordinateGroupAncestorId(b);
+  if (aGroupId != null && bGroupId != null && aGroupId !== bGroupId) {
+    return subordinateGroup;
+  }
+  return a?.parent === b?.parent ? sibling : cousin;
+}
+
 export function fitRangeShift(contentLeft, contentRight, viewportLeft, viewportRight) {
   const contentWidth = contentRight - contentLeft;
   const viewportWidth = viewportRight - viewportLeft;

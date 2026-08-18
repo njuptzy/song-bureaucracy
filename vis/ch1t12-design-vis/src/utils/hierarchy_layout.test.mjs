@@ -5,12 +5,14 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
+  hierarchyNodeGap,
   horizontalRangesFit,
   isHorizontalWheelGesture,
   packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   relativeAffineMatrix,
+  subordinateGroupAncestorId,
   virtualBusRange,
 } from "./hierarchy_layout.js";
 
@@ -37,6 +39,35 @@ test("展开的大机构锚定在所属制度组正下方", () => {
 test("虚拟分组总线同时覆盖来源节点和全部目标节点", () => {
   assert.deepEqual(virtualBusRange(620, [970]), [620, 970]);
   assert.deepEqual(virtualBusRange(970, [620, 760]), [620, 970]);
+});
+
+test("下属虚拟组内保持紧凑，两个虚拟组之间保留独立边界", () => {
+  const parent = { data: { id: 406 } };
+  const groupA = {
+    data: { id: "subordinate-group:406:a", isSubordinateGroup: true },
+    parent,
+  };
+  const groupB = {
+    data: { id: "subordinate-group:406:b", isSubordinateGroup: true },
+    parent,
+  };
+  const childA1 = { data: { id: 1 }, parent: groupA };
+  const childA2 = { data: { id: 2 }, parent: groupA };
+  const childB = { data: { id: 3 }, parent: groupB };
+
+  assert.equal(subordinateGroupAncestorId(childA1), groupA.data.id);
+  assert.equal(hierarchyNodeGap(childA1, childA2), 18);
+  assert.equal(hierarchyNodeGap(childA2, childB), 64);
+  assert.equal(hierarchyNodeGap(groupA, groupB), 64);
+});
+
+test("没有下属虚拟组时沿用原有不同父节点间距", () => {
+  const leftParent = { data: { id: "left" } };
+  const rightParent = { data: { id: "right" } };
+  assert.equal(hierarchyNodeGap(
+    { data: { id: 1 }, parent: leftParent },
+    { data: { id: 2 }, parent: rightParent },
+  ), 30);
 });
 
 test("下级子树利用可用宽度，不在左侧裁断后留下右侧空白", () => {
