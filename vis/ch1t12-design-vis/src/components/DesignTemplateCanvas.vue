@@ -30,9 +30,7 @@ import {
   buildHierarchyEdgeIndex,
   fitRangeShift,
   hierarchyNodeGap,
-  horizontalLayoutRange,
   isHorizontalWheelGesture,
-  packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   relativeAffineMatrix,
@@ -1865,8 +1863,8 @@ function renderDynamicHierarchy(svg) {
     }
   }
 
+  // 空间展开保持制度组及各分支的原始相对位置；超宽内容只通过整体平移浏览。
   const expandedBranchCenterX = new Map();
-  const expandedBranchRanges = [];
   let focusedBranchNode = null;
   for (const expandedInstitutionGroupNode of expandedInstitutionGroupNodes) {
     let branchCenterX = institutionGroupRowX.get(expandedInstitutionGroupNode.data.id)
@@ -1909,34 +1907,6 @@ function renderDynamicHierarchy(svg) {
         : areaCenterX - (minOffset + maxOffset) / 2;
     }
     expandedBranchCenterX.set(expandedInstitutionGroupNode.data.id, branchCenterX);
-    expandedBranchRanges.push({
-      id: expandedInstitutionGroupNode.data.id,
-      left: branchCenterX + minOffset,
-      right: branchCenterX + maxOffset,
-    });
-  }
-  if (expandedBranchRanges.length > 1) {
-    const originalRangeById = new Map(expandedBranchRanges.map((range) => [range.id, range]));
-    const packedRanges = packHorizontalRanges(expandedBranchRanges, 24);
-    const packedLeft = d3.min(packedRanges, (range) => range.left);
-    const packedRight = d3.max(packedRanges, (range) => range.right);
-    const viewportShift = fitRangeShift(
-      packedLeft,
-      packedRight,
-      area.left,
-      area.right,
-    );
-    for (const range of packedRanges) {
-      const originalRange = originalRangeById.get(range.id);
-      const branchCenter = expandedBranchCenterX.get(range.id);
-      if (!originalRange || branchCenter == null) continue;
-      expandedBranchCenterX.set(
-        range.id,
-        branchCenter + range.left + viewportShift - originalRange.left,
-      );
-      originalRange.left = range.left + viewportShift;
-      originalRange.right = range.right + viewportShift;
-    }
   }
 
   const clipId = "dynamic-tree-viewport-clip";
@@ -2029,47 +1999,6 @@ function renderDynamicHierarchy(svg) {
       ),
     }];
   }));
-
-  // 空间展开时，制度组标题和其子树必须作为一个整体打包。
-  // 只移动子树会让总线起点留在原处，随后跨进相邻制度组，视觉上重新连成一条线。
-  if (spaceAwareExpansion.value && expandedInstitutionGroupNodes.length > 1) {
-    const institutionRanges = institutionGroupNodes
-      .map((institutionGroupNode) => {
-        const range = horizontalLayoutRange(
-          institutionGroupNode.descendants().map((node) => nodeLayout.get(node)),
-        );
-        return range ? { id: institutionGroupNode.data.id, ...range } : null;
-      })
-      .filter(Boolean);
-    // 只保留能够辨认分组的最小横向断口；高度错层已经负责避免总线重合。
-    const packedInstitutionRanges = packHorizontalRanges(institutionRanges, 24);
-    const originalRangeById = new Map(institutionRanges.map((range) => [range.id, range]));
-    const packedLeft = d3.min(packedInstitutionRanges, (range) => range.left);
-    const packedRight = d3.max(packedInstitutionRanges, (range) => range.right);
-    const viewportShift = fitRangeShift(
-      packedLeft,
-      packedRight,
-      area.left,
-      area.right,
-    );
-    const shiftLayout = (layout, delta) => {
-      if (!layout || !delta) return;
-      layout.x += delta;
-      if (layout.left != null) layout.left += delta;
-      if (layout.right != null) layout.right += delta;
-    };
-    for (const packedRange of packedInstitutionRanges) {
-      const originalRange = originalRangeById.get(packedRange.id);
-      if (!originalRange) continue;
-      const delta = packedRange.left + viewportShift - originalRange.left;
-      const institutionGroupNode = institutionGroupNodes.find(
-        (node) => node.data.id === packedRange.id,
-      );
-      institutionGroupNode?.descendants().forEach((node) => {
-        shiftLayout(nodeLayout.get(node), delta);
-      });
-    }
-  }
 
   if (!spaceAwareExpansion.value && focusedBranchNode?.children?.length) {
     const descendantLayouts = focusedBranchNode.descendants()
