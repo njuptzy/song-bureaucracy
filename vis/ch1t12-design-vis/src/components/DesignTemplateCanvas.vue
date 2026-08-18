@@ -112,6 +112,12 @@ import {
   normalizeTimelineEras,
   normalizeTimelineEmperorReigns,
 } from "../utils/timeline_data";
+import {
+  MAJOR_EVENTS,
+  STATIC_MAJOR_EVENT_TITLES,
+  majorEventTooltip,
+  normalizeMajorEvents,
+} from "../utils/major_events";
 import { detailHeaderLayout } from "../utils/detail_header";
 import {
   nodeChangeIndicatorAriaLabel,
@@ -5691,6 +5697,92 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
   if (oldFrame && svg) playHierarchyTransition(svg, oldFrame, changes);
 }
 
+function bindMajorEvents(svg) {
+  const staticTitleSet = new Set(STATIC_MAJOR_EVENT_TITLES);
+  const staticLabels = [...svg.querySelectorAll("text")].filter((text) => {
+    const point = position(text);
+    return point
+      && Math.abs(point.y - 931.02) < 0.2
+      && staticTitleSet.has(normalizeText(text));
+  });
+  const staticPointLines = [...svg.querySelectorAll("line")].filter((line) => (
+    Math.abs(Number(line.getAttribute("y1")) - 909.59) < 0.1
+    && Math.abs(Number(line.getAttribute("y2")) - 916.43) < 0.1
+  ));
+  const staticRangeBars = [...svg.querySelectorAll("rect")].filter((rect) => {
+    const y = Number(rect.getAttribute("y"));
+    const height = Number(rect.getAttribute("height"));
+    return Math.abs(height - 2.95) < 0.1
+      && (Math.abs(y - 909.83) < 0.1 || Math.abs(y - 913.58) < 0.1);
+  });
+
+  const labelTemplate = staticLabels[0]?.cloneNode(true);
+  const pointTemplate = staticPointLines.find((line) => (
+    (line.getAttribute("class") || "").split(/\s+/).includes("cls-26")
+  ))?.cloneNode(true) || staticPointLines[0]?.cloneNode(true);
+  const rangeTemplate = staticRangeBars.find((rect) => Math.abs(Number(rect.getAttribute("y")) - 909.83) < 0.1)
+    ?.cloneNode(true);
+  if (!labelTemplate || !pointTemplate || !rangeTemplate) return;
+
+  staticLabels.forEach((element) => element.style.setProperty("display", "none"));
+  staticPointLines.forEach((element) => element.style.setProperty("display", "none"));
+  staticRangeBars.forEach((element) => element.style.setProperty("display", "none"));
+
+  const eventLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  eventLayer.classList.add("timeline-major-events");
+  eventLayer.setAttribute("data-source", "src/utils/major_events.js");
+  eventLayer.setAttribute("aria-label", "依据史料时间绑定的重大事件");
+
+  const events = normalizeMajorEvents(MAJOR_EVENTS, { yearMin: YEAR_MIN, yearMax: YEAR_MAX });
+  for (const event of events) {
+    const titleText = majorEventTooltip(event);
+    if (event.kind === "range") {
+      const bar = rangeTemplate.cloneNode(true);
+      bar.style.removeProperty("display");
+      const startX = yearScale(event.startYear);
+      const endX = yearScale(Math.min(TIMELINE_SCALE_END, event.endYear + 1));
+      bar.setAttribute("x", String(startX));
+      bar.setAttribute("width", String(Math.max(0, endX - startX)));
+      bar.setAttribute("pointer-events", "none");
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = titleText;
+      bar.replaceChildren(title);
+      eventLayer.appendChild(bar);
+    } else {
+      const marker = pointTemplate.cloneNode(true);
+      marker.style.removeProperty("display");
+      const x = yearScale(event.startYear);
+      marker.setAttribute("x1", String(x));
+      marker.setAttribute("x2", String(x));
+      marker.setAttribute("pointer-events", "none");
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = titleText;
+      marker.replaceChildren(title);
+      eventLayer.appendChild(marker);
+    }
+
+    const label = labelTemplate.cloneNode(true);
+    label.style.removeProperty("display");
+    label.setAttribute("transform", `translate(${yearScale(event.anchorYear)} 931.02)`);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("pointer-events", "none");
+    const tspan = label.querySelector("tspan");
+    if (tspan) {
+      tspan.setAttribute("x", "0");
+      tspan.setAttribute("y", "0");
+      tspan.textContent = event.title;
+    } else {
+      label.textContent = event.title;
+    }
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = titleText;
+    label.appendChild(title);
+    eventLayer.appendChild(label);
+  }
+
+  svg.appendChild(eventLayer);
+}
+
 function bindTimelineRange(svg) {
   const originalTriangle = [...svg.querySelectorAll("path")].find(
     (path) => (path.getAttribute("d") || "").startsWith("M837.34,1027.81")
@@ -5753,6 +5845,8 @@ function bindTimelineRange(svg) {
   }
   // 设计稿的 1109 年标记由三段竖线和上下端帽组成，需与静态三角一起隐藏。
   originalGuideLine?.parentElement?.parentElement?.style.setProperty("display", "none");
+
+  bindMajorEvents(svg);
 
   if (eraRecords.length || emperorRecords.length) {
     const timelineDataLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
