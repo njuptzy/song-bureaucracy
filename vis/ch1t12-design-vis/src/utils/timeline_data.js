@@ -43,7 +43,7 @@ export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
 /**
  * 为年号文字分配各自的真实时间段。
  *
- * 年号的起止竖线和时间段始终保留；文字是否显示只由持续年数决定，
+ * 年号的起止竖线和时间段始终保留；文字是否显示只由起止年份跨度决定，
  * 不因年号字数改变阈值。达到阈值但文字过长时，在自己的时间格内截成省略号，
  * 这样短年号不会被硬挤到邻近年号上方。
  */
@@ -61,15 +61,16 @@ export function layoutTimelineEraLabels(eras, xOf, options = {}) {
     const safeStartX = validGeometry ? startX : 0;
     const safeEndX = validGeometry ? Math.max(startX, endX) : 0;
     const slotWidth = Math.max(0, safeEndX - safeStartX);
-    const durationYears = Math.max(0, era.end - era.start + 1);
+    // 阈值按起止年份的跨度计算：963—968 的跨度是 5 年。
+    const spanYears = Math.max(0, era.end - era.start);
     return {
       ...era,
       startX: safeStartX,
       endX: safeEndX,
       slotWidth,
-      durationYears,
-      labelVisible: validGeometry && durationYears >= minYears,
-      labelHiddenReason: validGeometry && durationYears >= minYears ? null : "short-range",
+      spanYears,
+      labelVisible: validGeometry && spanYears >= minYears,
+      labelHiddenReason: validGeometry && spanYears >= minYears ? null : "short-range",
     };
   });
 
@@ -91,9 +92,17 @@ export function layoutTimelineEraLabels(eras, xOf, options = {}) {
     item.labelSlotStartX = item.startX + padding;
     item.labelSlotEndX = Math.max(item.labelSlotStartX, labelEndX - padding);
     item.labelSlotWidth = labelSlotWidth;
-    item.labelX = item.startX + Math.max(0, labelEndX - item.startX) / 2;
     item.labelText = labelText;
     item.labelWidth = labelText.length * fontSize;
+    // 文字中心必须落在自己的时间格内，避免字形左伸到起始竖线之前，
+    // 或右伸进相邻年号的时间格。这里使用估算文字宽度夹紧中心点；
+    // 文字本身已经按同一格宽度截断，因此不会改变真实年份坐标。
+    const labelCenterX = item.startX + Math.max(0, labelEndX - item.startX) / 2;
+    const labelMinX = item.startX + item.labelWidth / 2;
+    const labelMaxX = labelEndX - item.labelWidth / 2;
+    item.labelX = labelMaxX >= labelMinX
+      ? Math.max(labelMinX, Math.min(labelMaxX, labelCenterX))
+      : labelCenterX;
     if (item.labelVisible && !labelText) {
       item.labelVisible = false;
       item.labelHiddenReason = "no-room";
