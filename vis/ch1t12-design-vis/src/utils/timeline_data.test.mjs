@@ -63,6 +63,20 @@ test("达到固定年限后不因年号字数隐藏，过长文字只截成省�
   assert.equal(layout[0].labelText, "…");
 });
 
+test("乾德持续六年时完整显示，不被错误当作短年号", () => {
+  const layout = layoutTimelineEraLabels([
+    { name: "乾德", start: 963, end: 968 },
+    { name: "开宝", start: 968, end: 976 },
+  ], (year) => year * 4.14, {
+    minYears: 5,
+    fontSize: 10,
+    padding: 0,
+  });
+  assert.equal(layout[0].durationYears, 6);
+  assert.equal(layout[0].labelVisible, true);
+  assert.equal(layout[0].labelText, "乾德");
+});
+
 test("可见年号在自己的时间格内，不与相邻文字相撞", () => {
   const eras = [
     { name: "甲", start: 1, end: 10 },

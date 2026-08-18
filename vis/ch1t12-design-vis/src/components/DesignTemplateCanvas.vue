@@ -5761,7 +5761,7 @@ function bindTimelineRange(svg) {
     const eraLabels = layoutTimelineEraLabels(
       eraRecords,
       (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
-      { minYears: 5, fontSize: labelFontSize, padding: 2 },
+      { minYears: 5, fontSize: labelFontSize, padding: 0 },
     );
 
     for (const era of eraLabels) {

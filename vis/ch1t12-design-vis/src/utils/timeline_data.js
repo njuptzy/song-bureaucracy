@@ -52,7 +52,7 @@ export function layoutTimelineEraLabels(eras, xOf, options = {}) {
   const fontSize = Number(options.fontSize) > 0 ? Number(options.fontSize) : 10;
   const padding = Number.isFinite(Number(options.padding))
     ? Math.max(0, Number(options.padding))
-    : 2;
+    : 0;
   const records = normalizeTimelineEras(eras);
   const laidOut = records.map((era) => {
     const startX = Number(xOf(era.start));
