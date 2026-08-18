@@ -16,6 +16,21 @@ test("层级设置独立位于三个视图上方且彼此不重叠", () => {
       + HIERARCHY_HEADER_LAYOUT.controlGap
       <= HIERARCHY_HEADER_LAYOUT.animationControlX,
   );
+  assert.equal(
+    HIERARCHY_HEADER_LAYOUT.animationControlX
+      - HIERARCHY_HEADER_LAYOUT.spaceControlX,
+    HIERARCHY_HEADER_LAYOUT.controlWidth + HIERARCHY_HEADER_LAYOUT.controlGap,
+  );
+  assert.equal(
+    HIERARCHY_HEADER_LAYOUT.virtualNodeControlX
+      - HIERARCHY_HEADER_LAYOUT.animationControlX,
+    HIERARCHY_HEADER_LAYOUT.controlWidth + HIERARCHY_HEADER_LAYOUT.controlGap,
+  );
+  assert.equal(
+    HIERARCHY_HEADER_LAYOUT.spaceControlX + HIERARCHY_HEADER_LAYOUT.controlWidth / 2,
+    HIERARCHY_HEADER_LAYOUT.evolutionViewX
+      + HIERARCHY_HEADER_LAYOUT.controlWidth / 2,
+  );
 });
 
 test("层级动画只有显式开启且位于层级视图时运行", () => {

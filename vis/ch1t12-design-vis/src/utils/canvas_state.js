@@ -78,6 +78,9 @@ export function sanitizeCanvasState(value) {
   if (typeof value.spaceAwareExpansion === "boolean") {
     state.spaceAwareExpansion = value.spaceAwareExpansion;
   }
+  if (typeof value.showVirtualNodes === "boolean") {
+    state.showVirtualNodes = value.showVirtualNodes;
+  }
   return Object.keys(state).length ? state : null;
 }
 

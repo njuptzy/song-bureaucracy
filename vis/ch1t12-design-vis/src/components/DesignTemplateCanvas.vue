@@ -210,6 +210,7 @@ const expandedDetailId = ref(null);
 const inlineDetailField = ref("duty");
 const inlineDetailOfficialId = ref(null);
 const spaceAwareExpansion = ref(initialState.spaceAwareExpansion ?? false);
+const showVirtualNodes = ref(initialState.showVirtualNodes !== false);
 const hierarchyAnimationEnabled = ref(false);
 const svgCache = new Map();
 const hierarchyTemplateCache = new WeakMap();
@@ -361,6 +362,7 @@ const persistedCanvasState = computed(() => ({
   compositionFocusId: compositionFocusId.value,
   selectedCategory: selectedCategory.value,
   spaceAwareExpansion: spaceAwareExpansion.value,
+  showVirtualNodes: showVirtualNodes.value,
 }));
 
 function restoreCanvasState(state) {
@@ -400,6 +402,7 @@ function restoreCanvasState(state) {
     selectedCategory.value = state.selectedCategory.trim();
   }
   spaceAwareExpansion.value = state.spaceAwareExpansion === true;
+  showVirtualNodes.value = state.showVirtualNodes !== false;
 
   // 这些是当前点击产生的临时高亮，不属于上一个画布状态。
   evolutionSearchOpen.value = false;
@@ -1071,6 +1074,7 @@ function hierarchyTreeData(rootId, depth = 0, visiting = new Set()) {
     .sort(compareInstitutionIds);
   const shouldExpand = expandedHierarchyPath.includes(rootId);
   const groupedChildren = shouldExpand
+    && showVirtualNodes.value
     ? buildSubordinateGroupNodes({
       parent: entity,
       childIds: allChildren,
@@ -1142,7 +1146,9 @@ function categoryForestData(category) {
   }
   const virtualId = `category:${category}`;
   const showRoots = !collapsedHierarchyIds.has(virtualId);
-  const visibleRoots = showRoots
+  const visibleRoots = !showVirtualNodes.value
+    ? orderedRoots.map((id) => hierarchyTreeData(id, 1)).filter(Boolean)
+    : showRoots
     ? buildInstitutionGroupNodes({
       rootIds: orderedRoots,
       entityMap,
@@ -1152,15 +1158,18 @@ function categoryForestData(category) {
       treeForRoot: (id) => hierarchyTreeData(id, 2),
     })
     : [];
-  visibleRoots.forEach((group) => {
-    group.memberEntityIds = group.memberEntityIds.flatMap(hierarchySubtreeIds);
-  });
+  if (showVirtualNodes.value) {
+    visibleRoots.forEach((group) => {
+      group.memberEntityIds = group.memberEntityIds.flatMap(hierarchySubtreeIds);
+    });
+  }
   return {
     id: virtualId,
     title: category,
     childCount: orderedRoots.length,
-    hiddenCount: orderedRoots.length - visibleRoots.length,
+    hiddenCount: showVirtualNodes.value ? orderedRoots.length - visibleRoots.length : 0,
     isVirtual: true,
+    isLayoutRoot: !showVirtualNodes.value,
     memberEntityIds: orderedRoots.flatMap(hierarchySubtreeIds),
     children: visibleRoots,
   };
@@ -2384,7 +2393,7 @@ function renderDynamicHierarchy(svg) {
 
   // 每个虚拟节点使用独立横向总线，虚拟分组不冒充数据库中的历史层级边。
   const virtualParents = hierarchyNodes.filter((node) => (
-    node.data.isVirtual && node.children?.length
+    node.data.isVirtual && !node.data.isLayoutRoot && node.children?.length
   ));
   for (const virtualParent of virtualParents) {
     const source = nodeLayout.get(virtualParent);
@@ -2415,6 +2424,7 @@ function renderDynamicHierarchy(svg) {
 
   let expandedDetailNode = null;
   for (const node of hierarchyNodes) {
+    if (node.data.isLayoutRoot) continue;
     const layout = nodeLayout.get(node);
     const nodeGroup = node.data.isVirtual
       ? document.createElementNS("http://www.w3.org/2000/svg", "g")
@@ -4920,6 +4930,101 @@ function bindHierarchyAnimationControl(svg) {
   sync();
 }
 
+function bindVirtualNodeVisibilityControl(svg) {
+  let control = svg.querySelector(".virtual-node-visibility-control");
+  if (!control) {
+    const ns = "http://www.w3.org/2000/svg";
+    control = document.createElementNS(ns, "g");
+    control.classList.add("virtual-node-visibility-control");
+    control.setAttribute(
+      "transform",
+      `translate(${HIERARCHY_HEADER_LAYOUT.virtualNodeControlX} ${HIERARCHY_HEADER_LAYOUT.settingsY})`,
+    );
+    control.setAttribute("role", "switch");
+    control.setAttribute("tabindex", "0");
+    control.style.cursor = "pointer";
+
+    const outline = document.createElementNS(ns, "rect");
+    outline.dataset.controlPart = "outline";
+    outline.setAttribute("x", "0");
+    outline.setAttribute("y", "0");
+    outline.setAttribute("width", String(HIERARCHY_HEADER_LAYOUT.controlWidth));
+    outline.setAttribute("height", String(HIERARCHY_HEADER_LAYOUT.settingsHeight));
+    outline.setAttribute("fill", "#563905");
+    outline.setAttribute("stroke", "#563905");
+
+    // 沿用层级动画开关已有的轨道和滑块样式，避免为同类设置另造图标。
+    const track = document.createElementNS(ns, "rect");
+    track.dataset.controlPart = "track";
+    track.setAttribute("x", "12");
+    track.setAttribute("y", "11.5");
+    track.setAttribute("width", "30");
+    track.setAttribute("height", "13");
+    track.setAttribute("rx", "6.5");
+    track.setAttribute("fill", "none");
+    track.setAttribute("stroke", "#563905");
+    track.setAttribute("stroke-width", "0.9");
+
+    const thumb = document.createElementNS(ns, "circle");
+    thumb.dataset.controlPart = "thumb";
+    thumb.setAttribute("cy", "18");
+    thumb.setAttribute("r", "4.5");
+    thumb.setAttribute("fill", "#563905");
+
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", "cls-49");
+    label.setAttribute("x", "51");
+    label.setAttribute("y", "18");
+    label.setAttribute("dominant-baseline", "central");
+    label.textContent = "虚拟节点";
+
+    const title = document.createElementNS(ns, "title");
+    control.append(outline, track, thumb, label, title);
+    svg.appendChild(control);
+  }
+
+  const sync = () => {
+    const enabled = showVirtualNodes.value;
+    const outline = control.querySelector("[data-control-part='outline']");
+    const track = control.querySelector("[data-control-part='track']");
+    const thumb = control.querySelector("[data-control-part='thumb']");
+    control.style.display = viewMode.value === "hierarchy" ? "" : "none";
+    control.setAttribute("aria-checked", String(enabled));
+    control.setAttribute(
+      "aria-label",
+      enabled ? "隐藏虚拟节点，保留真实机构和上下级关系" : "显示虚拟节点",
+    );
+    outline.setAttribute("fill-opacity", enabled ? "0.12" : "0");
+    outline.setAttribute("stroke-width", enabled ? "1.35" : "0.8");
+    track.setAttribute("fill", enabled ? "#563905" : "none");
+    track.setAttribute("fill-opacity", enabled ? "0.16" : "0");
+    thumb.setAttribute("cx", enabled ? "35.5" : "18.5");
+    control.querySelector("title").textContent = enabled
+      ? "虚拟节点已显示：包括类别、制度组和下属分组"
+      : "虚拟节点已隐藏：只显示真实机构及其历史上下级关系";
+  };
+
+  const toggle = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showVirtualNodes.value = !showVirtualNodes.value;
+    hierarchyPanFocusId = selectedId.value;
+    sync();
+    refreshTemplate();
+  };
+  d3.select(control)
+    .on("click.virtual-node-visibility", toggle)
+    .on("keydown.virtual-node-visibility", (event) => {
+      if (event.key === "Enter" || event.key === " ") toggle(event);
+    })
+    .on("mouseenter.virtual-node-visibility", () => {
+      control.querySelector("[data-control-part='outline']")?.setAttribute("stroke-width", "1.35");
+    })
+    .on("mouseleave.virtual-node-visibility", sync);
+  svg.__syncVirtualNodeVisibilityControl = sync;
+  sync();
+}
+
 function enterEvolutionView({ entityId = null, sourceView = viewMode.value } = {}) {
   if (viewModeLocked.value) return;
   const requested = entityId != null ? entityMap.get(entityId) : null;
@@ -5157,6 +5262,7 @@ function bindTemplateControls(svg) {
   svg.querySelectorAll(".view-mode-hit-area").forEach((element) => element.remove());
   ensureEvolutionViewControl(svg);
   ensureGlobalUndoControl(svg);
+  bindVirtualNodeVisibilityControl(svg);
   svg.querySelector(".timetree-view-control")?.remove();
   svg.querySelector(".comparison-view-control")?.remove();
   const categoryItems = templateCategoryItems(svg);
@@ -5201,6 +5307,11 @@ function bindTemplateControls(svg) {
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
+        const viewLabelCenter = targetMode === "hierarchy"
+          ? HIERARCHY_HEADER_LAYOUT.hierarchyViewLabelX
+          : HIERARCHY_HEADER_LAYOUT.compositionViewLabelX;
+        this.setAttribute("text-anchor", "middle");
+        this.setAttribute("transform", `translate(${viewLabelCenter} 98.84)`);
         const returningFromEvolution = targetMode === "hierarchy"
           && viewMode.value === "evolution";
         const returnLabel = returningFromEvolution ? "返回层级" : "层级视图";
@@ -6239,6 +6350,7 @@ function refreshTemplate({ rebindStatic = false, rebindControls = false } = {}) 
   svg.__moveTimelineSelection?.();
   svg.__syncSpaceAwareExpansionControl?.();
   svg.__syncHierarchyAnimationControl?.();
+  svg.__syncVirtualNodeVisibilityControl?.();
 }
 
 function scheduleTimelineRefresh({ rebindStatic = false } = {}) {

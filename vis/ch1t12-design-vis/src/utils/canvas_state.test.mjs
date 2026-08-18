@@ -36,6 +36,7 @@ test("保存并恢复当前视图、机构和时间状态", () => {
     compositionFocusId: 174,
     selectedCategory: "中央机构",
     spaceAwareExpansion: false,
+    showVirtualNodes: false,
     hierarchyAnimationEnabled: true,
   };
 
@@ -52,6 +53,7 @@ test("保存并恢复当前视图、机构和时间状态", () => {
     compositionFocusId: 174,
     selectedCategory: "中央机构",
     spaceAwareExpansion: false,
+    showVirtualNodes: false,
   });
 });
 
@@ -87,6 +89,7 @@ test("恢复前会过滤未知字段并规范非法取值", () => {
     selectedId: "174",
     compositionFocusId: 174,
     selectedCategory: "  地方机构  ",
+    showVirtualNodes: "false",
     extra: "ignored",
   }), {
     evolutionMode: "compare",
