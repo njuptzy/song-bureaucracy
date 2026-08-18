@@ -5710,6 +5710,8 @@ function commitTimelineRange(nextRange, { focusedChange = null } = {}) {
 }
 
 function bindMajorEvents(svg) {
+  const labelBaseY = 928.02;
+  const labelRowGap = 13;
   const staticTitleSet = new Set(STATIC_MAJOR_EVENT_TITLES);
   const staticLabels = [...svg.querySelectorAll("text")].filter((text) => {
     const point = position(text);
@@ -5779,7 +5781,7 @@ function bindMajorEvents(svg) {
     const labelLayout = labelLayouts[eventIndex];
     label.setAttribute(
       "transform",
-      `translate(${labelLayout.x} ${931.02 + labelLayout.row * 13})`,
+      `translate(${labelLayout.x} ${labelBaseY + labelLayout.row * labelRowGap})`,
     );
     label.setAttribute("text-anchor", "middle");
     label.setAttribute("pointer-events", "none");
