@@ -491,18 +491,30 @@ function setText(element, text) {
 
 function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 7) {
   if (!element) return 0;
-  const content = (text || "暂无资料").replace(/\s+/g, " ").trim();
+  const content = String(text || "暂无资料").replace(/\r\n?/g, "\n").trim();
   const lines = [];
   const closingPunctuation = /[，。；：！？、〉》）】」』]/;
-  let offset = 0;
-  while (offset < content.length && lines.length < maxLines) {
-    let end = Math.min(content.length, offset + charsPerLine);
-    while (end < content.length && closingPunctuation.test(content[end])) end += 1;
-    let line = content.slice(offset, end);
-    if (end < content.length && lines.length === maxLines - 1) line = `${line.slice(0, -1)}…`;
-    lines.push(line);
-    offset = end;
-  }
+  const paragraphs = content.split("\n");
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    if (lines.length >= maxLines) return;
+    const normalized = paragraph.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      if (paragraphIndex < paragraphs.length - 1 && lines.length < maxLines) lines.push("");
+      return;
+    }
+    let offset = 0;
+    while (offset < normalized.length && lines.length < maxLines) {
+      let end = Math.min(normalized.length, offset + charsPerLine);
+      while (end < normalized.length && closingPunctuation.test(normalized[end])) end += 1;
+      let line = normalized.slice(offset, end);
+      if (end < normalized.length && lines.length === maxLines - 1) line = `${line.slice(0, -1)}…`;
+      lines.push(line);
+      offset = end;
+    }
+    if (paragraphIndex < paragraphs.length - 1 && lines.length < maxLines) lines.push("");
+  });
+  if (!lines.length) lines.push("暂无资料");
+  if (lines.length > maxLines) lines.length = maxLines;
   element.replaceChildren();
   for (const [index, line] of lines.entries()) {
     const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
@@ -4082,7 +4094,9 @@ function evolutionDetailPayload(svg) {
             value: EVOLUTION_EVENT_TYPE_LABELS[event.eventType] || "隶属变化",
           },
           {
-            label: "关系来源词条原文：",
+            label: relationshipOriginal.count > 1
+              ? `关系来源词条原文（${relationshipOriginal.count}条）：`
+              : "关系来源词条原文：",
             value: relationshipOriginal.text,
           },
           {
@@ -4163,7 +4177,12 @@ function evolutionDetailPayload(svg) {
         { label: "来源：", value: sources || "来源端点未完整记录。" },
         { label: "目标：", value: targets || "目标端点未完整记录。" },
         { label: "距入口年份：", value: evolutionComparisonText(comparison) },
-        { label: "关系来源词条原文：", value: relationshipOriginal.text },
+        {
+          label: relationshipOriginal.count > 1
+            ? `关系来源词条原文（${relationshipOriginal.count}条）：`
+            : "关系来源词条原文：",
+          value: relationshipOriginal.text,
+        },
         {
           label: "编码状态：",
           value: relation.implementationStatus === "unclassified"

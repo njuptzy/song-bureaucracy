@@ -10,6 +10,7 @@ export function relationshipSourceOriginal(data = {}, evidenceKeys = []) {
   if (!relationIds.length) {
     return {
       status: "unavailable",
+      count: 0,
       text: "当前变化没有可追溯的关系记录。",
     };
   }
@@ -18,6 +19,7 @@ export function relationshipSourceOriginal(data = {}, evidenceKeys = []) {
   if (relationIds.some((id) => !Object.prototype.hasOwnProperty.call(sources, String(id)))) {
     return {
       status: "loading",
+      count: 0,
       text: "正在读取该关系的来源词条原文…",
     };
   }
@@ -33,11 +35,17 @@ export function relationshipSourceOriginal(data = {}, evidenceKeys = []) {
       if (seenEntries.has(key)) return;
       seenEntries.add(key);
       const page = entry.page == null || entry.page === "" ? "" : `（第${entry.page}页）`;
-      originals.push(`《宋代官制辞典》“${entry.title || "未题名词条"}”${page}：${text}`);
+      originals.push(`《宋代官制辞典》“${entry.title || "未题名词条"}”${page}\n${text}`);
     });
   });
   if (originals.length) {
-    return { status: "matched", text: originals.join("\n\n") };
+    return {
+      status: "matched",
+      count: originals.length,
+      text: originals.map((text, index) => (
+        `【来源词条${index + 1}】\n${text}`
+      )).join("\n\n———————— 下一条来源词条 ————————\n\n"),
+    };
   }
 
   const sourceLabels = [...new Set(records.map((record) => {
@@ -46,6 +54,7 @@ export function relationshipSourceOriginal(data = {}, evidenceKeys = []) {
   }))];
   return {
     status: "unmatched",
+    count: 0,
     text: sourceLabels.length
       ? `构建记录标注来源为${sourceLabels.join("、")}，但未匹配到可展示的完整辞典词条原文。`
       : "该关系没有 BuildRecords 来源记录，无法展示完整词条原文。",
