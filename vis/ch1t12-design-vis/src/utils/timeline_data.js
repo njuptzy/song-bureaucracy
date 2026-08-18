@@ -91,6 +91,20 @@ export function formatTimelineHeader(year, eras, reigns) {
   return `${emperor} ${regnalYear}（${Math.round(numericYear)}年）`;
 }
 
+export function formatTimelineSelectionHeader({
+  selectionActive,
+  range,
+  rangeLabel,
+  eras,
+  reigns,
+}) {
+  const [start, end] = Array.isArray(range) ? range : [];
+  if (selectionActive && start === end) {
+    return formatTimelineHeader(start, eras, reigns);
+  }
+  return String(rangeLabel ?? "");
+}
+
 export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
   const min = Math.ceil(Number(yearMin));
   const max = Math.floor(Number(yearMax));

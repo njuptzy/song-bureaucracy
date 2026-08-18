@@ -6,6 +6,7 @@ import {
   formatTimelineEmperor,
   formatTimelineHeader,
   formatTimelineRegnalYear,
+  formatTimelineSelectionHeader,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
   normalizeTimelineEras,
@@ -95,6 +96,31 @@ test("顶部年份标题包含帝号、年号年次和公元年", () => {
   assert.equal(formatTimelineHeader(1069, eras, reigns), "神宗 熙宁二年（1069年）");
   assert.equal(formatTimelineHeader(1127, eras, reigns), "高宗 建炎元年（1127年）");
   assert.equal(formatTimelineHeader(1278, eras, reigns), "帝昺 祥兴元年（1278年）");
+});
+
+test("顶部年份标题区分单年选择、范围选择与历史全貌", () => {
+  const eras = [{ name: "建隆", start: 960, end: 963 }];
+  const reigns = [{ name: "太祖", start: 960, end: 976 }];
+  const base = { eras, reigns };
+
+  assert.equal(formatTimelineSelectionHeader({
+    ...base,
+    selectionActive: true,
+    range: [960, 960],
+    rangeLabel: "公元960年制度截面",
+  }), "太祖 建隆元年（960年）");
+  assert.equal(formatTimelineSelectionHeader({
+    ...base,
+    selectionActive: true,
+    range: [960, 976],
+    rangeLabel: "公元960—976年制度范围",
+  }), "公元960—976年制度范围");
+  assert.equal(formatTimelineSelectionHeader({
+    ...base,
+    selectionActive: false,
+    range: [960, 1279],
+    rangeLabel: "宋代历史全貌（960—1279年）",
+  }), "宋代历史全貌（960—1279年）");
 });
 
 test("年份刻度以服务端实际范围为边界", () => {
