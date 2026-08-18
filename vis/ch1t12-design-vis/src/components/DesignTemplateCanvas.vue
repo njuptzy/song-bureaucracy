@@ -5756,19 +5756,6 @@ function bindTimelineRange(svg) {
 
     for (const era of eraLabels) {
       const { startX, endX } = era;
-      const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      band.setAttribute("x", String(startX));
-      band.setAttribute("y", "942.2");
-      band.setAttribute("width", String(Math.max(1, endX - startX)));
-      band.setAttribute("height", "2.6");
-      band.setAttribute("fill", "#563905");
-      band.setAttribute("opacity", "0.42");
-      band.setAttribute("pointer-events", "none");
-      const bandTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      bandTitle.textContent = `${era.name}：${era.start}—${era.end}年`;
-      band.appendChild(bandTitle);
-      timelineDataLayer.appendChild(band);
-
       // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
       const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
       separator.setAttribute("class", "cls-36");
