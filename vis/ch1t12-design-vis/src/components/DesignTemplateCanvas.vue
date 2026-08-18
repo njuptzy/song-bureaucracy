@@ -1169,7 +1169,9 @@ function categoryForestData(category) {
     childCount: orderedRoots.length,
     hiddenCount: showVirtualNodes.value ? orderedRoots.length - visibleRoots.length : 0,
     isVirtual: true,
-    isLayoutRoot: !showVirtualNodes.value,
+    // 大类根（中央机构、路级机构等）始终是可见导航节点；关闭开关时
+    // 只把它作为真实机构的布局根，隐藏制度组和下属分组这些辅助节点。
+    isLayoutRoot: false,
     memberEntityIds: orderedRoots.flatMap(hierarchySubtreeIds),
     children: visibleRoots,
   };
