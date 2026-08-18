@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTimelineYearTicks,
+  formatChineseRegnalYear,
+  formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
   normalizeTimelineEras,
@@ -27,6 +29,36 @@ test("交界年沿用服务端表的年末截面顺序", () => {
     { name: "重和", start: 1118, end: 1118 },
   ];
   assert.equal(timelineEraForYear(1118, eras)?.name, "重和");
+});
+
+test("年号年次使用元年和规范中文数字", () => {
+  assert.equal(formatChineseRegnalYear(1), "元年");
+  assert.equal(formatChineseRegnalYear(2), "二年");
+  assert.equal(formatChineseRegnalYear(10), "十年");
+  assert.equal(formatChineseRegnalYear(11), "十一年");
+  assert.equal(formatChineseRegnalYear(20), "二十年");
+  assert.equal(formatChineseRegnalYear(32), "三十二年");
+});
+
+test("选中年份按完整年号数据生成古代纪年", () => {
+  const eras = [
+    { name: "熙宁", start: 1068, end: 1077 },
+    { name: "元丰", start: 1078, end: 1085 },
+    { name: "绍兴", start: 1131, end: 1162 },
+  ];
+  assert.equal(formatTimelineRegnalYear(1068, eras), "熙宁元年");
+  assert.equal(formatTimelineRegnalYear(1069, eras), "熙宁二年");
+  assert.equal(formatTimelineRegnalYear(1080, eras), "元丰三年");
+  assert.equal(formatTimelineRegnalYear(1162, eras), "绍兴三十二年");
+});
+
+test("交界年选择后生效的年号，缺失记录时不猜测", () => {
+  const eras = [
+    { name: "靖康", start: 1126, end: 1127 },
+    { name: "建炎", start: 1127, end: 1130 },
+  ];
+  assert.equal(formatTimelineRegnalYear(1127, eras), "建炎元年");
+  assert.equal(formatTimelineRegnalYear(1200, eras), "年号未明");
 });
 
 test("年份刻度以服务端实际范围为边界", () => {

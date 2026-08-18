@@ -105,6 +105,7 @@ import { formatStandardTime } from "../utils/time_format";
 import { formatSongYearLabel } from "../utils/song_era";
 import {
   buildTimelineYearTicks,
+  formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
   normalizeTimelineEras,
@@ -5904,12 +5905,19 @@ function bindTimelineRange(svg) {
     label.style.removeProperty("display");
     label.setAttribute("pointer-events", "none");
 
+    const regnalLabel = originalYear.cloneNode(true);
+    regnalLabel.style.removeProperty("display");
+    regnalLabel.classList.add("timeline-range-regnal-year");
+    regnalLabel.style.setProperty("font-size", "9px");
+    regnalLabel.style.setProperty("fill-opacity", "0.82");
+    regnalLabel.setAttribute("pointer-events", "none");
+
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
     title.textContent = index === 0 ? "所选时段起始年份" : "所选时段结束年份";
 
-    group.append(guide, triangle, label, title);
+    group.append(guide, triangle, label, regnalLabel, title);
     timelineLayer.appendChild(group);
-    return { group, guide, triangle, label, index };
+    return { group, guide, triangle, label, regnalLabel, title, index };
   });
 
   const cancelControl = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -5963,6 +5971,10 @@ function bindTimelineRange(svg) {
       handle.triangle.setAttribute("transform", `translate(${x - 837.69} 0)`);
       handle.label.setAttribute("transform", `translate(${x + 7} 1035.22)`);
       handle.label.replaceChildren(document.createTextNode(`${year}年`));
+      const regnalYear = formatTimelineRegnalYear(year, eraRecords);
+      handle.regnalLabel.setAttribute("transform", `translate(${x + 7} 1046.22)`);
+      handle.regnalLabel.replaceChildren(document.createTextNode(regnalYear));
+      handle.title.textContent = `${handle.index === 0 ? "所选时段起始" : "所选时段结束"}：${year}年，${regnalYear}`;
     }
   };
 

@@ -46,6 +46,31 @@ export function timelineEraForYear(year, eras) {
   return matches.at(-1) || null;
 }
 
+export function formatChineseRegnalYear(yearNumber) {
+  const numericYear = finiteNumber(yearNumber);
+  if (numericYear == null || numericYear < 1 || !Number.isInteger(numericYear)) return "";
+  if (numericYear === 1) return "元年";
+
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (numericYear < 10) return `${digits[numericYear]}年`;
+  if (numericYear < 20) return `十${numericYear % 10 ? digits[numericYear % 10] : ""}年`;
+  if (numericYear < 100) {
+    const tens = Math.floor(numericYear / 10);
+    const ones = numericYear % 10;
+    return `${digits[tens]}十${ones ? digits[ones] : ""}年`;
+  }
+  return `${numericYear}年`;
+}
+
+export function formatTimelineRegnalYear(year, eras) {
+  const numericYear = finiteNumber(year);
+  const era = timelineEraForYear(numericYear, eras);
+  if (numericYear == null || !era) return "年号未明";
+  const ordinal = Math.round(numericYear) - era.start + 1;
+  const regnalYear = formatChineseRegnalYear(ordinal);
+  return regnalYear ? `${era.name}${regnalYear}` : "年号未明";
+}
+
 export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
   const min = Math.ceil(Number(yearMin));
   const max = Math.floor(Number(yearMax));
