@@ -224,6 +224,36 @@ export function normalizeMajorEvents(events, { yearMin = -Infinity, yearMax = In
     .sort((left, right) => left.startYear - right.startYear || left.endYear - right.endYear);
 }
 
+export function layoutMajorEventLabels(events, yearToX, {
+  fontSize = 10.86,
+  collisionGap = 4,
+} = {}) {
+  if (!Array.isArray(events) || typeof yearToX !== "function") return [];
+  const layouts = events.map((event, index) => {
+    const x = Number(yearToX(event.anchorYear));
+    const width = Math.max(fontSize, Array.from(event.title || "").length * fontSize);
+    return {
+      event,
+      index,
+      x,
+      width,
+      left: x - width / 2,
+      right: x + width / 2,
+      row: 0,
+    };
+  });
+  const rowRightEdges = [];
+  for (const layout of [...layouts].sort((left, right) => left.x - right.x)) {
+    let row = rowRightEdges.findIndex(
+      (rightEdge) => layout.left >= rightEdge + collisionGap,
+    );
+    if (row < 0) row = rowRightEdges.length;
+    layout.row = row;
+    rowRightEdges[row] = layout.right;
+  }
+  return layouts.sort((left, right) => left.index - right.index);
+}
+
 export function majorEventTooltip(event) {
   if (!event) return "";
   const lines = [

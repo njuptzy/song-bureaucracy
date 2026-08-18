@@ -114,6 +114,7 @@ import {
   normalizeTimelineEmperorReigns,
 } from "../utils/timeline_data";
 import {
+  layoutMajorEventLabels,
   MAJOR_EVENTS,
   STATIC_MAJOR_EVENT_TITLES,
   majorEventTooltip,
@@ -5745,7 +5746,8 @@ function bindMajorEvents(svg) {
   eventLayer.setAttribute("aria-label", "依据史料时间绑定的重大事件");
 
   const events = normalizeMajorEvents(MAJOR_EVENTS, { yearMin: YEAR_MIN, yearMax: YEAR_MAX });
-  for (const event of events) {
+  const labelLayouts = layoutMajorEventLabels(events, yearScale);
+  for (const [eventIndex, event] of events.entries()) {
     const titleText = majorEventTooltip(event);
     if (event.kind === "range") {
       const bar = rangeTemplate.cloneNode(true);
@@ -5774,7 +5776,11 @@ function bindMajorEvents(svg) {
 
     const label = labelTemplate.cloneNode(true);
     label.style.removeProperty("display");
-    label.setAttribute("transform", `translate(${yearScale(event.anchorYear)} 931.02)`);
+    const labelLayout = labelLayouts[eventIndex];
+    label.setAttribute(
+      "transform",
+      `translate(${labelLayout.x} ${931.02 + labelLayout.row * 13})`,
+    );
     label.setAttribute("text-anchor", "middle");
     label.setAttribute("pointer-events", "none");
     const tspan = label.querySelector("tspan");

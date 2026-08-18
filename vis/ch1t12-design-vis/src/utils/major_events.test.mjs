@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   MAJOR_EVENTS,
   STATIC_MAJOR_EVENT_TITLES,
+  layoutMajorEventLabels,
   majorEventTooltip,
   normalizeMajorEvents,
 } from "./major_events.js";
@@ -39,6 +40,22 @@ test("元丰改制标示元丰五年新官制正式施行，不与熙宁变法�
   assert.equal(event.endYear, 1082);
   assert.equal(event.anchorYear, 1082);
   assert.equal(event.originalTime, "元丰五年");
+});
+
+test("相邻重大事件保持真实横坐标并自动错层，文字不再相互覆盖", () => {
+  const events = normalizeMajorEvents(MAJOR_EVENTS);
+  const layouts = layoutMajorEventLabels(events, (year) => year * 4.14);
+  const byTitle = new Map(layouts.map((layout) => [layout.event.title, layout]));
+
+  assert.equal(byTitle.get("熙宁变法").row, 0);
+  assert.equal(byTitle.get("元丰改制").row, 1);
+  assert.equal(byTitle.get("平夏城之战").row, 0);
+  for (const [index, left] of layouts.entries()) {
+    for (const right of layouts.slice(index + 1)) {
+      if (left.row !== right.row) continue;
+      assert.equal(left.right + 4 <= right.left || right.right + 4 <= left.left, true);
+    }
+  }
 });
 
 test("来源或时间未核实的横山之战不进入真实事件数据", () => {
