@@ -520,7 +520,7 @@ function hierarchyRoleEvent(change, role, entityMap, timepointById) {
     ? change.childId
     : role === "former_parent" ? change.previousParentId : change.nextParentId;
   const event = role === "subject"
-    ? `机构改隶：${previousParent?.title || `#${change.previousParentId}`} → ${nextParent?.title || `#${change.nextParentId}`}`
+    ? `改隶事件：${previousParent?.title || `#${change.previousParentId}`} → ${nextParent?.title || `#${change.nextParentId}`}`
     : role === "former_parent"
       ? `下属迁出：${child?.title || `#${change.childId}`} → ${nextParent?.title || `#${change.nextParentId}`}`
       : `下属迁入：${child?.title || `#${change.childId}`} ← ${previousParent?.title || `#${change.previousParentId}`}`;

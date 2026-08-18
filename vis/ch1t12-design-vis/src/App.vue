@@ -81,6 +81,8 @@ let panelResizeObserver = null;
 let activeDetailEntityId = null;
 const loadedDetailEntityIds = new Set();
 const pendingDetailRequests = new Map();
+const loadedDetailRelationIds = new Set();
+const pendingRelationDetailRequests = new Map();
 
 const DESIGN_VIEWBOX = { width: 1920, height: 1080 };
 const REVISION_PANEL_BOUNDS = { x: 82, y: 145, width: 393, height: 338 };
@@ -161,6 +163,12 @@ function undoCanvasNavigation() {
 function handleSelectionChange(selection) {
   selectedFact.value = selection;
   if (selection?.entityId != null) void loadEntityDetails(selection.entityId);
+  const relationIds = selection?.kind === "relation"
+    ? [selection.id]
+    : (selection?.item?.evidenceKeys || [])
+      .map((key) => /^R(\d+)$/.exec(String(key))?.[1])
+      .filter(Boolean);
+  relationIds.forEach((relationId) => void loadRelationDetails(relationId));
   if (editMode.value && selection && !connectionMode.value) {
     revisionDrawer.value = "";
   }
@@ -250,6 +258,16 @@ function mergeEntityDetails(target, details) {
   };
 }
 
+function mergeRelationDetails(target, details) {
+  return {
+    ...target,
+    relationshipSources: {
+      ...(target.relationshipSources || {}),
+      ...(details.relationshipSources || {}),
+    },
+  };
+}
+
 async function loadEntityDetails(entityId) {
   const numericId = Number(entityId);
   if (!baseData.value || !Number.isFinite(numericId) || loadedDetailEntityIds.has(numericId)) return;
@@ -273,6 +291,29 @@ async function loadEntityDetails(entityId) {
   return request;
 }
 
+async function loadRelationDetails(relationId) {
+  const numericId = Number(relationId);
+  if (!baseData.value || !Number.isFinite(numericId) || loadedDetailRelationIds.has(numericId)) return;
+  if (pendingRelationDetailRequests.has(numericId)) return pendingRelationDetailRequests.get(numericId);
+  const requestVersion = dataVersion.value;
+  const request = (async () => {
+    try {
+      const url = `/api/details/relation/${numericId}?v=${encodeURIComponent(requestVersion)}`;
+      const details = await fetchJson(url, "force-cache");
+      if (!baseData.value || requestVersion !== dataVersion.value) return;
+      baseData.value = mergeRelationDetails(baseData.value, details);
+      loadedDetailRelationIds.add(numericId);
+      applyPreview();
+    } catch (reason) {
+      revisionError.value = `关系来源原文加载失败：${reason.message}`;
+    } finally {
+      pendingRelationDetailRequests.delete(numericId);
+    }
+  })();
+  pendingRelationDetailRequests.set(numericId, request);
+  return request;
+}
+
 async function refreshRevision() {
   revisionState.value = await revisionRequest("/api/revisions/state");
   revisionPreview.value = await revisionRequest("/api/revisions/draft/preview");
@@ -293,6 +334,8 @@ async function refreshData(force = false) {
     dataVersion.value = version;
     loadedDetailEntityIds.clear();
     pendingDetailRequests.clear();
+    loadedDetailRelationIds.clear();
+    pendingRelationDetailRequests.clear();
     loadError.value = "";
     if (revisionState.value?.draft?.group_count) applyPreview();
     else data.value = baseData.value;

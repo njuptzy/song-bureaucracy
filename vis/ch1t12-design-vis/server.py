@@ -7,6 +7,7 @@
 接口:
     GET /data/song-bureaucracy-core.json  返回首屏结构数据
     GET /api/details/entity/{id}          按机构或官职返回原文与引文
+    GET /api/details/relation/{id}        按关系返回其构建来源词条原文
     GET /api/data                         兼容旧客户端的完整 JSON
     GET /           dist/index.html（需先 pnpm build）
 """
@@ -212,6 +213,41 @@ def _dictionary_row_payload(row: sqlite3.Row) -> dict:
         "office": _dict_section(fields, ("衙署", "办公地点")),
         "composition": _dict_section(fields, ("编制", "官额", "吏额")),
     }
+
+
+def _dictionary_full_original(row: sqlite3.Row) -> str:
+    """返回辞典行的完整原文内容，不使用详情摘要的截断上限。"""
+    fields = {}
+    if row["fields"]:
+        try:
+            parsed = json.loads(row["fields"])
+            if isinstance(parsed, dict):
+                fields = parsed
+        except (ValueError, TypeError):
+            fields = {}
+    sections = [
+        ("职源与沿革", ("职源与沿革", "职源", "沿革")),
+        ("职掌", ("职掌", "职责", "职掌与编制")),
+        ("品位", ("品位", "官品", "品阶", "品秩", "位遇", "序位")),
+        ("编制", ("编制", "官额", "吏额")),
+        ("简称与别名", ("简称与别名", "简称", "别称")),
+        ("下级机构", ("下级机构", "所辖机构", "所属机构")),
+        ("衙署", ("衙署", "办公地点")),
+    ]
+    parts = []
+    head = (row["text"] or "").strip()
+    if head:
+        parts.append(head)
+    for label, keys in sections:
+        value = ""
+        for key in keys:
+            candidate = fields.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                value = candidate.strip()
+                break
+        if value:
+            parts.append(f"{label}：{value}")
+    return "\n".join(parts)
 
 
 def build_payload(*, include_details: bool = True) -> dict:
@@ -740,6 +776,130 @@ def build_entity_details(entity_id: int) -> dict:
         dictionary.close()
 
 
+def _relationship_source_records(
+    entries: sqlite3.Connection,
+    dictionary: sqlite3.Connection,
+    relation_id: int,
+) -> list[dict]:
+    """沿 BuildRecords 还原一条关系的辞典来源。
+
+    优先用「词条名 + 页码」精确匹配；只有标题唯一时才允许
+    仅按标题回退。汇总标记或无法匹配的来源原样返回，不猜测词条。
+    """
+    build_rows = list(entries.execute(
+        """
+        SELECT source_entry, source_page, decision
+        FROM BuildRecords
+        WHERE target_table = 'Relationships' AND target_id = ?
+        ORDER BY id
+        """,
+        (relation_id,),
+    ))
+    records = []
+    seen_records = set()
+    for build_row in build_rows:
+        source_entry = (build_row["source_entry"] or "").strip()
+        source_page = str(build_row["source_page"] or "").strip()
+        decision = (build_row["decision"] or "").strip()
+        record_key = (source_entry, source_page, decision)
+        if record_key in seen_records:
+            continue
+        seen_records.add(record_key)
+
+        exact_rows = []
+        if source_entry and source_page:
+            exact_rows = list(dictionary.execute(
+                f'''SELECT id, title, catalog, page, text, fields
+                    FROM "{DICT_TABLE}"
+                    WHERE trim(title) = ? AND trim(CAST(page AS TEXT)) = ?
+                    ORDER BY id''',
+                (source_entry, source_page),
+            ))
+
+        matched_rows = exact_rows
+        match_status = "exact" if exact_rows else "unmatched"
+        if not matched_rows and source_entry:
+            title_rows = list(dictionary.execute(
+                f'''SELECT id, title, catalog, page, text, fields
+                    FROM "{DICT_TABLE}"
+                    WHERE trim(title) = ?
+                    ORDER BY id''',
+                (source_entry,),
+            ))
+            if len(title_rows) == 1:
+                matched_rows = title_rows
+                match_status = "title_unique"
+        if not matched_rows and "/" in source_entry:
+            composite_rows = []
+            composite_complete = True
+            page_range_match = re.fullmatch(r"(\d+)\s*[-–—]\s*(\d+)", source_page)
+            page_range = (
+                range(int(page_range_match.group(1)), int(page_range_match.group(2)) + 1)
+                if page_range_match else ()
+            )
+            for title in (part.strip() for part in source_entry.split("/")):
+                if not title:
+                    continue
+                title_rows = list(dictionary.execute(
+                    f'''SELECT id, title, catalog, page, text, fields
+                        FROM "{DICT_TABLE}"
+                        WHERE trim(title) = ?
+                        ORDER BY id''',
+                    (title,),
+                ))
+                if page_range:
+                    title_rows = [
+                        row for row in title_rows
+                        if str(row["page"] or "").strip().isdigit()
+                        and int(str(row["page"]).strip()) in page_range
+                    ]
+                if len(title_rows) != 1:
+                    composite_complete = False
+                    break
+                composite_rows.extend(title_rows)
+            if composite_complete and composite_rows:
+                matched_rows = composite_rows
+                match_status = "composite_titles"
+
+        entries_payload = []
+        for row in matched_rows:
+            payload = _dictionary_row_payload(row)
+            payload["id"] = row["id"]
+            payload["title"] = row["title"]
+            payload["originalText"] = _dictionary_full_original(row)
+            entries_payload.append(payload)
+        records.append({
+            "sourceEntry": source_entry,
+            "sourcePage": source_page,
+            "decision": decision,
+            "matchStatus": match_status,
+            "entries": entries_payload,
+        })
+    return records
+
+
+def build_relation_details(relation_id: int) -> dict:
+    entries = _connect(ENTRIES_DB)
+    dictionary = _connect(DICT_DB)
+    try:
+        exists = entries.execute(
+            "SELECT 1 FROM Relationships WHERE id = ?", (relation_id,)
+        ).fetchone()
+        if exists is None:
+            raise ValueError(f"关系不存在: {relation_id}")
+        return {
+            "relationId": relation_id,
+            "relationshipSources": {
+                str(relation_id): _relationship_source_records(
+                    entries, dictionary, relation_id
+                )
+            },
+        }
+    finally:
+        entries.close()
+        dictionary.close()
+
+
 def get_payload() -> bytes:
     fingerprint = _database_fingerprint()
     with _cache_lock:
@@ -781,6 +941,20 @@ def get_entity_details_payload(entity_id: int) -> bytes:
                 build_entity_details(entity_id), ensure_ascii=False
             ).encode("utf-8")
         return details[entity_id]
+
+
+def get_relation_details_payload(relation_id: int) -> bytes:
+    fingerprint = _database_fingerprint()
+    with _cache_lock:
+        if _cache.get("fingerprint") != fingerprint:
+            _cache.clear()
+            _cache["fingerprint"] = fingerprint
+        details = _cache.setdefault("relation_details", {})
+        if relation_id not in details:
+            details[relation_id] = json.dumps(
+                build_relation_details(relation_id), ensure_ascii=False
+            ).encode("utf-8")
+        return details[relation_id]
 
 
 def get_version() -> bytes:
@@ -909,6 +1083,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(
                     200,
                     get_entity_details_payload(int(detail_match.group(1))),
+                    "application/json; charset=utf-8",
+                    cache_control=(
+                        "public, max-age=31536000, immutable"
+                        if requested_version == current_version
+                        else "no-store"
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(404 if isinstance(exc, ValueError) else 500, {"error": str(exc)})
+            return
+        relation_detail_match = re.fullmatch(r"/api/details/relation/(\d+)", path)
+        if relation_detail_match:
+            try:
+                requested_version = query.get("v", [""])[0]
+                current_version = _database_fingerprint()
+                self._send(
+                    200,
+                    get_relation_details_payload(int(relation_detail_match.group(1))),
                     "application/json; charset=utf-8",
                     cache_control=(
                         "public, max-age=31536000, immutable"

@@ -549,7 +549,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-linejoin": "round",
     }));
   });
-  item(x + 210, "机构改隶", (sample, itemX) => {
+  item(x + 210, "改隶事件", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX} ${rowY - 4.6}L${itemX + 4.6} ${rowY}L${itemX} ${rowY + 4.6}L${itemX - 4.6} ${rowY}Z`,
       fill: COLORS.paper,

@@ -84,6 +84,7 @@ import {
   staffEdgesForEvolutionTimepoint,
 } from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
+import { relationshipSourceOriginal } from "../utils/relationship_source";
 import {
   compareInstitutionIdsBySourceOrder,
   compareInstitutionsBySourceOrder,
@@ -4055,8 +4056,8 @@ function evolutionDetailPayload(svg) {
       const child = entityMap.get(change.childId);
       const previousParent = entityMap.get(change.previousParentId);
       const nextParent = entityMap.get(change.nextParentId);
-      const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
       const evidence = evidenceLinesForKeys(event.evidenceKeys, event.quotation);
+      const relationshipOriginal = relationshipSourceOriginal(props.data, event.evidenceKeys);
       const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
       const role = event.hierarchyRole === "subject"
         ? "本机构的上级发生变化"
@@ -4070,19 +4071,19 @@ function evolutionDetailPayload(svg) {
         `原上级机构：${previousParent?.title || `#${change.previousParentId}`}`,
         `新上级机构：${nextParent?.title || `#${change.nextParentId}`}`,
       ].join("；");
-      const derivationNote = "机构改隶根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。";
+      const derivationNote = "改隶事件根据相邻的无歧义年份中明确记载的上下级关系变化派生；同年存在多个上级时不作推断，也不改变相关机构的存废状态。";
       return {
         title: entity?.title || "层级变化",
         year: eventTimeLabel(event),
         sections: [
-          { label: "事件：", value: event.event || event.hierarchyChangeLabel || "机构改隶" },
+          { label: "事件：", value: event.event || event.hierarchyChangeLabel || "改隶事件" },
           {
             label: "事件类型：",
             value: EVOLUTION_EVENT_TYPE_LABELS[event.eventType] || "隶属变化",
           },
           {
-            label: "词条原文：",
-            value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
+            label: "关系来源词条原文：",
+            value: relationshipOriginal.text,
           },
           {
             label: "存废判定：",
@@ -4094,7 +4095,6 @@ function evolutionDetailPayload(svg) {
           },
           { label: "距入口年份：", value: evolutionComparisonText(comparison) },
           { label: "相关关系：", value: hierarchySummary },
-          { label: "原文引文：", value: evidence.quotation },
           { label: "出处：", value: evidence.source },
           { label: "校勘说明：", value: `${derivationNote}${evidence.note ? `；${evidence.note}` : ""}` },
         ],
@@ -4144,6 +4144,10 @@ function evolutionDetailPayload(svg) {
   if (selected?.kind === "relation") {
     const relation = selected.item;
     const evidence = evidenceLines(relation.evidenceKey || `R${relation.id}`, relation.quotation);
+    const relationshipOriginal = relationshipSourceOriginal(
+      props.data,
+      [relation.evidenceKey || `R${relation.id}`],
+    );
     const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
     const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
@@ -4159,13 +4163,13 @@ function evolutionDetailPayload(svg) {
         { label: "来源：", value: sources || "来源端点未完整记录。" },
         { label: "目标：", value: targets || "目标端点未完整记录。" },
         { label: "距入口年份：", value: evolutionComparisonText(comparison) },
+        { label: "关系来源词条原文：", value: relationshipOriginal.text },
         {
           label: "编码状态：",
           value: relation.implementationStatus === "unclassified"
             ? "旧前后演变关系，尚未结构化细分；界面不依据自由文本猜测。"
             : `结构化关系${relation.groupId ? `；事件组 ${relation.groupId}` : "；未设置事件组"}。`,
         },
-        { label: "原文引文：", value: evidence.quotation },
         { label: "出处：", value: evidence.source },
         { label: "校勘说明：", value: evidence.note },
       ],

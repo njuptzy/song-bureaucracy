@@ -89,7 +89,7 @@ describe("buildEvolutionModel hierarchy changes", () => {
     assert.equal(event.effectiveYear, 1050);
     assert.equal(event.hierarchyRole, "subject");
     assert.equal(event.event, "改隶乙司");
-    assert.equal(event.hierarchyChangeLabel, "机构改隶：甲司 → 乙司");
+    assert.equal(event.hierarchyChangeLabel, "改隶事件：甲司 → 乙司");
     assert.equal(event.syntheticHierarchyChange, undefined);
     assert.deepEqual(event.evidenceKeys, ["R101", "R102", "T32"]);
   });
