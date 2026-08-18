@@ -3,12 +3,14 @@ import test from "node:test";
 import {
   buildTimelineYearTicks,
   formatChineseRegnalYear,
+  formatTimelineEmperor,
   formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
   normalizeTimelineEras,
   normalizeTimelineEmperorReigns,
   timelineEraForYear,
+  timelineEmperorForYear,
 } from "./timeline_data.js";
 
 test("时间轴直接使用服务端年号范围，不从文字猜测", () => {
@@ -29,6 +31,19 @@ test("交界年沿用服务端表的年末截面顺序", () => {
     { name: "重和", start: 1118, end: 1118 },
   ];
   assert.equal(timelineEraForYear(1118, eras)?.name, "重和");
+});
+
+test("选中年份按年末截面显示在位皇帝", () => {
+  const reigns = [
+    { name: "英宗", personal_name: "赵曙", start: 1063, end: 1067 },
+    { name: "神宗", personal_name: "赵顼", start: 1067, end: 1085 },
+    { name: "钦宗", personal_name: "赵桓", start: 1126, end: 1127 },
+    { name: "高宗", personal_name: "赵构", start: 1127, end: 1162 },
+  ];
+  assert.equal(timelineEmperorForYear(1069, reigns)?.name, "神宗");
+  assert.equal(formatTimelineEmperor(1067, reigns), "神宗");
+  assert.equal(formatTimelineEmperor(1127, reigns), "高宗");
+  assert.equal(formatTimelineEmperor(1200, reigns), "帝王未明");
 });
 
 test("年号年次使用元年和规范中文数字", () => {

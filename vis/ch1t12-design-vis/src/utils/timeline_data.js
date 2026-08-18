@@ -46,6 +46,18 @@ export function timelineEraForYear(year, eras) {
   return matches.at(-1) || null;
 }
 
+export function timelineEmperorForYear(year, reigns) {
+  const numericYear = finiteNumber(year);
+  if (numericYear == null) return null;
+  const matches = normalizeTimelineEmperorReigns(reigns)
+    .filter((reign) => numericYear >= reign.start && numericYear <= reign.end);
+  return matches.at(-1) || null;
+}
+
+export function formatTimelineEmperor(year, reigns) {
+  return timelineEmperorForYear(year, reigns)?.name || "帝王未明";
+}
+
 export function formatChineseRegnalYear(yearNumber) {
   const numericYear = finiteNumber(yearNumber);
   if (numericYear == null || numericYear < 1 || !Number.isInteger(numericYear)) return "";

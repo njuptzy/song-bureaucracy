@@ -105,6 +105,7 @@ import { formatStandardTime } from "../utils/time_format";
 import { formatSongYearLabel } from "../utils/song_era";
 import {
   buildTimelineYearTicks,
+  formatTimelineEmperor,
   formatTimelineRegnalYear,
   layoutTimelineEraLabels,
   layoutTimelineEmperorLabels,
@@ -5905,6 +5906,13 @@ function bindTimelineRange(svg) {
     label.style.removeProperty("display");
     label.setAttribute("pointer-events", "none");
 
+    const emperorLabel = originalYear.cloneNode(true);
+    emperorLabel.style.removeProperty("display");
+    emperorLabel.classList.add("timeline-range-emperor");
+    emperorLabel.style.setProperty("font-size", "9.5px");
+    emperorLabel.style.setProperty("fill-opacity", "0.92");
+    emperorLabel.setAttribute("pointer-events", "none");
+
     const regnalLabel = originalYear.cloneNode(true);
     regnalLabel.style.removeProperty("display");
     regnalLabel.classList.add("timeline-range-regnal-year");
@@ -5915,9 +5923,9 @@ function bindTimelineRange(svg) {
     const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
     title.textContent = index === 0 ? "所选时段起始年份" : "所选时段结束年份";
 
-    group.append(guide, triangle, label, regnalLabel, title);
+    group.append(guide, triangle, label, emperorLabel, regnalLabel, title);
     timelineLayer.appendChild(group);
-    return { group, guide, triangle, label, regnalLabel, title, index };
+    return { group, guide, triangle, label, emperorLabel, regnalLabel, title, index };
   });
 
   const cancelControl = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -5971,10 +5979,13 @@ function bindTimelineRange(svg) {
       handle.triangle.setAttribute("transform", `translate(${x - 837.69} 0)`);
       handle.label.setAttribute("transform", `translate(${x + 7} 1035.22)`);
       handle.label.replaceChildren(document.createTextNode(`${year}年`));
+      const emperor = formatTimelineEmperor(year, emperorRecords);
+      handle.emperorLabel.setAttribute("transform", `translate(${x + 7} 1046.22)`);
+      handle.emperorLabel.replaceChildren(document.createTextNode(emperor));
       const regnalYear = formatTimelineRegnalYear(year, eraRecords);
-      handle.regnalLabel.setAttribute("transform", `translate(${x + 7} 1046.22)`);
+      handle.regnalLabel.setAttribute("transform", `translate(${x + 7} 1057.22)`);
       handle.regnalLabel.replaceChildren(document.createTextNode(regnalYear));
-      handle.title.textContent = `${handle.index === 0 ? "所选时段起始" : "所选时段结束"}：${year}年，${regnalYear}`;
+      handle.title.textContent = `${handle.index === 0 ? "所选时段起始" : "所选时段结束"}：${year}年，${emperor}，${regnalYear}`;
     }
   };
 
