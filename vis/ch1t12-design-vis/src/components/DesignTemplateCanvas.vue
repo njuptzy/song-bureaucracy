@@ -37,6 +37,7 @@ import {
   panScrollbarGeometry,
   relativeAffineMatrix,
   virtualBusRange,
+  virtualBusY,
 } from "../utils/hierarchy_layout";
 import {
   collapseInstitutionGroups,
@@ -2394,7 +2395,8 @@ function renderDynamicHierarchy(svg) {
   for (const virtualParent of virtualParents) {
     const source = nodeLayout.get(virtualParent);
     const targets = virtualParent.children.map((child) => nodeLayout.get(child));
-    const busY = (source.bottom + Math.min(...targets.map((target) => target.top))) / 2;
+    const targetTop = Math.min(...targets.map((target) => target.top));
+    const busY = virtualBusY(source.bottom, targetTop, virtualParent.depth);
     const [busLeft, busRight] = virtualBusRange(
       source.x,
       targets.map((target) => target.x)

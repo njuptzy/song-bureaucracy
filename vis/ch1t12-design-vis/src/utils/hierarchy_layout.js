@@ -7,6 +7,11 @@ export function virtualBusRange(sourceX, targetXs) {
   return [Math.min(...xs), Math.max(...xs)];
 }
 
+export function virtualBusY(sourceBottom, targetTop, depth = 0, offset = 18) {
+  const midpoint = (sourceBottom + targetTop) / 2;
+  return midpoint + (depth === 0 ? -Math.abs(offset) : Math.abs(offset));
+}
+
 export function horizontalLayoutRange(layouts = []) {
   const bounds = layouts
     .filter(Boolean)

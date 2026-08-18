@@ -15,6 +15,7 @@ import {
   relativeAffineMatrix,
   subordinateGroupAncestorId,
   virtualBusRange,
+  virtualBusY,
 } from "./hierarchy_layout.js";
 
 test("层级边按上级建立索引并缓存子树，避免每个节点扫描全部关系", () => {
@@ -40,6 +41,14 @@ test("展开的大机构锚定在所属制度组正下方", () => {
 test("虚拟分组总线同时覆盖来源节点和全部目标节点", () => {
   assert.deepEqual(virtualBusRange(620, [970]), [620, 970]);
   assert.deepEqual(virtualBusRange(970, [620, 760]), [620, 970]);
+});
+
+test("公共总线和制度组子树总线使用不同高度", () => {
+  const commonBusY = virtualBusY(180, 220, 0);
+  const branchBusY = virtualBusY(260, 100, 1);
+  assert.equal(commonBusY, 182);
+  assert.equal(branchBusY, 198);
+  assert.ok(commonBusY < branchBusY);
 });
 
 test("制度组总线范围包含标题节点，组间打包后保留可见断口", () => {
