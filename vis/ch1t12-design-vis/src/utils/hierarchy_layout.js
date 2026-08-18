@@ -181,6 +181,11 @@ export function panFromScrollbarOffset(offset, thumbTravel, minPan, maxPan) {
   return maxPan - clampedOffset / thumbTravel * (maxPan - minPan);
 }
 
+export function focusPanToCenter(nodeX, viewportCenter, minPan, maxPan) {
+  const desiredPan = viewportCenter - nodeX;
+  return Math.max(minPan, Math.min(maxPan, desiredPan));
+}
+
 export function isHorizontalWheelGesture({
   deltaX = 0,
   deltaY = 0,

@@ -5,6 +5,7 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
+  focusPanToCenter,
   hierarchyNodeGap,
   horizontalRangesFit,
   isHorizontalWheelGesture,
@@ -152,6 +153,12 @@ test("机构树溢出时滚动条覆盖完整平移范围", () => {
   assert.equal(left.thumbOffset, 0);
   assert.equal(right.thumbOffset, right.thumbTravel);
   assert.equal(panFromScrollbarOffset(right.thumbTravel, right.thumbTravel, -1000, 0), -1000);
+});
+
+test("点击节点时把目标中心带入视口并尊重整体平移边界", () => {
+  assert.equal(focusPanToCenter(1400, 1165, -900, 0), -235);
+  assert.equal(focusPanToCenter(1900, 1165, -900, 0), -735);
+  assert.equal(focusPanToCenter(400, 1165, -900, 0), 0);
 });
 
 test("识别横向触控板手势但不拦截缩放手势", () => {

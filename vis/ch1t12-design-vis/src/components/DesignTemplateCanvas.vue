@@ -29,6 +29,7 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
+  focusPanToCenter,
   hierarchyNodeGap,
   isHorizontalWheelGesture,
   panFromScrollbarOffset,
@@ -219,6 +220,7 @@ const collapsedHierarchyIds = new Set();
 let expandedHierarchyPath = [];
 let hierarchyPanX = 0;
 let hierarchyPanY = 0;
+let hierarchyPanFocusId = null;
 let hierarchyPanTransitionOverride = null;
 let hierarchyEdgeIndexCache = {
   sourceEdges: null,
@@ -2301,6 +2303,23 @@ function renderDynamicHierarchy(svg) {
   const panOverride = hierarchyPanTransitionOverride;
   let nextPanX = panOverride?.x ?? hierarchyPanX;
   let nextPanY = panOverride?.y ?? hierarchyPanY;
+  if (!panOverride && hierarchyPanFocusId != null) {
+    const focusNode = hierarchyNodes.find((node) => (
+      node.data.id === hierarchyPanFocusId
+    ));
+    if (focusNode) {
+      const focusLayout = nodeLayout.get(focusNode);
+      if (focusLayout) {
+        nextPanX = focusPanToCenter(
+          focusLayout.x,
+          (area.left + area.right) / 2,
+          minPan,
+          maxPan,
+        );
+      }
+    }
+    hierarchyPanFocusId = null;
+  }
   const expandedLayout = nodeLayout.get(
     hierarchyNodes.find((node) => (
       !node.data.isVirtual && node.data.id === expandedDetailId.value
@@ -2570,6 +2589,7 @@ function renderDynamicHierarchy(svg) {
       event.stopPropagation();
       hierarchyReturnNotice.value = null;
       changeTrackGroup.value = null;
+      hierarchyPanFocusId = node.data.id;
       if (node.data.isSubordinateGroup) {
         const wasExpanded = expandedSubordinateGroupIds.includes(node.data.id);
         expandedSubordinateGroupIds = toggleInstitutionGroupIds(
@@ -2578,8 +2598,6 @@ function renderDynamicHierarchy(svg) {
           spaceAwareExpansion.value
         );
         if (!wasExpanded) lastExpandedSubordinateGroupId = node.data.id;
-        hierarchyPanX = 0;
-        hierarchyPanY = 0;
         if (!wasExpanded) {
           renderSubordinateGroupCandidate();
           return;
@@ -2597,8 +2615,6 @@ function renderDynamicHierarchy(svg) {
           spaceAwareExpansion.value,
         );
         if (!spaceAwareExpansion.value) lastExpandedHierarchyId = null;
-        hierarchyPanX = 0;
-        hierarchyPanY = 0;
         if (!wasExpanded) {
           renderInstitutionGroupCandidate();
           return;
@@ -2610,8 +2626,6 @@ function renderDynamicHierarchy(svg) {
         expandedHierarchyPath = [];
         lastExpandedHierarchyId = null;
       }
-      hierarchyPanX = 0;
-      hierarchyPanY = 0;
       refreshTemplate();
     };
     const nodeSelection = d3.select(nodeGroup)
@@ -2625,6 +2639,7 @@ function renderDynamicHierarchy(svg) {
         hierarchyReturnNotice.value = null;
         detailPanelScrollOffset = 0;
         inlineCompositionScrollOffset = 0;
+        hierarchyPanFocusId = node.data.id;
         changeTrackGroup.value = null;
         expandedDetailId.value = null;
         inlineDetailOfficialId.value = null;
