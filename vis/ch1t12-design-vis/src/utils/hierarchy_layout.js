@@ -7,6 +7,20 @@ export function virtualBusRange(sourceX, targetXs) {
   return [Math.min(...xs), Math.max(...xs)];
 }
 
+export function horizontalLayoutRange(layouts = []) {
+  const bounds = layouts
+    .filter(Boolean)
+    .map((layout) => ({
+      left: layout.left ?? layout.x - (layout.width || 34) / 2,
+      right: layout.right ?? layout.x + (layout.width || 34) / 2,
+    }));
+  if (!bounds.length) return null;
+  return {
+    left: Math.min(...bounds.map((bound) => bound.left)),
+    right: Math.max(...bounds.map((bound) => bound.right)),
+  };
+}
+
 export function subordinateGroupAncestorId(node) {
   let current = node;
   while (current) {

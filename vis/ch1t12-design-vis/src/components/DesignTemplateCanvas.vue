@@ -30,6 +30,7 @@ import {
   buildHierarchyEdgeIndex,
   fitRangeShift,
   hierarchyNodeGap,
+  horizontalLayoutRange,
   isHorizontalWheelGesture,
   packHorizontalRanges,
   panFromScrollbarOffset,
@@ -2027,6 +2028,46 @@ function renderDynamicHierarchy(svg) {
       ),
     }];
   }));
+
+  // 空间展开时，制度组标题和其子树必须作为一个整体打包。
+  // 只移动子树会让总线起点留在原处，随后跨进相邻制度组，视觉上重新连成一条线。
+  if (spaceAwareExpansion.value && expandedInstitutionGroupNodes.length > 1) {
+    const institutionRanges = institutionGroupNodes
+      .map((institutionGroupNode) => {
+        const range = horizontalLayoutRange(
+          institutionGroupNode.descendants().map((node) => nodeLayout.get(node)),
+        );
+        return range ? { id: institutionGroupNode.data.id, ...range } : null;
+      })
+      .filter(Boolean);
+    const packedInstitutionRanges = packHorizontalRanges(institutionRanges, 56);
+    const originalRangeById = new Map(institutionRanges.map((range) => [range.id, range]));
+    const packedLeft = d3.min(packedInstitutionRanges, (range) => range.left);
+    const packedRight = d3.max(packedInstitutionRanges, (range) => range.right);
+    const viewportShift = fitRangeShift(
+      packedLeft,
+      packedRight,
+      area.left,
+      area.right,
+    );
+    const shiftLayout = (layout, delta) => {
+      if (!layout || !delta) return;
+      layout.x += delta;
+      if (layout.left != null) layout.left += delta;
+      if (layout.right != null) layout.right += delta;
+    };
+    for (const packedRange of packedInstitutionRanges) {
+      const originalRange = originalRangeById.get(packedRange.id);
+      if (!originalRange) continue;
+      const delta = packedRange.left + viewportShift - originalRange.left;
+      const institutionGroupNode = institutionGroupNodes.find(
+        (node) => node.data.id === packedRange.id,
+      );
+      institutionGroupNode?.descendants().forEach((node) => {
+        shiftLayout(nodeLayout.get(node), delta);
+      });
+    }
+  }
 
   if (!spaceAwareExpansion.value && focusedBranchNode?.children?.length) {
     const descendantLayouts = focusedBranchNode.descendants()

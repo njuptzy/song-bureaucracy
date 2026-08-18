@@ -6,6 +6,7 @@ import {
   buildHierarchyEdgeIndex,
   fitRangeShift,
   hierarchyNodeGap,
+  horizontalLayoutRange,
   horizontalRangesFit,
   isHorizontalWheelGesture,
   packHorizontalRanges,
@@ -39,6 +40,26 @@ test("展开的大机构锚定在所属制度组正下方", () => {
 test("虚拟分组总线同时覆盖来源节点和全部目标节点", () => {
   assert.deepEqual(virtualBusRange(620, [970]), [620, 970]);
   assert.deepEqual(virtualBusRange(970, [620, 760]), [620, 970]);
+});
+
+test("制度组总线范围包含标题节点，组间打包后保留可见断口", () => {
+  const firstGroup = horizontalLayoutRange([
+    { x: 520, width: 180 },
+    { x: 240, left: 223, right: 257 },
+    { x: 620, left: 603, right: 637 },
+  ]);
+  const secondGroup = horizontalLayoutRange([
+    { x: 820, width: 180 },
+    { x: 710, left: 693, right: 727 },
+    { x: 930, left: 913, right: 947 },
+  ]);
+  assert.deepEqual(firstGroup, { left: 223, right: 637 });
+  assert.deepEqual(secondGroup, { left: 693, right: 947 });
+  const packed = packHorizontalRanges([
+    { id: "first", ...firstGroup },
+    { id: "second", ...secondGroup },
+  ], 56);
+  assert.ok(packed[1].left - packed[0].right >= 56);
 });
 
 test("下属虚拟组内保持紧凑，两个虚拟组之间保留独立边界", () => {
