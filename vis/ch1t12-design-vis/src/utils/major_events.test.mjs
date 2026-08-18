@@ -31,6 +31,16 @@ test("澶渊之盟、平夏城之战和崖山海战使用校正后的名称与�
   assert.equal(events.some((event) => event.title === "压山海战"), false);
 });
 
+test("元丰改制标示元丰五年新官制正式施行，不与熙宁变法重复画区间", () => {
+  const event = normalizeMajorEvents(MAJOR_EVENTS)
+    .find((item) => item.title === "元丰改制");
+  assert.equal(event.kind, "point");
+  assert.equal(event.startYear, 1082);
+  assert.equal(event.endYear, 1082);
+  assert.equal(event.anchorYear, 1082);
+  assert.equal(event.originalTime, "元丰五年");
+});
+
 test("来源或时间未核实的横山之战不进入真实事件数据", () => {
   assert.equal(MAJOR_EVENTS.some((event) => event.title === "横山之战"), false);
   assert.equal(STATIC_MAJOR_EVENT_TITLES.includes("横山之战"), true);

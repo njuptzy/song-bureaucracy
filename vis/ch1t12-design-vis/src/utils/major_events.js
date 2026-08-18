@@ -81,6 +81,19 @@ export const MAJOR_EVENTS = Object.freeze([
     },
   },
   {
+    id: "yuanfeng-bureaucratic-reform",
+    title: "元丰改制",
+    kind: "point",
+    year: 1082,
+    originalTime: "元丰五年",
+    certainty: "exact",
+    note: "标示新官制正式施行的年份；元丰三年开始详定，不另画与熙宁变法重叠的区间。",
+    source: {
+      title: "《宋史》卷十六《神宗本纪》及《职官志》",
+      url: "https://zh.wikisource.org/wiki/宋史/卷016",
+    },
+  },
+  {
     id: "pingxia-battle",
     title: "平夏城之战",
     kind: "point",
