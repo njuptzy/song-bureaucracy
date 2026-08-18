@@ -11,6 +11,7 @@ import {
   packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
+  pushOverlappingRanges,
   relativeAffineMatrix,
   subordinateGroupAncestorId,
   virtualBusRange,
@@ -115,6 +116,20 @@ test("多个展开分支按原顺序排开且保留完整宽度", () => {
   assert.equal(packed[1].right - packed[1].left, 800);
   assert.equal(packed[1].left - packed[0].right, 24);
   assert.equal(packed[1].right - packed[0].left, 1624);
+});
+
+test("重叠范围向同一方向整体平移，后续范围保持相对位置", () => {
+  const shifted = pushOverlappingRanges([
+    { id: "left", left: 0, right: 100 },
+    { id: "middle", left: 80, right: 180 },
+    { id: "right", left: 220, right: 320 },
+  ], 24);
+  assert.deepEqual(shifted.map(({ id, left, right, offset }) => ({ id, left, right, offset })), [
+    { id: "left", left: 0, right: 100, offset: 0 },
+    { id: "middle", left: 124, right: 224, offset: 44 },
+    { id: "right", left: 264, right: 364, offset: 44 },
+  ]);
+  assert.equal(shifted[2].left - shifted[1].left, 140);
 });
 
 test("机构树溢出时滚动条覆盖完整平移范围", () => {

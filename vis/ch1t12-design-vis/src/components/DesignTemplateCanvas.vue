@@ -31,9 +31,9 @@ import {
   fitRangeShift,
   hierarchyNodeGap,
   isHorizontalWheelGesture,
-  packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
+  pushOverlappingRanges,
   relativeAffineMatrix,
   virtualBusRange,
   virtualBusY,
@@ -2001,10 +2001,10 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  // 多个制度组同时展开时，只按“点击节点 + 同方向后代”的完整范围避让。
-  // 点击的制度组标题、后代节点和连线一起平移，保持整个方向上的相对位置。
-  if (spaceAwareExpansion.value && expandedInstitutionGroupNodes.length > 1) {
-    const branchRanges = expandedInstitutionGroupNodes
+  // 制度组发生重叠时，按从左到右的方向整体推开。当前制度组以及它右侧的
+  // 制度组都继承同一累计位移，标题、后代节点和连线维持各自的相对位置。
+  if (institutionGroupNodes.length > 1) {
+    const branchRanges = institutionGroupNodes
       .map((institutionGroupNode) => {
         const branchNodes = institutionGroupNode.descendants();
         const bounds = branchNodes
@@ -2022,10 +2022,10 @@ function renderDynamicHierarchy(svg) {
         };
       })
       .filter(Boolean);
-    const packedRanges = packHorizontalRanges(branchRanges, 24);
+    const packedRanges = pushOverlappingRanges(branchRanges, 24);
     const originalRangeById = new Map(branchRanges.map((range) => [range.id, range]));
     const groupById = new Map(
-      expandedInstitutionGroupNodes.map((node) => [node.data.id, node]),
+      institutionGroupNodes.map((node) => [node.data.id, node]),
     );
     const shiftLayout = (layout, delta) => {
       if (!layout || !delta) return;

@@ -95,6 +95,27 @@ export function packHorizontalRanges(ranges, gap = 18) {
   }));
 }
 
+// 按输入顺序向一个方向推开重叠范围。后续范围继承同一累计位移，
+// 因而同一方向上的节点始终一起移动，不会被分别重新打包。
+export function pushOverlappingRanges(ranges, gap = 18) {
+  let cumulativeOffset = 0;
+  let previousRight = -Infinity;
+  return (ranges || []).map((range) => {
+    const left = range.left + cumulativeOffset;
+    if (Number.isFinite(previousRight) && left < previousRight + gap) {
+      cumulativeOffset += previousRight + gap - left;
+    }
+    const next = {
+      ...range,
+      left: range.left + cumulativeOffset,
+      right: range.right + cumulativeOffset,
+      offset: cumulativeOffset,
+    };
+    previousRight = next.right;
+    return next;
+  });
+}
+
 export function buildHierarchyEdgeIndex(edges = []) {
   const normalizedEdges = Array.isArray(edges) ? edges : [];
   const childrenByParent = new Map();
