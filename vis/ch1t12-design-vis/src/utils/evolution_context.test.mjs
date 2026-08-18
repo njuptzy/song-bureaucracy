@@ -4,6 +4,8 @@ import {
   evolutionSelectionComparison,
   formatYearOffset,
   resolveHierarchyReturnContext,
+  resolveHierarchyReturnContexts,
+  staffEdgesForEvolutionTimepoint,
   yearOffset,
 } from "./evolution_context.js";
 
@@ -67,6 +69,7 @@ test("机构和官职都能解析为当前层级中的机构路径", () => {
     {
       requestedEntityId: 3,
       institutionId: 2,
+      institutionTitle: "下属",
       rootId: 1,
       path: [1, 2],
       active: true,
@@ -86,4 +89,82 @@ test("入口年份中机构不存续时返回 inactive 而不制造节点", () =
   });
   assert.equal(context.active, false);
   assert.deepEqual(context.path, [1, 2]);
+});
+
+test("官职只从传入年份快照的编制关系解析机构", () => {
+  const entities = [
+    { id: 1, title: "甲机构", type: "机构" },
+    { id: 2, title: "乙机构", type: "机构" },
+    { id: 3, title: "官职", type: "官职" },
+  ];
+  assert.equal(resolveHierarchyReturnContext({
+    entityId: 3,
+    entities,
+    staffEdges: [{ org: 2, official: 3 }],
+  }).institutionId, 2);
+  assert.equal(resolveHierarchyReturnContext({
+    entityId: 3,
+    entities,
+    staffEdges: [],
+  }), null);
+});
+
+test("官职同年有多个编制机构时完整返回而不擅自选择", () => {
+  const contexts = resolveHierarchyReturnContexts({
+    entityId: 3,
+    entities: [
+      { id: 1, title: "甲机构", type: "机构" },
+      { id: 2, title: "乙机构", type: "机构" },
+      { id: 3, title: "官职", type: "官职" },
+    ],
+    staffEdges: [
+      { org: 1, official: 3 },
+      { org: 2, official: 3 },
+      { org: 2, official: 3 },
+    ],
+  });
+  assert.deepEqual(
+    contexts.map(({ institutionId, institutionTitle }) => [institutionId, institutionTitle]),
+    [[1, "甲机构"], [2, "乙机构"]],
+  );
+  assert.equal(resolveHierarchyReturnContext({
+    entityId: 3,
+    entities: [
+      { id: 1, title: "甲机构", type: "机构" },
+      { id: 2, title: "乙机构", type: "机构" },
+      { id: 3, title: "官职", type: "官职" },
+    ],
+    staffEdges: [{ org: 1, official: 3 }, { org: 2, official: 3 }],
+  }), null);
+});
+
+test("官职时间点优先使用该点直接挂接且当年仍有效的编制", () => {
+  const selected = staffEdgesForEvolutionTimepoint({
+    officialId: 3,
+    timepointId: 30,
+    staffEdges: [
+      { org: 1, official: 3, states: [{ object_timepoint_id: 30 }] },
+      { org: 2, official: 3, states: [{ object_timepoint_id: 31 }] },
+      { org: 4, official: 3, states: [{ object_timepoint_id: 30 }] },
+    ],
+    snapshotStaffEdges: [
+      { org: 1, official: 3 },
+      { org: 2, official: 3 },
+    ],
+  });
+  assert.deepEqual(selected.map((edge) => edge.org), [1]);
+});
+
+test("官职时间点没有直接编制关系时回退到该年全部有效编制", () => {
+  const selected = staffEdgesForEvolutionTimepoint({
+    officialId: 3,
+    timepointId: 30,
+    staffEdges: [{ org: 1, official: 3, states: [{ object_timepoint_id: 31 }] }],
+    snapshotStaffEdges: [
+      { org: 1, official: 3 },
+      { org: 2, official: 3 },
+      { org: 4, official: 5 },
+    ],
+  });
+  assert.deepEqual(selected.map((edge) => edge.org), [1, 2]);
 });

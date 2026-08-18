@@ -80,6 +80,8 @@ import {
   evolutionSelectionComparison,
   formatYearOffset,
   resolveHierarchyReturnContext,
+  resolveHierarchyReturnContexts,
+  staffEdgesForEvolutionTimepoint,
 } from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import {
@@ -3503,8 +3505,8 @@ function renderDynamicEvolution(svg) {
       if (year == null) return;
       commitTimelineRange([year, year]);
     },
-    onOpenHierarchy(entityId) {
-      openHierarchyFromEvolution({ entityId, reason: "selected-action" });
+    onOpenHierarchy(entityId, year) {
+      openHierarchyFromEvolution({ entityId, year, reason: "selected-action" });
     },
   };
 
@@ -3517,7 +3519,7 @@ function renderDynamicEvolution(svg) {
     selectedRange: selectedRange.value,
     selectionActive: timelineSelectionActive.value,
     entryContext: evolutionEntryContext.value,
-    hierarchyEntityId: evolutionReturnEntityId(),
+    hierarchyResolution: evolutionHierarchyResolution(),
     mode: evolutionMode.value,
     searchOpen: evolutionSearchOpen.value,
     handlers,
@@ -5079,24 +5081,70 @@ function evolutionReturnEntityId() {
   return selectedId.value ?? evolutionEntryContext.value?.entryEntityId ?? null;
 }
 
-function openHierarchyFromEvolution({ entityId = null, reason = "entry" } = {}) {
+function evolutionHierarchyResolution() {
+  const selectedItem = selectedEvolutionItem.value;
+  if (selectedItem?.kind !== "timepoint") return { targets: [] };
+  const year = evolutionSelectionComparison(
+    selectedItem,
+    evolutionEntryContext.value?.entryYear,
+  )?.year;
+  if (year == null) {
+    return { targets: [], message: "该时间点年份未定，无法定位编制机构" };
+  }
+
+  const requested = entityMap.get(selectedItem.item?.entityId);
+  if (!requested) return { targets: [], message: `${year}年没有明确编制机构` };
+  const snapshot = yearSnapshot(year);
+  const snapshotStaffEdges = requested.type === "官职"
+    ? staffEdgesForEvolutionTimepoint({
+      officialId: requested.id,
+      timepointId: selectedItem.item?.id,
+      staffEdges: props.data.staffEdges || [],
+      snapshotStaffEdges: snapshot.staffEdges,
+    })
+    : snapshot.staffEdges;
+  const contexts = resolveHierarchyReturnContexts({
+    entityId: requested.id,
+    entities: props.data.entities,
+    hierarchyEdges: snapshot.hierarchyEdges,
+    staffEdges: snapshotStaffEdges,
+    activeEntityIds: snapshot.entityIds,
+  });
+  if (requested.type === "官职" && !contexts.length) {
+    return { targets: [], message: `${year}年没有明确编制机构` };
+  }
+  return {
+    targets: contexts.map((context) => ({
+      entityId: context.institutionId,
+      title: context.institutionTitle,
+      year,
+    })),
+  };
+}
+
+function openHierarchyFromEvolution({ entityId = null, year = null, reason = "entry" } = {}) {
   if (viewModeLocked.value) return;
   const requestedId = entityId ?? evolutionReturnEntityId();
   const requested = entityMap.get(requestedId);
   if (!requested) return;
-  const year = currentCanvasYear();
-  const current = currentSnapshot.value;
+  const targetYear = Number.isFinite(Number(year))
+    ? Math.round(Number(year))
+    : currentCanvasYear();
+  const targetSnapshot = yearSnapshot(targetYear);
   const context = resolveHierarchyReturnContext({
     entityId: requested.id,
     entities: props.data.entities,
-    hierarchyEdges: hierarchyEdgesForView(),
-    staffEdges: [...staffEdgesForView(), ...(props.data.staffEdges || [])],
-    activeEntityIds: current?.entityIds || null,
+    hierarchyEdges: targetSnapshot.hierarchyEdges,
+    staffEdges: targetSnapshot.staffEdges,
+    activeEntityIds: targetSnapshot.entityIds,
   });
   if (!context) return;
 
   const institution = entityMap.get(context.institutionId);
   if (!institution) return;
+  if (targetYear !== currentCanvasYear()) {
+    commitTimelineRange([targetYear, targetYear]);
+  }
   selectedId.value = institution.id;
   selectedEvolutionItem.value = null;
   focusHierarchyContext(institution, true);
@@ -5106,7 +5154,7 @@ function openHierarchyFromEvolution({ entityId = null, reason = "entry" } = {}) 
       requestedEntityId: requested.id,
       institutionId: institution.id,
       title: requested.title,
-      year,
+      year: targetYear,
       reason,
     };
   viewMode.value = "hierarchy";

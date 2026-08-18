@@ -16,12 +16,23 @@ test("选中演变事件时在主视图提供年份跳转和层级入口", () =>
   const actions = selectedEvolutionActionOptions(
     { kind: "timepoint", item: { effectiveYear: 1080 } },
     1069,
-    1069,
-    123,
+    { targets: [{ entityId: 123, year: 1080, title: "三司" }] },
   );
   assert.deepEqual(actions, [
     { kind: "year", year: 1080, label: "前往1080年" },
-    { kind: "hierarchy", year: 1069, entityId: 123, label: "在1069年打开层级" },
+    { kind: "hierarchy", year: 1080, entityId: 123, label: "在1080年打开层级" },
+  ]);
+});
+
+test("官职时间点没有明确编制机构时显示原因而不生成错误入口", () => {
+  const actions = selectedEvolutionActionOptions(
+    { kind: "timepoint", item: { effectiveYear: 1080 } },
+    1069,
+    { targets: [], message: "1080年没有明确编制机构" },
+  );
+  assert.deepEqual(actions, [
+    { kind: "year", year: 1080, label: "前往1080年" },
+    { kind: "status", label: "1080年没有明确编制机构" },
   ]);
 });
 
@@ -38,8 +49,7 @@ test("选中多端点关系时保留来源和目标的独立年份按钮", () =>
       },
     },
     1069,
-    1069,
-    1,
+    { targets: [{ entityId: 1, year: 1069, title: "三司" }] },
   );
   assert.deepEqual(actions, [
     { kind: "year", year: 1069, label: "前往来源1069年" },

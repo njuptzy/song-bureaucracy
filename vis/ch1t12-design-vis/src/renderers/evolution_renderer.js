@@ -1471,8 +1471,7 @@ function renderLanePager(parent, laneWindow, handlers) {
 export function selectedEvolutionActionOptions(
   selectedItem,
   entryYear,
-  currentYear,
-  hierarchyEntityId = null,
+  hierarchyResolution = null,
 ) {
   if (!selectedItem) return [];
   const comparison = evolutionSelectionComparison(selectedItem, entryYear);
@@ -1497,12 +1496,21 @@ export function selectedEvolutionActionOptions(
       });
     }
   }
-  if (hierarchyEntityId != null && Number.isFinite(Number(currentYear))) {
+  for (const target of hierarchyResolution?.targets || []) {
+    if (target?.entityId == null || !Number.isFinite(Number(target.year))) continue;
     actions.push({
       kind: "hierarchy",
-      year: Number(currentYear),
-      entityId: hierarchyEntityId,
-      label: `在${currentYear}年打开层级`,
+      year: Number(target.year),
+      entityId: target.entityId,
+      label: (hierarchyResolution.targets || []).length > 1 && target.title
+        ? `打开${target.title}`
+        : `在${target.year}年打开层级`,
+    });
+  }
+  if (hierarchyResolution?.message) {
+    actions.push({
+      kind: "status",
+      label: hierarchyResolution.message,
     });
   }
   return actions;
@@ -1512,8 +1520,7 @@ function renderSelectedActions(parent, options) {
   const actions = selectedEvolutionActionOptions(
     options.selectedItem,
     options.entryContext?.entryYear,
-    options.selectedRange?.[0],
-    options.hierarchyEntityId ?? options.activeEntityId,
+    options.hierarchyResolution,
   );
   if (!actions.length) return;
 
@@ -1541,32 +1548,42 @@ function renderSelectedActions(parent, options) {
   actions.forEach((action, index) => {
     const width = widths[index];
     const button = svgElement("g", {
-      class: "evolution-selection-action",
-      role: "button",
-      tabindex: "0",
-      "aria-label": action.label,
+      class: action.kind === "status"
+        ? "evolution-selection-status"
+        : "evolution-selection-action",
+      ...(action.kind === "status" ? {} : {
+        role: "button",
+        tabindex: "0",
+        "aria-label": action.label,
+      }),
     });
-    button.appendChild(svgElement("rect", {
-      x,
-      y: 152,
-      width,
-      height: buttonHeight,
-      rx: 2.5,
-      class: "evolution-selection-action-surface",
-    }));
+    if (action.kind !== "status") {
+      button.appendChild(svgElement("rect", {
+        x,
+        y: 152,
+        width,
+        height: buttonHeight,
+        rx: 2.5,
+        class: "evolution-selection-action-surface",
+      }));
+    }
     appendText(button, action.label, {
       x: x + width / 2,
       y: 166.2,
-      class: "evolution-selection-action-label",
+      class: action.kind === "status"
+        ? "evolution-selection-status-label"
+        : "evolution-selection-action-label",
       "text-anchor": "middle",
     });
-    addTitle(button, action.kind === "year"
-      ? `只移动当前年份线到${action.year}年，不改变入口年份`
-      : `在${action.year}年打开该实体的最小层级结构`);
-    makeInteractive(button, action.label, () => {
-      if (action.kind === "year") options.handlers.onCommitYear?.(action.year);
-      else options.handlers.onOpenHierarchy?.(action.entityId);
-    });
+    if (action.kind !== "status") {
+      addTitle(button, action.kind === "year"
+        ? `只移动当前年份线到${action.year}年，不改变入口年份`
+        : `在${action.year}年打开该机构的最小层级结构`);
+      makeInteractive(button, action.label, () => {
+        if (action.kind === "year") options.handlers.onCommitYear?.(action.year);
+        else options.handlers.onOpenHierarchy?.(action.entityId, action.year);
+      });
+    }
     group.appendChild(button);
     x += width + gap;
   });

@@ -64,7 +64,36 @@ export function evolutionSelectionComparison(selectedItem, entryYear) {
   return { kind: "relation", endpoints };
 }
 
-export function resolveHierarchyReturnContext({
+export function staffEdgesForEvolutionTimepoint({
+  officialId,
+  timepointId,
+  staffEdges = [],
+  snapshotStaffEdges = [],
+}) {
+  const normalizedOfficialId = normalizeId(officialId);
+  const normalizedTimepointId = normalizeId(timepointId);
+  const activeEdges = snapshotStaffEdges.filter((edge) => (
+    normalizeId(edge.official ?? edge.official_id) === normalizedOfficialId
+  ));
+  const directInstitutionIds = new Set(
+    staffEdges
+      .filter((edge) => (
+        normalizeId(edge.official ?? edge.official_id) === normalizedOfficialId
+        && (edge.states || []).some((state) => (
+          normalizeId(state.object_timepoint_id ?? state.objectTimepointId)
+            === normalizedTimepointId
+        ))
+      ))
+      .map((edge) => normalizeId(edge.org ?? edge.institution))
+      .filter((id) => id != null),
+  );
+  if (!directInstitutionIds.size) return activeEdges;
+  return activeEdges.filter((edge) => (
+    directInstitutionIds.has(normalizeId(edge.org ?? edge.institution))
+  ));
+}
+
+export function resolveHierarchyReturnContexts({
   entityId,
   entities = [],
   hierarchyEdges = [],
@@ -76,29 +105,40 @@ export function resolveHierarchyReturnContext({
     : new Map(entities.map((entity) => [normalizeId(entity.id), entity]));
   const requestedId = normalizeId(entityId);
   const requested = entityMap.get(requestedId) || null;
-  if (!requested) return null;
+  if (!requested) return [];
 
-  let institution = requested;
-  if (requested.type !== "机构") {
-    const affiliation = staffEdges.find((edge) => (
+  const institutions = requested.type === "机构"
+    ? [requested]
+    : staffEdges
+      .filter((edge) => (
       normalizeId(edge.official) === requestedId
       || normalizeId(edge.official_id) === requestedId
-    ));
-    institution = entityMap.get(normalizeId(affiliation?.org ?? affiliation?.institution)) || null;
-  }
-  if (!institution) return null;
+      ))
+      .map((edge) => entityMap.get(normalizeId(edge.org ?? edge.institution)) || null)
+      .filter(Boolean);
+  const uniqueInstitutions = [...new Map(
+    institutions.map((institution) => [normalizeId(institution.id), institution]),
+  ).values()];
 
-  const context = resolveHierarchyContext(institution.id, hierarchyEdges, entityMap);
-  const active = activeEntityIds == null
-    ? true
-    : activeEntityIds instanceof Set
-      ? activeEntityIds.has(institution.id)
-      : activeEntityIds.includes(institution.id);
-  return {
-    requestedEntityId: requested.id,
-    institutionId: institution.id,
-    rootId: context.root?.id ?? institution.id,
-    path: context.path,
-    active,
-  };
+  return uniqueInstitutions.map((institution) => {
+    const context = resolveHierarchyContext(institution.id, hierarchyEdges, entityMap);
+    const active = activeEntityIds == null
+      ? true
+      : activeEntityIds instanceof Set
+        ? activeEntityIds.has(institution.id)
+        : activeEntityIds.includes(institution.id);
+    return {
+      requestedEntityId: requested.id,
+      institutionId: institution.id,
+      institutionTitle: institution.title || "",
+      rootId: context.root?.id ?? institution.id,
+      path: context.path,
+      active,
+    };
+  });
+}
+
+export function resolveHierarchyReturnContext(options) {
+  const contexts = resolveHierarchyReturnContexts(options);
+  return contexts.length === 1 ? contexts[0] : null;
 }
