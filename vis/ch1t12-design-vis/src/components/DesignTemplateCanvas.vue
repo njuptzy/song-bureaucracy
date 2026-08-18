@@ -5733,18 +5733,7 @@ function bindTimelineRange(svg) {
     timelineDataLayer.setAttribute("aria-label", "依据完整年号数据绘制的年份和年号");
 
     for (const year of buildTimelineYearTicks(YEAR_MIN, YEAR_MAX, 10)) {
-      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
       const x = yearScale(year);
-      tick.setAttribute("x1", String(x));
-      tick.setAttribute("x2", String(x));
-      tick.setAttribute("y1", "986.42");
-      tick.setAttribute("y2", "991.5");
-      tick.setAttribute("stroke", "#563905");
-      tick.setAttribute("stroke-width", year % 50 === 0 || year === YEAR_MIN || year === YEAR_MAX ? "1.1" : "0.65");
-      tick.setAttribute("opacity", year % 50 === 0 || year === YEAR_MIN || year === YEAR_MAX ? "0.82" : "0.55");
-      tick.setAttribute("pointer-events", "none");
-      timelineDataLayer.appendChild(tick);
-
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("class", "cls-39");
       label.setAttribute("x", String(x));
