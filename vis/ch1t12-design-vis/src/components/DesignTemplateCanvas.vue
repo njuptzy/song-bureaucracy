@@ -5755,14 +5755,14 @@ function bindTimelineRange(svg) {
       timelineDataLayer.appendChild(label);
     }
 
-    // 年号区间和起始竖线全部保留。起止年份跨度不足 5 年的年号不显示文字，
+    // 年号区间和起始竖线全部保留。起止年份跨度不足 4 年的年号不显示文字，
     // 达到年限但名称过长时在自己的时间格内显示省略号，不按字数改变年限阈值。
     const labelY = 982.24;
     const labelFontSize = 10;
     const eraLabels = layoutTimelineEraLabels(
       eraRecords,
       (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
-      { minYears: 5, fontSize: labelFontSize, padding: 0 },
+      { minYears: 4, fontSize: labelFontSize, padding: 0 },
     );
 
     for (const era of eraLabels) {

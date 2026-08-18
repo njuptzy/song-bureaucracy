@@ -48,7 +48,7 @@ export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
  * 这样短年号不会被硬挤到邻近年号上方。
  */
 export function layoutTimelineEraLabels(eras, xOf, options = {}) {
-  const minYears = Number(options.minYears) > 0 ? Number(options.minYears) : 5;
+  const minYears = Number(options.minYears) > 0 ? Number(options.minYears) : 4;
   const fontSize = Number(options.fontSize) > 0 ? Number(options.fontSize) : 10;
   const padding = Number.isFinite(Number(options.padding))
     ? Math.max(0, Number(options.padding))
