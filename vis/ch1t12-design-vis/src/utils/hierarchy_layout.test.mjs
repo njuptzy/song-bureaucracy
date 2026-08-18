@@ -6,6 +6,7 @@ import {
   buildHierarchyEdgeIndex,
   fitRangeShift,
   horizontalRangesFit,
+  packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   relativeAffineMatrix,
@@ -55,6 +56,17 @@ test("左右分类分支互不重叠且位于视口内时可同时展示", () =>
   assert.equal(horizontalRangesFit([
     { left: 420, right: 760 },
   ], 500, 1830), false);
+});
+
+test("多个展开分支按原顺序排开且保留完整宽度", () => {
+  const packed = packHorizontalRanges([
+    { id: "left", left: 420, right: 1220 },
+    { id: "right", left: 900, right: 1700 },
+  ], 24);
+  assert.equal(packed[0].right - packed[0].left, 800);
+  assert.equal(packed[1].right - packed[1].left, 800);
+  assert.equal(packed[1].left - packed[0].right, 24);
+  assert.equal(packed[1].right - packed[0].left, 1624);
 });
 
 test("机构树溢出时滚动条覆盖完整平移范围", () => {

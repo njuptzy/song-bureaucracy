@@ -29,7 +29,7 @@ import {
   anchorBranchToGroup,
   buildHierarchyEdgeIndex,
   fitRangeShift,
-  horizontalRangesFit,
+  packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   relativeAffineMatrix,
@@ -41,6 +41,7 @@ import {
   compositionViewButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
+  hierarchyPathAfterInstitutionGroupToggle,
   institutionGroupsAfterLayout,
   mergeExpansionPaths,
   removeExpandedSubtree,
@@ -1096,57 +1097,24 @@ function hierarchySubtreeIds(rootId) {
   return hierarchyEdgeIndexForView().subtreeIds(rootId);
 }
 
-function renderExpansionCandidate(fallbackPath) {
-  const candidateIds = [...expandedHierarchyPath];
-  refreshTemplate();
-  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
-  const resolvedIds = expansionAfterLayout({
-    candidateIds,
-    fallbackPath,
-    spaceAware: spaceAwareExpansion.value,
-    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+function renderExpansionCandidate() {
+  expandedHierarchyPath = expansionAfterLayout({
+    candidateIds: expandedHierarchyPath,
   });
-  if (
-    resolvedIds.length === candidateIds.length
-    && resolvedIds.every((id, index) => id === candidateIds[index])
-  ) return;
-  expandedHierarchyPath = resolvedIds;
   refreshTemplate();
 }
 
-function renderInstitutionGroupCandidate(clickedId) {
-  const candidateIds = [...expandedInstitutionGroupIds];
-  refreshTemplate();
-  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
-  const resolvedIds = institutionGroupsAfterLayout({
-    candidateIds,
-    clickedId,
-    spaceAware: spaceAwareExpansion.value,
-    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+function renderInstitutionGroupCandidate() {
+  expandedInstitutionGroupIds = institutionGroupsAfterLayout({
+    candidateIds: expandedInstitutionGroupIds,
   });
-  if (
-    resolvedIds.length === candidateIds.length
-    && resolvedIds.every((id, index) => id === candidateIds[index])
-  ) return;
-  expandedInstitutionGroupIds = resolvedIds;
   refreshTemplate();
 }
 
-function renderSubordinateGroupCandidate(clickedId) {
-  const candidateIds = [...expandedSubordinateGroupIds];
-  refreshTemplate();
-  const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
-  const resolvedIds = institutionGroupsAfterLayout({
-    candidateIds,
-    clickedId,
-    spaceAware: spaceAwareExpansion.value,
-    layoutFits: svg?.__dynamicHierarchyFitsViewport !== false,
+function renderSubordinateGroupCandidate() {
+  expandedSubordinateGroupIds = institutionGroupsAfterLayout({
+    candidateIds: expandedSubordinateGroupIds,
   });
-  if (
-    resolvedIds.length === candidateIds.length
-    && resolvedIds.every((id, index) => id === candidateIds[index])
-  ) return;
-  expandedSubordinateGroupIds = resolvedIds;
   refreshTemplate();
 }
 
@@ -1792,7 +1760,6 @@ function hierarchyTemplates(svg) {
 }
 
 function renderDynamicHierarchy(svg) {
-  svg.__dynamicHierarchyFitsViewport = true;
   svg.querySelector(".hierarchy-year-marker")?.remove();
   const templates = hierarchyTemplates(svg);
   if (!templates) return;
@@ -1942,8 +1909,29 @@ function renderDynamicHierarchy(svg) {
       right: branchCenterX + maxOffset,
     });
   }
-  const expandedGroupBranchesFit = expandedInstitutionGroupNodes.length <= 1
-    || horizontalRangesFit(expandedBranchRanges, area.left, area.right, 24);
+  if (expandedBranchRanges.length > 1) {
+    const originalRangeById = new Map(expandedBranchRanges.map((range) => [range.id, range]));
+    const packedRanges = packHorizontalRanges(expandedBranchRanges, 24);
+    const packedLeft = d3.min(packedRanges, (range) => range.left);
+    const packedRight = d3.max(packedRanges, (range) => range.right);
+    const viewportShift = fitRangeShift(
+      packedLeft,
+      packedRight,
+      area.left,
+      area.right,
+    );
+    for (const range of packedRanges) {
+      const originalRange = originalRangeById.get(range.id);
+      const branchCenter = expandedBranchCenterX.get(range.id);
+      if (!originalRange || branchCenter == null) continue;
+      expandedBranchCenterX.set(
+        range.id,
+        branchCenter + range.left + viewportShift - originalRange.left,
+      );
+      originalRange.left = range.left + viewportShift;
+      originalRange.right = range.right + viewportShift;
+    }
+  }
 
   const clipId = "dynamic-tree-viewport-clip";
   const clipPath = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
@@ -2077,11 +2065,6 @@ function renderDynamicHierarchy(svg) {
   const contentBottom = d3.max([...nodeLayout.values()], (layout) => layout.bottom) ?? area.bottom;
   const contentHeight = contentBottom - contentTop;
   const viewportHeight = area.bottom - area.top;
-  svg.__dynamicHierarchyFitsViewport = (
-    contentWidth <= viewportWidth
-    && contentHeight <= viewportHeight
-    && expandedGroupBranchesFit
-  );
   const minPanY = contentHeight <= viewportHeight ? 0 : area.bottom - contentBottom;
   const maxPanY = contentHeight <= viewportHeight ? 0 : area.top - contentTop;
   const panControls = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -2569,7 +2552,7 @@ function renderDynamicHierarchy(svg) {
         hierarchyPanX = 0;
         hierarchyPanY = 0;
         if (!wasExpanded) {
-          renderSubordinateGroupCandidate(node.data.id);
+          renderSubordinateGroupCandidate();
           return;
         }
       } else if (node.data.isInstitutionGroup) {
@@ -2580,12 +2563,15 @@ function renderDynamicHierarchy(svg) {
           spaceAwareExpansion.value
         );
         if (!wasExpanded) lastExpandedInstitutionGroupId = node.data.id;
-        expandedHierarchyPath = [];
-        lastExpandedHierarchyId = null;
+        expandedHierarchyPath = hierarchyPathAfterInstitutionGroupToggle(
+          expandedHierarchyPath,
+          spaceAwareExpansion.value,
+        );
+        if (!spaceAwareExpansion.value) lastExpandedHierarchyId = null;
         hierarchyPanX = 0;
         hierarchyPanY = 0;
         if (!wasExpanded) {
-          renderInstitutionGroupCandidate(node.data.id);
+          renderInstitutionGroupCandidate();
           return;
         }
       } else if (collapsedHierarchyIds.has(node.data.id)) {
@@ -2630,7 +2616,7 @@ function renderDynamicHierarchy(svg) {
               spaceAwareExpansion.value
             );
             lastExpandedHierarchyId = node.data.id;
-            renderExpansionCandidate(fallbackPath);
+            renderExpansionCandidate();
             return;
           }
         }
@@ -2729,70 +2715,6 @@ function ensureGlobalUndoControl(svg) {
     } : null);
   // 把按钮放到 SVG 最上层，避免动态层或原稿元素覆盖透明命中区。
   svg.appendChild(control);
-}
-
-function reconcileComparisonHierarchyExpansion(svg) {
-  // 对照视图只有原层级视图一半的横向空间。复用层级视图原有的
-  // expansionAfterLayout / institutionGroupsAfterLayout 判定，但把“半栏”
-  // 作为布局边界重新判断，不能把完整层级画板的 fit 结果直接当成可见。
-  const hasMultipleInstitutionGroups = expandedInstitutionGroupIds.length > 1;
-  const layoutFits = svg.__dynamicHierarchyFitsViewport !== false
-    && !hasMultipleInstitutionGroups;
-  let changed = false;
-
-  const institutionGroupFallback = lastExpandedInstitutionGroupId
-    ?? expandedInstitutionGroupIds.at(-1)
-    ?? null;
-  if (institutionGroupFallback != null) {
-    const nextInstitutionGroups = institutionGroupsAfterLayout({
-      candidateIds: expandedInstitutionGroupIds,
-      clickedId: institutionGroupFallback,
-      spaceAware: spaceAwareExpansion.value,
-      layoutFits,
-    });
-    if (nextInstitutionGroups.length !== expandedInstitutionGroupIds.length
-      || nextInstitutionGroups.some((id, index) => id !== expandedInstitutionGroupIds[index])) {
-      expandedInstitutionGroupIds = nextInstitutionGroups;
-      changed = true;
-    }
-  }
-
-  const subordinateFallback = lastExpandedSubordinateGroupId
-    ?? expandedSubordinateGroupIds.at(-1)
-    ?? null;
-  if (subordinateFallback != null) {
-    const nextSubordinateGroups = institutionGroupsAfterLayout({
-      candidateIds: expandedSubordinateGroupIds,
-      clickedId: subordinateFallback,
-      spaceAware: spaceAwareExpansion.value,
-      layoutFits,
-    });
-    if (nextSubordinateGroups.length !== expandedSubordinateGroupIds.length
-      || nextSubordinateGroups.some((id, index) => id !== expandedSubordinateGroupIds[index])) {
-      expandedSubordinateGroupIds = nextSubordinateGroups;
-      changed = true;
-    }
-  }
-
-  if (lastExpandedHierarchyId != null && expandedHierarchyPath.length) {
-    const fallbackPath = resolveHierarchyContext(
-      lastExpandedHierarchyId,
-      hierarchyEdgesForView(),
-      entityMap,
-    ).path;
-    const nextPath = expansionAfterLayout({
-      candidateIds: expandedHierarchyPath,
-      fallbackPath,
-      spaceAware: spaceAwareExpansion.value,
-      layoutFits,
-    });
-    if (nextPath.length !== expandedHierarchyPath.length
-      || nextPath.some((id, index) => id !== expandedHierarchyPath[index])) {
-      expandedHierarchyPath = nextPath;
-      changed = true;
-    }
-  }
-  return changed;
 }
 
 function assignSlots(slots, entityIds) {
@@ -3373,12 +3295,6 @@ function renderDynamicComparison(svg) {
   // 先在各自的嵌套画板中运行原有渲染器，保留节点/事件处理器，
   // 再移除设计稿示例，只留下动态层；不会复制整张页面。
   renderDynamicHierarchy(leftSvg);
-  if (reconcileComparisonHierarchyExpansion(leftSvg)) {
-    // 状态校正后只重绘左侧动态树，不触发整页刷新，也不复制旧的视口。
-    leftSvg.querySelector(".dynamic-tree-viewport")?.remove();
-    leftSvg.querySelector("#dynamic-tree-viewport-clip")?.remove();
-    renderDynamicHierarchy(leftSvg);
-  }
   retainComparisonLayer(leftSvg, ".dynamic-tree-viewport");
   renderDynamicEvolution(rightSvg);
   // 对照区只保留时间轴本体；对象选择器属于独立演变视图入口，
@@ -4801,14 +4717,16 @@ function bindSpaceAwareExpansionControl(svg) {
     control.setAttribute("aria-checked", String(enabled));
     control.setAttribute(
       "aria-label",
-      enabled ? "关闭空间展开，恢复单节点展开" : "开启空间展开，空间足够时保留多个节点"
+      enabled
+        ? "关闭空间展开，恢复单节点展开"
+        : "开启空间展开，保留所有已展开机构，空间不足时使用底部滚动条"
     );
     outline.setAttribute("fill-opacity", enabled ? "0.12" : "0");
     outline.setAttribute("stroke-width", enabled ? "1.35" : "0.8");
     frontPage.setAttribute("fill", enabled ? "#563905" : "none");
     frontPage.setAttribute("fill-opacity", enabled ? "0.16" : "0");
     control.querySelector("title").textContent = enabled
-      ? "空间展开已开启：空间足够时保留多个机构分支"
+      ? "空间展开已开启：保留所有已展开机构，空间不足时使用底部滚动条"
       : "空间展开已关闭：点击新节点时收起旧分支";
   };
 

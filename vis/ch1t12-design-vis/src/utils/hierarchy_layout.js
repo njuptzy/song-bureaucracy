@@ -28,6 +28,33 @@ export function horizontalRangesFit(ranges, viewportLeft, viewportRight, gap = 1
   ));
 }
 
+export function packHorizontalRanges(ranges, gap = 18) {
+  const ordered = [...ranges]
+    .map((range) => ({ ...range }))
+    .sort((a, b) => a.left - b.left || a.right - b.right);
+  if (ordered.length <= 1) return ordered;
+
+  const preferredCenter = (
+    Math.min(...ordered.map((range) => range.left))
+    + Math.max(...ordered.map((range) => range.right))
+  ) / 2;
+  let cursorRight = -Infinity;
+  for (const range of ordered) {
+    const width = Math.max(0, range.right - range.left);
+    range.left = Math.max(range.left, cursorRight + gap);
+    range.right = range.left + width;
+    cursorRight = range.right;
+  }
+
+  const packedCenter = (ordered[0].left + ordered.at(-1).right) / 2;
+  const centerShift = preferredCenter - packedCenter;
+  return ordered.map((range) => ({
+    ...range,
+    left: range.left + centerShift,
+    right: range.right + centerShift,
+  }));
+}
+
 export function buildHierarchyEdgeIndex(edges = []) {
   const normalizedEdges = Array.isArray(edges) ? edges : [];
   const childrenByParent = new Map();

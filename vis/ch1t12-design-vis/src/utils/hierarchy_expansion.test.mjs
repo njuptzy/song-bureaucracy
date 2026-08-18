@@ -7,6 +7,7 @@ import {
   compositionViewButtonVisible,
   expansionAfterLayout,
   expansionAnchorId,
+  hierarchyPathAfterInstitutionGroupToggle,
   institutionGroupsAfterLayout,
   mergeExpansionPaths,
   removeExpandedSubtree,
@@ -55,13 +56,13 @@ test("收起节点时只移除该节点及其已展开后代", () => {
   assert.deepEqual(removeExpandedSubtree([1, 2, 4, 3], [2, 4]), [1, 3]);
 });
 
-test("组合布局超出画布时回退到新分支，单支自身溢出仍保留", () => {
+test("空间展开即使超出画布也保留全部已展开分支", () => {
   assert.deepEqual(expansionAfterLayout({
     candidateIds: [1, 2, 3],
     fallbackPath: [1, 3],
     spaceAware: true,
     layoutFits: false,
-  }), [1, 3]);
+  }), [1, 2, 3]);
   assert.deepEqual(expansionAfterLayout({
     candidateIds: [1, 3],
     fallbackPath: [1, 3],
@@ -92,6 +93,11 @@ test("空间模式允许同时展开左右两个虚拟分类", () => {
   assert.deepEqual(toggleInstitutionGroupIds(["left"], "right", true), ["left", "right"]);
 });
 
+test("空间模式打开新制度组时保留此前实体展开路径", () => {
+  assert.deepEqual(hierarchyPathAfterInstitutionGroupToggle([1, 2, 3], true), [1, 2, 3]);
+  assert.deepEqual(hierarchyPathAfterInstitutionGroupToggle([1, 2, 3], false), []);
+});
+
 test("三司虚拟分类在普通模式只保留新点击项，空间模式才允许并列展开", () => {
   const accounting = "subordinate-group:406:勾院与帐籍审核";
   const storage = "subordinate-group:406:库藏与粮料";
@@ -99,13 +105,13 @@ test("三司虚拟分类在普通模式只保留新点击项，空间模式才�
   assert.deepEqual(toggleInstitutionGroupIds([accounting], storage, true), [accounting, storage]);
 });
 
-test("多个虚拟分类放不下时回退到新点击分类", () => {
+test("多个虚拟分类放不下时仍全部保留", () => {
   assert.deepEqual(institutionGroupsAfterLayout({
     candidateIds: ["left", "right"],
     clickedId: "right",
     spaceAware: true,
     layoutFits: false,
-  }), ["right"]);
+  }), ["left", "right"]);
   assert.deepEqual(institutionGroupsAfterLayout({
     candidateIds: ["right"],
     clickedId: "right",
@@ -114,7 +120,7 @@ test("多个虚拟分类放不下时回退到新点击分类", () => {
   }), ["right"]);
 });
 
-test("三司多个分类在空间模式下排不进画布时只保留新点击分类", () => {
+test("三司多个分类在空间模式下排不进画布时仍全部保留", () => {
   const accounting = "subordinate-group:406:勾院与帐籍审核";
   const storage = "subordinate-group:406:库藏与粮料";
   assert.deepEqual(institutionGroupsAfterLayout({
@@ -122,7 +128,7 @@ test("三司多个分类在空间模式下排不进画布时只保留新点击�
     clickedId: storage,
     spaceAware: true,
     layoutFits: false,
-  }), [storage]);
+  }), [accounting, storage]);
 });
 
 test("关闭空间模式后只保留最近展开的虚拟分类", () => {

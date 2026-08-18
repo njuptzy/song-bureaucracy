@@ -10,14 +10,8 @@ export function removeExpandedSubtree(currentIds, subtreeIds) {
 
 export function expansionAfterLayout({
   candidateIds,
-  fallbackPath,
-  spaceAware,
-  layoutFits,
 }) {
-  if (!spaceAware || layoutFits) return [...candidateIds];
-  const fallback = new Set(fallbackPath);
-  const combinesIndependentBranch = candidateIds.some((id) => !fallback.has(id));
-  return combinesIndependentBranch ? [...fallbackPath] : [...candidateIds];
+  return [...candidateIds];
 }
 
 export function expansionAnchorId(expandedIds, spaceAware) {
@@ -33,12 +27,12 @@ export function toggleInstitutionGroupIds(currentIds, clickedId, spaceAware) {
 
 export function institutionGroupsAfterLayout({
   candidateIds,
-  clickedId,
-  spaceAware,
-  layoutFits,
 }) {
-  if (!spaceAware || layoutFits || candidateIds.length <= 1) return [...candidateIds];
-  return [clickedId];
+  return [...candidateIds];
+}
+
+export function hierarchyPathAfterInstitutionGroupToggle(currentIds, spaceAware) {
+  return spaceAware ? [...currentIds] : [];
 }
 
 export function collapseInstitutionGroups(expandedIds, lastExpandedId) {
