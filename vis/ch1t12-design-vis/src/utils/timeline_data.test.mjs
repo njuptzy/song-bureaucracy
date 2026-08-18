@@ -42,13 +42,28 @@ test("过短年号隐藏文字但保留真实时间段", () => {
   });
   assert.equal(layout[0].labelVisible, false);
   assert.equal(layout[0].labelHiddenReason, "short-range");
+  assert.equal(layout[0].durationYears, 4);
   assert.equal(layout[0].startX, 3840);
   assert.equal(layout[0].endX, 3856);
   assert.equal(layout[1].labelVisible, true);
   assert.equal(layout[1].labelX, (3872 + 3908) / 2);
+  assert.equal(layout[1].labelText, "开宝");
 });
 
-test("可见年号在自己的区间内，不与相邻文字相撞", () => {
+test("达到固定年限后不因年号字数隐藏，过长文字只截成省略号", () => {
+  const layout = layoutTimelineEraLabels([
+    { name: "甲乙丙丁", start: 1, end: 5 },
+  ], (year) => year * 4, {
+    minYears: 5,
+    fontSize: 10,
+    padding: 2,
+  });
+  assert.equal(layout[0].durationYears, 5);
+  assert.equal(layout[0].labelVisible, true);
+  assert.equal(layout[0].labelText, "…");
+});
+
+test("可见年号在自己的时间格内，不与相邻文字相撞", () => {
   const eras = [
     { name: "甲", start: 1, end: 10 },
     { name: "乙", start: 11, end: 20 },
@@ -59,8 +74,8 @@ test("可见年号在自己的区间内，不与相邻文字相撞", () => {
   });
   for (const item of layout) {
     assert.equal(item.labelVisible, true);
-    assert.ok(item.labelX - item.labelWidth / 2 >= item.startX);
-    assert.ok(item.labelX + item.labelWidth / 2 <= item.endX);
+    assert.ok(item.labelX - item.labelWidth / 2 >= item.labelSlotStartX);
+    assert.ok(item.labelX + item.labelWidth / 2 <= item.labelSlotEndX);
   }
   assert.ok(
     layout[1].labelX - layout[1].labelWidth / 2

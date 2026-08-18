@@ -5754,14 +5754,14 @@ function bindTimelineRange(svg) {
       timelineDataLayer.appendChild(label);
     }
 
-    // 年号区间和起始竖线全部保留。只有文字能完整放进自己的真实时间段，
-    // 且不会与相邻可见文字相撞时才显示；短年号只用竖线和时间段表示。
+    // 年号区间和起始竖线全部保留。持续不足 5 年的年号不显示文字，
+    // 达到年限但名称过长时在自己的时间格内显示省略号，不按字数改变年限阈值。
     const labelY = 982.24;
     const labelFontSize = 10;
     const eraLabels = layoutTimelineEraLabels(
       eraRecords,
       (year) => yearScale(Math.min(YEAR_MAX + 1, year)),
-      { fontSize: labelFontSize, padding: 2, gap: 1.2 },
+      { minYears: 5, fontSize: labelFontSize, padding: 2 },
     );
 
     for (const era of eraLabels) {
@@ -5797,7 +5797,7 @@ function bindTimelineRange(svg) {
       label.setAttribute("y", String(labelY));
       label.setAttribute("text-anchor", "middle");
       label.setAttribute("pointer-events", "none");
-      label.textContent = era.name;
+      label.textContent = era.labelText;
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
       title.textContent = `${era.name}：${era.start}—${era.end}年`;
       label.appendChild(title);

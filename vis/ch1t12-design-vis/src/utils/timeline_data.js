@@ -43,18 +43,16 @@ export function buildTimelineYearTicks(yearMin, yearMax, step = 10) {
 /**
  * 为年号文字分配各自的真实时间段。
  *
- * 年号的起止竖线和时间段始终保留；只有当文字在自己的时间段内放不下，
- * 或会与前一个可见标签相撞时，才隐藏文字。这样短年号不会被硬挤到邻近
- * 年号上方，但用户仍能通过竖线和时间段知道该年号占据了哪一段时间。
+ * 年号的起止竖线和时间段始终保留；文字是否显示只由持续年数决定，
+ * 不因年号字数改变阈值。达到阈值但文字过长时，在自己的时间格内截成省略号，
+ * 这样短年号不会被硬挤到邻近年号上方。
  */
 export function layoutTimelineEraLabels(eras, xOf, options = {}) {
+  const minYears = Number(options.minYears) > 0 ? Number(options.minYears) : 5;
   const fontSize = Number(options.fontSize) > 0 ? Number(options.fontSize) : 10;
   const padding = Number.isFinite(Number(options.padding))
     ? Math.max(0, Number(options.padding))
     : 2;
-  const gap = Number.isFinite(Number(options.gap))
-    ? Math.max(0, Number(options.gap))
-    : 1.2;
   const records = normalizeTimelineEras(eras);
   const laidOut = records.map((era) => {
     const startX = Number(xOf(era.start));
@@ -63,32 +61,43 @@ export function layoutTimelineEraLabels(eras, xOf, options = {}) {
     const safeStartX = validGeometry ? startX : 0;
     const safeEndX = validGeometry ? Math.max(startX, endX) : 0;
     const slotWidth = Math.max(0, safeEndX - safeStartX);
-    const labelWidth = Math.max(fontSize, era.name.length * fontSize);
-    const labelX = safeStartX + slotWidth / 2;
-    const fitsSlot = validGeometry && slotWidth >= labelWidth + padding * 2;
+    const durationYears = Math.max(0, era.end - era.start + 1);
     return {
       ...era,
       startX: safeStartX,
       endX: safeEndX,
       slotWidth,
-      labelWidth,
-      labelX,
-      labelVisible: fitsSlot,
-      labelHiddenReason: fitsSlot ? null : "short-range",
+      durationYears,
+      labelVisible: validGeometry && durationYears >= minYears,
+      labelHiddenReason: validGeometry && durationYears >= minYears ? null : "short-range",
     };
   });
 
-  let previousRight = Number.NEGATIVE_INFINITY;
-  for (const item of laidOut) {
-    if (!item.labelVisible) continue;
-    const left = item.labelX - item.labelWidth / 2;
-    const right = item.labelX + item.labelWidth / 2;
-    if (left < previousRight + gap) {
-      item.labelVisible = false;
-      item.labelHiddenReason = "collision";
-      continue;
+  for (let index = 0; index < laidOut.length; index += 1) {
+    const item = laidOut[index];
+    const nextStartX = laidOut[index + 1]?.startX ?? item.endX;
+    const labelEndX = Math.min(item.endX, nextStartX);
+    const labelSlotWidth = Math.max(0, labelEndX - item.startX - padding * 2);
+    const maxCharacters = Math.floor(labelSlotWidth / fontSize);
+    const codePoints = Array.from(item.name);
+    let labelText = item.name;
+    if (maxCharacters <= 0) {
+      labelText = "";
+    } else if (codePoints.length > maxCharacters) {
+      labelText = maxCharacters === 1
+        ? "…"
+        : `${codePoints.slice(0, maxCharacters - 1).join("")}…`;
     }
-    previousRight = right;
+    item.labelSlotStartX = item.startX + padding;
+    item.labelSlotEndX = Math.max(item.labelSlotStartX, labelEndX - padding);
+    item.labelSlotWidth = labelSlotWidth;
+    item.labelX = item.startX + Math.max(0, labelEndX - item.startX) / 2;
+    item.labelText = labelText;
+    item.labelWidth = labelText.length * fontSize;
+    if (item.labelVisible && !labelText) {
+      item.labelVisible = false;
+      item.labelHiddenReason = "no-room";
+    }
   }
   return laidOut;
 }
