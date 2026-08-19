@@ -880,7 +880,7 @@ function prepareSharedCategoryGroup(group, category) {
 }
 
 // 两张设计画板的内容区不同，但顶部品牌标题和朝代标题必须保持同一基准。
-// 以层级画板作为唯一头部模板，避免编制画板继续沿用原稿中偏移的宋朝槽位。
+// 只同步几何位置，不复制 class：两份 SVG 的 cls 编号各自独立，不能跨画板复用。
 function alignCompositionHeader(svg) {
   const hierarchyTemplate = svgCache.get(HIERARCHY_DESIGN_URL);
   if (!hierarchyTemplate) throw new Error("层级视图头部模板未加载");
@@ -900,11 +900,8 @@ function alignCompositionHeader(svg) {
       normalizeText(element) === normalizeText(source)
     ));
     if (!target) continue;
-    ["class", "transform", "x", "y", "text-anchor", "dominant-baseline"].forEach((attribute) => {
-      const value = source.getAttribute(attribute);
-      if (value == null) target.removeAttribute(attribute);
-      else target.setAttribute(attribute, value);
-    });
+    const transform = source.getAttribute("transform");
+    if (transform) target.setAttribute("transform", transform);
   }
 }
 
