@@ -903,6 +903,30 @@ function alignCompositionHeader(svg) {
     const transform = source.getAttribute("transform");
     if (transform) target.setAttribute("transform", transform);
   }
+
+  const dynastyControls = (root) => [...root.children]
+    .filter((element) => {
+      if (element.tagName.toLowerCase() !== "path") return false;
+      const path = element.getAttribute("d") || "";
+      const match = /^M([-.\d]+),([-.\d]+)/.exec(path);
+      if (!match || path.length > 180) return false;
+      const x = Number(match[1]);
+      const y = Number(match[2]);
+      return x >= 500 && x <= 900 && y >= 70 && y <= 90;
+    })
+    .sort((left, right) => {
+      const leftX = Number(/^M([-.\d]+)/.exec(left.getAttribute("d") || "")?.[1]);
+      const rightX = Number(/^M([-.\d]+)/.exec(right.getAttribute("d") || "")?.[1]);
+      return leftX - rightX;
+    });
+  const sourceControls = dynastyControls(hierarchyTemplate);
+  const targetControls = dynastyControls(svg);
+  if (sourceControls.length !== 2 || targetControls.length !== 2) {
+    throw new Error("朝代切换符号槽位不完整");
+  }
+  sourceControls.forEach((source, index) => {
+    targetControls[index].setAttribute("d", source.getAttribute("d"));
+  });
 }
 
 // 4-02 原稿把路级四司嵌进分类栏；完整编制画板只需沿用层级画板的
