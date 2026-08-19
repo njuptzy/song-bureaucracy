@@ -5984,6 +5984,22 @@ function bindTimelineRange(svg) {
       && Math.abs(Number(line.getAttribute("y2")) - 1021.73) < 0.1
   );
   if (!originalTriangle || !originalYear) return;
+  const timelineTextAtY = (y, predicate = () => true) => [...svg.querySelectorAll("text")].find((text) => {
+    const point = position(text);
+    return point && Math.abs(point.y - y) < 1 && predicate(normalizeText(text));
+  });
+  const yearTickClass = timelineTextAtY(1008.07, (value) => /^\d+年$/.test(value))
+    ?.getAttribute("class") || originalYear.getAttribute("class") || "cls-39";
+  const emperorClass = timelineTextAtY(964.71)?.getAttribute("class") || "cls-58";
+  const eraClass = timelineTextAtY(982.24)?.getAttribute("class") || "cls-44";
+  const emperorSeparatorClass = [...svg.querySelectorAll("line")]
+    .find((line) => Math.abs(Number(line.getAttribute("y1")) - 951.49) < 0.1
+      && Math.abs(Number(line.getAttribute("y2")) - 969.8) < 0.1)
+    ?.getAttribute("class") || "cls-26";
+  const eraSeparatorClass = [...svg.querySelectorAll("line")]
+    .find((line) => Math.abs(Number(line.getAttribute("y1")) - 973.55) < 0.1
+      && Math.abs(Number(line.getAttribute("y2")) - 984.96) < 0.1)
+    ?.getAttribute("class") || "cls-36";
   originalTriangle.style.display = "none";
   originalYear.style.display = "none";
   const eraRecords = normalizeTimelineEras(props.data?.meta?.eras);
@@ -5993,19 +6009,18 @@ function bindTimelineRange(svg) {
     // 完整年号表时才隐藏它们，避免旧 API 暂时缺字段时出现空时间轴。
     [...svg.querySelectorAll("text")].forEach((text) => {
       const point = position(text);
-      const className = text.getAttribute("class") || "";
-      const isStaticYear = (className === "cls-39" || className === "cls-46")
-        && Math.abs((point?.y ?? 0) - 1008.07) < 3;
-      if (isStaticYear || className === "cls-44") text.style.display = "none";
+      const value = normalizeText(text);
+      const isStaticYear = Math.abs((point?.y ?? 0) - 1008.07) < 3
+        && /^\d+年$/.test(value);
+      const isStaticEra = Math.abs((point?.y ?? 0) - 982.24) < 3;
+      if (isStaticYear || isStaticEra) text.style.display = "none";
     });
     // cls-36 是原稿示意年号的分隔竖线；它们与真实年号起点不一致，
     // 必须和示意文字一起移除，后面再按 ERA_YEARS 重新绘制。
     [...svg.querySelectorAll("line")].forEach((line) => {
-      const className = line.getAttribute("class") || "";
       const y1 = Number(line.getAttribute("y1"));
       const y2 = Number(line.getAttribute("y2"));
-      if (className.split(/\s+/).includes("cls-36")
-        && Math.abs(y1 - 973.55) < 0.1
+      if (Math.abs(y1 - 973.55) < 0.1
         && Math.abs(y2 - 984.96) < 0.1) {
         line.style.display = "none";
       }
@@ -6015,17 +6030,14 @@ function bindTimelineRange(svg) {
     // 设计稿中的帝王名称及分隔线仅为示意，按完整在位数据重新绘制。
     [...svg.querySelectorAll("text")].forEach((text) => {
       const point = position(text);
-      if ((text.getAttribute("class") || "") === "cls-58"
-        && Math.abs((point?.y ?? 0) - 964.71) < 1) {
+      if (Math.abs((point?.y ?? 0) - 964.71) < 1) {
         text.style.display = "none";
       }
     });
     [...svg.querySelectorAll("line")].forEach((line) => {
-      const className = line.getAttribute("class") || "";
       const y1 = Number(line.getAttribute("y1"));
       const y2 = Number(line.getAttribute("y2"));
-      if (className.split(/\s+/).includes("cls-26")
-        && Math.abs(y1 - 951.49) < 0.1
+      if (Math.abs(y1 - 951.49) < 0.1
         && Math.abs(y2 - 969.8) < 0.1) {
         line.style.display = "none";
       }
@@ -6057,7 +6069,7 @@ function bindTimelineRange(svg) {
 
       for (const x of [...new Set(boundaryXs)]) {
         const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        separator.setAttribute("class", "cls-26");
+        separator.setAttribute("class", emperorSeparatorClass);
         separator.setAttribute("x1", String(x));
         separator.setAttribute("x2", String(x));
         separator.setAttribute("y1", "951.49");
@@ -6069,7 +6081,7 @@ function bindTimelineRange(svg) {
       for (const reign of emperorLabels) {
         if (!reign.labelVisible) continue;
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        label.setAttribute("class", "cls-58");
+        label.setAttribute("class", emperorClass);
         label.setAttribute("x", String(reign.labelX));
         label.setAttribute("y", "964.71");
         label.setAttribute("text-anchor", "middle");
@@ -6087,7 +6099,7 @@ function bindTimelineRange(svg) {
       for (const year of buildTimelineYearTicks(YEAR_MIN, YEAR_MAX, 10)) {
         const x = yearScale(year);
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        label.setAttribute("class", "cls-39");
+        label.setAttribute("class", yearTickClass);
         label.setAttribute("x", String(x));
         label.setAttribute("y", "1008.07");
         label.setAttribute("text-anchor", "middle");
@@ -6110,7 +6122,7 @@ function bindTimelineRange(svg) {
         const { startX } = era;
         // 竖线是年号区间的分隔符，x 必须绑定真实起始年，不能跟随避让后的文字。
         const separator = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        separator.setAttribute("class", "cls-36");
+        separator.setAttribute("class", eraSeparatorClass);
         separator.setAttribute("x1", String(startX));
         separator.setAttribute("x2", String(startX));
         separator.setAttribute("y1", "973.55");
@@ -6121,7 +6133,7 @@ function bindTimelineRange(svg) {
         if (!era.labelVisible) continue;
 
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        label.setAttribute("class", "cls-44");
+        label.setAttribute("class", eraClass);
         label.setAttribute("x", String(era.labelX));
         label.setAttribute("y", String(labelY));
         label.setAttribute("text-anchor", "middle");
