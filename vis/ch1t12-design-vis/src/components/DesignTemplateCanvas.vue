@@ -930,6 +930,28 @@ function alignCompositionHeader(svg) {
     targetControls[index].setAttribute("d", source.getAttribute("d"));
   });
 
+  // 标题左侧还有一条朝代装饰横线。它与标题、切换符号属于同一组
+  // 几何槽位；只移动标题和符号会让编制画板的原稿横线压到“宋朝”文字。
+  const dynastyRule = (root) => [...root.querySelectorAll("line")]
+    .filter((element) => {
+      const x1 = Number(element.getAttribute("x1"));
+      const x2 = Number(element.getAttribute("x2"));
+      const y1 = Number(element.getAttribute("y1"));
+      const y2 = Number(element.getAttribute("y2"));
+      return [x1, x2, y1, y2].every(Number.isFinite)
+        && Math.abs(y1 - y2) < 0.1
+        && y1 >= 70 && y1 <= 90
+        && x1 >= 500 && x1 <= 700
+        && x2 > x1 && x2 - x1 < 30;
+    })
+    .sort((left, right) => Number(left.getAttribute("x1")) - Number(right.getAttribute("x1")));
+  const sourceRule = dynastyRule(hierarchyTemplate)[0];
+  const targetRule = dynastyRule(svg)[0];
+  if (!sourceRule || !targetRule) throw new Error("朝代标题装饰横线缺失");
+  ["x1", "x2", "y1", "y2"].forEach((attribute) => {
+    targetRule.setAttribute(attribute, sourceRule.getAttribute(attribute));
+  });
+
 }
 
 // 4-02 原稿把路级四司嵌进分类栏；完整编制画板只需沿用层级画板的
