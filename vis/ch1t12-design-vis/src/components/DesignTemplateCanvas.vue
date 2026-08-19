@@ -879,6 +879,35 @@ function prepareSharedCategoryGroup(group, category) {
   return group;
 }
 
+// 两张设计画板的内容区不同，但顶部品牌标题和朝代标题必须保持同一基准。
+// 以层级画板作为唯一头部模板，避免编制画板继续沿用原稿中偏移的宋朝槽位。
+function alignCompositionHeader(svg) {
+  const hierarchyTemplate = svgCache.get(HIERARCHY_DESIGN_URL);
+  if (!hierarchyTemplate) throw new Error("层级视图头部模板未加载");
+
+  const headerTexts = new Set(["中国古代职官体系", "宋朝", "层级视图", "编制视图"]);
+  const sourceTexts = [...hierarchyTemplate.querySelectorAll("text")].filter((element) => {
+    const point = position(element);
+    return point && point.y < 115 && headerTexts.has(normalizeText(element));
+  });
+  const targetTexts = [...svg.querySelectorAll("text")].filter((element) => {
+    const point = position(element);
+    return point && point.y < 115 && headerTexts.has(normalizeText(element));
+  });
+
+  for (const source of sourceTexts) {
+    const target = targetTexts.find((element) => (
+      normalizeText(element) === normalizeText(source)
+    ));
+    if (!target) continue;
+    ["class", "transform", "x", "y", "text-anchor", "dominant-baseline"].forEach((attribute) => {
+      const value = source.getAttribute(attribute);
+      if (value == null) target.removeAttribute(attribute);
+      else target.setAttribute(attribute, value);
+    });
+  }
+}
+
 // 4-02 原稿把路级四司嵌进分类栏；完整编制画板只需沿用层级画板的
 // 五大类导航。直接克隆 4-01 的五个原始 group，避免维护第二套坐标。
 function alignCompositionCategoryNavigation(svg) {
@@ -6403,7 +6432,10 @@ async function renderTemplate() {
     await Promise.all(requiredUrls.map(loadSvgTemplate));
     if (revision !== renderRevision || requestedMode !== viewMode.value) return;
     const svg = svgCache.get(url).cloneNode(true);
-    if (requestedMode === "composition") alignCompositionCategoryNavigation(svg);
+    if (requestedMode === "composition") {
+      alignCompositionHeader(svg);
+      alignCompositionCategoryNavigation(svg);
+    }
     svgMountRef.value.replaceChildren(svg);
     svg.removeAttribute("width");
     svg.removeAttribute("height");
