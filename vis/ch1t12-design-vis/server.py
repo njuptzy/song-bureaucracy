@@ -65,7 +65,7 @@ CHANGE_RELATION_OPTIONAL_COLUMNS = (
 )
 # 数据库文件没有变化时，前端仍可能命中旧的 immutable 首屏缓存。
 # 每次改变首屏数据契约时递增此版本，确保新字段立即进入浏览器。
-PAYLOAD_SCHEMA_VERSION = "20260818-emperor-reigns-v1"
+PAYLOAD_SCHEMA_VERSION = "20260819-full-dictionary-sections-v1"
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -97,11 +97,12 @@ def _connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _dict_section(fields: dict, keys) -> str:
+def _dict_section(fields: dict, keys, *, limit: int | None = SECTION_LEN) -> str:
     for k in keys:
         v = fields.get(k)
         if isinstance(v, str) and v.strip():
-            return v.strip()[:SECTION_LEN]
+            value = v.strip()
+            return value if limit is None else value[:limit]
     return ""
 
 
@@ -188,7 +189,7 @@ def _build_change_relations(
     return relations
 
 
-def _dictionary_row_payload(row: sqlite3.Row) -> dict:
+def _dictionary_row_payload(row: sqlite3.Row, *, full_sections: bool = False) -> dict:
     fields = {}
     raw = row["fields"]
     if raw:
@@ -200,18 +201,19 @@ def _dictionary_row_payload(row: sqlite3.Row) -> dict:
             fields = {}
     text = (row["text"] or "").strip()
     full_catalog = row["catalog"] or ""
+    section_limit = None if full_sections else SECTION_LEN
     return {
         "page": row["page"],
         "catalog": full_catalog.split("/")[-1],
         "summary": text[:SUMMARY_LEN],
         "text": text,
-        "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革")),
-        "aliases": _dict_section(fields, ("简称与别名", "简称", "别称")),
-        "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制")),
-        "rank": _dict_section(fields, ("品位", "官品", "品阶", "品秩", "位遇", "序位")),
-        "children": _dict_section(fields, ("下级机构", "所辖机构", "所属机构")),
-        "office": _dict_section(fields, ("衙署", "办公地点")),
-        "composition": _dict_section(fields, ("编制", "官额", "吏额")),
+        "origin": _dict_section(fields, ("职源与沿革", "职源", "沿革"), limit=section_limit),
+        "aliases": _dict_section(fields, ("简称与别名", "简称", "别称"), limit=section_limit),
+        "duty": _dict_section(fields, ("职掌", "职责", "职掌与编制"), limit=section_limit),
+        "rank": _dict_section(fields, ("品位", "官品", "品阶", "品秩", "位遇", "序位"), limit=section_limit),
+        "children": _dict_section(fields, ("下级机构", "所辖机构", "所属机构"), limit=section_limit),
+        "office": _dict_section(fields, ("衙署", "办公地点"), limit=section_limit),
+        "composition": _dict_section(fields, ("编制", "官额", "吏额"), limit=section_limit),
     }
 
 
@@ -759,7 +761,9 @@ def build_entity_details(entity_id: int) -> dict:
         return {
             "entityId": entity_id,
             "dictionary": {
-                entity["title"]: _dictionary_row_payload(dictionary_row)
+                entity["title"]: _dictionary_row_payload(
+                    dictionary_row, full_sections=True
+                )
             } if dictionary_row else {},
             "citations": citations,
             "timepointQuotations": {

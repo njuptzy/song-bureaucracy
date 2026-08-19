@@ -79,6 +79,31 @@ def normalized_times(connection: sqlite3.Connection) -> dict[int, dict]:
 
 
 class Ch1t12DesignServerContractTest(unittest.TestCase):
+    def test_entity_detail_dictionary_sections_are_not_truncated(self):
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        connection.execute(
+            "CREATE TABLE dictionary (title, catalog, page, text, fields)"
+        )
+        long_duty = "职掌原文" * 120
+        connection.execute(
+            "INSERT INTO dictionary VALUES (?, ?, ?, ?, ?)",
+            ("尚书省", "第一编/尚书省", "192", "官署名。", json.dumps({
+                "职掌": long_duty,
+                "简称与别名": "尚书都省" * 200,
+            }, ensure_ascii=False)),
+        )
+        row = connection.execute("SELECT * FROM dictionary").fetchone()
+        try:
+            summary = SERVER._dictionary_row_payload(row)
+            detail = SERVER._dictionary_row_payload(row, full_sections=True)
+        finally:
+            connection.close()
+
+        self.assertEqual(len(summary["duty"]), SERVER.SECTION_LEN)
+        self.assertEqual(detail["duty"], long_duty)
+        self.assertGreater(len(detail["aliases"]), SERVER.SECTION_LEN)
+
     def test_normalized_time_payload_keeps_calendar_ordering_fields(self):
         payload = SERVER._normalized_time_payload("北宋太平兴国八年三月七日")
         self.assertEqual(payload["raw_time"], "北宋太平兴国八年三月七日")
