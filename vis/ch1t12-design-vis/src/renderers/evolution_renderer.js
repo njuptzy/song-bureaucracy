@@ -782,6 +782,90 @@ function renderCompositeScope(parent, options) {
     group.append(track);
   }
 
+  // 编制是机构与官职之间的配置关系，不属于机构树的父子层级。
+  // 单独放在树下方，用官职图标和员额文字表达，避免误读为下属机构。
+  const staffingTop = viewportTop + viewportHeight + 22;
+  const rootOfficials = model.officialsByInstitution?.get(model.root.id) || [];
+  appendText(group, "编制", {
+    x,
+    y: staffingTop,
+    class: "evolution-composite-staff-heading",
+  });
+  appendText(group, rootOfficials.length ? `${rootOfficials.length}项` : "当前年份未载", {
+    x: right,
+    y: staffingTop,
+    class: "evolution-composite-summary",
+    "text-anchor": "end",
+  });
+  group.appendChild(svgElement("line", {
+    x1: x,
+    y1: staffingTop + 9,
+    x2: right,
+    y2: staffingTop + 9,
+    stroke: COLORS.line,
+    "stroke-width": 0.65,
+    "stroke-opacity": 0.6,
+  }));
+  if (rootOfficials.length) {
+    const staffRowHeight = 23;
+    const staffViewportTop = staffingTop + 18;
+    const staffViewportHeight = 82;
+    const staffClipId = "evolution-composite-staff-clip";
+    const staffClip = svgElement("clipPath", {
+      id: staffClipId,
+      clipPathUnits: "userSpaceOnUse",
+      "data-evolution-def": "composite-staff-clip",
+    });
+    staffClip.appendChild(svgElement("rect", {
+      x,
+      y: staffViewportTop,
+      width: right - x - 12,
+      height: staffViewportHeight,
+    }));
+    group.appendChild(staffClip);
+    const staffViewport = svgElement("g", {
+      class: "evolution-composite-staff-viewport",
+      "clip-path": `url(#${staffClipId})`,
+    });
+    rootOfficials.forEach((official, index) => {
+      const row = svgElement("g", {
+        class: "evolution-composite-staff-row",
+        transform: `translate(${x} ${staffViewportTop + index * staffRowHeight})`,
+        "data-composite-official-id": official.id,
+      });
+      appendIdentityGlyph(row, "官职", {
+        height: 17,
+        centerX: 10,
+        y: 3,
+        selected: official.id === options.activeEntityId,
+      });
+      appendText(row, shortened(official.title || `#${official.id}`, 15), {
+        x: 25,
+        y: 16,
+        class: "evolution-composite-staff-title",
+      });
+      const edge = model.staffEdges?.find((item) => item.official === official.id
+        && item.org === model.root.id);
+      const quota = edge?.staff_quota ? `${edge.staff_quota}人` : "员额未载";
+      const staffType = edge?.staff_type ? `，${edge.staff_type}` : "";
+      appendText(row, `${quota}${staffType}`, {
+        x: right - x - 18,
+        y: 16,
+        class: "evolution-composite-staff-meta",
+        "text-anchor": "end",
+      });
+      addTitle(row, `${official.title || "官职"}（${quota}${staffType}）`);
+      staffViewport.appendChild(row);
+    });
+    group.appendChild(staffViewport);
+  } else {
+    appendText(group, "当前年份未载明确编制", {
+      x,
+      y: staffingTop + 31,
+      class: "evolution-composite-staff-empty",
+    });
+  }
+
   group.style.pointerEvents = "all";
   group.addEventListener("wheel", (event) => {
     if (scroll.maxScroll <= 0) return;

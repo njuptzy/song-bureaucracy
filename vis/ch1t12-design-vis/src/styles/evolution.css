@@ -69,6 +69,34 @@
   font-weight: 500;
 }
 
+.dynamic-evolution-layer .evolution-composite-staff-heading {
+  fill: #351704;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dynamic-evolution-layer .evolution-composite-staff-row {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-staff-row:hover {
+  fill: #866d6d;
+}
+
+.dynamic-evolution-layer .evolution-composite-staff-title {
+  fill: #563905;
+  font-size: 11px;
+  dominant-baseline: central;
+}
+
+.dynamic-evolution-layer .evolution-composite-staff-meta,
+.dynamic-evolution-layer .evolution-composite-staff-empty {
+  fill: #756156;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10px;
+  dominant-baseline: central;
+}
+
 .dynamic-evolution-layer .evolution-composite-row {
   pointer-events: all;
 }
