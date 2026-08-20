@@ -19,20 +19,23 @@ export function nodeChangeIndicatorItems(summary) {
 }
 
 export function nodeChangeIndicatorLayout(items) {
-  let cursorX = 0;
-  const positionedItems = (items || []).map((item) => {
-    const radius = NODE_CHANGE_INDICATOR_GEOMETRY.radius;
-    const positioned = { ...item, centerX: cursorX + radius, radius };
-    cursorX += radius * 2 + NODE_CHANGE_INDICATOR_GEOMETRY.gap;
-    return positioned;
-  });
+  const { gap, radius } = NODE_CHANGE_INDICATOR_GEOMETRY;
+  const slotCenterX = {
+    past: radius,
+    future: radius * 2 + gap + radius,
+  };
+  const positionedItems = (items || []).map((item) => ({
+    ...item,
+    centerX: slotCenterX[item.kind] ?? radius,
+    radius,
+  }));
   return {
-    width: Math.max(0, cursorX - (positionedItems.length ? NODE_CHANGE_INDICATOR_GEOMETRY.gap : 0)),
-    height: NODE_CHANGE_INDICATOR_GEOMETRY.radius * 2,
-    centerY: NODE_CHANGE_INDICATOR_GEOMETRY.radius,
+    width: positionedItems.length ? radius * 4 + gap : 0,
+    height: radius * 2,
+    centerY: radius,
     items: positionedItems.map((item) => ({
       ...item,
-      centerY: NODE_CHANGE_INDICATOR_GEOMETRY.radius,
+      centerY: radius,
     })),
   };
 }
