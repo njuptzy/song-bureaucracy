@@ -531,7 +531,10 @@ function renderCompositeScope(parent, options) {
   const right = 475;
   const top = 160;
   const viewportTop = 180;
-  const viewportHeight = 105;
+  // The comparison selector is intentionally omitted. Reclaim its former
+  // panel so the hierarchy can be read as a complete vertical tree before the
+  // evidence/detail region begins below it.
+  const viewportHeight = 300;
   const rowHeight = 23;
   const indentStep = 16;
   const expandedIds = options.compositeExpandedEntityIds || [];
@@ -2197,7 +2200,6 @@ export function renderEvolutionOverlay(svg, options) {
   ensureDefs(svg);
   const layer = svgElement("g", { class: "dynamic-evolution-layer" });
   layer.style.pointerEvents = "none";
-  renderSelector(layer, options);
   renderCompositeScope(layer, options);
   renderSelectedActions(layer, options);
   renderMain(layer, options.layout, options);
