@@ -523,6 +523,15 @@ export function compositeTreeScrollMetrics(
   };
 }
 
+export const COMPOSITE_SCOPE_LAYOUT = Object.freeze({
+  treeViewportTop: 202,
+  treeViewportHeight: 154,
+  staffingTop: 378,
+  staffViewportTop: 396,
+  staffViewportHeight: 84,
+  detailPanelTop: 497.57,
+});
+
 function renderCompositeScope(parent, options) {
   const model = options.compositeModel;
   if (!model?.root) return;
@@ -530,11 +539,10 @@ function renderCompositeScope(parent, options) {
   const x = 82;
   const right = 475;
   const top = 160;
-  const viewportTop = 202;
-  // The comparison selector is intentionally omitted. Reclaim its former
-  // panel so the hierarchy can be read as a complete vertical tree before the
-  // evidence/detail region begins below it.
-  const viewportHeight = 278;
+  const viewportTop = COMPOSITE_SCOPE_LAYOUT.treeViewportTop;
+  // 编制区使用详情框上方的预留空间；机构树内容较多时仍在自己的
+  // 视口内滚动，不能继续向下覆盖详情标题和正文。
+  const viewportHeight = COMPOSITE_SCOPE_LAYOUT.treeViewportHeight;
   const rowHeight = 23;
   const indentStep = 16;
   const expandedIds = options.compositeExpandedEntityIds || [];
@@ -784,7 +792,7 @@ function renderCompositeScope(parent, options) {
 
   // 编制是机构与官职之间的配置关系，不属于机构树的父子层级。
   // 单独放在树下方，用官职图标和员额文字表达，避免误读为下属机构。
-  const staffingTop = viewportTop + viewportHeight + 22;
+  const staffingTop = COMPOSITE_SCOPE_LAYOUT.staffingTop;
   const rootOfficials = model.officialsByInstitution?.get(model.root.id) || [];
   appendText(group, "编制", {
     x,
@@ -808,8 +816,8 @@ function renderCompositeScope(parent, options) {
   }));
   if (rootOfficials.length) {
     const staffRowHeight = 23;
-    const staffViewportTop = staffingTop + 18;
-    const staffViewportHeight = 82;
+    const staffViewportTop = COMPOSITE_SCOPE_LAYOUT.staffViewportTop;
+    const staffViewportHeight = COMPOSITE_SCOPE_LAYOUT.staffViewportHeight;
     const staffClipId = "evolution-composite-staff-clip";
     const staffClip = svgElement("clipPath", {
       id: staffClipId,

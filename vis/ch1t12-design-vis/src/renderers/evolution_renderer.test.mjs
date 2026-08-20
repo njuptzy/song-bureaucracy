@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  COMPOSITE_SCOPE_LAYOUT,
   evolutionLaneIdentityLayout,
   evolutionLaneIdentityTemplate,
   eventStemGeometry,
@@ -11,6 +12,16 @@ import {
   relationRouteOptions,
   selectedEvolutionActionOptions,
 } from "./evolution_renderer.js";
+
+test("综合树和编制区保持在详情框上方且互不重叠", () => {
+  const treeBottom = COMPOSITE_SCOPE_LAYOUT.treeViewportTop
+    + COMPOSITE_SCOPE_LAYOUT.treeViewportHeight;
+  const staffingBottom = COMPOSITE_SCOPE_LAYOUT.staffViewportTop
+    + COMPOSITE_SCOPE_LAYOUT.staffViewportHeight;
+
+  assert.ok(treeBottom < COMPOSITE_SCOPE_LAYOUT.staffingTop);
+  assert.ok(staffingBottom < COMPOSITE_SCOPE_LAYOUT.detailPanelTop);
+});
 
 test("选中演变事件时在主视图提供年份跳转和层级入口", () => {
   const actions = selectedEvolutionActionOptions(
