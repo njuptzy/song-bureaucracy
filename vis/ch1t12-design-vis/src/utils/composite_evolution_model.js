@@ -1,3 +1,5 @@
+import { buildYearSnapshot } from "./snapshot.js";
+
 const CHANGE_CATEGORIES = Object.freeze({
   name: "名称变化",
   structure: "机构设置变化",
@@ -194,8 +196,14 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   const focus = entityMap.get(focusId);
   if (!focus) return null;
 
-  const hierarchyEdges = normalizeHierarchyEdges(data);
-  const staffEdges = normalizeStaffEdges(data);
+  const snapshotYear = finiteYear(options.year);
+  const snapshot = snapshotYear == null ? null : buildYearSnapshot(data, snapshotYear);
+  const hierarchyEdges = normalizeHierarchyEdges(snapshot
+    ? { hierarchyEdges: snapshot.hierarchyEdges }
+    : data);
+  const staffEdges = normalizeStaffEdges(snapshot
+    ? { staffEdges: snapshot.staffEdges }
+    : data);
   const timepoints = normalizeTimepoints(data);
   const childrenByParent = new Map();
   for (const edge of hierarchyEdges) {
@@ -219,30 +227,31 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   }
 
   const officialByInstitution = new Map();
+  const officialIds = new Set();
   for (const edge of staffEdges) {
     if (!visibleIds.has(edge.org)) continue;
     if (!officialByInstitution.has(edge.org)) officialByInstitution.set(edge.org, []);
     if (!officialByInstitution.get(edge.org).includes(edge.official)) {
       officialByInstitution.get(edge.org).push(edge.official);
     }
+    officialIds.add(edge.official);
   }
-  for (const ids of officialByInstitution.values()) {
-    for (const id of ids) visibleIds.add(id);
-  }
+  const allEntityIds = new Set([...visibleIds, ...officialIds]);
 
   const nodesById = new Map();
-  for (const id of visibleIds) {
+  for (const id of allEntityIds) {
     const entity = entityMap.get(id);
     if (!entity) continue;
     const isOfficial = entity.type === "官职";
-    const parentId = isOfficial
-      ? staffEdges.find((edge) => edge.official === id && visibleIds.has(edge.org))?.org ?? null
-      : (id === focusId ? null : parentByChild.get(id) ?? null);
+    // 编制隶属说明机构与官职的配置关系，不是机构树中的父子关系。
+    // 官职保留在模型中用于变化统计和独立编制区，但不进入 childIds。
+    const parentId = isOfficial ? null : (id === focusId ? null : parentByChild.get(id) ?? null);
     nodesById.set(id, {
       id,
       title: entity.title || "",
       type: entity.type || "机构",
       nodeKind: isOfficial ? "official" : "institution",
+      treeVisible: !isOfficial,
       parentId,
       depth: 0,
       childIds: [],
@@ -256,6 +265,12 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       node.depth = nodesById.get(node.parentId).depth + 1;
     }
   }
+  const officialsByInstitution = new Map(
+    [...officialByInstitution.entries()].map(([institutionId, ids]) => [
+      institutionId,
+      ids.map((id) => nodesById.get(id)).filter(Boolean),
+    ]),
+  );
 
   const changes = [];
   for (const node of nodesById.values()) {
@@ -333,12 +348,15 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
     focusEntityId: focusId,
     focusTitle: focus.title || "",
     nodes: [...nodesById.values()],
+    treeNodes: [...nodesById.values()].filter((node) => node.treeVisible !== false),
     nodesById,
     root,
     changes,
     categories,
     hierarchyEdges,
     staffEdges,
+    officialsByInstitution,
+    snapshotYear,
     yearMin: finiteYear(options.yearMin),
     yearMax: finiteYear(options.yearMax),
   };

@@ -551,7 +551,8 @@ function renderCompositeScope(parent, options) {
     y: top,
     class: "evolution-composite-heading",
   });
-  appendText(group, `显示${nodes.length}/${model.nodes.length} · ${model.changes.length}项变化`, {
+  const treeTotal = model.treeNodes?.length ?? model.nodes.length;
+  appendText(group, `机构树${nodes.length}/${treeTotal} · ${model.changes.length}项变化`, {
     x: right,
     y: top,
     class: "evolution-composite-summary",

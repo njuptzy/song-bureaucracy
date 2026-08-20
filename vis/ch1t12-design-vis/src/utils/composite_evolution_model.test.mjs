@@ -19,7 +19,7 @@ function point(id, entityId, year, event, extra = {}) {
   };
 }
 
-test("综合模型包含焦点机构、下属机构和官职", () => {
+test("综合模型保留官职但不把编制关系伪装成机构树父子关系", () => {
   const model = buildCompositeEvolutionModel({
     entities: [
       { id: 1, title: "尚书省", type: "机构" },
@@ -39,9 +39,11 @@ test("综合模型包含焦点机构、下属机构和官职", () => {
 
   assert.deepEqual(model.nodes.map((node) => node.id), [1, 2, 3]);
   assert.equal(model.nodesById.get(2).parentId, 1);
-  assert.equal(model.nodesById.get(3).parentId, 2);
+  assert.equal(model.nodesById.get(3).parentId, null);
   assert.equal(model.nodesById.get(3).nodeKind, "official");
-  assert.equal(model.nodesById.get(3).depth, 2);
+  assert.equal(model.nodesById.get(3).depth, 0);
+  assert.deepEqual(model.officialsByInstitution.get(2).map((node) => node.id), [3]);
+  assert.deepEqual(visibleCompositeNodes(model, [1, 2]).map((node) => node.id), [1, 2]);
 });
 
 test("变化按名称、机构设置、官员设置和职责四类归档", () => {
@@ -49,6 +51,26 @@ test("变化按名称、机构设置、官员设置和职责四类归档", () =>
   assert.equal(classifyCompositeChange({ text: "元丰改置", entityType: "机构" }), "structure");
   assert.equal(classifyCompositeChange({ text: "增置官一员", entityType: "官职" }), "staff");
   assert.equal(classifyCompositeChange({ text: "掌天下财赋", entityType: "机构" }), "duty");
+});
+
+test("按入口年份生成机构树，不把不同时期的下属机构合并", () => {
+  const modelAt1050 = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "根机构", type: "机构" },
+      { id: 2, title: "早期下属", type: "机构" },
+      { id: 3, title: "后期下属", type: "机构" },
+    ],
+    timepoints: {
+      1: [point(11, 1, 1000, "沿置", { time_type: "exact" })],
+      2: [point(21, 2, 1000, "始置", { time_type: "exact" })],
+      3: [point(31, 3, 1100, "始置", { time_type: "exact" })],
+    },
+    hierarchyEdges: [
+      { id: 101, parent: 1, child: 2, states: [{ id: 101, effective_year: 1000, subject_timepoint_id: 11, object_timepoint_id: 21 }] },
+      { id: 102, parent: 1, child: 3, states: [{ id: 102, effective_year: 1100, subject_timepoint_id: 11, object_timepoint_id: 31 }] },
+    ],
+  }, 1, { year: 1050 });
+  assert.deepEqual(modelAt1050.treeNodes.map((node) => node.id), [1, 2]);
 });
 
 test("综合模型保留多端点关系和关系级证据", () => {

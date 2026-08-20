@@ -3476,13 +3476,15 @@ function renderDynamicEvolution(svg) {
     evolutionLayoutCache = null;
   }
   const compositeFocusId = selectedId.value ?? focusIds[0] ?? null;
-  const compositeKey = String(compositeFocusId ?? "");
+  const compositeYear = Number(selectedRange.value?.[0]);
+  const compositeKey = `${String(compositeFocusId ?? "")}:${Number.isFinite(compositeYear) ? compositeYear : "all"}`;
   if (compositeEvolutionModelCacheKey !== compositeKey) {
     compositeEvolutionModelCache = compositeFocusId == null
       ? null
       : buildCompositeEvolutionModel(props.data, compositeFocusId, {
         yearMin: YEAR_MIN,
         yearMax: YEAR_MAX,
+        year: compositeYear,
       });
     compositeEvolutionModelCacheKey = compositeKey;
     compositeExpandedEntityIds.value = compositeFocusId == null
@@ -3520,6 +3522,9 @@ function renderDynamicEvolution(svg) {
 
   const handlers = {
     onSelectEntity(entityId) {
+      evolutionEntityIds.value = [entityId];
+      evolutionMode.value = "single";
+      evolutionLanePage.value = 1;
       selectedId.value = entityId;
       selectedEvolutionItem.value = null;
       emit("selection-change", null);
