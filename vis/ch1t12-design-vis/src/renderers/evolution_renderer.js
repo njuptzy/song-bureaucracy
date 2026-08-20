@@ -20,6 +20,13 @@ const COLORS = {
   abolish: "#a0432e",
 };
 
+export function evolutionEventIconSize(iconType, selected = false) {
+  const emphasis = selected ? 1 : 0;
+  if (iconType === "affiliation_change") return 7 + emphasis;
+  if (iconType === "establish" || iconType === "abolish") return 7.2 + emphasis;
+  return 4.2 + emphasis;
+}
+
 /**
  * Single visual weight for every evolution relation stroke — single relations
  * and fan branches alike. Unselected lines stay very light (0.35) so they
@@ -52,6 +59,8 @@ const LANE_IDENTITY_TEMPLATES = Object.freeze({
   }),
 });
 
+export const EVOLUTION_SELECTOR_SLOT_STEP = 52;
+
 export function evolutionLaneIdentityTemplate(entityType) {
   return entityType === "官职"
     ? LANE_IDENTITY_TEMPLATES.official
@@ -76,12 +85,90 @@ export function evolutionLaneIdentityLayout(entityType, height, labelX, labelMax
   };
 }
 
+export function evolutionIdentityGlyphMetrics(entityType, height, centerX, y = 0) {
+  const template = evolutionLaneIdentityTemplate(entityType);
+  const scale = height / template.bounds.height;
+  const width = template.bounds.width * scale;
+  const x = centerX - width / 2;
+  const bodyTop = entityType === "官职"
+    ? y + (template.body.y - template.bounds.y) * scale
+    : y + 5 * scale;
+  const bodyBottom = entityType === "官职"
+    ? y + (template.body.y + template.body.height - template.bounds.y) * scale
+    : y + height;
+  return {
+    template,
+    scale,
+    width,
+    x,
+    y,
+    centerX,
+    bodyTop,
+    bodyBottom,
+  };
+}
+
 function svgElement(tag, attrs = {}) {
   const element = document.createElementNS(SVG_NS, tag);
   for (const [name, value] of Object.entries(attrs)) {
     if (value != null) element.setAttribute(name, String(value));
   }
   return element;
+}
+
+function appendIdentityGlyph(parent, entityType, {
+  height,
+  centerX,
+  y,
+  selected,
+  dashed = false,
+  widthOverride = null,
+}) {
+  const metrics = evolutionIdentityGlyphMetrics(entityType, height, centerX, y);
+  const { template, scale, x } = metrics;
+  const glyphWidth = Number.isFinite(widthOverride) ? widthOverride : metrics.width;
+  const glyphX = centerX - glyphWidth / 2;
+  const sourceTransform = Number.isFinite(widthOverride)
+    ? `translate(${glyphX} ${y}) scale(${glyphWidth / template.bounds.width} ${scale}) translate(${-template.bounds.x} ${-template.bounds.y})`
+    : `translate(${x} ${y}) scale(${scale}) translate(${-template.bounds.x} ${-template.bounds.y})`;
+  if (entityType === "官职") {
+    parent.appendChild(svgElement("rect", {
+      ...template.body,
+      transform: sourceTransform,
+      fill: dashed ? "none" : COLORS.ink,
+      "fill-opacity": dashed ? 0 : (selected ? 0.17 : 0.1),
+      stroke: dashed ? COLORS.olive : (selected ? COLORS.selected : COLORS.olive),
+      "stroke-width": dashed
+        ? 0.85
+        : (selected ? template.bodyStrokeWidth * 1.8 : template.bodyStrokeWidth),
+      ...(dashed ? { "stroke-dasharray": "3 3", "vector-effect": "non-scaling-stroke" } : {}),
+      "pointer-events": "none",
+    }));
+    parent.appendChild(svgElement("polygon", {
+      points: template.capPoints,
+      transform: sourceTransform,
+      fill: dashed ? "none" : "#878089",
+      "fill-opacity": dashed ? 0 : (selected ? 0.82 : 0.6),
+      stroke: dashed ? COLORS.olive : (selected ? COLORS.selected : COLORS.line),
+      "stroke-width": dashed
+        ? 0.85
+        : (selected ? template.capStrokeWidth * 1.45 : template.capStrokeWidth),
+      ...(dashed ? { "stroke-dasharray": "3 3", "vector-effect": "non-scaling-stroke" } : {}),
+      "pointer-events": "none",
+    }));
+  } else {
+    parent.appendChild(svgElement("polygon", {
+      points: template.points,
+      transform: sourceTransform,
+      fill: dashed ? "none" : (selected ? COLORS.ink : "none"),
+      "fill-opacity": dashed ? 0 : (selected ? 0.12 : 0),
+      stroke: dashed ? COLORS.olive : (selected ? COLORS.selected : COLORS.line),
+      "stroke-width": dashed ? 0.85 : (selected ? template.strokeWidth * 1.35 : template.strokeWidth),
+      ...(dashed ? { "stroke-dasharray": "3 3", "vector-effect": "non-scaling-stroke" } : {}),
+      "pointer-events": "none",
+    }));
+  }
+  return { ...metrics, x: glyphX, width: glyphWidth };
 }
 
 function appendText(parent, text, attrs = {}) {
@@ -107,6 +194,17 @@ function appendVerticalText(parent, text, attrs = {}, options = {}) {
   });
   parent.appendChild(element);
   return element;
+}
+
+export function evolutionLaneTitleMetrics(bodyTop, bodyBottom, fontSize = 14) {
+  const availableHeight = Math.max(0, bodyBottom - bodyTop);
+  // 每个汉字至少占据自身字号并保留少量呼吸空间，避免字号放大后
+  // 仍被旧的 10.5px 步进压叠在一起。
+  const pitch = fontSize + 2;
+  return {
+    pitch,
+    maxChars: Math.max(2, Math.floor(Math.max(0, availableHeight - 8) / pitch) + 1),
+  };
 }
 
 function makeInteractive(element, label, activate) {
@@ -201,30 +299,41 @@ function renderModeChoice(parent, { x, label, active, onActivate }) {
 }
 
 function selectorNode(parent, entity, index, selected, removable, handlers) {
-  const x = 83 + index * 62;
+  const x = 83 + index * EVOLUTION_SELECTOR_SLOT_STEP;
   const y = 367;
   const width = 46;
   const height = 92;
   const group = svgElement("g", {
-    class: `evolution-selector-node${selected ? " is-selected" : ""}`,
+    class: `evolution-selector-node evolution-selector-node--${entity.type === "官职" ? "official" : "institution"}${selected ? " is-selected" : ""}`,
     transform: `translate(${x} ${y})`,
     "data-entity-id": entity.id,
+    "data-entity-type": entity.type,
   });
-  group.appendChild(svgElement("path", {
-    d: `M0 7H5V0H${width - 5}V7H${width}V${height}H0Z`,
-    fill: selected ? COLORS.ink : "none",
-    "fill-opacity": selected ? 0.12 : 0,
-    stroke: COLORS.line,
-    "stroke-width": selected ? 1.35 : 0.85,
+  group.appendChild(svgElement("rect", {
+    x: 0,
+    y: 0,
+    width,
+    height,
+    fill: "transparent",
+    "pointer-events": "all",
   }));
-  appendVerticalText(group, entity.title, {
-    x: width / 2,
-    y: 14,
+  const glyph = appendIdentityGlyph(group, entity.type, {
+    height,
+    centerX: width / 2,
+    y: 0,
+    selected,
+  });
+  const displayTitle = shortened(entity.title, 6);
+  const textPitch = 12.5;
+  const textHeight = Math.max(0, (Array.from(displayTitle).length - 1) * textPitch);
+  appendVerticalText(group, displayTitle, {
+    x: glyph.centerX,
+    y: glyph.bodyTop + (glyph.bodyBottom - glyph.bodyTop - textHeight) / 2,
     class: "evolution-selector-node-label",
     "text-anchor": "middle",
   }, {
     maxChars: 6,
-    pitch: 12.5,
+    pitch: textPitch,
   });
   addTitle(group, `${entity.title}（${entity.type}）`);
   makeInteractive(group, `选择${entity.title}`, () => handlers.onSelectEntity?.(entity.id));
@@ -248,18 +357,19 @@ function selectorNode(parent, entity, index, selected, removable, handlers) {
 }
 
 function renderAddNode(parent, index, onActivate) {
-  const x = 83 + index * 62;
+  const x = 83 + index * EVOLUTION_SELECTOR_SLOT_STEP;
   const group = svgElement("g", {
     class: "evolution-selector-add",
     transform: `translate(${x} 367)`,
   });
-  group.appendChild(svgElement("path", {
-    d: "M0 7H5V0H41V7H46V92H0Z",
-    fill: "none",
-    stroke: COLORS.olive,
-    "stroke-width": 0.85,
-    "stroke-dasharray": "3 3",
-  }));
+  appendIdentityGlyph(group, "机构", {
+    height: 92,
+    centerX: 23,
+    y: 0,
+    selected: false,
+    dashed: true,
+    widthOverride: 46,
+  });
   group.appendChild(svgElement("path", {
     d: "M17 38H29M23 32V44",
     fill: "none",
@@ -525,15 +635,16 @@ function renderEvolutionLegend(parent, layout) {
     sample.appendChild(svgElement("circle", {
       cx: itemX,
       cy: rowY,
-      r: 3.5,
+      r: evolutionEventIconSize("record"),
       fill: COLORS.paper,
       stroke: COLORS.line,
       "stroke-width": 0.9,
     }));
   });
   item(x + 120, "建置", (sample, itemX) => {
+    const size = evolutionEventIconSize("establish");
     sample.appendChild(svgElement("path", {
-      d: `M${itemX} ${rowY - 6.2}L${itemX + 6.2} ${rowY + 5}H${itemX - 6.2}Z`,
+      d: `M${itemX} ${rowY - size}L${itemX + size} ${rowY + size * (5 / 6.2)}H${itemX - size}Z`,
       fill: COLORS.line,
       stroke: COLORS.line,
       "stroke-width": 1,
@@ -541,8 +652,9 @@ function renderEvolutionLegend(parent, layout) {
     }));
   });
   item(x + 174, "罢置", (sample, itemX) => {
+    const size = evolutionEventIconSize("abolish");
     sample.appendChild(svgElement("path", {
-      d: `M${itemX} ${rowY + 6.2}L${itemX + 6.2} ${rowY - 5}H${itemX - 6.2}Z`,
+      d: `M${itemX} ${rowY + size}L${itemX + size} ${rowY - size * (5 / 6.2)}H${itemX - size}Z`,
       fill: COLORS.abolish,
       stroke: COLORS.abolish,
       "stroke-width": 1,
@@ -550,8 +662,9 @@ function renderEvolutionLegend(parent, layout) {
     }));
   });
   item(x + 228, "改隶事件", (sample, itemX) => {
+    const size = evolutionEventIconSize("affiliation_change");
     sample.appendChild(svgElement("path", {
-      d: `M${itemX} ${rowY - 6}L${itemX + 6} ${rowY}L${itemX} ${rowY + 6}L${itemX - 6} ${rowY}Z`,
+      d: `M${itemX} ${rowY - size}L${itemX + size} ${rowY}L${itemX} ${rowY + size}L${itemX - size} ${rowY}Z`,
       fill: COLORS.paper,
       stroke: COLORS.selected,
       "stroke-width": 1.1,
@@ -645,13 +758,13 @@ export function laneAnomalySummary(anomalies, maxChars = Number.POSITIVE_INFINIT
 
 function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
   const height = Math.max(42, Math.min(102, lanePitch ? lanePitch - 12 : 102));
-  const template = evolutionLaneIdentityTemplate(lane.type);
-  const { scale, width, x } = evolutionLaneIdentityLayout(
+  const laneLayout = evolutionLaneIdentityLayout(
     lane.type,
     height,
     lane.labelX,
     lane.labelMaxWidth,
   );
+  const { width, x } = laneLayout;
   const y = lane.y - height / 2;
   const group = svgElement("g", {
     class: `evolution-lane-label evolution-lane-label--${lane.type === "官职" ? "official" : "institution"}${selected ? " is-selected" : ""}`,
@@ -659,46 +772,16 @@ function renderLaneLabel(parent, lane, selected, onSelectEntity, lanePitch) {
     "data-entity-type": lane.type,
   });
 
-  const sourceTransform = `translate(${x} ${y}) scale(${scale}) translate(${-template.bounds.x} ${-template.bounds.y})`;
-  if (lane.type === "官职") {
-    group.appendChild(svgElement("rect", {
-      ...template.body,
-      transform: sourceTransform,
-      fill: COLORS.ink,
-      "fill-opacity": selected ? 0.17 : 0.1,
-      stroke: selected ? COLORS.selected : COLORS.olive,
-      "stroke-width": selected ? template.bodyStrokeWidth * 1.8 : template.bodyStrokeWidth,
-      "pointer-events": "none",
-    }));
-    group.appendChild(svgElement("polygon", {
-      points: template.capPoints,
-      transform: sourceTransform,
-      fill: "#878089",
-      "fill-opacity": selected ? 0.82 : 0.6,
-      stroke: selected ? COLORS.selected : COLORS.line,
-      "stroke-width": selected ? template.capStrokeWidth * 1.45 : template.capStrokeWidth,
-      "pointer-events": "none",
-    }));
-  } else {
-    group.appendChild(svgElement("polygon", {
-      points: template.points,
-      transform: sourceTransform,
-      fill: selected ? COLORS.ink : "none",
-      "fill-opacity": selected ? 0.12 : 0,
-      stroke: selected ? COLORS.selected : COLORS.line,
-      "stroke-width": selected ? template.strokeWidth * 1.35 : template.strokeWidth,
-      "pointer-events": "none",
-    }));
-  }
-
-  const bodyTop = lane.type === "官职"
-    ? y + (template.body.y - template.bounds.y) * scale
-    : y + 5 * scale;
-  const bodyBottom = lane.type === "官职"
-    ? y + (template.body.y + template.body.height - template.bounds.y) * scale
-    : y + height;
-  const textPitch = Math.min(10.5, Math.max(8, (bodyBottom - bodyTop - 6) / 6));
-  const maxChars = Math.max(2, Math.floor((bodyBottom - bodyTop - 8) / textPitch) + 1);
+  const glyph = appendIdentityGlyph(group, lane.type, {
+    height,
+    centerX: laneLayout.centerX,
+    y,
+    selected,
+  });
+  const { bodyTop, bodyBottom } = glyph;
+  const { pitch: textPitch, maxChars } = evolutionLaneTitleMetrics(
+    bodyTop, bodyBottom,
+  );
   const displayTitle = shortened(lane.title, maxChars);
   const textHeight = Math.max(0, (Array.from(displayTitle).length - 1) * textPitch);
   appendVerticalText(group, displayTitle, {
@@ -822,7 +905,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     if (!degenerate) {
       // The icon represents the whole fuzzy interval, not its upper bound.
       // Keep the bracket detached and point its centre back to a displaced icon.
-      const spanY = y + 10;
+      const spanY = y + 16;
       const middleX = (startX + endX) / 2;
       group.appendChild(svgElement("line", {
         class: "evolution-event-bounded-span",
@@ -833,22 +916,22 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
       }));
       group.appendChild(svgElement("path", {
         class: "evolution-event-bounded-span",
-        d: `M${startX} ${y + 6.5}V${spanY}M${endX} ${y + 6.5}V${spanY}`,
+        d: `M${startX} ${y + 9.5}V${spanY}M${endX} ${y + 9.5}V${spanY}`,
         fill: "none",
         stroke: COLORS.olive,
         "stroke-width": 1.1,
       }));
       group.appendChild(svgElement("line", {
         class: "evolution-event-range-link",
-        x1: x, y1: y + 5.8, x2: middleX, y2: spanY - 1.5,
+        x1: x, y1: y + 8.8, x2: middleX, y2: spanY - 2,
         stroke: COLORS.olive,
         "stroke-width": 0.65,
         "stroke-opacity": 0.78,
         "pointer-events": "none",
       }));
       group.appendChild(svgElement("rect", {
-        x: Math.min(startX, endX), y: y + 5.5,
-        width: Math.max(3, Math.abs(endX - startX)), height: 5.5,
+        x: Math.min(startX, endX), y: y + 9,
+        width: Math.max(3, Math.abs(endX - startX)), height: 7,
         fill: "transparent", "pointer-events": "all",
       }));
     }
@@ -857,7 +940,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     const startX = event.rangeStartX ?? event.baseX;
     const endX = event.rangeEndX ?? event.baseX;
     group.appendChild(svgElement("path", {
-      d: `M${startX} ${y - 13}V${y - 20}H${endX}V${y - 13}`,
+      d: `M${startX} ${y - 17}V${y - 26}H${endX}V${y - 17}`,
       fill: "none", stroke: COLORS.olive, "stroke-width": 0.8,
     }));
     // The mark describes the complete period, so its leader points to the
@@ -865,13 +948,14 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     const middleX = (startX + endX) / 2;
     group.appendChild(svgElement("line", {
       class: "evolution-event-range-link",
-      x1: x, y1: y - 5.8, x2: middleX, y2: y - 11.5,
+      x1: x, y1: y - 8.8, x2: middleX, y2: y - 15.5,
       stroke: COLORS.olive, "stroke-width": 0.65, "stroke-opacity": 0.85,
       "pointer-events": "none",
     }));
   }
+  const iconSize = evolutionEventIconSize(iconType, selected);
   if (iconType === "affiliation_change") {
-    const size = selected ? 5.5 : 4.6;
+    const size = iconSize;
     group.appendChild(svgElement("path", {
       d: `M${x} ${y - size}L${x + size} ${y}L${x} ${y + size}L${x - size} ${y}Z`,
       fill: selected ? COLORS.selected : COLORS.paper,
@@ -883,9 +967,9 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     // 建置/罢置用一对镜像实心三角形：建置 = 墨色正立三角（立起来），
     // 罢置 = 赭红倒三角（裁撤）；选中只换颜色和尺寸，不改变形状。
     const up = iconType === "establish";
-    const size = selected ? 5.6 : 4.8;
+    const size = iconSize;
     const apexY = up ? y - size : y + size;
-    const baseY = up ? y + size * 0.79 : y - size * 0.79;
+    const baseY = up ? y + size * (5 / 6.2) : y - size * (5 / 6.2);
     const color = selected ? COLORS.selected : (up ? COLORS.line : COLORS.abolish);
     group.appendChild(svgElement("path", {
       d: `M${x} ${apexY}L${x + size} ${baseY}H${x - size}Z`,
@@ -896,7 +980,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
     }));
   } else {
     group.appendChild(svgElement("circle", {
-      cx: x, cy: y, r: selected ? 4.2 : 2.6,
+      cx: x, cy: y, r: iconSize,
       fill: selected ? COLORS.selected : COLORS.paper,
       stroke: selected ? COLORS.selected : COLORS.line,
       "stroke-width": selected ? 1.2 : 1,
@@ -906,7 +990,7 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
   // Selection feedback stays on the mark itself; details live in the left
   // panel, with no additional on-canvas callout.
   group.appendChild(svgElement("circle", {
-    cx: x, cy: y, r: event.displaced ? 5.5 : 10,
+    cx: x, cy: y, r: Math.max(event.displaced ? 9 : 10, iconSize + 3),
     fill: "transparent", "pointer-events": "all",
   }));
   addTitle(group, eventDescription(event));
@@ -914,18 +998,70 @@ function renderEventMark(parent, event, selected, dimmed, handlers) {
   parent.appendChild(group);
 }
 
-function endpointClearance(point, arrowhead = false) {
+function cross(first, second) {
+  return first.x * second.y - first.y * second.x;
+}
+
+function rayPolygonDistance(direction, vertices) {
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < vertices.length; index += 1) {
+    const start = vertices[index];
+    const end = vertices[(index + 1) % vertices.length];
+    const edge = { x: end.x - start.x, y: end.y - start.y };
+    const denominator = cross(direction, edge);
+    if (Math.abs(denominator) < 1e-9) continue;
+    const distance = cross(start, edge) / denominator;
+    const segmentPosition = cross(start, direction) / denominator;
+    if (distance >= 0 && segmentPosition >= -1e-9 && segmentPosition <= 1 + 1e-9) {
+      nearest = Math.min(nearest, distance);
+    }
+  }
+  return Number.isFinite(nearest) ? nearest : 0;
+}
+
+/**
+ * Distance from an event centre to the visible outer edge in a given
+ * direction. The enlarged diamond and triangle marks do not have a constant
+ * radius, so a fixed inset makes diagonal relations stop too early or too
+ * late. This uses the actual glyph outlines used by renderEventMark and adds
+ * half of the corresponding stroke width.
+ */
+export function evolutionEndpointClearance(point, toward, arrowhead = false) {
   if (point?.timepointId == null) return 0;
-  if (point.iconType === "affiliation_change") return 5.2;
-  const triangle = ["establish", "abolish"].includes(point.iconType);
-  // The endpoint is the arrow tip / relation stroke endpoint, so clearance
-  // should follow the visible glyph edge instead of leaving a large dead gap.
-  // A normal record has r=2.6 and a 1px stroke, so its visible outer edge is
-  // 3.1 units from the centre. Selected marks render after relations and mask
-  // the covered part themselves; reserving their larger radius here would
-  // leave an obvious broken gap around every unselected hollow circle.
-  if (triangle) return arrowhead ? 5.8 : 6;
-  return 3.1;
+  const deltaX = Number(toward?.x) - Number(point.x);
+  const deltaY = Number(toward?.y) - Number(point.y);
+  const length = Math.hypot(deltaX, deltaY);
+  if (!length) return 0;
+  const direction = { x: deltaX / length, y: deltaY / length };
+  const size = evolutionEventIconSize(point.iconType || "record");
+  let distance;
+  let strokeWidth;
+  if (point.iconType === "affiliation_change") {
+    distance = rayPolygonDistance(direction, [
+      { x: 0, y: -size },
+      { x: size, y: 0 },
+      { x: 0, y: size },
+      { x: -size, y: 0 },
+    ]);
+    strokeWidth = 1.1;
+  } else if (["establish", "abolish"].includes(point.iconType)) {
+    const up = point.iconType === "establish";
+    const apexY = up ? -size : size;
+    const baseY = up ? size * (5 / 6.2) : -size * (5 / 6.2);
+    distance = rayPolygonDistance(direction, [
+      { x: 0, y: apexY },
+      { x: size, y: baseY },
+      { x: -size, y: baseY },
+    ]);
+    strokeWidth = 1;
+  } else {
+    distance = size;
+    strokeWidth = 1;
+  }
+  // Selected marks render after relations and mask the covered part. Do not
+  // reserve their extra emphasis radius here, or every unselected line gets a
+  // visible gap around the event glyph.
+  return Math.max(0, distance + strokeWidth / 2);
 }
 
 function insetPoint(point, toward, distance) {
@@ -957,8 +1093,16 @@ export function relationRouteOptions(relation, source, target) {
 export function relationPath(source, target, options = {}) {
   // Relations terminate outside the event glyph. Drawing to its center makes
   // the event triangle cover the real marker and read as an oversized arrow.
-  const start = insetPoint(source, target, endpointClearance(source));
-  const end = insetPoint(target, source, endpointClearance(target, true));
+  const start = insetPoint(
+    source,
+    target,
+    evolutionEndpointClearance(source, target),
+  );
+  const end = insetPoint(
+    target,
+    source,
+    evolutionEndpointClearance(target, source, true),
+  );
   const deltaY = end.y - start.y;
   if (Math.abs(deltaY) < 1) {
     const lift = start.y > 470 ? -28 : 28;
@@ -1232,9 +1376,9 @@ function renderOffAxis(parent, layout, selectedItem, selectionFocus, handlers) {
         class: `evolution-offaxis-event${isSelected ? " is-selected" : ""}`
           + `${dimmed ? " is-dimmed" : ""}`,
       });
-      // 与主车道普通记载圆点同尺寸（未选中 2.6 / 选中 4.2）。
+      // 与主车道普通记载圆点保持同一视觉尺寸。
       group.appendChild(svgElement("circle", {
-        cx: event.x, cy: event.y, r: isSelected ? 4.2 : 2.6,
+        cx: event.x, cy: event.y, r: evolutionEventIconSize("record", isSelected),
         fill: isSelected ? COLORS.selected : COLORS.paper,
         stroke: bucket === "unresolved" ? COLORS.selected : COLORS.line,
         "stroke-width": 1,
@@ -1300,7 +1444,11 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
     if (fan.direction === "out") {
       // Split: branch leaves the hub and ends with an arrowhead on each
       // target event mark — N arrowheads make the 1→N reading explicit.
-      const target = insetPoint(spoke, hub, endpointClearance(spoke, true));
+      const target = insetPoint(
+        spoke,
+        hub,
+        evolutionEndpointClearance(spoke, hub, true),
+      );
       const d = sameColumn
         ? branchPath(hub, target, bow)
         : `M${trunkX} ${target.y}L${target.x} ${target.y}`;
@@ -1317,7 +1465,11 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
       }
     } else {
       // Merge: one branch per source lane converging into the hub.
-      const source = insetPoint(spoke, hub, endpointClearance(spoke));
+      const source = insetPoint(
+        spoke,
+        hub,
+        evolutionEndpointClearance(spoke, hub),
+      );
       const d = sameColumn
         ? branchPath(source, hub, bow)
         : `M${source.x} ${source.y}L${trunkX} ${source.y}`;
@@ -1346,7 +1498,11 @@ function renderFanGroup(parent, fan, selectedRelationKey, focusActive, handlers)
   if (fan.direction === "in") {
     // Fan-in converges into the hub: single arrowhead at the shared target.
     const approach = { x: trunkX, y: hub.y + travel * 16 };
-    const target = insetPoint(hub, approach, endpointClearance(hub, true));
+    const target = insetPoint(
+      hub,
+      approach,
+      evolutionEndpointClearance(hub, approach, true),
+    );
     group.appendChild(svgElement("path", {
       d: `M${approach.x} ${approach.y}L${target.x} ${target.y}`,
       fill: "none", stroke: color, "stroke-width": width,
