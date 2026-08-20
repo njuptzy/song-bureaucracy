@@ -529,7 +529,6 @@ export function compositeTreeLayout(
   viewportWidth = 381,
   rowHeight = 36,
   viewportTop = 180,
-  nodeSpacing = 76,
 ) {
   const levels = new Map();
   for (const node of nodes || []) {
@@ -537,16 +536,16 @@ export function compositeTreeLayout(
     if (!levels.has(depth)) levels.set(depth, []);
     levels.get(depth).push(node);
   }
-  const maxLevelCount = Math.max(1, ...[...levels.values()].map((level) => level.length));
-  const contentWidth = Math.max(viewportWidth, (maxLevelCount - 1) * nodeSpacing + 112);
-  const center = viewportX + viewportWidth / 2;
+  const inset = 28;
+  const left = viewportX + inset;
+  const usableWidth = Math.max(1, viewportWidth - inset * 2);
   const positions = new Map();
   const maxDepth = levels.size ? Math.max(...levels.keys()) : 0;
   for (const [depth, level] of levels) {
-    const firstX = center - ((level.length - 1) * nodeSpacing) / 2;
+    const gap = usableWidth / (level.length + 1);
     level.forEach((node, index) => {
       positions.set(node.id, {
-        x: firstX + index * nodeSpacing,
+        x: left + gap * (index + 1),
         y: viewportTop + rowHeight * depth + rowHeight / 2,
         depth,
       });
@@ -557,35 +556,6 @@ export function compositeTreeLayout(
     maxDepth,
     rowCount: maxDepth + 1,
     contentHeight: (maxDepth + 1) * rowHeight,
-    contentWidth,
-  };
-}
-
-export function compositeTreeHorizontalMetrics(
-  contentWidth,
-  viewportWidth = 381,
-  requestedOffset = 0,
-) {
-  const overflow = Math.max(0, ((Number(contentWidth) || 0) - viewportWidth) / 2);
-  const minScroll = -overflow;
-  const maxScroll = overflow;
-  const offset = Math.max(minScroll, Math.min(maxScroll, Number(requestedOffset) || 0));
-  const trackWidth = viewportWidth;
-  const thumbWidth = overflow > 0
-    ? Math.max(28, trackWidth * viewportWidth / Math.max(viewportWidth, contentWidth))
-    : trackWidth;
-  const thumbTravel = Math.max(0, trackWidth - thumbWidth);
-  return {
-    contentWidth,
-    minScroll,
-    maxScroll,
-    offset,
-    trackWidth,
-    thumbWidth,
-    thumbTravel,
-    thumbOffset: maxScroll > minScroll
-      ? (offset - minScroll) / (maxScroll - minScroll) * thumbTravel
-      : 0,
   };
 }
 
@@ -600,22 +570,14 @@ function renderCompositeScope(parent, options) {
   const viewportHeight = 105;
   const rowHeight = 36;
   const viewportWidth = right - x - 12;
-  const nodeSpacing = 76;
   const expandedIds = options.compositeExpandedEntityIds || [];
   const nodes = visibleCompositeNodes(model, expandedIds);
-  const treeLayout = compositeTreeLayout(
-    nodes, x, viewportWidth, rowHeight, viewportTop, nodeSpacing,
-  );
+  const treeLayout = compositeTreeLayout(nodes, x, viewportWidth, rowHeight, viewportTop);
   let scroll = compositeTreeScrollMetrics(
     treeLayout.rowCount,
     rowHeight,
     viewportHeight,
     options.compositeScrollOffset,
-  );
-  let horizontalScroll = compositeTreeHorizontalMetrics(
-    treeLayout.contentWidth,
-    viewportWidth,
-    options.compositeScrollX,
   );
 
   appendText(group, "综合对象", {
@@ -660,7 +622,7 @@ function renderCompositeScope(parent, options) {
     class: "evolution-composite-scroll-surface",
     x,
     y: viewportTop,
-    width: viewportWidth,
+    width: right - x - 12,
     height: viewportHeight,
     fill: "transparent",
     "pointer-events": "all",
@@ -726,7 +688,9 @@ function renderCompositeScope(parent, options) {
       y: -9,
       selected: node.id === options.activeEntityId,
     });
-    const maxChars = Math.max(3, Math.floor((nodeSpacing - 10) / 11));
+    const levelCount = Math.max(1, nodes.filter((candidate) => candidate.depth === node.depth).length);
+    const slotWidth = viewportWidth / levelCount;
+    const maxChars = Math.max(3, Math.floor((slotWidth - 10) / 11));
     appendText(nodeGroup, shortened(node.title || `#${node.id}`, maxChars), {
       x: 0,
       y: 20,
@@ -772,52 +736,15 @@ function renderCompositeScope(parent, options) {
     "aria-valuemax": String(scroll.maxScroll),
     "aria-valuenow": String(scroll.offset),
   });
-  const horizontalTrackY = viewportTop + viewportHeight - 3;
-  const horizontalTrack = svgElement("rect", {
-    class: "evolution-composite-scroll-track evolution-composite-scroll-track--horizontal",
-    x,
-    y: horizontalTrackY,
-    width: viewportWidth,
-    height: 1.5,
-    rx: 0.75,
-  });
-  const horizontalThumb = svgElement("rect", {
-    class: "evolution-composite-scroll-thumb evolution-composite-scroll-thumb--horizontal",
-    x: x + horizontalScroll.thumbOffset,
-    y: horizontalTrackY - 1,
-    width: horizontalScroll.thumbWidth,
-    height: 3.5,
-    rx: 1.75,
-    role: "scrollbar",
-    tabindex: "0",
-    "aria-label": "横向滚动综合对象树",
-    "aria-valuemin": String(horizontalScroll.minScroll),
-    "aria-valuemax": String(horizontalScroll.maxScroll),
-    "aria-valuenow": String(horizontalScroll.offset),
-  });
   const applyScroll = (nextOffset) => {
     scroll = compositeTreeScrollMetrics(treeLayout.rowCount, rowHeight, viewportHeight, nextOffset);
-    content.setAttribute("transform", `translate(${-horizontalScroll.offset} ${-scroll.offset})`);
+    content.setAttribute("transform", `translate(0 ${-scroll.offset})`);
     thumb.setAttribute("y", String(viewportTop + scroll.thumbOffset));
     thumb.setAttribute("aria-valuemax", String(scroll.maxScroll));
     thumb.setAttribute("aria-valuenow", String(scroll.offset));
     options.handlers.onCompositeScroll?.(scroll.offset);
   };
-  const applyHorizontalScroll = (nextOffset) => {
-    horizontalScroll = compositeTreeHorizontalMetrics(
-      treeLayout.contentWidth,
-      viewportWidth,
-      nextOffset,
-    );
-    content.setAttribute("transform", `translate(${-horizontalScroll.offset} ${-scroll.offset})`);
-    horizontalThumb.setAttribute("x", String(x + horizontalScroll.thumbOffset));
-    horizontalThumb.setAttribute("aria-valuemin", String(horizontalScroll.minScroll));
-    horizontalThumb.setAttribute("aria-valuemax", String(horizontalScroll.maxScroll));
-    horizontalThumb.setAttribute("aria-valuenow", String(horizontalScroll.offset));
-    options.handlers.onCompositeScrollX?.(horizontalScroll.offset);
-  };
   applyScroll(scroll.offset);
-  applyHorizontalScroll(horizontalScroll.offset);
 
   if (scroll.maxScroll > 0) {
     const trackHit = svgElement("rect", {
@@ -878,83 +805,8 @@ function renderCompositeScope(parent, options) {
     group.append(track);
   }
 
-  if (horizontalScroll.maxScroll > horizontalScroll.minScroll) {
-    const horizontalTrackHit = svgElement("rect", {
-      class: "evolution-composite-scroll-hit evolution-composite-scroll-hit--horizontal",
-      x,
-      y: horizontalTrackY - 6,
-      width: viewportWidth,
-      height: 13,
-      fill: "transparent",
-      "pointer-events": "all",
-    });
-    horizontalTrackHit.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const bounds = horizontalTrackHit.getBoundingClientRect();
-      const localX = (event.clientX - bounds.left) / Math.max(1, bounds.width) * viewportWidth;
-      const ratio = Math.max(0, Math.min(1, (localX - horizontalScroll.thumbWidth / 2)
-        / Math.max(1, horizontalScroll.thumbTravel)));
-      applyHorizontalScroll(horizontalScroll.minScroll
-        + ratio * (horizontalScroll.maxScroll - horizontalScroll.minScroll));
-    });
-    group.append(horizontalTrack, horizontalTrackHit, horizontalThumb);
-
-    let horizontalDrag = null;
-    horizontalThumb.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      horizontalDrag = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startOffset: horizontalScroll.offset,
-      };
-      horizontalThumb.setPointerCapture?.(event.pointerId);
-    });
-    horizontalThumb.addEventListener("pointermove", (event) => {
-      if (!horizontalDrag || horizontalDrag.pointerId !== event.pointerId) return;
-      const rect = horizontalTrack.getBoundingClientRect();
-      const svgTravel = (event.clientX - horizontalDrag.startX)
-        / Math.max(1, rect.width) * viewportWidth;
-      const range = horizontalScroll.maxScroll - horizontalScroll.minScroll;
-      applyHorizontalScroll(horizontalDrag.startOffset
-        + svgTravel / Math.max(1, horizontalScroll.thumbTravel) * range);
-    });
-    const finishHorizontalDrag = (event) => {
-      if (!horizontalDrag || horizontalDrag.pointerId !== event.pointerId) return;
-      horizontalThumb.releasePointerCapture?.(event.pointerId);
-      horizontalDrag = null;
-    };
-    horizontalThumb.addEventListener("pointerup", finishHorizontalDrag);
-    horizontalThumb.addEventListener("pointercancel", finishHorizontalDrag);
-    horizontalThumb.addEventListener("keydown", (event) => {
-      const delta = {
-        ArrowLeft: -nodeSpacing,
-        ArrowRight: nodeSpacing,
-        Home: horizontalScroll.minScroll,
-        End: horizontalScroll.maxScroll,
-      }[event.key];
-      if (delta === undefined) return;
-      event.preventDefault();
-      event.stopPropagation();
-      applyHorizontalScroll(event.key === "Home" || event.key === "End"
-        ? delta
-        : horizontalScroll.offset + delta);
-    });
-  } else {
-    group.append(horizontalTrack);
-  }
-
   group.style.pointerEvents = "all";
   group.addEventListener("wheel", (event) => {
-    const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
-    if (horizontal) {
-      if (horizontalScroll.maxScroll <= horizontalScroll.minScroll) return;
-      event.preventDefault();
-      event.stopPropagation();
-      applyHorizontalScroll(horizontalScroll.offset + (event.deltaX || event.deltaY) * 0.45);
-      return;
-    }
     if (scroll.maxScroll <= 0) return;
     event.preventDefault();
     event.stopPropagation();

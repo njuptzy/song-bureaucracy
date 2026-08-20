@@ -115,11 +115,6 @@
   opacity: 0.86;
 }
 
-.dynamic-evolution-layer .evolution-composite-scroll-track--horizontal,
-.dynamic-evolution-layer .evolution-composite-scroll-thumb--horizontal {
-  cursor: ew-resize;
-}
-
 .dynamic-evolution-layer .evolution-composite-scroll-hit {
   cursor: pointer;
 }
