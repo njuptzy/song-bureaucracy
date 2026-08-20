@@ -10,6 +10,7 @@ import {
   evolutionLaneTitleMetrics,
   compositeTreeScrollMetrics,
   compositeTreeLayout,
+  compositeTreeHorizontalMetrics,
 } from "../renderers/evolution_renderer.js";
 
 function point(iconType, x, y) {
@@ -116,6 +117,16 @@ describe("compositeTreeLayout", () => {
     assert.ok(grandchild.y > rightChild.y);
     assert.ok(leftChild.x < rightChild.x);
     assert.equal(layout.rowCount, 3);
+  });
+
+  it("同层节点保持固定间距，超出视口时通过横向滚动覆盖", () => {
+    const nodes = Array.from({ length: 8 }, (_, index) => ({ id: index, depth: 1 }));
+    const layout = compositeTreeLayout(nodes, 82, 381, 36, 180, 76);
+    assert.equal(layout.positions.get(1).x - layout.positions.get(0).x, 76);
+    assert.ok(layout.contentWidth > 381);
+    const metrics = compositeTreeHorizontalMetrics(layout.contentWidth, 381, 9999);
+    assert.ok(metrics.maxScroll > 0);
+    assert.equal(metrics.offset, metrics.maxScroll);
   });
 });
 
