@@ -184,6 +184,8 @@ const evolutionSearchOpen = ref(false);
 const compositeExpandedEntityIds = ref(new Set());
 const compositeScopeScrollOffset = ref(0);
 const compositeStaffScrollOffset = ref(0);
+const compositeSelectedEvent = ref(null);
+const compositeExpandedBands = ref(new Set(["institution", "staff", "duty"]));
 const comparisonPaneOffsets = ref({
   hierarchy: {
     x: Number(initialState.comparisonPaneOffsets?.hierarchy?.x) || 0,
@@ -248,6 +250,7 @@ let evolutionModelCacheKey = "";
 let evolutionModelCache = null;
 let compositeEvolutionModelCacheKey = "";
 let compositeEvolutionModelCache = null;
+const compositeEventCache = new Map();
 let evolutionLayoutCacheKey = "";
 let evolutionLayoutCache = null;
 let structuralChangeIndex = null;
@@ -256,6 +259,35 @@ let activeTransitionCleanupFrame = null;
 let reduceMotionQuery = null;
 const expandedChangeEvidenceKeys = new Set();
 const transitionTrackItemKeyCache = new WeakMap();
+
+function requestCompositeEvents(focusEntityId, year) {
+  if (focusEntityId == null) return;
+  const normalizedYear = Number.isFinite(Number(year)) ? Math.round(Number(year)) : "all";
+  const key = `${focusEntityId}:${normalizedYear}`;
+  if (compositeEventCache.has(key)) return;
+  const params = new URLSearchParams({
+    focus_entity_id: String(focusEntityId),
+    include_details: "1",
+  });
+  if (normalizedYear !== "all") params.set("year", String(normalizedYear));
+  const pending = fetch(`/api/composite-events?${params.toString()}`, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then((result) => {
+      compositeEventCache.set(key, result);
+      if (compositeEvolutionModelCacheKey === key && compositeEvolutionModelCache) {
+        compositeEvolutionModelCache.bands = result.bands || compositeEvolutionModelCache.bands;
+        compositeEvolutionModelCache.bandEvents = Object.values(compositeEvolutionModelCache.bands)
+          .flat();
+        refreshTemplate();
+      }
+      return result;
+    })
+    .catch(() => null);
+  compositeEventCache.set(key, pending);
+}
 
 const YEAR_MIN = props.data.meta?.yearMin ?? 960;
 const YEAR_MAX = props.data.meta?.yearMax ?? 1279;
@@ -368,6 +400,8 @@ const persistedCanvasState = computed(() => ({
   selectedRange: [...selectedRange.value],
   timelineSelectionActive: timelineSelectionActive.value,
   selectedId: selectedId.value,
+  compositeExpandedEntityIds: [...compositeExpandedEntityIds.value],
+  compositeExpandedBands: [...compositeExpandedBands.value],
   compositionFocusId: compositionFocusId.value,
   selectedCategory: selectedCategory.value,
   spaceAwareExpansion: spaceAwareExpansion.value,
@@ -406,6 +440,14 @@ function restoreCanvasState(state) {
   pendingRange.value = [...normalizedRange];
   timelineSelectionActive.value = state.timelineSelectionActive !== false;
   selectedId.value = state.selectedId ?? null;
+  if (Array.isArray(state.compositeExpandedEntityIds)) {
+    compositeExpandedEntityIds.value = new Set(state.compositeExpandedEntityIds);
+  }
+  if (Array.isArray(state.compositeExpandedBands)) {
+    compositeExpandedBands.value = new Set(
+      state.compositeExpandedBands.filter((band) => ["institution", "staff", "duty"].includes(band)),
+    );
+  }
   compositionFocusId.value = state.compositionFocusId ?? null;
   if (typeof state.selectedCategory === "string" && state.selectedCategory.trim()) {
     selectedCategory.value = state.selectedCategory.trim();
@@ -3488,11 +3530,22 @@ function renderDynamicEvolution(svg) {
         year: compositeYear,
       });
     compositeEvolutionModelCacheKey = compositeKey;
+    const restoredExpanded = compositeEvolutionModelCache
+      ? [...compositeExpandedEntityIds.value]
+        .filter((id) => compositeEvolutionModelCache.nodesById?.has(id))
+      : [];
     compositeExpandedEntityIds.value = compositeFocusId == null
       ? new Set()
-      : new Set([compositeFocusId]);
+      : new Set([compositeFocusId, ...restoredExpanded]);
     compositeScopeScrollOffset.value = 0;
     compositeStaffScrollOffset.value = 0;
+    compositeSelectedEvent.value = null;
+  }
+  requestCompositeEvents(compositeFocusId, compositeYear);
+  const compositeApiResult = compositeEventCache.get(compositeKey);
+  if (compositeApiResult?.bands && compositeEvolutionModelCache) {
+    compositeEvolutionModelCache.bands = compositeApiResult.bands;
+    compositeEvolutionModelCache.bandEvents = Object.values(compositeApiResult.bands).flat();
   }
   const windowedModel = windowEvolutionModel(evolutionModelCache, evolutionLanePage.value, 8);
   if (windowedModel.laneWindow.page !== evolutionLanePage.value) {
@@ -3585,6 +3638,20 @@ function renderDynamicEvolution(svg) {
     onCompositeStaffScroll(offset) {
       compositeStaffScrollOffset.value = Math.max(0, Number(offset) || 0);
     },
+    onSelectCompositeEvent(event) {
+      const current = compositeSelectedEvent.value;
+      compositeSelectedEvent.value = current?.id === event.id ? null : event;
+      selectedEvolutionItem.value = null;
+      detailPanelScrollOffset = 0;
+      refreshTemplate();
+    },
+    onToggleCompositeBand(band) {
+      const next = new Set(compositeExpandedBands.value);
+      if (next.has(band)) next.delete(band);
+      else next.add(band);
+      compositeExpandedBands.value = next;
+      refreshTemplate();
+    },
     onLanePageChange(page) {
       const nextPage = Math.max(1, Math.min(model.laneWindow.pageCount, Math.floor(page)));
       if (nextPage === evolutionLanePage.value) return;
@@ -3657,6 +3724,8 @@ function renderDynamicEvolution(svg) {
     compositeExpandedEntityIds: compositeExpandedEntityIds.value,
     compositeScrollOffset: compositeScopeScrollOffset.value,
     compositeStaffScrollOffset: compositeStaffScrollOffset.value,
+    compositeSelectedEvent: compositeSelectedEvent.value,
+    compositeExpandedBands: compositeExpandedBands.value,
     handlers,
   });
 }
@@ -4182,6 +4251,52 @@ function evolutionCurrentEntryText() {
 function evolutionDetailPayload(svg) {
   const model = svg.__evolutionModel;
   const selected = selectedEvolutionItem.value;
+  const compositeEvent = compositeSelectedEvent.value;
+  if (compositeEvent) {
+    const subject = compositeEvent.subject || {};
+    const evidence = evidenceLinesForKeys(
+      compositeEvent.evidenceKeys,
+      compositeEvent.quotation || compositeEvent.displaySummary,
+    );
+    const relationshipOriginal = relationshipSourceOriginal(
+      props.data,
+      compositeEvent.evidenceKeys || [],
+    );
+    const endpointText = (items) => (items || [])
+      .map((item) => `${item.title || titleOf(item.entityId)}（${item.type || ""}）`)
+      .join("、") || "未完整记录";
+    const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[subject.title] || {});
+    return {
+      title: subject.title || compositeEvent.displayTitle || "综合演变事件",
+      year: compositeEvent.eventTime || (
+        compositeEvent.yearStart == null ? "年代未明" : `${compositeEvent.yearStart}年`
+      ),
+      sections: [
+        { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
+        { label: "事件：", value: compositeEvent.displayTitle || compositeEvent.subtype || "未载事件" },
+        { label: "摘要：", value: compositeEvent.displaySummary || "未载摘要" },
+        { label: "来源端点：", value: endpointText(compositeEvent.sourceEndpoints) },
+        { label: "目标端点：", value: endpointText(compositeEvent.targetEndpoints) },
+        { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
+        {
+          label: relationshipOriginal.count > 1
+            ? `关系来源词条原文（${relationshipOriginal.count}条）：`
+            : "关系来源词条原文：",
+          value: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
+        },
+        { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
+        { label: "出处：", value: evidence.source || "当前事件没有独立出处。" },
+        { label: "不确定性：", value: compositeEvent.uncertainty || "未标注不确定性。" },
+        {
+          label: "订正状态：",
+          value: compositeEvent.revisionStatus
+            ? `已人工订正${compositeEvent.revisionId ? `（${compositeEvent.revisionId}）` : ""}`
+            : "原始记录",
+        },
+        { label: "校勘说明：", value: evidence.note || "未载校勘说明。" },
+      ],
+    };
+  }
   if (selected?.kind === "timepoint") {
     const event = selected.item;
     const entity = entityMap.get(event.entityId) || selectedEntity();

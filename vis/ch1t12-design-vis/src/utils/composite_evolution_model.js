@@ -181,6 +181,92 @@ function sortChanges(changes) {
     || String(a.id).localeCompare(String(b.id), "zh", { numeric: true }));
 }
 
+function eventBand(category) {
+  if (category === "staff") return "staff";
+  if (category === "duty") return "duty";
+  return "institution";
+}
+
+function endpointPayload(entityMap, id, fallback = {}) {
+  const entity = entityMap.get(id);
+  return {
+    entityId: id,
+    title: entity?.title || fallback.title || `#${id}`,
+    type: entity?.type || fallback.type || "机构",
+  };
+}
+
+function buildBandEvents(changes, model) {
+  const events = changes.map((change) => {
+    const band = eventBand(change.category);
+    const sourceEndpoints = (change.sourceIds || []).map((id) => endpointPayload(model.entityMap, id));
+    const targetEndpoints = (change.targetIds || []).map((id) => endpointPayload(model.entityMap, id));
+    const subjectId = change.entityId ?? sourceEndpoints[0]?.entityId ?? targetEndpoints[0]?.entityId ?? null;
+    return {
+      id: change.id,
+      band,
+      category: change.category,
+      subtype: change.relationType || change.eventType || change.category,
+      subject: endpointPayload(model.entityMap, subjectId, { type: band === "staff" ? "官职" : "机构" }),
+      sourceEndpoints,
+      targetEndpoints,
+      yearStart: change.year,
+      yearEnd: change.year,
+      eventTime: change.eventTime || "",
+      displayTitle: change.eventText || change.categoryLabel,
+      displaySummary: change.uncertain ? "关系端点未完整确定。" : change.eventText || change.categoryLabel,
+      evidenceKeys: [...(change.citationKeys || [])],
+      citations: [...(change.citations || [])],
+      quotation: change.quotation || "",
+      revisionStatus: change.revisionStatus || "",
+      revisionId: change.revisionOriginalId || null,
+      uncertainty: change.uncertain ? "方向未定" : "",
+      sourceChange: change,
+    };
+  });
+
+  // 编制关系本身是配置证据，不是机构树父子关系。把每条带员额/类型
+  // 的有效区间变成编制事件，确保下属机构展开后也能显示自己的官职变化。
+  for (const edge of model.staffEdges || []) {
+    if (!model.visibleIds.has(edge.org)) continue;
+    const official = model.entityMap.get(edge.official);
+    if (!official) continue;
+    const periods = Array.isArray(edge.periods) && edge.periods.length ? edge.periods : [{}];
+    for (const period of periods) {
+      const start = period.start ?? null;
+      const end = period.end ?? start;
+      const quota = edge.staff_quota || "员额未载";
+      const staffType = edge.staff_type || "人员类型未定";
+      const id = `S${edge.id}:${start ?? "undated"}`;
+      if (events.some((event) => event.id === id)) continue;
+      events.push({
+        id,
+        band: "staff",
+        category: "staff",
+        subtype: "编制隶属",
+        subject: endpointPayload(model.entityMap, edge.official, { type: "官职" }),
+        sourceEndpoints: [endpointPayload(model.entityMap, edge.org)],
+        targetEndpoints: [endpointPayload(model.entityMap, edge.official, { type: "官职" })],
+        yearStart: start,
+        yearEnd: end,
+        eventTime: period.time_type || "",
+        displayTitle: `${official.title || "官职"}编制`,
+        displaySummary: `${quota}，${staffType}`,
+        evidenceKeys: [`R${edge.id}`],
+        citations: [],
+        quotation: edge.quotation || "",
+        revisionStatus: edge._revision_status || "",
+        revisionId: edge._revision_original_id || null,
+        uncertainty: start == null ? "年代未定" : "",
+        sourceChange: null,
+      });
+    }
+  }
+  return events.sort((a, b) => (a.yearStart ?? Number.POSITIVE_INFINITY)
+    - (b.yearStart ?? Number.POSITIVE_INFINITY)
+    || String(a.id).localeCompare(String(b.id), "zh", { numeric: true }));
+}
+
 /**
  * Build a rendering-neutral composite evolution tree around one institution.
  * The model deliberately keeps all relation endpoints and evidence instead of
@@ -296,6 +382,8 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
         citationKeys: point.citationKeys,
         citations: citationsFor(data, point.citationKeys),
         quotation: point.quotation || "",
+        revisionStatus: point._revision_status || point.revisionStatus || "",
+        revisionOriginalId: point._revision_original_id || point.revisionOriginalId || null,
       });
     }
   }
@@ -334,25 +422,34 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       citations: citationsFor(data, relationCitationKeys),
       quotation: relation.quotation || "",
       uncertain: sourceIds.length !== 1 || targetIds.length !== 1,
+      revisionStatus: relation._revision_status || relation.revisionStatus || "",
+      revisionOriginalId: relation._revision_original_id || relation.revisionOriginalId || null,
     });
   }
 
   sortChanges(changes);
   const root = nodesById.get(focusId);
-  const categories = Object.entries(CHANGE_CATEGORIES).map(([key, label]) => ({
-    key,
-    label,
-    count: changes.filter((change) => change.category === key).length,
-  }));
-  return {
+  const hierarchyPath = [];
+  let pathId = focusId;
+  const seenPath = new Set();
+  while (pathId != null && !seenPath.has(pathId)) {
+    seenPath.add(pathId);
+    hierarchyPath.unshift(endpointPayload(entityMap, pathId));
+    pathId = parentByChild.get(pathId) ?? null;
+  }
+  const model = {
     focusEntityId: focusId,
     focusTitle: focus.title || "",
+    entities,
+    entityMap,
+    visibleIds,
     nodes: [...nodesById.values()],
     treeNodes: [...nodesById.values()].filter((node) => node.treeVisible !== false),
     nodesById,
     root,
+    hierarchyPath,
     changes,
-    categories,
+    categories: [],
     hierarchyEdges,
     staffEdges,
     officialsByInstitution,
@@ -360,6 +457,19 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
     yearMin: finiteYear(options.yearMin),
     yearMax: finiteYear(options.yearMax),
   };
+  const categories = Object.entries(CHANGE_CATEGORIES).map(([key, label]) => ({
+    key,
+    label,
+    count: changes.filter((change) => change.category === key).length,
+  }));
+  model.categories = categories;
+  model.bandEvents = buildBandEvents(changes, model);
+  model.bands = {
+    institution: model.bandEvents.filter((event) => event.band === "institution"),
+    staff: model.bandEvents.filter((event) => event.band === "staff"),
+    duty: model.bandEvents.filter((event) => event.band === "duty"),
+  };
+  return model;
 }
 
 export function visibleCompositeNodes(model, expandedIds = []) {

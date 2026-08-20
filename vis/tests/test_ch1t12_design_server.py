@@ -79,6 +79,53 @@ def normalized_times(connection: sqlite3.Connection) -> dict[int, dict]:
 
 
 class Ch1t12DesignServerContractTest(unittest.TestCase):
+    def test_composite_events_endpoint_returns_three_bands(self):
+        payload = {
+            "entities": [
+                {"id": 1, "title": "甲机构", "type": "机构"},
+                {"id": 2, "title": "乙官职", "type": "官职"},
+            ],
+            "hierarchyEdges": [],
+            "staffEdges": [{
+                "id": 20, "org": 1, "official": 2,
+                "staff_quota": "二员", "staff_type": "官",
+                "periods": [{"start": 1000, "end": 1100}],
+            }],
+            "changeRelations": [{
+                "id": 30, "relation_type": "职掌·移交",
+                "display_relation_type": "职掌·移交",
+                "source": 1, "target": 1,
+                "source_time": {"year_start": 1050, "year_end": 1050, "raw_time": "1050年"},
+                "target_time": {"year_start": 1050, "year_end": 1050},
+                "evidence_key": "R30", "quotation": "甲机构移交职掌",
+            }],
+            "timepoints": {"1": [{
+                "id": 10, "year_start": 1040, "year_end": 1040,
+                "raw_time": "1040年", "event": "始置甲机构",
+            }]},
+            "citations": {"R30": [{"citation": "出处", "quotation": "甲机构移交职掌"}]},
+        }
+        previous = SERVER.build_payload
+        SERVER.build_payload = lambda include_details=True: payload
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), SERVER.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        connection = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+        try:
+            connection.request("GET", "/api/composite-events?focus_entity_id=1&year=1050&include_details=1")
+            response = connection.getresponse()
+            result = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual(set(result["bands"]), {"institution", "staff", "duty"})
+            self.assertEqual(result["bands"]["staff"][0]["displaySummary"], "二员，官")
+            self.assertEqual(result["bands"]["duty"][0]["evidenceKeys"], ["R30"])
+        finally:
+            connection.close()
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+            SERVER.build_payload = previous
+
     def test_entity_detail_dictionary_sections_are_not_truncated(self):
         connection = sqlite3.connect(":memory:")
         connection.row_factory = sqlite3.Row

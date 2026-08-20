@@ -933,6 +933,199 @@ def get_core_payload() -> bytes:
         return _cache["core"]
 
 
+def _period_active(period: dict, year: int | None) -> bool:
+    if year is None:
+        return True
+    start = period.get("start")
+    end = period.get("end")
+    if start is None or end is None:
+        return False
+    return int(start) <= year <= int(end)
+
+
+def _edge_active(edge: dict, year: int | None) -> bool:
+    periods = edge.get("periods") or []
+    return any(_period_active(period, year) for period in periods) if year is not None else True
+
+
+def _composite_event_band(relation_type: str, text: str, subject_type: str) -> tuple[str, str]:
+    combined = f"{relation_type} {text}"
+    if (
+        "职掌" in combined
+        or "职责" in combined
+        or "移交" in combined
+        or re.search(r"掌[\u4e00-\u9fff]{1,8}", combined)
+    ):
+        return "duty", "duty_transfer"
+    if subject_type == "官职" or any(token in combined for token in ("编制", "官员", "职级")):
+        return "staff", "staff_change"
+    if any(token in combined for token in ("改称", "改名", "更名")):
+        return "institution", "rename"
+    if any(token in combined for token in ("改隶", "改置", "始置", "初置", "复置", "罢置", "罢废", "废置")):
+        return "institution", "structure_change"
+    return "institution", "evolution"
+
+
+def build_composite_events_payload(focus_entity_id: int, year: int | None, include_details: bool) -> dict:
+    """Build a compact, read-only event contract for the three-band view."""
+    payload = build_payload(include_details=include_details)
+    entities = {int(entity["id"]): entity for entity in payload.get("entities", [])}
+    focus = entities.get(int(focus_entity_id))
+    if focus is None:
+        raise ValueError(f"机构或官职不存在: {focus_entity_id}")
+    hierarchy_edges = [edge for edge in payload.get("hierarchyEdges", []) if _edge_active(edge, year)]
+    staff_edges = [edge for edge in payload.get("staffEdges", []) if _edge_active(edge, year)]
+    children = {}
+    parent_by_child = {}
+    for edge in hierarchy_edges:
+        children.setdefault(edge["parent"], []).append(edge["child"])
+        parent_by_child.setdefault(edge["child"], edge["parent"])
+    visible = {int(focus_entity_id)}
+    queue = [int(focus_entity_id)]
+    while queue:
+        parent = queue.pop(0)
+        for child in children.get(parent, []):
+            if child in visible:
+                continue
+            visible.add(child)
+            queue.append(child)
+    nodes = [
+        {
+            "entityId": entity_id,
+            "title": entities[entity_id].get("title", ""),
+            "type": entities[entity_id].get("type", "机构"),
+            "parentId": parent_by_child.get(entity_id),
+        }
+        for entity_id in visible if entity_id in entities
+    ]
+    path = [int(focus_entity_id)]
+    while path[0] in parent_by_child and len(path) < len(entities):
+        path.insert(0, parent_by_child[path[0]])
+    hierarchy_path = [
+        {"entityId": entity_id, "title": entities[entity_id].get("title", "")}
+        for entity_id in path if entity_id in entities
+    ]
+    citations = payload.get("citations", {})
+    bands = {"institution": [], "staff": [], "duty": []}
+
+    def endpoint(entity_id):
+        entity = entities.get(int(entity_id), {})
+        return {
+            "entityId": int(entity_id),
+            "title": entity.get("title", f"#{entity_id}"),
+            "type": entity.get("type", "机构"),
+        }
+
+    def add_event(event):
+        bands[event["band"]].append(event)
+
+    # Explicit evolution and duty-transfer relations retain every endpoint.
+    for relation in payload.get("changeRelations", []):
+        source_id = relation.get("source")
+        target_id = relation.get("target")
+        if source_id not in visible and target_id not in visible:
+            continue
+        source = endpoint(source_id) if source_id is not None else None
+        target = endpoint(target_id) if target_id is not None else None
+        relation_type = relation.get("display_relation_type") or relation.get("relation_type") or "前后演变"
+        text = relation.get("quotation") or relation_type
+        band, subtype = _composite_event_band(
+            relation_type,
+            text,
+            (source or {}).get("type", "机构"),
+        )
+        evidence_key = relation.get("evidence_key") or f"R{relation.get('id')}"
+        add_event({
+            "id": f"R{relation.get('id')}",
+            "band": band,
+            "category": subtype,
+            "subtype": relation.get("relation_subtype") or relation_type,
+            "subject": source or target,
+            "sourceEndpoints": [source] if source else [],
+            "targetEndpoints": [target] if target else [],
+            "yearStart": (relation.get("source_time") or {}).get("year_start"),
+            "yearEnd": (relation.get("target_time") or {}).get("year_end"),
+            "eventTime": ((relation.get("source_time") or {}).get("raw_time") or ""),
+            "displayTitle": relation_type,
+            "displaySummary": relation.get("quotation") or relation_type,
+            "evidenceKeys": [evidence_key],
+            "citations": citations.get(evidence_key, []) if include_details else [],
+            "revisionStatus": relation.get("_revision_status") or "",
+            "revisionId": relation.get("_revision_original_id"),
+            "uncertainty": "方向未定" if source_id is None or target_id is None else "",
+        })
+
+    # Timepoints supply lifecycle, ordinary duty records and official/rank changes.
+    for entity_id in visible:
+        entity = entities.get(entity_id, {})
+        for point in (payload.get("timepoints", {}).get(str(entity_id), []) or []):
+            event = str(point.get("event") or point.get("quotation") or "").strip()
+            if not event:
+                continue
+            band, subtype = _composite_event_band(
+                str(point.get("event_type") or ""), event, entity.get("type", "机构")
+            )
+            key = f"T{point.get('id')}"
+            add_event({
+                "id": key,
+                "band": band,
+                "category": subtype,
+                "subtype": point.get("event_type") or subtype,
+                "subject": endpoint(entity_id),
+                "sourceEndpoints": [endpoint(entity_id)],
+                "targetEndpoints": [],
+                "yearStart": point.get("year_start"),
+                "yearEnd": point.get("year_end") or point.get("year_start"),
+                "eventTime": point.get("raw_time") or point.get("time") or "",
+                "displayTitle": event,
+                "displaySummary": event,
+                "evidenceKeys": [key],
+                "citations": citations.get(key, []) if include_details else [],
+                "revisionStatus": point.get("_revision_status") or "",
+                "revisionId": point.get("_revision_original_id"),
+                "uncertainty": "",
+            })
+
+    for edge in payload.get("staffEdges", []):
+        if edge.get("org") not in visible:
+            continue
+        official = endpoint(edge["official"])
+        key = f"R{edge.get('id')}"
+        add_event({
+            "id": f"S{edge.get('id')}",
+            "band": "staff",
+            "category": "staff_composition",
+            "subtype": "编制隶属",
+            "subject": official,
+            "sourceEndpoints": [endpoint(edge["org"])],
+            "targetEndpoints": [official],
+            "yearStart": (edge.get("periods") or [{}])[0].get("start"),
+            "yearEnd": (edge.get("periods") or [{}])[0].get("end"),
+            "eventTime": "",
+            "displayTitle": f"{official['title']}编制",
+            "displaySummary": f"{edge.get('staff_quota') or '员额未载'}，{edge.get('staff_type') or '人员类型未定'}",
+            "evidenceKeys": [key],
+            "citations": citations.get(key, []) if include_details else [],
+            "revisionStatus": edge.get("_revision_status") or "",
+            "revisionId": edge.get("_revision_original_id"),
+            "uncertainty": "年代未定" if not edge.get("periods") else "",
+        })
+
+    for band in bands.values():
+        band.sort(key=lambda event: (event.get("yearStart") is None, event.get("yearStart") or 0, str(event["id"])))
+    return {
+        "focus": {
+            "entityId": int(focus["id"]),
+            "title": focus.get("title", ""),
+            "type": focus.get("type", "机构"),
+            "hierarchyPath": hierarchy_path,
+        },
+        "snapshotYear": year,
+        "nodes": nodes,
+        "bands": bands,
+    }
+
+
 def get_entity_details_payload(entity_id: int) -> bytes:
     fingerprint = _database_fingerprint()
     with _cache_lock:
@@ -1160,6 +1353,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/version":
             self._send(200, get_version(), "application/json; charset=utf-8")
+            return
+        if path == "/api/composite-events":
+            try:
+                focus_text = query.get("focus_entity_id", [""])[0]
+                if not focus_text or not re.fullmatch(r"\d+", focus_text):
+                    raise ValueError("focus_entity_id 必须是机构或官职 ID")
+                year_text = query.get("year", [""])[0]
+                year = int(year_text) if year_text and re.fullmatch(r"-?\d+", year_text) else None
+                include_details = query.get("include_details", ["0"])[0] in {"1", "true", "yes"}
+                self._send_json(
+                    200,
+                    build_composite_events_payload(int(focus_text), year, include_details),
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._send_json(404 if isinstance(exc, ValueError) else 500, {"error": str(exc)})
             return
         if path == "/api/health":
             self._send(200, b'{"ok":true}', "application/json")

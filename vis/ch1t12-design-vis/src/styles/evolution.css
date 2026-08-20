@@ -386,6 +386,59 @@
   filter: grayscale(0.8);
 }
 
+.dynamic-evolution-layer .evolution-composite-bands {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-band-label {
+  fill: #351704;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dynamic-evolution-layer .evolution-composite-path {
+  fill: #866d6d;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-composite-band-count {
+  fill: #918069;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-composite-band-empty {
+  fill: #918069;
+  font-size: 11px;
+}
+
+.dynamic-evolution-layer .evolution-composite-event {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-event-title {
+  fill: #351704;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-composite-event-summary {
+  fill: #918069;
+  font-size: 9px;
+}
+
+.dynamic-evolution-layer .evolution-composite-event:hover .evolution-composite-event-title,
+.dynamic-evolution-layer .evolution-composite-event:focus .evolution-composite-event-title,
+.dynamic-evolution-layer .evolution-composite-event.is-selected .evolution-composite-event-title {
+  fill: #866d6d;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dynamic-evolution-layer .evolution-composite-event,
+  .dynamic-evolution-layer .evolution-composite-band {
+    transition: none !important;
+  }
+}
+
 .evolution-search-surface {
   width: 100%;
   height: 100%;

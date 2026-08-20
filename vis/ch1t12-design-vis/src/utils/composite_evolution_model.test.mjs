@@ -125,3 +125,27 @@ test("展开状态只影响可见节点，不改变节点相对父子关系", ()
   assert.deepEqual(visibleCompositeNodes(model, [1, 2]).map((node) => node.id), [1, 2, 3]);
   assert.equal(model.nodesById.get(3).parentId, 2);
 });
+
+test("综合模型输出三条信息带并保留编制端点", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "尚书省", type: "机构" },
+      { id: 2, title: "吏部", type: "机构" },
+      { id: 3, title: "尚书左丞", type: "官职" },
+    ],
+    timepoints: {
+      1: [point(11, 1, 1080, "改置尚书省")],
+      2: [point(21, 2, 1080, "掌选事")],
+      3: [point(31, 3, 1080, "增置尚书左丞")],
+    },
+    hierarchyEdges: [{ id: 101, parent: 1, child: 2, periods: [{ start: 1000, end: 1200 }] }],
+    staffEdges: [{ id: 201, org: 2, official: 3, periods: [{ start: 1000, end: 1200 }], staff_quota: "二员", staff_type: "官" }],
+  }, 1, { year: 1080 });
+
+  assert.ok(model.bands.institution.some((event) => event.band === "institution"));
+  assert.ok(model.bands.duty.some((event) => event.band === "duty"));
+  const staff = model.bands.staff.find((event) => event.id.startsWith("S201"));
+  assert.equal(staff.subject.title, "尚书左丞");
+  assert.equal(staff.displaySummary, "二员，官");
+  assert.equal(staff.sourceEndpoints[0].title, "吏部");
+});

@@ -524,8 +524,8 @@ export function compositeTreeScrollMetrics(
 }
 
 export const COMPOSITE_SCOPE_LAYOUT = Object.freeze({
-  treeViewportTop: 202,
-  treeViewportHeight: 154,
+  treeViewportTop: 214,
+  treeViewportHeight: 150,
   staffingTop: 378,
   staffViewportTop: 396,
   staffViewportHeight: 84,
@@ -546,6 +546,7 @@ function renderCompositeScope(parent, options) {
   const rowHeight = 23;
   const indentStep = 16;
   const expandedIds = options.compositeExpandedEntityIds || [];
+  const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
   const nodes = visibleCompositeNodes(model, expandedIds);
   let scroll = compositeTreeScrollMetrics(
     nodes.length,
@@ -559,6 +560,12 @@ function renderCompositeScope(parent, options) {
     y: top,
     class: "evolution-composite-heading",
   });
+  const hierarchyPath = (model.hierarchyPath || []).map((item) => item.title).join(" > ");
+  appendText(group, hierarchyPath || model.focusTitle || "当前焦点", {
+    x,
+    y: top + 15,
+    class: "evolution-composite-path",
+  });
   const treeTotal = model.treeNodes?.length ?? model.nodes.length;
   appendText(group, `机构树${nodes.length}/${treeTotal} · ${model.changes.length}项变化`, {
     x: right,
@@ -571,14 +578,14 @@ function renderCompositeScope(parent, options) {
     .join("  ·  ");
   appendText(group, categoryCopy || "暂无分类变化", {
     x,
-    y: top + 29,
+    y: top + 42,
     class: "evolution-composite-categories",
   });
   group.appendChild(svgElement("line", {
     x1: x,
-    y1: top + 12,
+    y1: top + 25,
     x2: right,
-    y2: top + 12,
+    y2: top + 25,
     stroke: COLORS.line,
     "stroke-width": 0.82,
   }));
@@ -1255,6 +1262,149 @@ function renderEvolutionLegend(parent, layout) {
     }));
   });
   addTitle(group, "时间轴符号说明");
+  parent.appendChild(group);
+}
+
+const COMPOSITE_BAND_META = Object.freeze({
+  institution: { label: "机构结构演变", color: COLORS.line },
+  staff: { label: "官员 / 吏员 / 编制", color: COLORS.selected },
+  duty: { label: "职责演变", color: COLORS.olive },
+});
+
+function compositeEventVisible(event, visibleIds) {
+  const ids = [
+    event.subject?.entityId,
+    ...(event.sourceEndpoints || []).map((endpoint) => endpoint.entityId),
+    ...(event.targetEndpoints || []).map((endpoint) => endpoint.entityId),
+  ].filter((id) => id != null);
+  return ids.some((id) => visibleIds.has(id));
+}
+
+function compositeBandEvents(model, band, expandedIds) {
+  const visibleNodes = visibleCompositeNodes(model, expandedIds);
+  const visibleIds = new Set(visibleNodes.map((node) => node.id));
+  return (model?.bands?.[band] || model?.bandEvents || [])
+    .filter((event) => event.band === band && compositeEventVisible(event, visibleIds));
+}
+
+function renderCompositeBands(parent, layout, options) {
+  const plot = layout?.plotBounds;
+  const model = options.compositeModel;
+  if (!plot || !model) return;
+  const group = svgElement("g", { class: "evolution-composite-bands" });
+  const startY = plot.y + 52;
+  const bandHeight = Math.min(142, Math.max(110, (plot.height - 82) / 3));
+  const labelX = plot.x;
+  const trackX = plot.x + 110;
+  const trackRight = plot.right - 12;
+  const expandedIds = options.compositeExpandedEntityIds || [];
+  const selectedId = options.compositeSelectedEvent?.id;
+  const scale = (year) => {
+    if (year == null || !layout.yearScale) return trackX + 4;
+    const [domainStart, domainEnd] = layout.yearScale.domain;
+    const [rangeStart, rangeEnd] = layout.yearScale.range;
+    return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
+      * (rangeEnd - rangeStart);
+  };
+  const addEvent = (bandGroup, event, index, bandTop, color) => {
+    const year = event.yearStart ?? event.yearEnd;
+    const x = Math.max(trackX + 4, Math.min(trackRight - 4, scale(year)));
+    const row = index % 3;
+    const y = bandTop + 48 + row * 25;
+    const selected = selectedId === event.id;
+    const item = svgElement("g", {
+      class: `evolution-composite-event${selected ? " is-selected" : ""}`,
+      transform: `translate(${x} ${y})`,
+      "data-composite-event-id": event.id,
+    });
+    item.appendChild(svgElement("line", {
+      x1: 0,
+      y1: -18,
+      x2: 0,
+      y2: 2,
+      stroke: color,
+      "stroke-width": selected ? 1.3 : 0.8,
+      opacity: selected ? 1 : 0.65,
+    }));
+    item.appendChild(svgElement("circle", {
+      cx: 0,
+      cy: 4,
+      r: selected ? 4.7 : 3.6,
+      fill: selected ? color : COLORS.paper,
+      stroke: color,
+      "stroke-width": selected ? 1.1 : 0.9,
+    }));
+    const title = shortened(event.displayTitle || event.subtype, 12);
+    appendText(item, title, {
+      x: 0,
+      y: 19,
+      class: "evolution-composite-event-title",
+      "text-anchor": index % 2 ? "end" : "start",
+    });
+    const summary = shortened(event.displaySummary || "", 16);
+    if (summary && summary !== title) {
+      appendText(item, summary, {
+        x: 0,
+        y: 31,
+        class: "evolution-composite-event-summary",
+        "text-anchor": index % 2 ? "end" : "start",
+      });
+    }
+    addTitle(item, [event.eventTime, event.displayTitle, event.displaySummary, event.uncertainty]
+      .filter(Boolean).join(" · "));
+    makeInteractive(item, `查看${event.displayTitle || "事件"}`, () => (
+      options.handlers.onSelectCompositeEvent?.(event)
+    ));
+    bandGroup.appendChild(item);
+  };
+  Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
+    const bandTop = startY + bandIndex * bandHeight;
+    const bandGroup = svgElement("g", { class: `evolution-composite-band evolution-composite-band-${band}` });
+    appendText(bandGroup, meta.label, {
+      x: labelX,
+      y: bandTop + 18,
+      class: "evolution-composite-band-label",
+    });
+    const count = compositeBandEvents(model, band, expandedIds).length;
+    appendText(bandGroup, `${count}项`, {
+      x: labelX,
+      y: bandTop + 36,
+      class: "evolution-composite-band-count",
+    });
+    const bandExpanded = expandedBands instanceof Set
+      ? expandedBands.has(band)
+      : expandedBands.includes?.(band);
+    makeInteractive(
+      bandGroup,
+      `${bandExpanded ? "收起" : "展开"}${meta.label}`,
+      () => options.handlers.onToggleCompositeBand?.(band),
+    );
+    bandGroup.appendChild(svgElement("line", {
+      x1: trackX,
+      y1: bandTop + 31,
+      x2: trackRight,
+      y2: bandTop + 31,
+      stroke: meta.color,
+      "stroke-width": 0.8,
+      opacity: 0.7,
+    }));
+    const events = bandExpanded ? compositeBandEvents(model, band, expandedIds) : [];
+    if (!bandExpanded) {
+      appendText(bandGroup, "已折叠", {
+        x: trackX + 8,
+        y: bandTop + 66,
+        class: "evolution-composite-band-empty",
+      });
+    } else if (!events.length) {
+      appendText(bandGroup, "当前展开范围暂无记录", {
+        x: trackX + 8,
+        y: bandTop + 66,
+        class: "evolution-composite-band-empty",
+      });
+    }
+    events.forEach((event, index) => addEvent(bandGroup, event, index, bandTop, meta.color));
+    group.appendChild(bandGroup);
+  });
   parent.appendChild(group);
 }
 
@@ -2324,6 +2474,12 @@ function renderMain(layer, layout, options) {
     options.selectedItem,
     options.entryContext,
   );
+  if (options.compositeModel) {
+    renderCompositeBands(group, layout, options);
+    renderEvolutionLegend(group, layout);
+    layer.appendChild(group);
+    return;
+  }
   renderEvolutionLegend(group, layout);
   const hasDrawableRelations = (layout.relations || []).some((relation) => relation.drawable)
     || (layout.relationGroups || []).some((relationGroup) => relationGroup.drawable);
