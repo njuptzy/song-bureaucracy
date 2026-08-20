@@ -1306,11 +1306,10 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (bandGroup, event, index, bandTop, color) => {
+  const addEvent = (content, event, index, viewportTop, color, rowHeight) => {
     const year = event.yearStart ?? event.yearEnd;
     const x = Math.max(trackX + 4, Math.min(trackRight - 4, scale(year)));
-    const row = index % 3;
-    const y = bandTop + 48 + row * 25;
+    const y = viewportTop + 13 + index * rowHeight;
     const selected = selectedId === event.id;
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
@@ -1355,7 +1354,7 @@ function renderCompositeBands(parent, layout, options) {
     makeInteractive(item, `查看${event.displayTitle || "事件"}`, () => (
       options.handlers.onSelectCompositeEvent?.(event)
     ));
-    bandGroup.appendChild(item);
+    content.appendChild(item);
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
     const bandTop = startY + bandIndex * bandHeight;
@@ -1389,6 +1388,17 @@ function renderCompositeBands(parent, layout, options) {
       opacity: 0.7,
     }));
     const events = bandExpanded ? compositeBandEvents(model, band, expandedIds) : [];
+    const viewportTop = bandTop + 47;
+    const viewportHeight = Math.max(48, bandHeight - 53);
+    // 标题和摘要各占一行；行距必须大于两行文字的总高度，
+    // 否则相邻事件仍会在同一带内互相覆盖。
+    const rowHeight = 44;
+    const scroll = compositeTreeScrollMetrics(
+      events.length,
+      rowHeight,
+      viewportHeight,
+      options.compositeBandScrollOffsets?.[band],
+    );
     if (!bandExpanded) {
       appendText(bandGroup, "已折叠", {
         x: trackX + 8,
@@ -1401,8 +1411,139 @@ function renderCompositeBands(parent, layout, options) {
         y: bandTop + 66,
         class: "evolution-composite-band-empty",
       });
+    } else {
+      const clipId = `evolution-composite-${band}-clip`;
+      const clip = svgElement("clipPath", {
+        id: clipId,
+        clipPathUnits: "userSpaceOnUse",
+      });
+      clip.appendChild(svgElement("rect", {
+        x: trackX,
+        y: viewportTop,
+        width: Math.max(1, trackRight - trackX),
+        height: viewportHeight,
+      }));
+      bandGroup.appendChild(clip);
+      const viewport = svgElement("g", {
+        class: "evolution-composite-band-viewport",
+        "clip-path": `url(#${clipId})`,
+      });
+      const content = svgElement("g", {
+        class: "evolution-composite-band-content",
+        transform: `translate(0 ${-scroll.offset})`,
+      });
+      events.forEach((event, index) => addEvent(content, event, index, viewportTop, meta.color, rowHeight));
+      viewport.appendChild(content);
+      bandGroup.appendChild(viewport);
+
+      const scrollX = trackRight - 2;
+      const track = svgElement("rect", {
+        class: "evolution-composite-band-scroll-track",
+        x: scrollX,
+        y: viewportTop,
+        width: 1.5,
+        height: viewportHeight,
+        rx: 0.75,
+      });
+      const thumb = svgElement("rect", {
+        class: "evolution-composite-band-scroll-thumb",
+        x: scrollX - 1,
+        y: viewportTop + scroll.thumbOffset,
+        width: 3.5,
+        height: scroll.thumbHeight,
+        rx: 1.75,
+        role: "scrollbar",
+        tabindex: "0",
+        "aria-label": `滚动${meta.label}`,
+        "aria-valuemin": "0",
+        "aria-valuemax": String(scroll.maxScroll),
+        "aria-valuenow": String(scroll.offset),
+      });
+      let currentScroll = scroll;
+      const applyBandScroll = (nextOffset) => {
+        currentScroll = compositeTreeScrollMetrics(
+          events.length,
+          rowHeight,
+          viewportHeight,
+          nextOffset,
+        );
+        content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
+        thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
+        thumb.setAttribute("aria-valuemax", String(currentScroll.maxScroll));
+        thumb.setAttribute("aria-valuenow", String(currentScroll.offset));
+        options.handlers.onCompositeBandScroll?.(band, currentScroll.offset);
+      };
+      applyBandScroll(scroll.offset);
+      bandGroup.append(track);
+      if (scroll.maxScroll > 0) {
+        const hit = svgElement("rect", {
+          class: "evolution-composite-band-scroll-hit",
+          x: scrollX - 6,
+          y: viewportTop,
+          width: 13,
+          height: viewportHeight,
+          fill: "transparent",
+          "pointer-events": "all",
+        });
+        hit.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          applyBandScroll(currentScroll.offset + event.deltaY * 0.45);
+        }, { passive: false });
+        hit.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const bounds = hit.getBoundingClientRect();
+          const localY = (event.clientY - bounds.top) / Math.max(1, bounds.height) * viewportHeight;
+          const ratio = Math.max(0, Math.min(1, (localY - currentScroll.thumbHeight / 2)
+            / Math.max(1, currentScroll.thumbTravel)));
+          applyBandScroll(ratio * currentScroll.maxScroll);
+        });
+        thumb.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          applyBandScroll(currentScroll.offset + event.deltaY * 0.45);
+        }, { passive: false });
+        let drag = null;
+        thumb.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          drag = { pointerId: event.pointerId, startY: event.clientY, startOffset: currentScroll.offset };
+          thumb.setPointerCapture?.(event.pointerId);
+        });
+        thumb.addEventListener("pointermove", (event) => {
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          const rect = track.getBoundingClientRect();
+          const svgTravel = (event.clientY - drag.startY) / Math.max(1, rect.height) * viewportHeight;
+          applyBandScroll(drag.startOffset + svgTravel / Math.max(1, currentScroll.thumbTravel) * currentScroll.maxScroll);
+        });
+        const finishDrag = (event) => {
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          thumb.releasePointerCapture?.(event.pointerId);
+          drag = null;
+        };
+        thumb.addEventListener("pointerup", finishDrag);
+        thumb.addEventListener("pointercancel", finishDrag);
+        thumb.addEventListener("keydown", (event) => {
+          const delta = { ArrowUp: -rowHeight, ArrowDown: rowHeight, PageUp: -viewportHeight,
+            PageDown: viewportHeight, Home: -Infinity, End: Infinity }[event.key];
+          if (delta === undefined) return;
+          event.preventDefault();
+          event.stopPropagation();
+          applyBandScroll(Number.isFinite(delta)
+            ? currentScroll.offset + delta
+            : delta < 0 ? 0 : currentScroll.maxScroll);
+        });
+        bandGroup.append(hit, thumb);
+      } else {
+        bandGroup.append(thumb);
+      }
+      viewport.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applyBandScroll(currentScroll.offset + event.deltaY * 0.45);
+      }, { passive: false });
     }
-    events.forEach((event, index) => addEvent(bandGroup, event, index, bandTop, meta.color));
     group.appendChild(bandGroup);
   });
   parent.appendChild(group);

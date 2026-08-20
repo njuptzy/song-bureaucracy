@@ -184,6 +184,11 @@ const evolutionSearchOpen = ref(false);
 const compositeExpandedEntityIds = ref(new Set());
 const compositeScopeScrollOffset = ref(0);
 const compositeStaffScrollOffset = ref(0);
+const compositeBandScrollOffsets = ref({
+  institution: 0,
+  staff: 0,
+  duty: 0,
+});
 const compositeSelectedEvent = ref(null);
 const compositeExpandedBands = ref(new Set(["institution", "staff", "duty"]));
 const comparisonPaneOffsets = ref({
@@ -3638,6 +3643,13 @@ function renderDynamicEvolution(svg) {
     onCompositeStaffScroll(offset) {
       compositeStaffScrollOffset.value = Math.max(0, Number(offset) || 0);
     },
+    onCompositeBandScroll(band, offset) {
+      if (!(band in compositeBandScrollOffsets.value)) return;
+      compositeBandScrollOffsets.value = {
+        ...compositeBandScrollOffsets.value,
+        [band]: Math.max(0, Number(offset) || 0),
+      };
+    },
     onSelectCompositeEvent(event) {
       const current = compositeSelectedEvent.value;
       compositeSelectedEvent.value = current?.id === event.id ? null : event;
@@ -3724,6 +3736,7 @@ function renderDynamicEvolution(svg) {
     compositeExpandedEntityIds: compositeExpandedEntityIds.value,
     compositeScrollOffset: compositeScopeScrollOffset.value,
     compositeStaffScrollOffset: compositeStaffScrollOffset.value,
+    compositeBandScrollOffsets: compositeBandScrollOffsets.value,
     compositeSelectedEvent: compositeSelectedEvent.value,
     compositeExpandedBands: compositeExpandedBands.value,
     handlers,
