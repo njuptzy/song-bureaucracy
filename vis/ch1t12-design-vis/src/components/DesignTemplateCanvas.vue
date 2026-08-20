@@ -144,6 +144,7 @@ import {
   changesForEntity,
   resolveTransitionSelection,
 } from "../utils/transition_model";
+import { buildCompositeEvolutionModel } from "../utils/composite_evolution_model";
 
 const props = defineProps({
   data: { type: Object, required: true },
@@ -180,6 +181,7 @@ const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
   ? Math.max(1, Math.floor(initialState.evolutionLanePage))
   : 1);
 const evolutionSearchOpen = ref(false);
+const compositeExpandedEntityIds = ref(new Set());
 const comparisonPaneOffsets = ref({
   hierarchy: {
     x: Number(initialState.comparisonPaneOffsets?.hierarchy?.x) || 0,
@@ -242,6 +244,8 @@ let timelineRefreshFrame = null;
 let timelineRefreshNeedsStatic = false;
 let evolutionModelCacheKey = "";
 let evolutionModelCache = null;
+let compositeEvolutionModelCacheKey = "";
+let compositeEvolutionModelCache = null;
 let evolutionLayoutCacheKey = "";
 let evolutionLayoutCache = null;
 let structuralChangeIndex = null;
@@ -462,6 +466,8 @@ watch(() => props.data, (data) => {
   if (evolutionAffected) {
     evolutionModelCacheKey = "";
     evolutionModelCache = null;
+    compositeEvolutionModelCacheKey = "";
+    compositeEvolutionModelCache = null;
     evolutionLayoutCacheKey = "";
     evolutionLayoutCache = null;
   }
@@ -3467,6 +3473,20 @@ function renderDynamicEvolution(svg) {
     evolutionLayoutCacheKey = "";
     evolutionLayoutCache = null;
   }
+  const compositeFocusId = selectedId.value ?? focusIds[0] ?? null;
+  const compositeKey = String(compositeFocusId ?? "");
+  if (compositeEvolutionModelCacheKey !== compositeKey) {
+    compositeEvolutionModelCache = compositeFocusId == null
+      ? null
+      : buildCompositeEvolutionModel(props.data, compositeFocusId, {
+        yearMin: YEAR_MIN,
+        yearMax: YEAR_MAX,
+      });
+    compositeEvolutionModelCacheKey = compositeKey;
+    compositeExpandedEntityIds.value = compositeFocusId == null
+      ? new Set()
+      : new Set([compositeFocusId]);
+  }
   const windowedModel = windowEvolutionModel(evolutionModelCache, evolutionLanePage.value, 8);
   if (windowedModel.laneWindow.page !== evolutionLanePage.value) {
     evolutionLanePage.value = windowedModel.laneWindow.page;
@@ -3542,6 +3562,13 @@ function renderDynamicEvolution(svg) {
       evolutionSearchOpen.value = Boolean(open);
       refreshTemplate();
     },
+    onCompositeToggle(entityId) {
+      const next = new Set(compositeExpandedEntityIds.value);
+      if (next.has(entityId)) next.delete(entityId);
+      else next.add(entityId);
+      compositeExpandedEntityIds.value = next;
+      refreshTemplate();
+    },
     onLanePageChange(page) {
       const nextPage = Math.max(1, Math.min(model.laneWindow.pageCount, Math.floor(page)));
       if (nextPage === evolutionLanePage.value) return;
@@ -3610,6 +3637,8 @@ function renderDynamicEvolution(svg) {
     hierarchyResolution: evolutionHierarchyResolution(),
     mode: evolutionMode.value,
     searchOpen: evolutionSearchOpen.value,
+    compositeModel: compositeEvolutionModelCache,
+    compositeExpandedEntityIds: compositeExpandedEntityIds.value,
     handlers,
   });
 }

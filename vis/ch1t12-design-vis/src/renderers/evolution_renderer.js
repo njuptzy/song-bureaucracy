@@ -6,6 +6,7 @@ import {
 import {
   evolutionSelectionComparison,
 } from "../utils/evolution_context.js";
+import { visibleCompositeNodes } from "../utils/composite_evolution_model.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
@@ -495,6 +496,118 @@ function renderSelector(layer, options) {
     renderSearchPanel(group, options.entities, options.focusEntities.map((entity) => entity.id), options.handlers);
   }
   layer.appendChild(group);
+}
+
+function renderCompositeScope(parent, options) {
+  const model = options.compositeModel;
+  if (!model?.root) return;
+  const group = svgElement("g", { class: "evolution-composite-scope" });
+  const x = 82;
+  const top = 500;
+  appendText(group, "综合对象", {
+    x,
+    y: top,
+    class: "evolution-section-heading",
+  });
+  appendText(group, `${model.nodes.length}个对象 · ${model.changes.length}项变化`, {
+    x: 475,
+    y: top,
+    class: "evolution-composite-summary",
+    "text-anchor": "end",
+  });
+  group.appendChild(svgElement("line", {
+    x1: x,
+    y1: top + 12,
+    x2: 475,
+    y2: top + 12,
+    stroke: COLORS.line,
+    "stroke-width": 0.82,
+  }));
+
+  const expandedIds = options.compositeExpandedEntityIds || [];
+  const nodes = visibleCompositeNodes(model, expandedIds);
+  const rowHeight = 26;
+  const maxRows = 10;
+  nodes.slice(0, maxRows).forEach((node, index) => {
+    const rowY = top + 34 + index * rowHeight;
+    const indent = Math.min(7, node.depth || 0) * 16;
+    const nodeGroup = svgElement("g", {
+      class: `evolution-composite-row evolution-composite-row--${node.nodeKind}`,
+      transform: `translate(${x + indent} ${rowY})`,
+      "data-composite-entity-id": node.id,
+    });
+    const hasChildren = (node.childIds || []).length > 0;
+    if (hasChildren) {
+      const expanded = expandedIds instanceof Set
+        ? expandedIds.has(node.id)
+        : expandedIds.includes?.(node.id);
+      const toggle = svgElement("g", {
+        class: "evolution-composite-toggle",
+        transform: "translate(5 0)",
+      });
+      toggle.appendChild(svgElement("circle", {
+        cx: 0,
+        cy: 0,
+        r: 5.5,
+        fill: COLORS.paper,
+        stroke: COLORS.line,
+        "stroke-width": 0.7,
+      }));
+      toggle.appendChild(svgElement("path", {
+        d: expanded ? "M-2.5 0H2.5" : "M-2.5 0H2.5M0-2.5V2.5",
+        stroke: COLORS.line,
+        "stroke-width": 0.85,
+        "stroke-linecap": "round",
+      }));
+      makeInteractive(toggle, `${expanded ? "收起" : "展开"}${node.title}`, () => (
+        options.handlers.onCompositeToggle?.(node.id)
+      ));
+      nodeGroup.appendChild(toggle);
+    }
+    const glyph = appendIdentityGlyph(nodeGroup, node.type, {
+      height: 20,
+      centerX: hasChildren ? 23 : 7,
+      y: -10,
+      selected: node.id === options.activeEntityId,
+    });
+    appendText(nodeGroup, node.title || `#${node.id}`, {
+      x: (hasChildren ? 38 : 22) + glyph.width / 3,
+      y: 4,
+      class: "evolution-composite-title",
+    });
+    const changeCount = (node.changeIds || []).length;
+    if (changeCount) {
+      appendText(nodeGroup, String(changeCount), {
+        x: 386 - indent,
+        y: 4,
+        class: "evolution-composite-count",
+        "text-anchor": "end",
+      });
+    }
+    addTitle(nodeGroup, `${node.title}（${node.type}，${changeCount}项变化）`);
+    makeInteractive(nodeGroup, `选择${node.title}`, () => options.handlers.onSelectEntity?.(node.id));
+    group.appendChild(nodeGroup);
+  });
+  if (nodes.length > maxRows) {
+    appendText(group, `还有${nodes.length - maxRows}个已展开对象`, {
+      x: 475,
+      y: top + 34 + maxRows * rowHeight,
+      class: "evolution-composite-overflow",
+      "text-anchor": "end",
+    });
+  }
+  const categorySummary = (model.categories || [])
+    .filter((category) => category.count > 0)
+    .map((category) => `${category.label}${category.count}`)
+    .join(" · ");
+  if (categorySummary) {
+    appendText(group, categorySummary, {
+      x,
+      y: top + 34 + Math.min(nodes.length, maxRows) * rowHeight + 17,
+      class: "evolution-composite-categories",
+    });
+  }
+  parent.appendChild(group);
 }
 
 function renderAxis(parent, layout, selectedRange, selectionActive, selectedItem, entryContext) {
@@ -1915,6 +2028,7 @@ export function renderEvolutionOverlay(svg, options) {
   const layer = svgElement("g", { class: "dynamic-evolution-layer" });
   layer.style.pointerEvents = "none";
   renderSelector(layer, options);
+  renderCompositeScope(layer, options);
   renderSelectedActions(layer, options);
   renderMain(layer, options.layout, options);
   svg.appendChild(layer);

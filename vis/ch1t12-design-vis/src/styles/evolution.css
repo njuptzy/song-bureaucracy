@@ -50,6 +50,42 @@
   dominant-baseline: central;
 }
 
+.dynamic-evolution-layer .evolution-composite-scope {
+  pointer-events: none;
+}
+
+.dynamic-evolution-layer .evolution-composite-summary,
+.dynamic-evolution-layer .evolution-composite-count,
+.dynamic-evolution-layer .evolution-composite-categories,
+.dynamic-evolution-layer .evolution-composite-overflow {
+  fill: #756156;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, "Songti SC", serif;
+  font-size: 10px;
+}
+
+.dynamic-evolution-layer .evolution-composite-row {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-row:hover,
+.dynamic-evolution-layer .evolution-composite-row:focus-within {
+  fill: #866d6d;
+}
+
+.dynamic-evolution-layer .evolution-composite-row--official .evolution-composite-title {
+  fill: #563905;
+}
+
+.dynamic-evolution-layer .evolution-composite-title {
+  font-size: 12px;
+  dominant-baseline: central;
+}
+
+.dynamic-evolution-layer .evolution-composite-toggle {
+  pointer-events: all;
+  cursor: pointer;
+}
+
 .dynamic-evolution-layer .evolution-view-heading {
   font-size: 27px;
   font-weight: 500;
