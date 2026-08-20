@@ -503,11 +503,13 @@ function renderCompositeScope(parent, options) {
   if (!model?.root) return;
   const group = svgElement("g", { class: "evolution-composite-scope" });
   const x = 82;
-  const top = 500;
+  // The detail panel occupies y=497.57 onward. Keep this compact scope
+  // navigator in the free band above it so the two layers never overlap.
+  const top = 182;
   appendText(group, "综合对象", {
     x,
     y: top,
-    class: "evolution-section-heading",
+    class: "evolution-composite-heading",
   });
   appendText(group, `${model.nodes.length}个对象 · ${model.changes.length}项变化`, {
     x: 475,
@@ -526,8 +528,8 @@ function renderCompositeScope(parent, options) {
 
   const expandedIds = options.compositeExpandedEntityIds || [];
   const nodes = visibleCompositeNodes(model, expandedIds);
-  const rowHeight = 26;
-  const maxRows = 10;
+  const rowHeight = 23;
+  const maxRows = 3;
   nodes.slice(0, maxRows).forEach((node, index) => {
     const rowY = top + 34 + index * rowHeight;
     const indent = Math.min(7, node.depth || 0) * 16;
@@ -594,17 +596,6 @@ function renderCompositeScope(parent, options) {
       y: top + 34 + maxRows * rowHeight,
       class: "evolution-composite-overflow",
       "text-anchor": "end",
-    });
-  }
-  const categorySummary = (model.categories || [])
-    .filter((category) => category.count > 0)
-    .map((category) => `${category.label}${category.count}`)
-    .join(" · ");
-  if (categorySummary) {
-    appendText(group, categorySummary, {
-      x,
-      y: top + 34 + Math.min(nodes.length, maxRows) * rowHeight + 17,
-      class: "evolution-composite-categories",
     });
   }
   parent.appendChild(group);
