@@ -503,9 +503,9 @@ function renderCompositeScope(parent, options) {
   if (!model?.root) return;
   const group = svgElement("g", { class: "evolution-composite-scope" });
   const x = 82;
-  // The detail panel occupies y=497.57 onward. Keep this compact scope
-  // navigator in the free band above it so the two layers never overlap.
-  const top = 182;
+  // Evolution mode replaces the original introduction copy in y=147..287.
+  // Keep the scope navigator wholly inside that dedicated source region.
+  const top = 160;
   appendText(group, "综合对象", {
     x,
     y: top,
@@ -529,7 +529,7 @@ function renderCompositeScope(parent, options) {
   const expandedIds = options.compositeExpandedEntityIds || [];
   const nodes = visibleCompositeNodes(model, expandedIds);
   const rowHeight = 23;
-  const maxRows = 3;
+  const maxRows = 4;
   nodes.slice(0, maxRows).forEach((node, index) => {
     const rowY = top + 34 + index * rowHeight;
     const indent = Math.min(7, node.depth || 0) * 16;

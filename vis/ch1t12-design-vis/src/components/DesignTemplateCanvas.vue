@@ -3137,6 +3137,7 @@ function hideEvolutionExamples(svg) {
     if (["defs", "style", "image"].includes(element.tagName.toLowerCase())) return;
     if (normalizeText(element).startsWith("宋朝的职官体系是自秦朝以来")) {
       element.classList.add("evolution-intro-copy");
+      element.style.display = "none";
     }
     const point = position(element);
     const bounds = elementBounds(element);
