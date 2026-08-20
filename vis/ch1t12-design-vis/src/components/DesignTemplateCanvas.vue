@@ -182,6 +182,7 @@ const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
   : 1);
 const evolutionSearchOpen = ref(false);
 const compositeExpandedEntityIds = ref(new Set());
+const compositeScopeScrollOffset = ref(0);
 const comparisonPaneOffsets = ref({
   hierarchy: {
     x: Number(initialState.comparisonPaneOffsets?.hierarchy?.x) || 0,
@@ -3487,6 +3488,7 @@ function renderDynamicEvolution(svg) {
     compositeExpandedEntityIds.value = compositeFocusId == null
       ? new Set()
       : new Set([compositeFocusId]);
+    compositeScopeScrollOffset.value = 0;
   }
   const windowedModel = windowEvolutionModel(evolutionModelCache, evolutionLanePage.value, 8);
   if (windowedModel.laneWindow.page !== evolutionLanePage.value) {
@@ -3570,6 +3572,9 @@ function renderDynamicEvolution(svg) {
       compositeExpandedEntityIds.value = next;
       refreshTemplate();
     },
+    onCompositeScroll(offset) {
+      compositeScopeScrollOffset.value = Math.max(0, Number(offset) || 0);
+    },
     onLanePageChange(page) {
       const nextPage = Math.max(1, Math.min(model.laneWindow.pageCount, Math.floor(page)));
       if (nextPage === evolutionLanePage.value) return;
@@ -3640,6 +3645,7 @@ function renderDynamicEvolution(svg) {
     searchOpen: evolutionSearchOpen.value,
     compositeModel: compositeEvolutionModelCache,
     compositeExpandedEntityIds: compositeExpandedEntityIds.value,
+    compositeScrollOffset: compositeScopeScrollOffset.value,
     handlers,
   });
 }

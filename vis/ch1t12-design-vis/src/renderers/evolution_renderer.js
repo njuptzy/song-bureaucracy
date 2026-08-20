@@ -498,21 +498,58 @@ function renderSelector(layer, options) {
   layer.appendChild(group);
 }
 
+export function compositeTreeScrollMetrics(
+  rowCount,
+  rowHeight = 23,
+  viewportHeight = 105,
+  requestedOffset = 0,
+) {
+  const contentHeight = Math.max(0, Number(rowCount) || 0) * rowHeight;
+  const maxScroll = Math.max(0, contentHeight - viewportHeight);
+  const offset = Math.max(0, Math.min(maxScroll, Number(requestedOffset) || 0));
+  const trackHeight = viewportHeight;
+  const thumbHeight = maxScroll > 0
+    ? Math.max(20, trackHeight * viewportHeight / contentHeight)
+    : trackHeight;
+  const thumbTravel = Math.max(0, trackHeight - thumbHeight);
+  return {
+    contentHeight,
+    maxScroll,
+    offset,
+    trackHeight,
+    thumbHeight,
+    thumbTravel,
+    thumbOffset: maxScroll > 0 ? offset / maxScroll * thumbTravel : 0,
+  };
+}
+
 function renderCompositeScope(parent, options) {
   const model = options.compositeModel;
   if (!model?.root) return;
   const group = svgElement("g", { class: "evolution-composite-scope" });
   const x = 82;
-  // Evolution mode replaces the original introduction copy in y=147..287.
-  // Keep the scope navigator wholly inside that dedicated source region.
+  const right = 475;
   const top = 160;
+  const viewportTop = 180;
+  const viewportHeight = 105;
+  const rowHeight = 23;
+  const indentStep = 16;
+  const expandedIds = options.compositeExpandedEntityIds || [];
+  const nodes = visibleCompositeNodes(model, expandedIds);
+  let scroll = compositeTreeScrollMetrics(
+    nodes.length,
+    rowHeight,
+    viewportHeight,
+    options.compositeScrollOffset,
+  );
+
   appendText(group, "综合对象", {
     x,
     y: top,
     class: "evolution-composite-heading",
   });
-  appendText(group, `${model.nodes.length}个对象 · ${model.changes.length}项变化`, {
-    x: 475,
+  appendText(group, `显示${nodes.length}/${model.nodes.length} · ${model.changes.length}项变化`, {
+    x: right,
     y: top,
     class: "evolution-composite-summary",
     "text-anchor": "end",
@@ -520,19 +557,64 @@ function renderCompositeScope(parent, options) {
   group.appendChild(svgElement("line", {
     x1: x,
     y1: top + 12,
-    x2: 475,
+    x2: right,
     y2: top + 12,
     stroke: COLORS.line,
     "stroke-width": 0.82,
   }));
 
-  const expandedIds = options.compositeExpandedEntityIds || [];
-  const nodes = visibleCompositeNodes(model, expandedIds);
-  const rowHeight = 23;
-  const maxRows = 4;
-  nodes.slice(0, maxRows).forEach((node, index) => {
-    const rowY = top + 34 + index * rowHeight;
-    const indent = Math.min(7, node.depth || 0) * 16;
+  const clipId = "evolution-composite-tree-clip";
+  const clip = svgElement("clipPath", {
+    id: clipId,
+    clipPathUnits: "userSpaceOnUse",
+    "data-evolution-def": "composite-tree-clip",
+  });
+  clip.appendChild(svgElement("rect", {
+    x,
+    y: viewportTop,
+    width: right - x - 12,
+    height: viewportHeight,
+  }));
+  group.appendChild(clip);
+
+  const viewport = svgElement("g", {
+    class: "evolution-composite-viewport",
+    "clip-path": `url(#${clipId})`,
+  });
+  group.appendChild(svgElement("rect", {
+    class: "evolution-composite-scroll-surface",
+    x,
+    y: viewportTop,
+    width: right - x - 12,
+    height: viewportHeight,
+    fill: "transparent",
+    "pointer-events": "all",
+  }));
+  const content = svgElement("g", { class: "evolution-composite-content" });
+  const rowIndexById = new Map(nodes.map((node, index) => [node.id, index]));
+  const rowCenter = (index) => viewportTop + rowHeight / 2 + index * rowHeight;
+
+  // Parent-to-child elbow paths make the hierarchy readable before labels are read.
+  nodes.forEach((node, index) => {
+    if (node.parentId == null || !rowIndexById.has(node.parentId)) return;
+    const parentNode = model.nodesById?.get(node.parentId);
+    const parentIndex = rowIndexById.get(node.parentId);
+    if (!parentNode || parentIndex == null) return;
+    const parentX = x + Math.min(7, parentNode.depth || 0) * indentStep + 5;
+    const childX = x + Math.min(7, node.depth || 0) * indentStep + 5;
+    content.appendChild(svgElement("path", {
+      class: "evolution-composite-branch",
+      d: `M${parentX} ${rowCenter(parentIndex)}V${rowCenter(index)}H${childX}`,
+      fill: "none",
+      stroke: COLORS.olive,
+      "stroke-width": 0.75,
+      "pointer-events": "none",
+    }));
+  });
+
+  nodes.forEach((node, index) => {
+    const rowY = rowCenter(index);
+    const indent = Math.min(7, node.depth || 0) * indentStep;
     const nodeGroup = svgElement("g", {
       class: `evolution-composite-row evolution-composite-row--${node.nodeKind}`,
       transform: `translate(${x + indent} ${rowY})`,
@@ -567,20 +649,23 @@ function renderCompositeScope(parent, options) {
       nodeGroup.appendChild(toggle);
     }
     const glyph = appendIdentityGlyph(nodeGroup, node.type, {
-      height: 20,
-      centerX: hasChildren ? 23 : 7,
-      y: -10,
+      height: 18,
+      centerX: 23,
+      y: -9,
       selected: node.id === options.activeEntityId,
     });
-    appendText(nodeGroup, node.title || `#${node.id}`, {
-      x: (hasChildren ? 38 : 22) + glyph.width / 3,
+    const titleX = 38 + glyph.width / 3;
+    const countX = right - x - indent - 18;
+    const maxChars = Math.max(4, Math.floor((countX - titleX - 18) / 11));
+    appendText(nodeGroup, shortened(node.title || `#${node.id}`, maxChars), {
+      x: titleX,
       y: 4,
       class: "evolution-composite-title",
     });
     const changeCount = (node.changeIds || []).length;
     if (changeCount) {
       appendText(nodeGroup, String(changeCount), {
-        x: 386 - indent,
+        x: countX,
         y: 4,
         class: "evolution-composite-count",
         "text-anchor": "end",
@@ -588,16 +673,110 @@ function renderCompositeScope(parent, options) {
     }
     addTitle(nodeGroup, `${node.title}（${node.type}，${changeCount}项变化）`);
     makeInteractive(nodeGroup, `选择${node.title}`, () => options.handlers.onSelectEntity?.(node.id));
-    group.appendChild(nodeGroup);
+    content.appendChild(nodeGroup);
   });
-  if (nodes.length > maxRows) {
-    appendText(group, `还有${nodes.length - maxRows}个已展开对象`, {
-      x: 475,
-      y: top + 34 + maxRows * rowHeight,
-      class: "evolution-composite-overflow",
-      "text-anchor": "end",
+  viewport.appendChild(content);
+  group.appendChild(viewport);
+
+  const trackX = right - 4;
+  const track = svgElement("rect", {
+    class: "evolution-composite-scroll-track",
+    x: trackX,
+    y: viewportTop,
+    width: 1.5,
+    height: viewportHeight,
+    rx: 0.75,
+  });
+  const thumb = svgElement("rect", {
+    class: "evolution-composite-scroll-thumb",
+    x: trackX - 1,
+    y: viewportTop + scroll.thumbOffset,
+    width: 3.5,
+    height: scroll.thumbHeight,
+    rx: 1.75,
+    role: "scrollbar",
+    tabindex: "0",
+    "aria-label": "滚动综合对象树",
+    "aria-valuemin": "0",
+    "aria-valuemax": String(scroll.maxScroll),
+    "aria-valuenow": String(scroll.offset),
+  });
+  const applyScroll = (nextOffset) => {
+    scroll = compositeTreeScrollMetrics(nodes.length, rowHeight, viewportHeight, nextOffset);
+    content.setAttribute("transform", `translate(0 ${-scroll.offset})`);
+    thumb.setAttribute("y", String(viewportTop + scroll.thumbOffset));
+    thumb.setAttribute("aria-valuemax", String(scroll.maxScroll));
+    thumb.setAttribute("aria-valuenow", String(scroll.offset));
+    options.handlers.onCompositeScroll?.(scroll.offset);
+  };
+  applyScroll(scroll.offset);
+
+  if (scroll.maxScroll > 0) {
+    const trackHit = svgElement("rect", {
+      class: "evolution-composite-scroll-hit",
+      x: trackX - 6,
+      y: viewportTop,
+      width: 13,
+      height: viewportHeight,
+      fill: "transparent",
+      "pointer-events": "all",
     });
+    trackHit.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = trackHit.getBoundingClientRect();
+      const localY = (event.clientY - bounds.top) / Math.max(1, bounds.height) * viewportHeight;
+      const ratio = Math.max(0, Math.min(1, (localY - scroll.thumbHeight / 2)
+        / Math.max(1, scroll.thumbTravel)));
+      applyScroll(ratio * scroll.maxScroll);
+    });
+    group.append(track, trackHit, thumb);
+
+    let drag = null;
+    thumb.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      drag = { pointerId: event.pointerId, startY: event.clientY, startOffset: scroll.offset };
+      thumb.setPointerCapture?.(event.pointerId);
+    });
+    thumb.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const rect = track.getBoundingClientRect();
+      const svgTravel = (event.clientY - drag.startY) / Math.max(1, rect.height) * viewportHeight;
+      applyScroll(drag.startOffset + svgTravel / Math.max(1, scroll.thumbTravel) * scroll.maxScroll);
+    });
+    const finishDrag = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      thumb.releasePointerCapture?.(event.pointerId);
+      drag = null;
+    };
+    thumb.addEventListener("pointerup", finishDrag);
+    thumb.addEventListener("pointercancel", finishDrag);
+    thumb.addEventListener("keydown", (event) => {
+      const delta = {
+        ArrowUp: -rowHeight,
+        ArrowDown: rowHeight,
+        PageUp: -viewportHeight,
+        PageDown: viewportHeight,
+        Home: -Number.POSITIVE_INFINITY,
+        End: Number.POSITIVE_INFINITY,
+      }[event.key];
+      if (delta === undefined) return;
+      event.preventDefault();
+      event.stopPropagation();
+      applyScroll(Number.isFinite(delta) ? scroll.offset + delta : (delta < 0 ? 0 : scroll.maxScroll));
+    });
+  } else {
+    group.append(track);
   }
+
+  group.style.pointerEvents = "all";
+  group.addEventListener("wheel", (event) => {
+    if (scroll.maxScroll <= 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    applyScroll(scroll.offset + event.deltaY * 0.45);
+  }, { passive: false });
   parent.appendChild(group);
 }
 

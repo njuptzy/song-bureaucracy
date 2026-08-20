@@ -8,6 +8,7 @@ import {
   evolutionLaneIdentityLayout,
   relationPath,
   evolutionLaneTitleMetrics,
+  compositeTreeScrollMetrics,
 } from "../renderers/evolution_renderer.js";
 
 function point(iconType, x, y) {
@@ -69,6 +70,29 @@ describe("evolution identity glyphs", () => {
       assert.equal(glyph.width, lane.width);
       assert.equal(glyph.x, lane.x);
     }
+  });
+});
+
+describe("compositeTreeScrollMetrics", () => {
+  it("内容未溢出时锁定在顶部并占满滚动轨道", () => {
+    assert.deepEqual(compositeTreeScrollMetrics(4, 23, 105, 80), {
+      contentHeight: 92,
+      maxScroll: 0,
+      offset: 0,
+      trackHeight: 105,
+      thumbHeight: 105,
+      thumbTravel: 0,
+      thumbOffset: 0,
+    });
+  });
+
+  it("完整保留所有树行并钳制滚动位置", () => {
+    const metrics = compositeTreeScrollMetrics(36, 23, 105, 9999);
+    assert.equal(metrics.contentHeight, 828);
+    assert.equal(metrics.maxScroll, 723);
+    assert.equal(metrics.offset, 723);
+    assert.equal(metrics.thumbHeight, 20);
+    assert.equal(metrics.thumbOffset, metrics.thumbTravel);
   });
 });
 

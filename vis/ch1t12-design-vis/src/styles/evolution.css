@@ -73,6 +73,11 @@
   pointer-events: all;
 }
 
+.dynamic-evolution-layer .evolution-composite-branch {
+  stroke: #918069;
+  stroke-opacity: 0.72;
+}
+
 .dynamic-evolution-layer .evolution-composite-row:hover,
 .dynamic-evolution-layer .evolution-composite-row:focus-within {
   fill: #866d6d;
@@ -89,6 +94,28 @@
 
 .dynamic-evolution-layer .evolution-composite-toggle {
   pointer-events: all;
+  cursor: pointer;
+}
+
+.dynamic-evolution-layer .evolution-composite-scroll-track {
+  fill: #563905;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.dynamic-evolution-layer .evolution-composite-scroll-thumb {
+  fill: #563905;
+  opacity: 0.62;
+  pointer-events: all;
+  cursor: ns-resize;
+}
+
+.dynamic-evolution-layer .evolution-composite-scroll-thumb:hover,
+.dynamic-evolution-layer .evolution-composite-scroll-thumb:focus-visible {
+  opacity: 0.86;
+}
+
+.dynamic-evolution-layer .evolution-composite-scroll-hit {
   cursor: pointer;
 }
 
