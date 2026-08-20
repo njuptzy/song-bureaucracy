@@ -9,6 +9,7 @@ import {
   relationPath,
   evolutionLaneTitleMetrics,
   compositeTreeScrollMetrics,
+  compositeTreeLayout,
 } from "../renderers/evolution_renderer.js";
 
 function point(iconType, x, y) {
@@ -93,6 +94,28 @@ describe("compositeTreeScrollMetrics", () => {
     assert.equal(metrics.offset, 723);
     assert.equal(metrics.thumbHeight, 20);
     assert.equal(metrics.thumbOffset, metrics.thumbTravel);
+  });
+});
+
+describe("compositeTreeLayout", () => {
+  it("焦点机构位于中央，下属层级向下排布", () => {
+    const layout = compositeTreeLayout([
+      { id: 1, depth: 0 },
+      { id: 2, depth: 1 },
+      { id: 3, depth: 1 },
+      { id: 4, depth: 2 },
+    ], 82, 381, 36, 180);
+    const root = layout.positions.get(1);
+    const leftChild = layout.positions.get(2);
+    const rightChild = layout.positions.get(3);
+    const grandchild = layout.positions.get(4);
+    assert.equal(root.x, 272.5);
+    assert.equal(root.y, 198);
+    assert.ok(leftChild.y > root.y);
+    assert.ok(rightChild.y > root.y);
+    assert.ok(grandchild.y > rightChild.y);
+    assert.ok(leftChild.x < rightChild.x);
+    assert.equal(layout.rowCount, 3);
   });
 });
 

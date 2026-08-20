@@ -523,6 +523,42 @@ export function compositeTreeScrollMetrics(
   };
 }
 
+export function compositeTreeLayout(
+  nodes,
+  viewportX = 82,
+  viewportWidth = 381,
+  rowHeight = 36,
+  viewportTop = 180,
+) {
+  const levels = new Map();
+  for (const node of nodes || []) {
+    const depth = Math.max(0, Number(node.depth) || 0);
+    if (!levels.has(depth)) levels.set(depth, []);
+    levels.get(depth).push(node);
+  }
+  const inset = 28;
+  const left = viewportX + inset;
+  const usableWidth = Math.max(1, viewportWidth - inset * 2);
+  const positions = new Map();
+  const maxDepth = levels.size ? Math.max(...levels.keys()) : 0;
+  for (const [depth, level] of levels) {
+    const gap = usableWidth / (level.length + 1);
+    level.forEach((node, index) => {
+      positions.set(node.id, {
+        x: left + gap * (index + 1),
+        y: viewportTop + rowHeight * depth + rowHeight / 2,
+        depth,
+      });
+    });
+  }
+  return {
+    positions,
+    maxDepth,
+    rowCount: maxDepth + 1,
+    contentHeight: (maxDepth + 1) * rowHeight,
+  };
+}
+
 function renderCompositeScope(parent, options) {
   const model = options.compositeModel;
   if (!model?.root) return;
@@ -532,12 +568,13 @@ function renderCompositeScope(parent, options) {
   const top = 160;
   const viewportTop = 180;
   const viewportHeight = 105;
-  const rowHeight = 23;
-  const indentStep = 16;
+  const rowHeight = 36;
+  const viewportWidth = right - x - 12;
   const expandedIds = options.compositeExpandedEntityIds || [];
   const nodes = visibleCompositeNodes(model, expandedIds);
+  const treeLayout = compositeTreeLayout(nodes, x, viewportWidth, rowHeight, viewportTop);
   let scroll = compositeTreeScrollMetrics(
-    nodes.length,
+    treeLayout.rowCount,
     rowHeight,
     viewportHeight,
     options.compositeScrollOffset,
@@ -572,7 +609,7 @@ function renderCompositeScope(parent, options) {
   clip.appendChild(svgElement("rect", {
     x,
     y: viewportTop,
-    width: right - x - 12,
+    width: viewportWidth,
     height: viewportHeight,
   }));
   group.appendChild(clip);
@@ -591,20 +628,17 @@ function renderCompositeScope(parent, options) {
     "pointer-events": "all",
   }));
   const content = svgElement("g", { class: "evolution-composite-content" });
-  const rowIndexById = new Map(nodes.map((node, index) => [node.id, index]));
-  const rowCenter = (index) => viewportTop + rowHeight / 2 + index * rowHeight;
 
-  // Parent-to-child elbow paths make the hierarchy readable before labels are read.
-  nodes.forEach((node, index) => {
-    if (node.parentId == null || !rowIndexById.has(node.parentId)) return;
+  // Lay the focus institution at the center and place each child level below it.
+  nodes.forEach((node) => {
+    const childPosition = treeLayout.positions.get(node.id);
+    const parentPosition = treeLayout.positions.get(node.parentId);
+    if (node.parentId == null || !parentPosition || !childPosition) return;
     const parentNode = model.nodesById?.get(node.parentId);
-    const parentIndex = rowIndexById.get(node.parentId);
-    if (!parentNode || parentIndex == null) return;
-    const parentX = x + Math.min(7, parentNode.depth || 0) * indentStep + 5;
-    const childX = x + Math.min(7, node.depth || 0) * indentStep + 5;
+    if (!parentNode) return;
     content.appendChild(svgElement("path", {
       class: "evolution-composite-branch",
-      d: `M${parentX} ${rowCenter(parentIndex)}V${rowCenter(index)}H${childX}`,
+      d: `M${parentPosition.x} ${parentPosition.y + 10}V${childPosition.y - 10}H${childPosition.x}`,
       fill: "none",
       stroke: COLORS.olive,
       "stroke-width": 0.75,
@@ -612,12 +646,12 @@ function renderCompositeScope(parent, options) {
     }));
   });
 
-  nodes.forEach((node, index) => {
-    const rowY = rowCenter(index);
-    const indent = Math.min(7, node.depth || 0) * indentStep;
+  nodes.forEach((node) => {
+    const position = treeLayout.positions.get(node.id);
+    if (!position) return;
     const nodeGroup = svgElement("g", {
       class: `evolution-composite-row evolution-composite-row--${node.nodeKind}`,
-      transform: `translate(${x + indent} ${rowY})`,
+      transform: `translate(${position.x} ${position.y})`,
       "data-composite-entity-id": node.id,
     });
     const hasChildren = (node.childIds || []).length > 0;
@@ -627,7 +661,7 @@ function renderCompositeScope(parent, options) {
         : expandedIds.includes?.(node.id);
       const toggle = svgElement("g", {
         class: "evolution-composite-toggle",
-        transform: "translate(5 0)",
+        transform: "translate(-15 0)",
       });
       toggle.appendChild(svgElement("circle", {
         cx: 0,
@@ -650,25 +684,26 @@ function renderCompositeScope(parent, options) {
     }
     const glyph = appendIdentityGlyph(nodeGroup, node.type, {
       height: 18,
-      centerX: 23,
+      centerX: 0,
       y: -9,
       selected: node.id === options.activeEntityId,
     });
-    const titleX = 38 + glyph.width / 3;
-    const countX = right - x - indent - 18;
-    const maxChars = Math.max(4, Math.floor((countX - titleX - 18) / 11));
+    const levelCount = Math.max(1, nodes.filter((candidate) => candidate.depth === node.depth).length);
+    const slotWidth = viewportWidth / levelCount;
+    const maxChars = Math.max(3, Math.floor((slotWidth - 10) / 11));
     appendText(nodeGroup, shortened(node.title || `#${node.id}`, maxChars), {
-      x: titleX,
-      y: 4,
+      x: 0,
+      y: 20,
       class: "evolution-composite-title",
+      "text-anchor": "middle",
     });
     const changeCount = (node.changeIds || []).length;
     if (changeCount) {
       appendText(nodeGroup, String(changeCount), {
-        x: countX,
-        y: 4,
+        x: 0,
+        y: 31,
         class: "evolution-composite-count",
-        "text-anchor": "end",
+        "text-anchor": "middle",
       });
     }
     addTitle(nodeGroup, `${node.title}（${node.type}，${changeCount}项变化）`);
@@ -702,7 +737,7 @@ function renderCompositeScope(parent, options) {
     "aria-valuenow": String(scroll.offset),
   });
   const applyScroll = (nextOffset) => {
-    scroll = compositeTreeScrollMetrics(nodes.length, rowHeight, viewportHeight, nextOffset);
+    scroll = compositeTreeScrollMetrics(treeLayout.rowCount, rowHeight, viewportHeight, nextOffset);
     content.setAttribute("transform", `translate(0 ${-scroll.offset})`);
     thumb.setAttribute("y", String(viewportTop + scroll.thumbOffset));
     thumb.setAttribute("aria-valuemax", String(scroll.maxScroll));
