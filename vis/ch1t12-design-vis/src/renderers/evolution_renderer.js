@@ -530,11 +530,11 @@ function renderCompositeScope(parent, options) {
   const x = 82;
   const right = 475;
   const top = 160;
-  const viewportTop = 180;
+  const viewportTop = 202;
   // The comparison selector is intentionally omitted. Reclaim its former
   // panel so the hierarchy can be read as a complete vertical tree before the
   // evidence/detail region begins below it.
-  const viewportHeight = 300;
+  const viewportHeight = 278;
   const rowHeight = 23;
   const indentStep = 16;
   const expandedIds = options.compositeExpandedEntityIds || [];
@@ -556,6 +556,14 @@ function renderCompositeScope(parent, options) {
     y: top,
     class: "evolution-composite-summary",
     "text-anchor": "end",
+  });
+  const categoryCopy = (model.categories || [])
+    .map((category) => `${category.label}${category.count}`)
+    .join("  ·  ");
+  appendText(group, categoryCopy || "暂无分类变化", {
+    x,
+    y: top + 29,
+    class: "evolution-composite-categories",
   });
   group.appendChild(svgElement("line", {
     x1: x,
