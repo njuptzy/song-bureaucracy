@@ -818,6 +818,15 @@ function renderCompositeScope(parent, options) {
     const staffRowHeight = 23;
     const staffViewportTop = COMPOSITE_SCOPE_LAYOUT.staffViewportTop;
     const staffViewportHeight = COMPOSITE_SCOPE_LAYOUT.staffViewportHeight;
+    let staffScroll = compositeTreeScrollMetrics(
+      rootOfficials.length,
+      staffRowHeight,
+      staffViewportHeight,
+      options.compositeStaffScrollOffset,
+    );
+    const staffRegion = svgElement("g", {
+      class: "evolution-composite-staff-region",
+    });
     const staffClipId = "evolution-composite-staff-clip";
     const staffClip = svgElement("clipPath", {
       id: staffClipId,
@@ -830,10 +839,22 @@ function renderCompositeScope(parent, options) {
       width: right - x - 12,
       height: staffViewportHeight,
     }));
-    group.appendChild(staffClip);
+    staffRegion.appendChild(staffClip);
+    const staffSurface = svgElement("rect", {
+      class: "evolution-composite-staff-scroll-surface",
+      x,
+      y: staffViewportTop,
+      width: right - x - 12,
+      height: staffViewportHeight,
+      fill: "transparent",
+      "pointer-events": "all",
+    });
     const staffViewport = svgElement("g", {
       class: "evolution-composite-staff-viewport",
       "clip-path": `url(#${staffClipId})`,
+    });
+    const staffContent = svgElement("g", {
+      class: "evolution-composite-staff-content",
     });
     rootOfficials.forEach((official, index) => {
       const row = svgElement("g", {
@@ -863,9 +884,126 @@ function renderCompositeScope(parent, options) {
         "text-anchor": "end",
       });
       addTitle(row, `${official.title || "官职"}（${quota}${staffType}）`);
-      staffViewport.appendChild(row);
+      staffContent.appendChild(row);
     });
-    group.appendChild(staffViewport);
+    staffViewport.appendChild(staffContent);
+    staffRegion.append(staffSurface, staffViewport);
+
+    const staffTrackX = right - 4;
+    const staffTrack = svgElement("rect", {
+      class: "evolution-composite-scroll-track evolution-composite-staff-scroll-track",
+      x: staffTrackX,
+      y: staffViewportTop,
+      width: 1.5,
+      height: staffViewportHeight,
+      rx: 0.75,
+    });
+    const staffThumb = svgElement("rect", {
+      class: "evolution-composite-scroll-thumb evolution-composite-staff-scroll-thumb",
+      x: staffTrackX - 1,
+      y: staffViewportTop + staffScroll.thumbOffset,
+      width: 3.5,
+      height: staffScroll.thumbHeight,
+      rx: 1.75,
+      role: "scrollbar",
+      tabindex: "0",
+      "aria-label": "滚动编制列表",
+      "aria-valuemin": "0",
+      "aria-valuemax": String(staffScroll.maxScroll),
+      "aria-valuenow": String(staffScroll.offset),
+    });
+    const applyStaffScroll = (nextOffset) => {
+      staffScroll = compositeTreeScrollMetrics(
+        rootOfficials.length,
+        staffRowHeight,
+        staffViewportHeight,
+        nextOffset,
+      );
+      staffContent.setAttribute("transform", `translate(0 ${-staffScroll.offset})`);
+      staffThumb.setAttribute("y", String(staffViewportTop + staffScroll.thumbOffset));
+      staffThumb.setAttribute("aria-valuemax", String(staffScroll.maxScroll));
+      staffThumb.setAttribute("aria-valuenow", String(staffScroll.offset));
+      options.handlers.onCompositeStaffScroll?.(staffScroll.offset);
+    };
+    applyStaffScroll(staffScroll.offset);
+
+    if (staffScroll.maxScroll > 0) {
+      const staffTrackHit = svgElement("rect", {
+        class: "evolution-composite-scroll-hit evolution-composite-staff-scroll-hit",
+        x: staffTrackX - 6,
+        y: staffViewportTop,
+        width: 13,
+        height: staffViewportHeight,
+        fill: "transparent",
+        "pointer-events": "all",
+      });
+      staffTrackHit.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const bounds = staffTrackHit.getBoundingClientRect();
+        const localY = (event.clientY - bounds.top)
+          / Math.max(1, bounds.height) * staffViewportHeight;
+        const ratio = Math.max(0, Math.min(1, (localY - staffScroll.thumbHeight / 2)
+          / Math.max(1, staffScroll.thumbTravel)));
+        applyStaffScroll(ratio * staffScroll.maxScroll);
+      });
+      staffRegion.append(staffTrack, staffTrackHit, staffThumb);
+
+      let staffDrag = null;
+      staffThumb.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        staffDrag = {
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          startOffset: staffScroll.offset,
+        };
+        staffThumb.setPointerCapture?.(event.pointerId);
+      });
+      staffThumb.addEventListener("pointermove", (event) => {
+        if (!staffDrag || staffDrag.pointerId !== event.pointerId) return;
+        const rect = staffTrack.getBoundingClientRect();
+        const svgTravel = (event.clientY - staffDrag.startY)
+          / Math.max(1, rect.height) * staffViewportHeight;
+        applyStaffScroll(
+          staffDrag.startOffset
+            + svgTravel / Math.max(1, staffScroll.thumbTravel) * staffScroll.maxScroll,
+        );
+      });
+      const finishStaffDrag = (event) => {
+        if (!staffDrag || staffDrag.pointerId !== event.pointerId) return;
+        staffThumb.releasePointerCapture?.(event.pointerId);
+        staffDrag = null;
+      };
+      staffThumb.addEventListener("pointerup", finishStaffDrag);
+      staffThumb.addEventListener("pointercancel", finishStaffDrag);
+      staffThumb.addEventListener("keydown", (event) => {
+        const delta = {
+          ArrowUp: -staffRowHeight,
+          ArrowDown: staffRowHeight,
+          PageUp: -staffViewportHeight,
+          PageDown: staffViewportHeight,
+          Home: -Number.POSITIVE_INFINITY,
+          End: Number.POSITIVE_INFINITY,
+        }[event.key];
+        if (delta === undefined) return;
+        event.preventDefault();
+        event.stopPropagation();
+        applyStaffScroll(Number.isFinite(delta)
+          ? staffScroll.offset + delta
+          : (delta < 0 ? 0 : staffScroll.maxScroll));
+      });
+    } else {
+      staffRegion.append(staffTrack);
+    }
+
+    staffRegion.addEventListener("wheel", (event) => {
+      event.stopPropagation();
+      if (staffScroll.maxScroll <= 0) return;
+      event.preventDefault();
+      applyStaffScroll(staffScroll.offset + event.deltaY * 0.45);
+    }, { passive: false });
+    group.appendChild(staffRegion);
   } else {
     appendText(group, "当前年份未载明确编制", {
       x,

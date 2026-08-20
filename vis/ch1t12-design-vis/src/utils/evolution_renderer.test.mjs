@@ -94,6 +94,15 @@ describe("compositeTreeScrollMetrics", () => {
     assert.equal(metrics.thumbHeight, 20);
     assert.equal(metrics.thumbOffset, metrics.thumbTravel);
   });
+
+  it("编制列表可从首项滚动到第23项", () => {
+    const metrics = compositeTreeScrollMetrics(23, 23, 84, Number.POSITIVE_INFINITY);
+    assert.equal(metrics.contentHeight, 529);
+    assert.equal(metrics.maxScroll, 445);
+    assert.equal(metrics.offset, 445);
+    assert.equal(metrics.thumbHeight, 20);
+    assert.equal(metrics.thumbOffset, metrics.thumbTravel);
+  });
 });
 
 describe("evolution relation endpoints", () => {
