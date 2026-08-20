@@ -546,7 +546,6 @@ function renderCompositeScope(parent, options) {
   const rowHeight = 23;
   const indentStep = 16;
   const expandedIds = options.compositeExpandedEntityIds || [];
-  const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
   const nodes = visibleCompositeNodes(model, expandedIds);
   let scroll = compositeTreeScrollMetrics(
     nodes.length,
@@ -1298,6 +1297,7 @@ function renderCompositeBands(parent, layout, options) {
   const trackX = plot.x + 110;
   const trackRight = plot.right - 12;
   const expandedIds = options.compositeExpandedEntityIds || [];
+  const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
   const selectedId = options.compositeSelectedEvent?.id;
   const scale = (year) => {
     if (year == null || !layout.yearScale) return trackX + 4;
