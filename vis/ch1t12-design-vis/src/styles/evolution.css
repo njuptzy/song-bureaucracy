@@ -433,6 +433,35 @@
   pointer-events: all;
 }
 
+.dynamic-evolution-layer .evolution-composite-event-label-group {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-event-label {
+  fill: #351704;
+  font-size: 10px;
+  dominant-baseline: alphabetic;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: #f5f3ec;
+  stroke-linejoin: round;
+  stroke-width: 2px;
+}
+
+.dynamic-evolution-layer .evolution-composite-event-label-leader {
+  fill: none;
+  opacity: 0.55;
+  stroke-width: 0.7px;
+}
+
+.dynamic-evolution-layer .evolution-composite-event-label-group:hover .evolution-composite-event-label,
+.dynamic-evolution-layer .evolution-composite-event-label-group:focus .evolution-composite-event-label,
+.dynamic-evolution-layer .evolution-composite-event-label-group.is-selected .evolution-composite-event-label {
+  fill: #866d6d;
+  font-weight: 600;
+}
+
 .dynamic-evolution-layer .evolution-composite-event-title {
   fill: #563905;
   font-size: 10px;

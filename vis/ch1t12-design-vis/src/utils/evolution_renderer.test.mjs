@@ -11,6 +11,7 @@ import {
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
   layoutCompositeBandEventRows,
+  layoutCompositeBandLabels,
   compositeSectionLayout,
 } from "../renderers/evolution_renderer.js";
 
@@ -39,6 +40,60 @@ it("圆点不相交的演变事件共用轴线，只有相撞时才下沉回指"
   assert.equal(placements[2].rowIndex, 1);
   assert.equal(placements[0].x, placements[0].anchorX);
   assert.equal(placements[2].x, placements[2].anchorX);
+});
+
+it("信息带标签优先占用圆点旁的空位且不生成引线", () => {
+  const placements = [
+    { event: { displayTitle: "增置官职" }, x: 80, anchorX: 80, rowIndex: 0 },
+    { event: { displayTitle: "员额变化" }, x: 260, anchorX: 260, rowIndex: 0 },
+  ];
+  const labels = layoutCompositeBandLabels(placements, 420, 18, 72);
+
+  assert.ok(labels.every((placement) => placement.label));
+  assert.ok(labels.every((placement) => placement.label.leader === null));
+  assert.ok(labels[0].label.box.right < labels[1].label.box.x);
+});
+
+it("圆点附近放不下标签时移动到空位并用引线连回事件点", () => {
+  const placements = [
+    { event: { displayTitle: "一个很长的编制变化标签" }, x: 45, anchorX: 45, rowIndex: 0 },
+  ];
+  const [placement] = layoutCompositeBandLabels(placements, 90, 18, 44);
+
+  assert.ok(placement.label);
+  assert.ok(placement.label.leader);
+  assert.equal(placement.label.leader.x1, placement.x);
+  assert.equal(placement.label.leader.y1, 0);
+});
+
+it("自动放置的标签始终位于内容宽度内且互不重叠", () => {
+  const placements = Array.from({ length: 8 }, (_, index) => ({
+    event: { displayTitle: `编制事件${index + 1}` },
+    x: 40 + index * 17,
+    anchorX: 40 + index * 17,
+    rowIndex: index % 3,
+  }));
+  const labels = layoutCompositeBandLabels(placements, 240, 18, 72)
+    .map((placement) => placement.label)
+    .filter(Boolean);
+
+  assert.equal(labels.length, placements.length);
+  for (const label of labels) {
+    assert.ok(label.box.x >= 0);
+    assert.ok(label.box.right <= 240);
+    assert.ok(label.box.y >= -8);
+  }
+  for (let index = 0; index < labels.length; index += 1) {
+    for (let compared = index + 1; compared < labels.length; compared += 1) {
+      const first = labels[index].box;
+      const second = labels[compared].box;
+      const overlaps = first.x < second.right + 3
+        && first.right + 3 > second.x
+        && first.y < second.bottom + 3
+        && first.bottom + 3 > second.y;
+      assert.equal(overlaps, false);
+    }
+  }
 });
 
 it("机构主线、机构结构和编制区域严格等高", () => {

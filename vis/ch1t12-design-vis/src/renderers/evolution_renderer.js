@@ -1351,12 +1351,13 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
   });
   const contentHeight = Math.max(
     viewportHeight,
+    placements.length * rowHeight,
     placements.reduce((height, placement) => (
-      Math.max(height, (placement.rowIndex + 1) * rowHeight + 8)
+      Math.max(height, (placement.rowIndex + 1) * rowHeight)
     ), 0),
   );
   const occupiedLabels = [];
-  return placements.map((placement, placementIndex) => {
+  return placements.map((placement) => {
     const text = shortened(placement.event.displayTitle || placement.event.subtype, 12);
     const width = Math.min(Math.max(36, text.length * 10), Math.max(36, viewportWidth - 8));
     const height = 14;
@@ -1369,8 +1370,18 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       { x: placement.x + 12, y: markerY - 25, direct: false, anchor: "start" },
       { x: placement.x - width - 12, y: markerY - 25, direct: false, anchor: "end" },
     ];
-    for (let y = -7; y <= contentHeight - height; y += rowHeight) {
-      for (let x = 4; x <= viewportWidth - width - 4; x += 24) {
+    const scanYs = [];
+    for (let y = -7; y <= contentHeight - height; y += rowHeight) scanYs.push(y);
+    scanYs.sort((first, second) => (
+      Math.abs(first + 7 - markerY) - Math.abs(second + 7 - markerY)
+    ));
+    const scanXs = [];
+    for (let x = 4; x <= viewportWidth - width - 4; x += 24) scanXs.push(x);
+    scanXs.sort((first, second) => (
+      Math.abs(first + width / 2 - placement.x) - Math.abs(second + width / 2 - placement.x)
+    ));
+    for (const y of scanYs) {
+      for (const x of scanXs) {
         candidates.push({ x, y, direct: false, anchor: "start" });
       }
     }
@@ -1384,9 +1395,8 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       if (box.x < 0 || box.right > viewportWidth || box.y < -8 || box.bottom > contentHeight) {
         return false;
       }
-      return markerBoxes.every((markerBox, markerIndex) => (
-        markerIndex === placementIndex || !compositeBoxesOverlap(box, markerBox)
-      )) && occupiedLabels.every((labelBox) => !compositeBoxesOverlap(box, labelBox));
+      return markerBoxes.every((markerBox) => !compositeBoxesOverlap(box, markerBox))
+        && occupiedLabels.every((labelBox) => !compositeBoxesOverlap(box, labelBox));
     });
     const chosen = valid[0];
     if (!chosen) return { ...placement, label: null };
@@ -1439,7 +1449,7 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (guides, content, placement, color, rowHeight, initialOffset) => {
+  const addEvent = (guides, leaders, content, placement, color, rowHeight, initialOffset) => {
     const { event, anchorX, x, rowIndex } = placement;
     // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
     const y = -4 + rowIndex * rowHeight;
@@ -1490,10 +1500,53 @@ function renderCompositeBands(parent, layout, options) {
       options.handlers.onSelectCompositeEvent?.(event)
     ));
     content.appendChild(item);
+    let labelLeader = null;
+    let labelGroup = null;
+    if (placement.label) {
+      const { label } = placement;
+      if (label.leader) {
+        labelLeader = svgElement("line", {
+          class: "evolution-composite-event-label-leader",
+          x1: label.leader.x1,
+          y1: label.leader.y1,
+          x2: label.leader.x2,
+          y2: label.leader.y2,
+          stroke: color,
+          "pointer-events": "none",
+        });
+        leaders.appendChild(labelLeader);
+      }
+      labelGroup = svgElement("g", {
+        class: `evolution-composite-event-label-group${selected ? " is-selected" : ""}`,
+        "data-composite-event-id": event.id,
+      });
+      labelGroup.appendChild(svgElement("rect", {
+        x: label.box.x,
+        y: label.box.y,
+        width: label.box.right - label.box.x,
+        height: label.box.bottom - label.box.y,
+        fill: "transparent",
+        "pointer-events": "all",
+      }));
+      appendText(labelGroup, label.text, {
+        x: label.x,
+        y: label.y,
+        "text-anchor": label.textAnchor,
+        class: "evolution-composite-event-label",
+      });
+      addTitle(labelGroup, [event.eventTime, event.displayTitle, event.displaySummary, event.uncertainty]
+        .filter(Boolean).join(" · "));
+      makeInteractive(labelGroup, `查看${event.displayTitle || "事件"}`, () => (
+        options.handlers.onSelectCompositeEvent?.(event)
+      ));
+      content.appendChild(labelGroup);
+    }
     return {
       guide,
       anchor,
       item,
+      labelGroup,
+      labelLeader,
       markerY: y + 4,
       displaced: rowIndex > 0 || x !== anchorX,
     };
@@ -1539,13 +1592,23 @@ function renderCompositeBands(parent, layout, options) {
     const viewportHeight = Math.max(48, bandHeight - 37);
     const rowHeight = 18;
     const viewportWidth = Math.max(1, trackRight - trackX);
-    const placements = layoutCompositeBandEventRows(
+    const pointPlacements = layoutCompositeBandEventRows(
       events,
       viewportWidth,
       (event) => scale(event.yearStart ?? event.yearEnd) - trackX,
     );
+    const placements = layoutCompositeBandLabels(
+      pointPlacements,
+      viewportWidth,
+      rowHeight,
+      viewportHeight,
+    );
     const rowCount = placements.reduce(
-      (count, placement) => Math.max(count, placement.rowIndex + 1),
+      (count, placement) => Math.max(
+        count,
+        placement.rowIndex + 1,
+        Math.ceil((placement.label?.box?.bottom || 0) / rowHeight),
+      ),
       0,
     );
     const scroll = compositeTreeScrollMetrics(
@@ -1605,14 +1668,18 @@ function renderCompositeBands(parent, layout, options) {
         transform: `translate(0 ${-scroll.offset})`,
       });
       const guides = svgElement("g", { class: "evolution-composite-band-guides" });
+      const leaders = svgElement("g", { class: "evolution-composite-band-label-leaders" });
+      const items = svgElement("g", { class: "evolution-composite-band-items" });
       const eventLayouts = placements.map((placement) => addEvent(
         guides,
-        content,
+        leaders,
+        items,
         placement,
         meta.color,
         rowHeight,
         scroll.offset,
       ));
+      content.append(leaders, items);
       viewport.appendChild(guides);
       viewport.appendChild(content);
       bandGroup.appendChild(viewport);
@@ -1649,13 +1716,23 @@ function renderCompositeBands(parent, layout, options) {
           nextOffset,
         );
         content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
-        eventLayouts.forEach(({ guide, anchor, item, markerY, displaced }) => {
+        eventLayouts.forEach(({
+          guide,
+          anchor,
+          item,
+          labelGroup,
+          labelLeader,
+          markerY,
+          displaced,
+        }) => {
           const rowTop = markerY - 8 - currentScroll.offset;
           const rowBottom = markerY + 8 - currentScroll.offset;
           const visible = rowBottom >= 0 && rowTop <= viewportHeight;
           guide.style.display = visible && displaced ? "" : "none";
           anchor.style.display = visible && displaced ? "" : "none";
           item.style.display = visible ? "" : "none";
+          if (labelGroup) labelGroup.style.display = visible ? "" : "none";
+          if (labelLeader) labelLeader.style.display = visible ? "" : "none";
           guide.setAttribute("y2", String(markerY - currentScroll.offset));
         });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
