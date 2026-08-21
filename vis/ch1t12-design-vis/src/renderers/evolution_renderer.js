@@ -1819,28 +1819,47 @@ function renderCompositeBands(parent, layout, options) {
   parent.appendChild(group);
 }
 
-export function layoutCompositeMainLaneEvents(events, laneY, axisY, sectionBottom) {
-  const offsets = [...new Set((events || []).map((event) => (
-    Math.round(((event.y ?? laneY) - laneY) * 1000) / 1000
-  )))].sort((first, second) => (
-    Math.abs(first) - Math.abs(second) || first - second
+export function layoutCompositeMainLaneEvents(events, _laneY, axisY, sectionBottom) {
+  const rows = [];
+  const rowByIndex = new Map();
+  const ordered = (events || []).map((event, index) => ({
+    event,
+    index,
+    x: Number.isFinite(event.baseX) ? event.baseX : event.displayX,
+  })).sort((first, second) => (
+    first.x - second.x || first.index - second.index
   ));
-  const rowByOffset = new Map(offsets.map((offset, index) => [offset, index]));
+  for (const item of ordered) {
+    const halfWidth = Math.max(10, evolutionEventIconSize(item.event.iconType) + 3);
+    const interval = [item.x - halfWidth, item.x + halfWidth];
+    let rowIndex = rows.findIndex((occupied) => occupied.every(([left, right]) => (
+      interval[1] + 3 <= left || interval[0] >= right + 3
+    )));
+    if (rowIndex < 0) {
+      rowIndex = rows.length;
+      rows.push([]);
+    }
+    rows[rowIndex].push(interval);
+    rowByIndex.set(item.index, rowIndex);
+  }
   const bottomPadding = 24;
   const availableHeight = Math.max(0, sectionBottom - axisY - bottomPadding);
-  const rowPitch = offsets.length > 1
-    ? Math.min(72, availableHeight / offsets.length)
+  const rowPitch = rows.length > 1
+    ? Math.min(72, availableHeight / rows.length)
     : 0;
-  return (events || []).map((event) => {
-    const offset = Math.round(((event.y ?? laneY) - laneY) * 1000) / 1000;
-    const rowIndex = rowByOffset.get(offset) || 0;
+  return (events || []).map((event, index) => {
+    const rowIndex = rowByIndex.get(index) || 0;
+    const displayX = Number.isFinite(event.baseX) ? event.baseX : event.displayX;
     const y = axisY + rowIndex * rowPitch;
     return {
       ...event,
+      displayX,
       y,
       displayY: y,
       baseY: axisY,
-      displaced: event.displayX !== event.baseX || rowIndex > 0,
+      offsetX: 0,
+      offsetY: y - axisY,
+      displaced: rowIndex > 0,
     };
   });
 }

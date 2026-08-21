@@ -107,9 +107,9 @@ it("机构主线、机构结构和编制区域严格等高", () => {
 it("机构主线碰撞层利用轴线下方空间而不再挤在轴线上下", () => {
   const events = [
     { id: "axis", baseX: 100, displayX: 100, y: 200 },
-    { id: "upper", baseX: 100, displayX: 100, y: 182 },
-    { id: "lower", baseX: 100, displayX: 100, y: 218 },
-    { id: "far", baseX: 100, displayX: 100, y: 164 },
+    { id: "upper", baseX: 100, displayX: 82, y: 182 },
+    { id: "lower", baseX: 100, displayX: 118, y: 218 },
+    { id: "far", baseX: 100, displayX: 64, y: 164 },
   ];
   const result = layoutCompositeMainLaneEvents(events, 200, 80, 220);
 
@@ -119,6 +119,21 @@ it("机构主线碰撞层利用轴线下方空间而不再挤在轴线上下", (
   assert.ok(result.every((event) => event.y <= 196));
   assert.ok(result[3].y - result[0].y > 80);
   assert.ok(result.every((event) => event.displayX === 100));
+  assert.ok(result.every((event) => event.displayX === event.baseX));
+});
+
+it("机构主线只在真实年份相近时换到下一行且回指保持竖直", () => {
+  const events = [
+    { id: "a", baseX: 100, displayX: 82 },
+    { id: "b", baseX: 112, displayX: 130 },
+    { id: "c", baseX: 160, displayX: 142 },
+  ];
+  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220);
+
+  assert.equal(result[0].y, 80);
+  assert.ok(result[1].y > 80);
+  assert.equal(result[2].y, 80);
+  assert.deepEqual(result.map((event) => event.displayX), [100, 112, 160]);
 });
 
 function point(iconType, x, y) {
