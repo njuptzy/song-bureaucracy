@@ -390,6 +390,21 @@
   pointer-events: all;
 }
 
+.dynamic-evolution-layer .evolution-composite-main-lane {
+  pointer-events: all;
+}
+
+.dynamic-evolution-layer .evolution-composite-main-heading {
+  fill: #351704;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dynamic-evolution-layer .evolution-composite-main-title {
+  fill: #563905;
+  font-size: 11px;
+}
+
 .dynamic-evolution-layer .evolution-composite-band-label {
   fill: #351704;
   font-size: 15px;

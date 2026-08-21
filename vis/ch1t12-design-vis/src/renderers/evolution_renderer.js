@@ -1291,8 +1291,9 @@ function renderCompositeBands(parent, layout, options) {
   const model = options.compositeModel;
   if (!plot || !model) return;
   const group = svgElement("g", { class: "evolution-composite-bands" });
-  const startY = plot.y + 52;
-  const bandHeight = Math.min(142, Math.max(110, (plot.height - 82) / 3));
+  // 顶部保留机构演变主线；三条信息带是补充层，不能替换主图。
+  const startY = plot.y + 132;
+  const bandHeight = Math.min(142, Math.max(110, (plot.bottom - startY - 4) / 3));
   const labelX = plot.x;
   const trackX = plot.x + 110;
   const trackRight = plot.right - 12;
@@ -1577,6 +1578,77 @@ function renderCompositeBands(parent, layout, options) {
     }
     group.appendChild(bandGroup);
   });
+  parent.appendChild(group);
+}
+
+function renderCompositeMainLane(parent, layout, options) {
+  const plot = layout?.plotBounds;
+  const lanes = layout?.lanes || [];
+  if (!plot || !lanes.length) return;
+  const focusId = options.activeEntityId ?? options.focusEntities?.[0]?.id;
+  const lane = lanes.find((item) => item.entityId === focusId) || lanes[0];
+  if (!lane) return;
+  const mainY = plot.y + 66;
+  const selected = selectedKey(options.selectedItem);
+  const selectedEventId = selected?.startsWith("timepoint:") ? selected.slice(10) : null;
+  const group = svgElement("g", { class: "evolution-composite-main-lane" });
+
+  appendText(group, "机构演变主线", {
+    x: Math.max(535, plot.x - 126),
+    y: mainY - 18,
+    class: "evolution-composite-main-heading",
+  });
+  appendText(group, shortened(lane.title || "当前机构", 10), {
+    x: Math.max(535, plot.x - 126),
+    y: mainY + 5,
+    class: "evolution-composite-main-title",
+  });
+  group.appendChild(svgElement("line", {
+    x1: plot.x,
+    y1: mainY,
+    x2: plot.right,
+    y2: mainY,
+    stroke: COLORS.olive,
+    "stroke-width": 0.72,
+    "stroke-dasharray": "3 4",
+    opacity: 0.52,
+  }));
+  for (const segment of lane.segments || []) {
+    group.appendChild(svgElement("line", {
+      class: "evolution-lifecycle-segment",
+      x1: segment.startX,
+      y1: mainY,
+      x2: segment.endX,
+      y2: mainY,
+      stroke: COLORS.line,
+      "stroke-width": 2.1,
+    }));
+  }
+
+  const compactEvents = (lane.events || []).map((event) => {
+    const yearToX = (year, fallback) => {
+      if (year == null) return fallback;
+      const [domainStart, domainEnd] = layout.yearScale.domain;
+      const [rangeStart, rangeEnd] = layout.yearScale.range;
+      return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
+        * (rangeEnd - rangeStart);
+    };
+    return {
+      ...event,
+      y: mainY + Math.max(-18, Math.min(18, (event.y ?? lane.y) - lane.y)),
+      baseY: mainY,
+      rangeStartX: yearToX(event.yearStart, event.baseX),
+      rangeEndX: yearToX(event.yearEnd, event.baseX),
+    };
+  });
+  compactEvents.forEach((event) => renderEventStem(group, event, false));
+  compactEvents.forEach((event) => renderEventMark(
+    group,
+    event,
+    String(event.id) === selectedEventId,
+    false,
+    options.handlers,
+  ));
   parent.appendChild(group);
 }
 
@@ -2647,6 +2719,7 @@ function renderMain(layer, layout, options) {
     options.entryContext,
   );
   if (options.compositeModel) {
+    renderCompositeMainLane(group, layout, options);
     renderCompositeBands(group, layout, options);
     renderEvolutionLegend(group, layout);
     layer.appendChild(group);
