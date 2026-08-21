@@ -1585,7 +1585,7 @@ function renderCompositeBands(parent, layout, options) {
       item,
       labelGroup,
       labelLeader,
-      labelBox: label?.box || null,
+      labelBox: placement.label?.box || null,
       markerY: y + 4,
       displaced: rowIndex > 0 || x !== anchorX,
     };

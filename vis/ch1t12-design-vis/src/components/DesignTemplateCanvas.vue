@@ -279,7 +279,13 @@ function requestCompositeEvents(focusEntityId, year) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
     })
+    .catch(() => {
+      compositeEventCache.set(key, { error: true });
+      if (compositeEvolutionModelCacheKey === key) refreshTemplate();
+      return null;
+    })
     .then((result) => {
+      if (!result) return null;
       compositeEventCache.set(key, result);
       if (compositeEvolutionModelCacheKey === key && compositeEvolutionModelCache) {
         compositeEvolutionModelCache.bands = result.bands || compositeEvolutionModelCache.bands;
@@ -292,11 +298,6 @@ function requestCompositeEvents(focusEntityId, year) {
         refreshTemplate();
       }
       return result;
-    })
-    .catch(() => {
-      compositeEventCache.set(key, { error: true });
-      if (compositeEvolutionModelCacheKey === key) refreshTemplate();
-      return null;
     });
   compositeEventCache.set(key, pending);
 }
