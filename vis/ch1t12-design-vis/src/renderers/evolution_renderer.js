@@ -1306,25 +1306,28 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (content, event, index, color, rowHeight) => {
+  const addEvent = (guides, content, event, index, color, rowHeight, initialOffset) => {
     const year = event.yearStart ?? event.yearEnd;
     const x = Math.max(4, Math.min(trackRight - trackX - 4, scale(year) - trackX));
     const y = 13 + index * rowHeight;
     const selected = selectedId === event.id;
+    const guide = svgElement("line", {
+      class: "evolution-composite-event-guide",
+      x1: x,
+      y1: 0,
+      x2: x,
+      y2: y + 4 - initialOffset,
+      stroke: color,
+      "stroke-width": selected ? 1.3 : 0.8,
+      opacity: selected ? 1 : 0.65,
+      "pointer-events": "none",
+    });
+    guides.appendChild(guide);
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
       transform: `translate(${x} ${y})`,
       "data-composite-event-id": event.id,
     });
-    item.appendChild(svgElement("line", {
-      x1: 0,
-      y1: -18,
-      x2: 0,
-      y2: 2,
-      stroke: color,
-      "stroke-width": selected ? 1.3 : 0.8,
-      opacity: selected ? 1 : 0.65,
-    }));
     item.appendChild(svgElement("circle", {
       cx: 0,
       cy: 4,
@@ -1355,6 +1358,7 @@ function renderCompositeBands(parent, layout, options) {
       options.handlers.onSelectCompositeEvent?.(event)
     ));
     content.appendChild(item);
+    return { guide, item, rowY: y };
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
     const bandTop = startY + bandIndex * bandHeight;
@@ -1390,8 +1394,9 @@ function renderCompositeBands(parent, layout, options) {
       opacity: 0.7,
     }));
     const events = bandExpanded ? compositeBandEvents(model, band, expandedIds) : [];
-    const viewportTop = bandTop + 47;
-    const viewportHeight = Math.max(48, bandHeight - 53);
+    // 视口顶边与横向年份轴严格共线，事件引导线才能从轴线出发。
+    const viewportTop = bandTop + 31;
+    const viewportHeight = Math.max(48, bandHeight - 37);
     // 标题和摘要各占一行；行距必须大于两行文字的总高度，
     // 否则相邻事件仍会在同一带内互相覆盖。
     const rowHeight = 44;
@@ -1440,7 +1445,17 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-content",
         transform: `translate(0 ${-scroll.offset})`,
       });
-      events.forEach((event, index) => addEvent(content, event, index, meta.color, rowHeight));
+      const guides = svgElement("g", { class: "evolution-composite-band-guides" });
+      const eventLayouts = events.map((event, index) => addEvent(
+        guides,
+        content,
+        event,
+        index,
+        meta.color,
+        rowHeight,
+        scroll.offset,
+      ));
+      viewport.appendChild(guides);
       viewport.appendChild(content);
       bandGroup.appendChild(viewport);
 
@@ -1476,6 +1491,14 @@ function renderCompositeBands(parent, layout, options) {
           nextOffset,
         );
         content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
+        eventLayouts.forEach(({ guide, item, rowY }) => {
+          const rowTop = rowY - 18 - currentScroll.offset;
+          const rowBottom = rowY + 31 - currentScroll.offset;
+          const visible = rowBottom >= 0 && rowTop <= viewportHeight;
+          guide.style.display = visible ? "" : "none";
+          item.style.display = visible ? "" : "none";
+          guide.setAttribute("y2", String(rowY + 4 - currentScroll.offset));
+        });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
         thumb.setAttribute("aria-valuemax", String(currentScroll.maxScroll));
         thumb.setAttribute("aria-valuenow", String(currentScroll.offset));
