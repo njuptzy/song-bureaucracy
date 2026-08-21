@@ -1819,7 +1819,13 @@ function renderCompositeBands(parent, layout, options) {
   parent.appendChild(group);
 }
 
-export function layoutCompositeMainLaneEvents(events, _laneY, axisY, sectionBottom) {
+export function layoutCompositeMainLaneEvents(
+  events,
+  _laneY,
+  axisY,
+  sectionBottom,
+  sectionTop = axisY,
+) {
   const rows = [];
   const rowByIndex = new Map();
   const ordered = (events || []).map((event, index) => ({
@@ -1843,14 +1849,24 @@ export function layoutCompositeMainLaneEvents(events, _laneY, axisY, sectionBott
     rowByIndex.set(item.index, rowIndex);
   }
   const bottomPadding = 24;
-  const availableHeight = Math.max(0, sectionBottom - axisY - bottomPadding);
-  const rowPitch = rows.length > 1
-    ? Math.min(72, availableHeight / rows.length)
+  const availableAbove = Math.max(0, axisY - sectionTop - 8);
+  const upperGap = Math.min(32, availableAbove);
+  const hasUpperRow = rows.length > 1 && upperGap >= 20;
+  const belowRowCount = Math.max(0, rows.length - 1 - (hasUpperRow ? 1 : 0));
+  const availableBelow = Math.max(0, sectionBottom - axisY - bottomPadding);
+  const belowGap = belowRowCount > 0
+    ? Math.min(64, availableBelow / belowRowCount)
     : 0;
   return (events || []).map((event, index) => {
     const rowIndex = rowByIndex.get(index) || 0;
     const displayX = Number.isFinite(event.baseX) ? event.baseX : event.displayX;
-    const y = axisY + rowIndex * rowPitch;
+    let y = axisY;
+    if (hasUpperRow && rowIndex === 1) {
+      y = axisY - upperGap;
+    } else if (rowIndex > 0) {
+      const belowIndex = rowIndex - (hasUpperRow ? 1 : 0);
+      y = axisY + belowIndex * belowGap;
+    }
     return {
       ...event,
       displayX,
@@ -1915,6 +1931,7 @@ function renderCompositeMainLane(parent, layout, options) {
     lane.y,
     mainY,
     sections.mainTop + sections.sectionHeight,
+    sections.mainTop,
   ).map((event) => {
     const yearToX = (year, fallback) => {
       if (year == null) return fallback;

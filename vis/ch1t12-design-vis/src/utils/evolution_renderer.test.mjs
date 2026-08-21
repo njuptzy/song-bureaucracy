@@ -104,22 +104,24 @@ it("机构主线、机构结构和编制区域严格等高", () => {
   assert.equal(sections.mainTop + sections.sectionHeight * 3, 822);
 });
 
-it("机构主线碰撞层利用轴线下方空间而不再挤在轴线上下", () => {
+it("机构主线在轴线上下分层并保持足够行距", () => {
   const events = [
     { id: "axis", baseX: 100, displayX: 100, y: 200 },
     { id: "upper", baseX: 100, displayX: 82, y: 182 },
     { id: "lower", baseX: 100, displayX: 118, y: 218 },
     { id: "far", baseX: 100, displayX: 64, y: 164 },
   ];
-  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220);
+  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220, 40);
 
   assert.equal(result[0].y, 80);
-  assert.ok(result.slice(1).every((event) => event.y > 80));
+  assert.ok(result[1].y < 80);
+  assert.ok(result.slice(2).every((event) => event.y > 80));
   assert.equal(new Set(result.map((event) => event.y)).size, 4);
   assert.ok(result.every((event) => event.y <= 196));
-  assert.ok(result[3].y - result[0].y > 80);
   assert.ok(result.every((event) => event.displayX === 100));
   assert.ok(result.every((event) => event.displayX === event.baseX));
+  const orderedYs = result.map((event) => event.y).sort((first, second) => first - second);
+  assert.ok(orderedYs.slice(1).every((y, index) => y - orderedYs[index] >= 28));
 });
 
 it("机构主线只在真实年份相近时换到下一行且回指保持竖直", () => {
@@ -128,10 +130,10 @@ it("机构主线只在真实年份相近时换到下一行且回指保持竖直"
     { id: "b", baseX: 112, displayX: 130 },
     { id: "c", baseX: 160, displayX: 142 },
   ];
-  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220);
+  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220, 40);
 
   assert.equal(result[0].y, 80);
-  assert.ok(result[1].y > 80);
+  assert.ok(result[1].y < 80);
   assert.equal(result[2].y, 80);
   assert.deepEqual(result.map((event) => event.displayX), [100, 112, 160]);
 });
