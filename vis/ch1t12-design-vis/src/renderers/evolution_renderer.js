@@ -1359,13 +1359,14 @@ function renderCompositeBands(parent, layout, options) {
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
     const bandTop = startY + bandIndex * bandHeight;
     const bandGroup = svgElement("g", { class: `evolution-composite-band evolution-composite-band-${band}` });
-    appendText(bandGroup, meta.label, {
+    const bandToggle = svgElement("g", { class: "evolution-composite-band-toggle" });
+    appendText(bandToggle, meta.label, {
       x: labelX,
       y: bandTop + 18,
       class: "evolution-composite-band-label",
     });
     const count = compositeBandEvents(model, band, expandedIds).length;
-    appendText(bandGroup, `${count}项`, {
+    appendText(bandToggle, `${count}项`, {
       x: labelX,
       y: bandTop + 36,
       class: "evolution-composite-band-count",
@@ -1374,10 +1375,11 @@ function renderCompositeBands(parent, layout, options) {
       ? expandedBands.has(band)
       : expandedBands.includes?.(band);
     makeInteractive(
-      bandGroup,
+      bandToggle,
       `${bandExpanded ? "收起" : "展开"}${meta.label}`,
       () => options.handlers.onToggleCompositeBand?.(band),
     );
+    bandGroup.appendChild(bandToggle);
     bandGroup.appendChild(svgElement("line", {
       x1: trackX,
       y1: bandTop + 31,
@@ -1428,6 +1430,15 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-viewport",
         "clip-path": `url(#${clipId})`,
       });
+      viewport.appendChild(svgElement("rect", {
+        class: "evolution-composite-band-scroll-surface",
+        x: trackX,
+        y: viewportTop,
+        width: Math.max(1, trackRight - trackX),
+        height: viewportHeight,
+        fill: "transparent",
+        "pointer-events": "all",
+      }));
       const content = svgElement("g", {
         class: "evolution-composite-band-content",
         transform: `translate(0 ${-scroll.offset})`,
