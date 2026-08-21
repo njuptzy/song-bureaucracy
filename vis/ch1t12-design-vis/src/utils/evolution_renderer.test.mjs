@@ -11,6 +11,7 @@ import {
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
   layoutCompositeBandEventRows,
+  compositeSectionLayout,
 } from "../renderers/evolution_renderer.js";
 
 it("三信息带与机构主线共用完全相同的年份横轴", () => {
@@ -36,6 +37,12 @@ it("文字不相交的演变事件共用一行，只有相撞时才下沉", () =
   assert.equal(placements[0].rowIndex, 0);
   assert.equal(placements[1].rowIndex, 0);
   assert.equal(placements[2].rowIndex, 1);
+});
+
+it("机构主线、机构结构和编制区域严格等高", () => {
+  const sections = compositeSectionLayout({ y: 258, height: 568 });
+  assert.equal(sections.bandsTop - sections.mainTop, sections.sectionHeight);
+  assert.equal(sections.mainTop + sections.sectionHeight * 3, 822);
 });
 
 function point(iconType, x, y) {

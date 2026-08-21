@@ -1296,6 +1296,16 @@ export function compositeBandTrackBounds(layout) {
   };
 }
 
+export function compositeSectionLayout(plot) {
+  if (!plot) return null;
+  const sectionHeight = Math.max(110, (plot.height - 4) / 3);
+  return {
+    sectionHeight,
+    mainTop: plot.y,
+    bandsTop: plot.y + sectionHeight,
+  };
+}
+
 export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
   const rows = [];
   return (events || []).map((event, index) => {
@@ -1337,10 +1347,9 @@ function renderCompositeBands(parent, layout, options) {
   const model = options.compositeModel;
   if (!plot || !model) return;
   const group = svgElement("g", { class: "evolution-composite-bands" });
-  // 顶部保留机构演变主线；三条信息带是补充层，不能替换主图。
-  const startY = plot.y + 132;
-  const bandCount = Object.keys(COMPOSITE_BAND_META).length;
-  const bandHeight = Math.max(110, (plot.bottom - startY - 4) / bandCount);
+  const sections = compositeSectionLayout(plot);
+  const startY = sections.bandsTop;
+  const bandHeight = sections.sectionHeight;
   const { labelX, trackX, trackRight } = compositeBandTrackBounds(layout);
   const expandedIds = options.compositeExpandedEntityIds || [];
   const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff"]);
@@ -1654,7 +1663,8 @@ function renderCompositeMainLane(parent, layout, options) {
   const focusId = options.activeEntityId ?? options.focusEntities?.[0]?.id;
   const lane = lanes.find((item) => item.entityId === focusId) || lanes[0];
   if (!lane) return;
-  const mainY = plot.y + 66;
+  const sections = compositeSectionLayout(plot);
+  const mainY = sections.mainTop + 31;
   const { labelX } = compositeBandTrackBounds(layout);
   const selected = selectedKey(options.selectedItem);
   const selectedEventId = selected?.startsWith("timepoint:") ? selected.slice(10) : null;
@@ -1662,7 +1672,7 @@ function renderCompositeMainLane(parent, layout, options) {
 
   appendText(group, "机构演变主线", {
     x: labelX,
-    y: mainY - 18,
+    y: sections.mainTop + 18,
     class: "evolution-composite-main-heading",
   });
   appendText(group, shortened(lane.title || "当前机构", 10), {
