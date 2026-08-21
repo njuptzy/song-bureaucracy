@@ -11,6 +11,7 @@ import {
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
   compositeBandItemVisibility,
+  compositeBandLabelWidth,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
   layoutCompositeMainLaneEvents,
@@ -57,6 +58,37 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
   assert.ok(labels.every((placement) => placement.label.box.x > placement.x));
   assert.ok(labels.every((placement) => placement.label.box.y >= 11));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
+});
+
+it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
+  assert.equal(compositeBandLabelWidth("国子监录编制"), 78);
+  assert.equal(compositeBandLabelWidth("A1编制"), 42);
+});
+
+it("标签会避开其他事件图标的扩大禁入区", () => {
+  const placements = [
+    { event: { displayTitle: "国子监祭酒编制" }, x: 40, anchorX: 40, rowIndex: 1 },
+    { event: { displayTitle: "博士编制" }, x: 130, anchorX: 130, rowIndex: 1 },
+  ];
+  const laidOut = layoutCompositeBandLabels(placements, 280, 18, 100);
+  const markerBoxes = placements.map((placement) => ({
+    x: placement.x - 10,
+    y: placement.rowIndex * 18 - 10,
+    right: placement.x + 10,
+    bottom: placement.rowIndex * 18 + 10,
+  }));
+
+  for (const placement of laidOut) {
+    if (!placement.label) continue;
+    for (const marker of markerBoxes) {
+      const box = placement.label.box;
+      const overlaps = box.x < marker.right + 3
+        && box.right + 3 > marker.x
+        && box.y < marker.bottom + 3
+        && box.bottom + 3 > marker.y;
+      assert.equal(overlaps, false);
+    }
+  }
 });
 
 it("圆点右侧放不下标签时直接隐藏", () => {

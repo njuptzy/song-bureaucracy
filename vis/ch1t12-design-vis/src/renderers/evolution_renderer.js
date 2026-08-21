@@ -1339,16 +1339,22 @@ function compositeBoxesOverlap(first, second, gap = 3) {
     && first.bottom + gap > second.y;
 }
 
+export function compositeBandLabelWidth(text) {
+  return Array.from(String(text || "")).reduce((width, character) => (
+    width + (/^[\x00-\x7F]$/.test(character) ? 6 : 12)
+  ), 6);
+}
+
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const axisClearance = 11;
   const labelHeight = 14;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
-      x: placement.x - 8,
-      y: markerY - 8,
-      right: placement.x + 8,
-      bottom: markerY + 8,
+      x: placement.x - 10,
+      y: markerY - 10,
+      right: placement.x + 10,
+      bottom: markerY + 10,
     };
   });
   const contentHeight = Math.max(
@@ -1359,7 +1365,10 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
   );
   const prepared = placements.map((placement, layoutIndex) => {
     const text = shortened(placement.event.displayTitle || placement.event.subtype, 12);
-    const width = Math.min(Math.max(36, text.length * 10), Math.max(36, viewportWidth - 8));
+    const width = Math.min(
+      Math.max(40, compositeBandLabelWidth(text)),
+      Math.max(40, viewportWidth - 8),
+    );
     const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
     const inlineY = Math.max(axisClearance, markerY - 7);
