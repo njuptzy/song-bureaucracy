@@ -286,6 +286,10 @@ function requestCompositeEvents(focusEntityId, year) {
         compositeEvolutionModelCache.bands = result.bands || compositeEvolutionModelCache.bands;
         compositeEvolutionModelCache.bandEvents = Object.values(compositeEvolutionModelCache.bands)
           .flat();
+        // 新焦点的异步事件到达时必须直接可见。此前整带误触会留下
+        // 折叠状态，造成接口已有几十条记录而画面看似为空。
+        compositeExpandedBands.value = new Set(["institution", "staff", "duty"]);
+        compositeBandScrollOffsets.value = { institution: 0, staff: 0, duty: 0 };
         refreshTemplate();
       }
       return result;
@@ -3544,6 +3548,8 @@ function renderDynamicEvolution(svg) {
       : new Set([compositeFocusId, ...restoredExpanded]);
     compositeScopeScrollOffset.value = 0;
     compositeStaffScrollOffset.value = 0;
+    compositeExpandedBands.value = new Set(["institution", "staff", "duty"]);
+    compositeBandScrollOffsets.value = { institution: 0, staff: 0, duty: 0 };
     compositeSelectedEvent.value = null;
   }
   requestCompositeEvents(compositeFocusId, compositeYear);
