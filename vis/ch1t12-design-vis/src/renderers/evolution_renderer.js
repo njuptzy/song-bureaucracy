@@ -1819,6 +1819,32 @@ function renderCompositeBands(parent, layout, options) {
   parent.appendChild(group);
 }
 
+export function layoutCompositeMainLaneEvents(events, laneY, axisY, sectionBottom) {
+  const offsets = [...new Set((events || []).map((event) => (
+    Math.round(((event.y ?? laneY) - laneY) * 1000) / 1000
+  )))].sort((first, second) => (
+    Math.abs(first) - Math.abs(second) || first - second
+  ));
+  const rowByOffset = new Map(offsets.map((offset, index) => [offset, index]));
+  const bottomPadding = 24;
+  const availableHeight = Math.max(0, sectionBottom - axisY - bottomPadding);
+  const rowPitch = offsets.length > 1
+    ? Math.min(72, availableHeight / offsets.length)
+    : 0;
+  return (events || []).map((event) => {
+    const offset = Math.round(((event.y ?? laneY) - laneY) * 1000) / 1000;
+    const rowIndex = rowByOffset.get(offset) || 0;
+    const y = axisY + rowIndex * rowPitch;
+    return {
+      ...event,
+      y,
+      displayY: y,
+      baseY: axisY,
+      displaced: event.displayX !== event.baseX || rowIndex > 0,
+    };
+  });
+}
+
 function renderCompositeMainLane(parent, layout, options) {
   const plot = layout?.plotBounds;
   const lanes = layout?.lanes || [];
@@ -1865,7 +1891,12 @@ function renderCompositeMainLane(parent, layout, options) {
     }));
   }
 
-  const compactEvents = (lane.events || []).map((event) => {
+  const mainEvents = layoutCompositeMainLaneEvents(
+    lane.events || [],
+    lane.y,
+    mainY,
+    sections.mainTop + sections.sectionHeight,
+  ).map((event) => {
     const yearToX = (year, fallback) => {
       if (year == null) return fallback;
       const [domainStart, domainEnd] = layout.yearScale.domain;
@@ -1875,14 +1906,12 @@ function renderCompositeMainLane(parent, layout, options) {
     };
     return {
       ...event,
-      y: mainY + Math.max(-18, Math.min(18, (event.y ?? lane.y) - lane.y)),
-      baseY: mainY,
       rangeStartX: yearToX(event.yearStart, event.baseX),
       rangeEndX: yearToX(event.yearEnd, event.baseX),
     };
   });
-  compactEvents.forEach((event) => renderEventStem(group, event, false));
-  compactEvents.forEach((event) => renderEventMark(
+  mainEvents.forEach((event) => renderEventStem(group, event, false));
+  mainEvents.forEach((event) => renderEventMark(
     group,
     event,
     String(event.id) === selectedEventId,

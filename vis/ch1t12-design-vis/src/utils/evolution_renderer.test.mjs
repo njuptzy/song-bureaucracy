@@ -12,6 +12,7 @@ import {
   compositeBandTrackBounds,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
+  layoutCompositeMainLaneEvents,
   compositeSectionLayout,
 } from "../renderers/evolution_renderer.js";
 
@@ -101,6 +102,23 @@ it("机构主线、机构结构和编制区域严格等高", () => {
   const sections = compositeSectionLayout({ y: 258, height: 568 });
   assert.equal(sections.bandsTop - sections.mainTop, sections.sectionHeight);
   assert.equal(sections.mainTop + sections.sectionHeight * 3, 822);
+});
+
+it("机构主线碰撞层利用轴线下方空间而不再挤在轴线上下", () => {
+  const events = [
+    { id: "axis", baseX: 100, displayX: 100, y: 200 },
+    { id: "upper", baseX: 100, displayX: 100, y: 182 },
+    { id: "lower", baseX: 100, displayX: 100, y: 218 },
+    { id: "far", baseX: 100, displayX: 100, y: 164 },
+  ];
+  const result = layoutCompositeMainLaneEvents(events, 200, 80, 220);
+
+  assert.equal(result[0].y, 80);
+  assert.ok(result.slice(1).every((event) => event.y > 80));
+  assert.equal(new Set(result.map((event) => event.y)).size, 4);
+  assert.ok(result.every((event) => event.y <= 196));
+  assert.ok(result[3].y - result[0].y > 80);
+  assert.ok(result.every((event) => event.displayX === 100));
 });
 
 function point(iconType, x, y) {
