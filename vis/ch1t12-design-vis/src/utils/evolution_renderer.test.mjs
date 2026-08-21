@@ -10,6 +10,7 @@ import {
   evolutionLaneTitleMetrics,
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
+  layoutCompositeBandEventRows,
 } from "../renderers/evolution_renderer.js";
 
 it("三信息带与机构主线共用完全相同的年份横轴", () => {
@@ -23,6 +24,18 @@ it("三信息带与机构主线共用完全相同的年份横轴", () => {
     trackX: 650,
     trackRight: 1798,
   });
+});
+
+it("文字不相交的演变事件共用一行，只有相撞时才下沉", () => {
+  const events = [
+    { id: "a", displayTitle: "嘉庆院 → 将作监", displaySummary: "前后演变", x: 180 },
+    { id: "b", displayTitle: "少府监 → 将作监", displaySummary: "前后演变", x: 650 },
+    { id: "c", displayTitle: "近邻机构 → 将作监", displaySummary: "前后演变", x: 675 },
+  ];
+  const placements = layoutCompositeBandEventRows(events, 900, (event) => event.x);
+  assert.equal(placements[0].rowIndex, 0);
+  assert.equal(placements[1].rowIndex, 0);
+  assert.equal(placements[2].rowIndex, 1);
 });
 
 function point(iconType, x, y) {

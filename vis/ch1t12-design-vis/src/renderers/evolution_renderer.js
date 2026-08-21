@@ -1297,6 +1297,42 @@ export function compositeBandTrackBounds(layout) {
   };
 }
 
+export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
+  const rows = [];
+  return (events || []).map((event, index) => {
+    const x = Math.max(4, Math.min(viewportWidth - 4, xForEvent(event)));
+    const title = shortened(event.displayTitle || event.subtype, 12);
+    const summary = shortened(event.displaySummary || "", 16);
+    const textWidth = Math.min(
+      Math.max(1, viewportWidth - 8),
+      Math.max(title.length * 10, summary.length * 9, 24),
+    );
+    const textAnchor = x < textWidth / 2 + 6
+      ? "start"
+      : x > viewportWidth - textWidth / 2 - 6
+        ? "end"
+        : "middle";
+    const left = textAnchor === "start" ? x
+      : textAnchor === "end" ? x - textWidth
+        : x - textWidth / 2;
+    const right = textAnchor === "start" ? x + textWidth
+      : textAnchor === "end" ? x
+        : x + textWidth / 2;
+    const interval = [Math.max(0, left - 10), Math.min(viewportWidth, right + 10)];
+    let rowIndex = rows.findIndex((occupied) => (
+      occupied.every(([occupiedLeft, occupiedRight]) => (
+        interval[1] <= occupiedLeft || interval[0] >= occupiedRight
+      ))
+    ));
+    if (rowIndex < 0) {
+      rowIndex = rows.length;
+      rows.push([]);
+    }
+    rows[rowIndex].push(interval);
+    return { event, index, x, rowIndex, textAnchor, title, summary };
+  });
+}
+
 function renderCompositeBands(parent, layout, options) {
   const plot = layout?.plotBounds;
   const model = options.compositeModel;
@@ -1316,10 +1352,9 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (guides, content, event, index, color, rowHeight, initialOffset) => {
-    const year = event.yearStart ?? event.yearEnd;
-    const x = Math.max(4, Math.min(trackRight - trackX - 4, scale(year) - trackX));
-    const y = 13 + index * rowHeight;
+  const addEvent = (guides, content, placement, color, rowHeight, initialOffset) => {
+    const { event, x, rowIndex, textAnchor, title, summary } = placement;
+    const y = 13 + rowIndex * rowHeight;
     const selected = selectedId === event.id;
     const guide = svgElement("line", {
       class: "evolution-composite-event-guide",
@@ -1346,20 +1381,18 @@ function renderCompositeBands(parent, layout, options) {
       stroke: color,
       "stroke-width": selected ? 1.1 : 0.9,
     }));
-    const title = shortened(event.displayTitle || event.subtype, 12);
     appendText(item, title, {
       x: 0,
       y: 19,
       class: "evolution-composite-event-title",
-      "text-anchor": index % 2 ? "end" : "start",
+      "text-anchor": textAnchor,
     });
-    const summary = shortened(event.displaySummary || "", 16);
     if (summary && summary !== title) {
       appendText(item, summary, {
         x: 0,
         y: 31,
         class: "evolution-composite-event-summary",
-        "text-anchor": index % 2 ? "end" : "start",
+        "text-anchor": textAnchor,
       });
     }
     addTitle(item, [event.eventTime, event.displayTitle, event.displaySummary, event.uncertainty]
@@ -1410,8 +1443,18 @@ function renderCompositeBands(parent, layout, options) {
     // 标题和摘要各占一行；行距必须大于两行文字的总高度，
     // 否则相邻事件仍会在同一带内互相覆盖。
     const rowHeight = 44;
+    const viewportWidth = Math.max(1, trackRight - trackX);
+    const placements = layoutCompositeBandEventRows(
+      events,
+      viewportWidth,
+      (event) => scale(event.yearStart ?? event.yearEnd) - trackX,
+    );
+    const rowCount = placements.reduce(
+      (count, placement) => Math.max(count, placement.rowIndex + 1),
+      0,
+    );
     const scroll = compositeTreeScrollMetrics(
-      events.length,
+      rowCount,
       rowHeight,
       viewportHeight,
       options.compositeBandScrollOffsets?.[band],
@@ -1429,7 +1472,6 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-empty",
       });
     } else {
-      const viewportWidth = Math.max(1, trackRight - trackX);
       // 嵌套 SVG 建立独立的局部坐标系，并用自身 viewport 裁剪。
       // 事件不再先按画板全局坐标放置后再套 clipPath，避免在第二、
       // 第三信息带中被错误裁掉，只留下计数和滚动条。
@@ -1456,11 +1498,10 @@ function renderCompositeBands(parent, layout, options) {
         transform: `translate(0 ${-scroll.offset})`,
       });
       const guides = svgElement("g", { class: "evolution-composite-band-guides" });
-      const eventLayouts = events.map((event, index) => addEvent(
+      const eventLayouts = placements.map((placement) => addEvent(
         guides,
         content,
-        event,
-        index,
+        placement,
         meta.color,
         rowHeight,
         scroll.offset,
@@ -1495,7 +1536,7 @@ function renderCompositeBands(parent, layout, options) {
       let currentScroll = scroll;
       const applyBandScroll = (nextOffset) => {
         currentScroll = compositeTreeScrollMetrics(
-          events.length,
+          rowCount,
           rowHeight,
           viewportHeight,
           nextOffset,
