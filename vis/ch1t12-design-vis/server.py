@@ -1033,6 +1033,11 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
         source = endpoint(source_id) if source_id is not None else None
         target = endpoint(target_id) if target_id is not None else None
         relation_type = relation.get("display_relation_type") or relation.get("relation_type") or "前后演变"
+        unclassified_evolution = (
+            relation.get("classification_status") == "unclassified"
+            or "未分类" in relation_type
+        )
+        display_relation_type = "前后演变" if unclassified_evolution else relation_type
         text = relation.get("quotation") or relation_type
         band, subtype = _composite_event_band(
             relation_type,
@@ -1057,12 +1062,15 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 transition_title(source_endpoints, target_endpoints)
                 if band == "institution" else relation_type
             ),
-            "displaySummary": relation_type,
+            "displaySummary": display_relation_type,
             "evidenceKeys": [evidence_key],
             "citations": citations.get(evidence_key, []) if include_details else [],
             "revisionStatus": relation.get("_revision_status") or "",
             "revisionId": relation.get("_revision_original_id"),
-            "uncertainty": "方向未定" if source_id is None or target_id is None else "",
+            "uncertainty": "；".join(filter(None, [
+                "方向未定" if source_id is None or target_id is None else "",
+                "具体类型未定" if unclassified_evolution else "",
+            ])),
         })
 
     # Timepoints supply lifecycle, ordinary duty records and official/rank changes.

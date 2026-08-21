@@ -206,6 +206,8 @@ function buildBandEvents(changes, model) {
       + ` → ${targetEndpoints.map((endpoint) => endpoint.title).join("、") || "去向未定"}`;
     const structuredInstitutionChange = band === "institution"
       && (sourceEndpoints.length || targetEndpoints.length);
+    const relationType = change.relationType || change.categoryLabel || "前后演变";
+    const unclassifiedEvolution = /未分类/.test(relationType);
     return {
       id: change.id,
       band,
@@ -221,14 +223,17 @@ function buildBandEvents(changes, model) {
         ? transitionTitle
         : change.eventText || change.categoryLabel,
       displaySummary: structuredInstitutionChange
-        ? change.relationType || change.categoryLabel || "前后演变"
+        ? unclassifiedEvolution ? "前后演变" : relationType
         : change.uncertain ? "关系端点未完整确定。" : change.eventText || change.categoryLabel,
       evidenceKeys: [...(change.citationKeys || [])],
       citations: [...(change.citations || [])],
       quotation: change.quotation || "",
       revisionStatus: change.revisionStatus || "",
       revisionId: change.revisionOriginalId || null,
-      uncertainty: change.uncertain ? "方向未定" : "",
+      uncertainty: [
+        change.uncertain ? "方向未定" : "",
+        unclassifiedEvolution ? "具体类型未定" : "",
+      ].filter(Boolean).join("；"),
       sourceChange: change,
     };
   });

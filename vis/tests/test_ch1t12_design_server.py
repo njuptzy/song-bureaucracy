@@ -134,7 +134,8 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 event for event in result["bands"]["institution"] if event["id"] == "R31"
             )
             self.assertEqual(institution["displayTitle"], "甲机构 → 丙机构")
-            self.assertEqual(institution["displaySummary"], "前后演变（未分类）")
+            self.assertEqual(institution["displaySummary"], "前后演变")
+            self.assertEqual(institution["uncertainty"], "具体类型未定")
             self.assertNotIn("旧称原文", institution["displaySummary"])
             self.assertEqual(institution["citations"][0]["quotation"], "甲机构旧称原文改为丙机构")
         finally:
