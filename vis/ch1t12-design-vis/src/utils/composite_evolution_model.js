@@ -202,6 +202,10 @@ function buildBandEvents(changes, model) {
     const sourceEndpoints = (change.sourceIds || []).map((id) => endpointPayload(model.entityMap, id));
     const targetEndpoints = (change.targetIds || []).map((id) => endpointPayload(model.entityMap, id));
     const subjectId = change.entityId ?? sourceEndpoints[0]?.entityId ?? targetEndpoints[0]?.entityId ?? null;
+    const transitionTitle = `${sourceEndpoints.map((endpoint) => endpoint.title).join("、") || "来源未定"}`
+      + ` → ${targetEndpoints.map((endpoint) => endpoint.title).join("、") || "去向未定"}`;
+    const structuredInstitutionChange = band === "institution"
+      && (sourceEndpoints.length || targetEndpoints.length);
     return {
       id: change.id,
       band,
@@ -213,8 +217,12 @@ function buildBandEvents(changes, model) {
       yearStart: change.year,
       yearEnd: change.year,
       eventTime: change.eventTime || "",
-      displayTitle: change.eventText || change.categoryLabel,
-      displaySummary: change.uncertain ? "关系端点未完整确定。" : change.eventText || change.categoryLabel,
+      displayTitle: structuredInstitutionChange
+        ? transitionTitle
+        : change.eventText || change.categoryLabel,
+      displaySummary: structuredInstitutionChange
+        ? change.relationType || change.categoryLabel || "前后演变"
+        : change.uncertain ? "关系端点未完整确定。" : change.eventText || change.categoryLabel,
       evidenceKeys: [...(change.citationKeys || [])],
       citations: [...(change.citations || [])],
       quotation: change.quotation || "",

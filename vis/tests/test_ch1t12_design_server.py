@@ -84,6 +84,7 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
             "entities": [
                 {"id": 1, "title": "甲机构", "type": "机构"},
                 {"id": 2, "title": "乙官职", "type": "官职"},
+                {"id": 3, "title": "丙机构", "type": "机构"},
             ],
             "hierarchyEdges": [],
             "staffEdges": [{
@@ -98,12 +99,22 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 "source_time": {"year_start": 1050, "year_end": 1050, "raw_time": "1050年"},
                 "target_time": {"year_start": 1050, "year_end": 1050},
                 "evidence_key": "R30", "quotation": "甲机构移交职掌",
+            }, {
+                "id": 31, "relation_type": "前后演变",
+                "display_relation_type": "前后演变（未分类）",
+                "source": 1, "target": 3,
+                "source_time": {"year_start": 1050, "year_end": 1050, "raw_time": "1050年"},
+                "target_time": {"year_start": 1050, "year_end": 1050},
+                "evidence_key": "R31", "quotation": "甲机构旧称原文改为丙机构",
             }],
             "timepoints": {"1": [{
                 "id": 10, "year_start": 1040, "year_end": 1040,
                 "raw_time": "1040年", "event": "始置甲机构",
             }]},
-            "citations": {"R30": [{"citation": "出处", "quotation": "甲机构移交职掌"}]},
+            "citations": {
+                "R30": [{"citation": "出处", "quotation": "甲机构移交职掌"}],
+                "R31": [{"citation": "出处二", "quotation": "甲机构旧称原文改为丙机构"}],
+            },
         }
         previous = SERVER.build_payload
         SERVER.build_payload = lambda include_details=True: payload
@@ -119,6 +130,13 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
             self.assertEqual(set(result["bands"]), {"institution", "staff", "duty"})
             self.assertEqual(result["bands"]["staff"][0]["displaySummary"], "二员，官")
             self.assertEqual(result["bands"]["duty"][0]["evidenceKeys"], ["R30"])
+            institution = next(
+                event for event in result["bands"]["institution"] if event["id"] == "R31"
+            )
+            self.assertEqual(institution["displayTitle"], "甲机构 → 丙机构")
+            self.assertEqual(institution["displaySummary"], "前后演变（未分类）")
+            self.assertNotIn("旧称原文", institution["displaySummary"])
+            self.assertEqual(institution["citations"][0]["quotation"], "甲机构旧称原文改为丙机构")
         finally:
             connection.close()
             httpd.shutdown()

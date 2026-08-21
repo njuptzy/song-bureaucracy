@@ -1019,6 +1019,11 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
     def add_event(event):
         bands[event["band"]].append(event)
 
+    def transition_title(sources, targets):
+        source_title = "、".join(item["title"] for item in sources) or "来源未定"
+        target_title = "、".join(item["title"] for item in targets) or "去向未定"
+        return f"{source_title} → {target_title}"
+
     # Explicit evolution and duty-transfer relations retain every endpoint.
     for relation in payload.get("changeRelations", []):
         source_id = relation.get("source")
@@ -1035,19 +1040,24 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             (source or {}).get("type", "机构"),
         )
         evidence_key = relation.get("evidence_key") or f"R{relation.get('id')}"
+        source_endpoints = [source] if source else []
+        target_endpoints = [target] if target else []
         add_event({
             "id": f"R{relation.get('id')}",
             "band": band,
             "category": subtype,
             "subtype": relation.get("relation_subtype") or relation_type,
             "subject": source or target,
-            "sourceEndpoints": [source] if source else [],
-            "targetEndpoints": [target] if target else [],
+            "sourceEndpoints": source_endpoints,
+            "targetEndpoints": target_endpoints,
             "yearStart": (relation.get("source_time") or {}).get("year_start"),
             "yearEnd": (relation.get("target_time") or {}).get("year_end"),
             "eventTime": ((relation.get("source_time") or {}).get("raw_time") or ""),
-            "displayTitle": relation_type,
-            "displaySummary": relation.get("quotation") or relation_type,
+            "displayTitle": (
+                transition_title(source_endpoints, target_endpoints)
+                if band == "institution" else relation_type
+            ),
+            "displaySummary": relation_type,
             "evidenceKeys": [evidence_key],
             "citations": citations.get(evidence_key, []) if include_details else [],
             "revisionStatus": relation.get("_revision_status") or "",
