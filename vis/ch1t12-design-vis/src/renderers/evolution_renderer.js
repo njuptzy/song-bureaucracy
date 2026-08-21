@@ -1418,7 +1418,7 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       y: box.y + 11,
       textAnchor: chosen.anchor,
       box,
-      leader: chosen.direct ? null : {
+      leader: {
         x1: item.placement.x,
         y1: item.markerY,
         x2: targetX,

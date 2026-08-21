@@ -43,7 +43,7 @@ it("圆点不相交的演变事件共用轴线，只有相撞时才下沉回指"
   assert.equal(placements[2].x, placements[2].anchorX);
 });
 
-it("信息带标签优先占用圆点旁的空位且不生成引线", () => {
+it("信息带标签即使位于圆点旁也明确画线连接", () => {
   const placements = [
     { event: { displayTitle: "增置官职" }, x: 80, anchorX: 80, rowIndex: 0 },
     { event: { displayTitle: "员额变化" }, x: 260, anchorX: 260, rowIndex: 0 },
@@ -51,7 +51,8 @@ it("信息带标签优先占用圆点旁的空位且不生成引线", () => {
   const labels = layoutCompositeBandLabels(placements, 420, 18, 72);
 
   assert.ok(labels.every((placement) => placement.label));
-  assert.ok(labels.every((placement) => placement.label.leader === null));
+  assert.ok(labels.every((placement) => placement.label.leader));
+  assert.ok(labels.every((placement) => placement.label.leader.x1 === placement.x));
   assert.ok(labels.every((placement) => placement.label.box.y >= 11));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
@@ -81,6 +82,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
 
   assert.ok(labels.length > 0);
   assert.ok(labels.length < placements.length);
+  assert.ok(labels.every((label) => label.leader));
   for (const label of labels) {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
