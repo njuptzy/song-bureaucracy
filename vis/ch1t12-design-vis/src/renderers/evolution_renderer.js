@@ -1306,10 +1306,10 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (content, event, index, viewportTop, color, rowHeight) => {
+  const addEvent = (content, event, index, color, rowHeight) => {
     const year = event.yearStart ?? event.yearEnd;
-    const x = Math.max(trackX + 4, Math.min(trackRight - 4, scale(year)));
-    const y = viewportTop + 13 + index * rowHeight;
+    const x = Math.max(4, Math.min(trackRight - trackX - 4, scale(year) - trackX));
+    const y = 13 + index * rowHeight;
     const selected = selectedId === event.id;
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
@@ -1414,27 +1414,24 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-empty",
       });
     } else {
-      const clipId = `evolution-composite-${band}-clip`;
-      const clip = svgElement("clipPath", {
-        id: clipId,
-        clipPathUnits: "userSpaceOnUse",
-      });
-      clip.appendChild(svgElement("rect", {
+      const viewportWidth = Math.max(1, trackRight - trackX);
+      // 嵌套 SVG 建立独立的局部坐标系，并用自身 viewport 裁剪。
+      // 事件不再先按画板全局坐标放置后再套 clipPath，避免在第二、
+      // 第三信息带中被错误裁掉，只留下计数和滚动条。
+      const viewport = svgElement("svg", {
+        class: "evolution-composite-band-viewport",
         x: trackX,
         y: viewportTop,
-        width: Math.max(1, trackRight - trackX),
+        width: viewportWidth,
         height: viewportHeight,
-      }));
-      bandGroup.appendChild(clip);
-      const viewport = svgElement("g", {
-        class: "evolution-composite-band-viewport",
-        "clip-path": `url(#${clipId})`,
+        viewBox: `0 0 ${viewportWidth} ${viewportHeight}`,
+        overflow: "hidden",
       });
       viewport.appendChild(svgElement("rect", {
         class: "evolution-composite-band-scroll-surface",
-        x: trackX,
-        y: viewportTop,
-        width: Math.max(1, trackRight - trackX),
+        x: 0,
+        y: 0,
+        width: viewportWidth,
         height: viewportHeight,
         fill: "transparent",
         "pointer-events": "all",
@@ -1443,7 +1440,7 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-content",
         transform: `translate(0 ${-scroll.offset})`,
       });
-      events.forEach((event, index) => addEvent(content, event, index, viewportTop, meta.color, rowHeight));
+      events.forEach((event, index) => addEvent(content, event, index, meta.color, rowHeight));
       viewport.appendChild(content);
       bandGroup.appendChild(viewport);
 
