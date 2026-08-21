@@ -1322,17 +1322,11 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
       rows.push([]);
     }
     rows[rowIndex].push(interval);
-    const horizontalStep = rowIndex === 0 ? 0 : Math.ceil(rowIndex / 2) * 10;
-    const horizontalDirection = rowIndex % 2 ? -1 : 1;
-    const displayX = Math.max(4, Math.min(
-      viewportWidth - 4,
-      x + horizontalDirection * horizontalStep,
-    ));
     return {
       event,
       index,
       anchorX: x,
-      x: displayX,
+      x,
       rowIndex,
     };
   });
