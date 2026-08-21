@@ -1144,6 +1144,32 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
     }
 
 
+def get_composite_events_payload(
+    focus_entity_id: int,
+    year: int | None,
+    include_details: bool,
+) -> bytes:
+    fingerprint = _database_fingerprint()
+    cache_key = (int(focus_entity_id), year, bool(include_details))
+    with _cache_lock:
+        if _cache.get("fingerprint") != fingerprint:
+            _cache.clear()
+            _cache["fingerprint"] = fingerprint
+        composite_cache = _cache.setdefault("composite_events", {})
+        if cache_key not in composite_cache:
+            composite_cache[cache_key] = json.dumps(
+                build_composite_events_payload(
+                    int(focus_entity_id), year, bool(include_details)
+                ),
+                ensure_ascii=False,
+            ).encode("utf-8")
+            # Keep recent navigation fast without retaining an unbounded set
+            # of focus/year combinations for the lifetime of the service.
+            while len(composite_cache) > 96:
+                composite_cache.pop(next(iter(composite_cache)))
+        return composite_cache[cache_key]
+
+
 def get_entity_details_payload(entity_id: int) -> bytes:
     fingerprint = _database_fingerprint()
     with _cache_lock:
@@ -1380,9 +1406,11 @@ class Handler(BaseHTTPRequestHandler):
                 year_text = query.get("year", [""])[0]
                 year = int(year_text) if year_text and re.fullmatch(r"-?\d+", year_text) else None
                 include_details = query.get("include_details", ["0"])[0] in {"1", "true", "yes"}
-                self._send_json(
+                self._send(
                     200,
-                    build_composite_events_payload(int(focus_text), year, include_details),
+                    get_composite_events_payload(int(focus_text), year, include_details),
+                    "application/json; charset=utf-8",
+                    cache_control="no-store",
                 )
             except Exception as exc:  # noqa: BLE001
                 self._send_json(404 if isinstance(exc, ValueError) else 500, {"error": str(exc)})

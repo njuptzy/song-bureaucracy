@@ -79,6 +79,28 @@ def normalized_times(connection: sqlite3.Connection) -> dict[int, dict]:
 
 
 class Ch1t12DesignServerContractTest(unittest.TestCase):
+    def test_composite_event_payload_is_cached_by_focus_year_and_detail_mode(self):
+        previous_builder = SERVER.build_composite_events_payload
+        previous_fingerprint = SERVER._database_fingerprint
+        calls = []
+        try:
+            SERVER._cache.clear()
+            SERVER._database_fingerprint = lambda: "stable-test-fingerprint"
+            SERVER.build_composite_events_payload = lambda focus, year, details: (
+                calls.append((focus, year, details))
+                or {"focus": focus, "year": year, "details": details}
+            )
+            first = SERVER.get_composite_events_payload(1, 1050, True)
+            second = SERVER.get_composite_events_payload(1, 1050, True)
+            third = SERVER.get_composite_events_payload(1, 1051, True)
+            self.assertEqual(first, second)
+            self.assertNotEqual(second, third)
+            self.assertEqual(calls, [(1, 1050, True), (1, 1051, True)])
+        finally:
+            SERVER.build_composite_events_payload = previous_builder
+            SERVER._database_fingerprint = previous_fingerprint
+            SERVER._cache.clear()
+
     def test_composite_events_endpoint_returns_three_bands(self):
         payload = {
             "entities": [
