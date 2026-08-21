@@ -1655,17 +1655,18 @@ function renderCompositeMainLane(parent, layout, options) {
   const lane = lanes.find((item) => item.entityId === focusId) || lanes[0];
   if (!lane) return;
   const mainY = plot.y + 66;
+  const { labelX } = compositeBandTrackBounds(layout);
   const selected = selectedKey(options.selectedItem);
   const selectedEventId = selected?.startsWith("timepoint:") ? selected.slice(10) : null;
   const group = svgElement("g", { class: "evolution-composite-main-lane" });
 
   appendText(group, "机构演变主线", {
-    x: Math.max(535, plot.x - 126),
+    x: labelX,
     y: mainY - 18,
     class: "evolution-composite-main-heading",
   });
   appendText(group, shortened(lane.title || "当前机构", 10), {
-    x: Math.max(535, plot.x - 126),
+    x: labelX,
     y: mainY + 5,
     class: "evolution-composite-main-title",
   });
