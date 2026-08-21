@@ -1363,22 +1363,13 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
     const inlineY = Math.max(axisClearance, markerY - 7);
-    const centeredX = Math.max(4, Math.min(
-      viewportWidth - width - 4,
-      placement.x - width / 2,
-    ));
     const nearbyCandidates = [
       { x: placement.x + 12, y: inlineY, direct: true, anchor: "start" },
-      { x: placement.x - width - 12, y: inlineY, direct: true, anchor: "end" },
       { x: placement.x + 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
-      { x: placement.x - width - 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "end" },
-      { x: placement.x + 12, y: markerY - 25, direct: false, anchor: "start" },
-      { x: placement.x - width - 12, y: markerY - 25, direct: false, anchor: "end" },
-      { x: centeredX, y: Math.max(axisClearance, markerY + 14), direct: false, anchor: "start" },
     ];
     const verticalSlots = [];
     for (let y = axisClearance; y + height <= contentHeight; y += labelHeight + 7) {
-      verticalSlots.push(y);
+      if (y + height >= markerY) verticalSlots.push(y);
     }
     verticalSlots.sort((first, second) => (
       Math.abs(first + height / 2 - markerY) - Math.abs(second + height / 2 - markerY)
@@ -1386,11 +1377,12 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     ));
     const candidates = [
       ...nearbyCandidates,
-      ...verticalSlots.flatMap((y) => ([
-        { x: placement.x + 12, y, direct: false, anchor: "start" },
-        { x: placement.x - width - 12, y, direct: false, anchor: "end" },
-        { x: centeredX, y, direct: false, anchor: "start" },
-      ])),
+      ...verticalSlots.map((y) => ({
+        x: placement.x + 12,
+        y,
+        direct: false,
+        anchor: "start",
+      })),
     ];
     const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
@@ -1444,6 +1436,11 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         y1: item.markerY,
         x2: targetX,
         y2: targetY,
+        points: [
+          [item.placement.x, item.markerY],
+          [item.placement.x, targetY],
+          [targetX, targetY],
+        ],
       },
     });
   }
@@ -1543,12 +1540,10 @@ function renderCompositeBands(parent, layout, options) {
     if (placement.label) {
       const { label } = placement;
       if (label.leader) {
-        labelLeader = svgElement("line", {
+        labelLeader = svgElement("polyline", {
           class: "evolution-composite-event-label-leader",
-          x1: label.leader.x1,
-          y1: label.leader.y1,
-          x2: label.leader.x2,
-          y2: label.leader.y2,
+          points: label.leader.points.map((point) => point.join(",")).join(" "),
+          fill: "none",
           stroke: color,
           "pointer-events": "none",
         });

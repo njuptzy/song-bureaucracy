@@ -54,20 +54,18 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
   assert.ok(labels.every((placement) => placement.label));
   assert.ok(labels.every((placement) => placement.label.leader));
   assert.ok(labels.every((placement) => placement.label.leader.x1 === placement.x));
+  assert.ok(labels.every((placement) => placement.label.box.x > placement.x));
   assert.ok(labels.every((placement) => placement.label.box.y >= 11));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
 
-it("圆点附近放不下标签时移动到空位并用引线连回事件点", () => {
+it("圆点右侧放不下标签时直接隐藏", () => {
   const placements = [
     { event: { displayTitle: "一个很长的编制变化标签" }, x: 45, anchorX: 45, rowIndex: 0 },
   ];
   const [placement] = layoutCompositeBandLabels(placements, 90, 18, 44);
 
-  assert.ok(placement.label);
-  assert.ok(placement.label.leader);
-  assert.equal(placement.label.leader.x1, placement.x);
-  assert.equal(placement.label.leader.y1, 0);
+  assert.equal(placement.label, null);
 });
 
 it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
@@ -88,6 +86,14 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
     assert.ok(label.box.y >= 11);
+    assert.equal(label.textAnchor, "start");
+    for (let index = 1; index < label.leader.points.length; index += 1) {
+      const previous = label.leader.points[index - 1];
+      const current = label.leader.points[index];
+      assert.ok(previous[0] === current[0] || previous[1] === current[1]);
+    }
+    assert.ok(label.leader.x2 >= label.leader.x1);
+    assert.ok(label.leader.y2 >= label.leader.y1);
   }
   for (let index = 0; index < labels.length; index += 1) {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
