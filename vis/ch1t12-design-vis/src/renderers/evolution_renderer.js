@@ -1340,6 +1340,7 @@ function compositeBoxesOverlap(first, second, gap = 3) {
 }
 
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
+  const axisClearance = 11;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
@@ -1362,16 +1363,17 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     const width = Math.min(Math.max(36, text.length * 10), Math.max(36, viewportWidth - 8));
     const height = 14;
     const markerY = placement.rowIndex * rowHeight;
+    const inlineY = Math.max(axisClearance, markerY - 7);
     const candidates = [
-      { x: placement.x + 12, y: markerY - 7, direct: true, anchor: "start" },
-      { x: placement.x - width - 12, y: markerY - 7, direct: true, anchor: "end" },
-      { x: placement.x + 12, y: markerY + 11, direct: false, anchor: "start" },
-      { x: placement.x - width - 12, y: markerY + 11, direct: false, anchor: "end" },
+      { x: placement.x + 12, y: inlineY, direct: true, anchor: "start" },
+      { x: placement.x - width - 12, y: inlineY, direct: true, anchor: "end" },
+      { x: placement.x + 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
+      { x: placement.x - width - 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "end" },
       { x: placement.x + 12, y: markerY - 25, direct: false, anchor: "start" },
       { x: placement.x - width - 12, y: markerY - 25, direct: false, anchor: "end" },
     ];
     const scanYs = [];
-    for (let y = -7; y <= contentHeight - height; y += rowHeight) scanYs.push(y);
+    for (let y = axisClearance; y <= contentHeight - height; y += rowHeight) scanYs.push(y);
     scanYs.sort((first, second) => (
       Math.abs(first + 7 - markerY) - Math.abs(second + 7 - markerY)
     ));
@@ -1392,7 +1394,8 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         right: candidate.x + width,
         bottom: candidate.y + height,
       };
-      if (box.x < 0 || box.right > viewportWidth || box.y < -8 || box.bottom > contentHeight) {
+      if (box.x < 0 || box.right > viewportWidth
+        || box.y < axisClearance || box.bottom > contentHeight) {
         return false;
       }
       return markerBoxes.every((markerBox) => !compositeBoxesOverlap(box, markerBox))

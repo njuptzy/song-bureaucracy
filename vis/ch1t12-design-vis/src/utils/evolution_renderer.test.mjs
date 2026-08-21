@@ -51,6 +51,7 @@ it("信息带标签优先占用圆点旁的空位且不生成引线", () => {
 
   assert.ok(labels.every((placement) => placement.label));
   assert.ok(labels.every((placement) => placement.label.leader === null));
+  assert.ok(labels.every((placement) => placement.label.box.y >= 11));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
 
@@ -81,7 +82,7 @@ it("自动放置的标签始终位于内容宽度内且互不重叠", () => {
   for (const label of labels) {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
-    assert.ok(label.box.y >= -8);
+    assert.ok(label.box.y >= 11);
   }
   for (let index = 0; index < labels.length; index += 1) {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
