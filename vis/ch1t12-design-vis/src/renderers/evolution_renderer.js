@@ -1338,7 +1338,22 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
       rows.push([]);
     }
     rows[rowIndex].push(interval);
-    return { event, index, x, rowIndex, textAnchor, title, summary };
+    const horizontalStep = rowIndex === 0 ? 0 : Math.ceil(rowIndex / 2) * 24;
+    const horizontalDirection = rowIndex % 2 ? -1 : 1;
+    const displayX = Math.max(4, Math.min(
+      viewportWidth - 4,
+      x + horizontalDirection * horizontalStep,
+    ));
+    return {
+      event,
+      index,
+      anchorX: x,
+      x: displayX,
+      rowIndex,
+      textAnchor,
+      title,
+      summary,
+    };
   });
 }
 
@@ -1364,12 +1379,13 @@ function renderCompositeBands(parent, layout, options) {
       * (rangeEnd - rangeStart);
   };
   const addEvent = (guides, content, placement, color, rowHeight, initialOffset) => {
-    const { event, x, rowIndex, textAnchor, title, summary } = placement;
-    const y = 13 + rowIndex * rowHeight;
+    const { event, anchorX, x, rowIndex, textAnchor, title, summary } = placement;
+    // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
+    const y = -4 + rowIndex * rowHeight;
     const selected = selectedId === event.id;
     const guide = svgElement("line", {
       class: "evolution-composite-event-guide",
-      x1: x,
+      x1: anchorX,
       y1: 0,
       x2: x,
       y2: y + 4 - initialOffset,
@@ -1378,7 +1394,15 @@ function renderCompositeBands(parent, layout, options) {
       opacity: selected ? 1 : 0.65,
       "pointer-events": "none",
     });
-    guides.appendChild(guide);
+    const anchor = svgElement("circle", {
+      class: "evolution-composite-event-anchor",
+      cx: anchorX,
+      cy: 0,
+      r: 1.55,
+      fill: color,
+      "pointer-events": "none",
+    });
+    guides.append(guide, anchor);
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
       transform: `translate(${x} ${y})`,
@@ -1412,7 +1436,7 @@ function renderCompositeBands(parent, layout, options) {
       options.handlers.onSelectCompositeEvent?.(event)
     ));
     content.appendChild(item);
-    return { guide, item, rowY: y };
+    return { guide, anchor, item, rowY: y, displaced: rowIndex > 0 || x !== anchorX };
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
     const bandTop = startY + bandIndex * bandHeight;
@@ -1567,11 +1591,12 @@ function renderCompositeBands(parent, layout, options) {
           nextOffset,
         );
         content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
-        eventLayouts.forEach(({ guide, item, rowY }) => {
+        eventLayouts.forEach(({ guide, anchor, item, rowY, displaced }) => {
           const rowTop = rowY - 18 - currentScroll.offset;
           const rowBottom = rowY + 31 - currentScroll.offset;
           const visible = rowBottom >= 0 && rowTop <= viewportHeight;
-          guide.style.display = visible ? "" : "none";
+          guide.style.display = visible && displaced ? "" : "none";
+          anchor.style.display = visible && displaced ? "" : "none";
           item.style.display = visible ? "" : "none";
           guide.setAttribute("y2", String(rowY + 4 - currentScroll.offset));
         });

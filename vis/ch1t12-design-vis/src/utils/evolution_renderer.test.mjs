@@ -37,6 +37,8 @@ it("文字不相交的演变事件共用一行，只有相撞时才下沉", () =
   assert.equal(placements[0].rowIndex, 0);
   assert.equal(placements[1].rowIndex, 0);
   assert.equal(placements[2].rowIndex, 1);
+  assert.equal(placements[0].x, placements[0].anchorX);
+  assert.notEqual(placements[2].x, placements[2].anchorX);
 });
 
 it("机构主线、机构结构和编制区域严格等高", () => {
