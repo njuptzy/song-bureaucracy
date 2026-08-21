@@ -1348,6 +1348,8 @@ export function compositeBandLabelWidth(text) {
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const axisClearance = 11;
   const labelHeight = 14;
+  const labelOffsetX = 15;
+  const maxLeaderDrop = 28;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
@@ -1373,8 +1375,8 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     const markerY = placement.rowIndex * rowHeight;
     const inlineY = Math.max(axisClearance, markerY - 7);
     const nearbyCandidates = [
-      { x: placement.x + 12, y: inlineY, direct: true, anchor: "start" },
-      { x: placement.x + 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
+      { x: placement.x + labelOffsetX, y: inlineY, direct: true, anchor: "start" },
+      { x: placement.x + labelOffsetX, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
     ];
     const verticalSlots = [];
     for (let y = axisClearance; y + height <= contentHeight; y += labelHeight + 7) {
@@ -1387,7 +1389,7 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     const candidates = [
       ...nearbyCandidates,
       ...verticalSlots.map((y) => ({
-        x: placement.x + 12,
+        x: placement.x + labelOffsetX,
         y,
         direct: false,
         anchor: "start",
@@ -1408,6 +1410,8 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         || box.y < axisClearance || box.bottom > contentHeight) {
         return null;
       }
+      const attachmentY = Math.max(box.y, Math.min(box.bottom, markerY));
+      if (attachmentY - markerY > maxLeaderDrop) return null;
       return markerBoxes.every((markerBox) => !compositeBoxesOverlap(box, markerBox))
         ? { ...candidate, box }
         : null;
@@ -1422,14 +1426,12 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     || first.placement.x - second.placement.x
     || first.layoutIndex - second.layoutIndex
   ));
-  for (const item of prepared) {
-    const chosen = item.validCandidates.find(({ box }) => (
-      occupiedLabels.every((labelBox) => !compositeBoxesOverlap(box, labelBox, 7))
+  const placeLabel = (item, candidateFilter) => {
+    const chosen = item.validCandidates.find((candidate) => (
+      candidateFilter(candidate)
+      && occupiedLabels.every((labelBox) => !compositeBoxesOverlap(candidate.box, labelBox, 7))
     ));
-    if (!chosen) {
-      labelByIndex.set(item.layoutIndex, null);
-      continue;
-    }
+    if (!chosen) return false;
     const { box } = chosen;
     occupiedLabels.push(box);
     const targetX = Math.max(box.x, Math.min(box.right, item.placement.x));
@@ -1452,6 +1454,15 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         ],
       },
     });
+    return true;
+  };
+  for (const item of prepared) {
+    placeLabel(item, (candidate) => candidate.direct === true);
+  }
+  for (const item of prepared) {
+    if (labelByIndex.has(item.layoutIndex)) continue;
+    const placed = placeLabel(item, (candidate) => candidate.direct !== true);
+    if (!placed) labelByIndex.set(item.layoutIndex, null);
   }
   return placements.map((placement, index) => ({
     ...placement,

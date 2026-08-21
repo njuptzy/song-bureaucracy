@@ -60,6 +60,19 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
 
+it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {
+  const [placement] = layoutCompositeBandLabels([{
+    event: { displayTitle: "国子监丞编制" },
+    x: 80,
+    anchorX: 80,
+    rowIndex: 2,
+  }], 320, 18, 100);
+
+  assert.ok(placement.label);
+  assert.equal(placement.label.leader.y2, placement.label.leader.y1);
+  assert.equal(placement.label.box.x, placement.x + 15);
+});
+
 it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
   assert.equal(compositeBandLabelWidth("国子监录编制"), 78);
   assert.equal(compositeBandLabelWidth("A1编制"), 42);
@@ -126,6 +139,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
     }
     assert.ok(label.leader.x2 >= label.leader.x1);
     assert.ok(label.leader.y2 >= label.leader.y1);
+    assert.ok(label.leader.y2 - label.leader.y1 <= 28);
   }
   for (let index = 0; index < labels.length; index += 1) {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
@@ -140,7 +154,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
   }
 });
 
-it("编制标签会继续使用信息带下半部的空位", () => {
+it("编制标签只使用事件点附近的下方空位", () => {
   const placements = Array.from({ length: 5 }, (_, index) => ({
     event: { displayTitle: `密集编制变化${index + 1}` },
     x: 100 + index * 4,
@@ -151,8 +165,9 @@ it("编制标签会继续使用信息带下半部的空位", () => {
     .map((placement) => placement.label)
     .filter(Boolean);
 
-  assert.ok(labels.length >= 3);
-  assert.ok(labels.some((label) => label.box.y >= 53));
+  assert.ok(labels.length > 0);
+  assert.ok(labels.length < placements.length);
+  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 28));
 });
 
 it("标签仍在视口时不会随圆点提前隐藏", () => {
