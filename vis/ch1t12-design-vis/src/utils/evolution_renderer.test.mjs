@@ -86,7 +86,22 @@ it("轴线上相邻事件可使用安全的第一排和第二近邻排标签", (
 
   assert.ok(labels.length >= 2);
   assert.ok(labels.every((label) => label.box.y >= 14));
-  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 36));
+  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 40));
+});
+
+it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
+  const placements = Array.from({ length: 6 }, (_, rowIndex) => ({
+    event: { displayTitle: `编制${rowIndex + 1}` },
+    x: 60,
+    anchorX: 60,
+    rowIndex,
+  }));
+  const labels = layoutCompositeBandLabels(placements, 260, 18, 130)
+    .map((placement) => placement.label)
+    .filter(Boolean);
+
+  assert.equal(labels.length, placements.length);
+  assert.ok(labels.every((label) => label.leader.y2 === label.box.y + 7));
 });
 
 it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
@@ -155,16 +170,16 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
     }
     assert.ok(label.leader.x2 >= label.leader.x1);
     assert.ok(label.leader.y2 >= label.leader.y1);
-    assert.ok(label.leader.y2 - label.leader.y1 <= 36);
+    assert.ok(label.leader.y2 - label.leader.y1 <= 40);
   }
   for (let index = 0; index < labels.length; index += 1) {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
       const first = labels[index].box;
       const second = labels[compared].box;
-      const overlaps = first.x < second.right + 7
-        && first.right + 7 > second.x
-        && first.y < second.bottom + 7
-        && first.bottom + 7 > second.y;
+      const overlaps = first.x < second.right + 4
+        && first.right + 4 > second.x
+        && first.y < second.bottom + 4
+        && first.bottom + 4 > second.y;
       assert.equal(overlaps, false);
     }
   }
@@ -183,7 +198,7 @@ it("编制标签只使用事件点附近的下方空位", () => {
 
   assert.ok(labels.length > 0);
   assert.ok(labels.length < placements.length);
-  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 36));
+  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 40));
 });
 
 it("标签仍在视口时不会随圆点提前隐藏", () => {
