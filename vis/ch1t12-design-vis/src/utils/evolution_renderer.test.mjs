@@ -9,7 +9,21 @@ import {
   relationPath,
   evolutionLaneTitleMetrics,
   compositeTreeScrollMetrics,
+  compositeBandTrackBounds,
 } from "../renderers/evolution_renderer.js";
+
+it("三信息带与机构主线共用完全相同的年份横轴", () => {
+  const layout = {
+    bounds: { x: 520 },
+    plotBounds: { x: 650, right: 1798 },
+    yearScale: { range: [650, 1798] },
+  };
+  assert.deepEqual(compositeBandTrackBounds(layout), {
+    labelX: 520,
+    trackX: 650,
+    trackRight: 1798,
+  });
+});
 
 function point(iconType, x, y) {
   return { iconType, timepointId: `${iconType}-${x}-${y}`, x, y };

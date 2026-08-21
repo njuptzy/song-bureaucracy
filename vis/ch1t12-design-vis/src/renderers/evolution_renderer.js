@@ -1286,6 +1286,17 @@ function compositeBandEvents(model, band, expandedIds) {
     .filter((event) => event.band === band && compositeEventVisible(event, visibleIds));
 }
 
+export function compositeBandTrackBounds(layout) {
+  const plot = layout?.plotBounds;
+  if (!plot) return null;
+  const range = layout?.yearScale?.range || [plot.x, plot.right];
+  return {
+    labelX: layout?.bounds?.x ?? plot.x - 126,
+    trackX: range[0],
+    trackRight: range[1],
+  };
+}
+
 function renderCompositeBands(parent, layout, options) {
   const plot = layout?.plotBounds;
   const model = options.compositeModel;
@@ -1294,9 +1305,7 @@ function renderCompositeBands(parent, layout, options) {
   // 顶部保留机构演变主线；三条信息带是补充层，不能替换主图。
   const startY = plot.y + 132;
   const bandHeight = Math.min(142, Math.max(110, (plot.bottom - startY - 4) / 3));
-  const labelX = plot.x;
-  const trackX = plot.x + 110;
-  const trackRight = plot.right - 12;
+  const { labelX, trackX, trackRight } = compositeBandTrackBounds(layout);
   const expandedIds = options.compositeExpandedEntityIds || [];
   const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
   const selectedId = options.compositeSelectedEvent?.id;
