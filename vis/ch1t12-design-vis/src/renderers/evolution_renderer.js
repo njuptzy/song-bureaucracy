@@ -1346,10 +1346,10 @@ export function compositeBandLabelWidth(text) {
 }
 
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
-  const axisClearance = 11;
+  const axisClearance = 14;
   const labelHeight = 14;
   const labelOffsetX = 15;
-  const maxLeaderDrop = 28;
+  const maxLeaderDrop = 36;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {

@@ -56,7 +56,7 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
   assert.ok(labels.every((placement) => placement.label.leader));
   assert.ok(labels.every((placement) => placement.label.leader.x1 === placement.x));
   assert.ok(labels.every((placement) => placement.label.box.x > placement.x));
-  assert.ok(labels.every((placement) => placement.label.box.y >= 11));
+  assert.ok(labels.every((placement) => placement.label.box.y >= 14));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
 
@@ -71,6 +71,22 @@ it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {
   assert.ok(placement.label);
   assert.equal(placement.label.leader.y2, placement.label.leader.y1);
   assert.equal(placement.label.box.x, placement.x + 15);
+});
+
+it("轴线上相邻事件可使用安全的第一排和第二近邻排标签", () => {
+  const placements = [80, 160, 240].map((x, index) => ({
+    event: { displayTitle: `国子监事件${index + 1}` },
+    x,
+    anchorX: x,
+    rowIndex: 0,
+  }));
+  const labels = layoutCompositeBandLabels(placements, 400, 18, 100)
+    .map((placement) => placement.label)
+    .filter(Boolean);
+
+  assert.ok(labels.length >= 2);
+  assert.ok(labels.every((label) => label.box.y >= 14));
+  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 36));
 });
 
 it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
@@ -130,7 +146,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
   for (const label of labels) {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
-    assert.ok(label.box.y >= 11);
+    assert.ok(label.box.y >= 14);
     assert.equal(label.textAnchor, "start");
     for (let index = 1; index < label.leader.points.length; index += 1) {
       const previous = label.leader.points[index - 1];
@@ -139,7 +155,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
     }
     assert.ok(label.leader.x2 >= label.leader.x1);
     assert.ok(label.leader.y2 >= label.leader.y1);
-    assert.ok(label.leader.y2 - label.leader.y1 <= 28);
+    assert.ok(label.leader.y2 - label.leader.y1 <= 36);
   }
   for (let index = 0; index < labels.length; index += 1) {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
@@ -167,7 +183,7 @@ it("编制标签只使用事件点附近的下方空位", () => {
 
   assert.ok(labels.length > 0);
   assert.ok(labels.length < placements.length);
-  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 28));
+  assert.ok(labels.every((label) => label.leader.y2 - label.leader.y1 <= 36));
 });
 
 it("标签仍在视口时不会随圆点提前隐藏", () => {
