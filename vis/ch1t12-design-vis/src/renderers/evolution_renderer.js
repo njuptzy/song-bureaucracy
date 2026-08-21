@@ -1332,6 +1332,92 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
   });
 }
 
+function compositeBoxesOverlap(first, second, gap = 3) {
+  return first.x < second.right + gap
+    && first.right + gap > second.x
+    && first.y < second.bottom + gap
+    && first.bottom + gap > second.y;
+}
+
+export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
+  const markerBoxes = placements.map((placement) => {
+    const markerY = placement.rowIndex * rowHeight;
+    return {
+      x: placement.x - 8,
+      y: markerY - 8,
+      right: placement.x + 8,
+      bottom: markerY + 8,
+    };
+  });
+  const contentHeight = Math.max(
+    viewportHeight,
+    placements.reduce((height, placement) => (
+      Math.max(height, (placement.rowIndex + 1) * rowHeight + 8)
+    ), 0),
+  );
+  const occupiedLabels = [];
+  return placements.map((placement, placementIndex) => {
+    const text = shortened(placement.event.displayTitle || placement.event.subtype, 12);
+    const width = Math.min(Math.max(36, text.length * 10), Math.max(36, viewportWidth - 8));
+    const height = 14;
+    const markerY = placement.rowIndex * rowHeight;
+    const candidates = [
+      { x: placement.x + 12, y: markerY - 7, direct: true, anchor: "start" },
+      { x: placement.x - width - 12, y: markerY - 7, direct: true, anchor: "end" },
+      { x: placement.x + 12, y: markerY + 11, direct: false, anchor: "start" },
+      { x: placement.x - width - 12, y: markerY + 11, direct: false, anchor: "end" },
+      { x: placement.x + 12, y: markerY - 25, direct: false, anchor: "start" },
+      { x: placement.x - width - 12, y: markerY - 25, direct: false, anchor: "end" },
+    ];
+    for (let y = -7; y <= contentHeight - height; y += rowHeight) {
+      for (let x = 4; x <= viewportWidth - width - 4; x += 24) {
+        candidates.push({ x, y, direct: false, anchor: "start" });
+      }
+    }
+    const valid = candidates.filter((candidate) => {
+      const box = {
+        x: candidate.x,
+        y: candidate.y,
+        right: candidate.x + width,
+        bottom: candidate.y + height,
+      };
+      if (box.x < 0 || box.right > viewportWidth || box.y < -8 || box.bottom > contentHeight) {
+        return false;
+      }
+      return markerBoxes.every((markerBox, markerIndex) => (
+        markerIndex === placementIndex || !compositeBoxesOverlap(box, markerBox)
+      )) && occupiedLabels.every((labelBox) => !compositeBoxesOverlap(box, labelBox));
+    });
+    const chosen = valid[0];
+    if (!chosen) return { ...placement, label: null };
+    const box = {
+      x: chosen.x,
+      y: chosen.y,
+      right: chosen.x + width,
+      bottom: chosen.y + height,
+    };
+    occupiedLabels.push(box);
+    const targetX = Math.max(box.x, Math.min(box.right, placement.x));
+    const targetY = Math.max(box.y, Math.min(box.bottom, markerY));
+    return {
+      ...placement,
+      label: {
+        text,
+        x: chosen.anchor === "end" ? box.right : box.x,
+        y: box.y + 11,
+        textAnchor: chosen.anchor,
+        box,
+        leader: chosen.direct ? null : {
+          x1: placement.x,
+          y1: markerY,
+          x2: targetX,
+          y2: targetY,
+        },
+      },
+    };
+  });
+}
+
 function renderCompositeBands(parent, layout, options) {
   const plot = layout?.plotBounds;
   const model = options.compositeModel;
