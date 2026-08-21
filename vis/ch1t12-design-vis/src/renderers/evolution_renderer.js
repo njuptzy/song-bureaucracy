@@ -1310,24 +1310,8 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
   const rows = [];
   return (events || []).map((event, index) => {
     const x = Math.max(4, Math.min(viewportWidth - 4, xForEvent(event)));
-    const title = shortened(event.displayTitle || event.subtype, 12);
-    const summary = shortened(event.displaySummary || "", 16);
-    const textWidth = Math.min(
-      Math.max(1, viewportWidth - 8),
-      Math.max(title.length * 10, summary.length * 9, 24),
-    );
-    const textAnchor = x < textWidth / 2 + 6
-      ? "start"
-      : x > viewportWidth - textWidth / 2 - 6
-        ? "end"
-        : "middle";
-    const left = textAnchor === "start" ? x
-      : textAnchor === "end" ? x - textWidth
-        : x - textWidth / 2;
-    const right = textAnchor === "start" ? x + textWidth
-      : textAnchor === "end" ? x
-        : x + textWidth / 2;
-    const interval = [Math.max(0, left - 10), Math.min(viewportWidth, right + 10)];
+    // 信息带暂不绘制文字，只按圆点和点击热区做碰撞检测。
+    const interval = [Math.max(0, x - 9), Math.min(viewportWidth, x + 9)];
     let rowIndex = rows.findIndex((occupied) => (
       occupied.every(([occupiedLeft, occupiedRight]) => (
         interval[1] <= occupiedLeft || interval[0] >= occupiedRight
@@ -1338,7 +1322,7 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
       rows.push([]);
     }
     rows[rowIndex].push(interval);
-    const horizontalStep = rowIndex === 0 ? 0 : Math.ceil(rowIndex / 2) * 24;
+    const horizontalStep = rowIndex === 0 ? 0 : Math.ceil(rowIndex / 2) * 10;
     const horizontalDirection = rowIndex % 2 ? -1 : 1;
     const displayX = Math.max(4, Math.min(
       viewportWidth - 4,
@@ -1350,9 +1334,6 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
       anchorX: x,
       x: displayX,
       rowIndex,
-      textAnchor,
-      title,
-      summary,
     };
   });
 }
@@ -1379,7 +1360,7 @@ function renderCompositeBands(parent, layout, options) {
       * (rangeEnd - rangeStart);
   };
   const addEvent = (guides, content, placement, color, rowHeight, initialOffset) => {
-    const { event, anchorX, x, rowIndex, textAnchor, title, summary } = placement;
+    const { event, anchorX, x, rowIndex } = placement;
     // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
     const y = -4 + rowIndex * rowHeight;
     const selected = selectedId === event.id;
@@ -1416,27 +1397,26 @@ function renderCompositeBands(parent, layout, options) {
       stroke: color,
       "stroke-width": selected ? 1.1 : 0.9,
     }));
-    appendText(item, title, {
-      x: 0,
-      y: 19,
-      class: "evolution-composite-event-title",
-      "text-anchor": textAnchor,
-    });
-    if (summary && summary !== title) {
-      appendText(item, summary, {
-        x: 0,
-        y: 31,
-        class: "evolution-composite-event-summary",
-        "text-anchor": textAnchor,
-      });
-    }
+    item.appendChild(svgElement("circle", {
+      cx: 0,
+      cy: 4,
+      r: 8,
+      fill: "transparent",
+      "pointer-events": "all",
+    }));
     addTitle(item, [event.eventTime, event.displayTitle, event.displaySummary, event.uncertainty]
       .filter(Boolean).join(" · "));
     makeInteractive(item, `查看${event.displayTitle || "事件"}`, () => (
       options.handlers.onSelectCompositeEvent?.(event)
     ));
     content.appendChild(item);
-    return { guide, anchor, item, rowY: y, displaced: rowIndex > 0 || x !== anchorX };
+    return {
+      guide,
+      anchor,
+      item,
+      markerY: y + 4,
+      displaced: rowIndex > 0 || x !== anchorX,
+    };
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
     const bandTop = startY + bandIndex * bandHeight;
@@ -1477,9 +1457,7 @@ function renderCompositeBands(parent, layout, options) {
     // 视口顶边与横向年份轴严格共线，事件引导线才能从轴线出发。
     const viewportTop = bandTop + 31;
     const viewportHeight = Math.max(48, bandHeight - 37);
-    // 标题和摘要各占一行；行距必须大于两行文字的总高度，
-    // 否则相邻事件仍会在同一带内互相覆盖。
-    const rowHeight = 44;
+    const rowHeight = 18;
     const viewportWidth = Math.max(1, trackRight - trackX);
     const placements = layoutCompositeBandEventRows(
       events,
@@ -1527,18 +1505,18 @@ function renderCompositeBands(parent, layout, options) {
       const viewport = svgElement("svg", {
         class: "evolution-composite-band-viewport",
         x: trackX,
-        y: viewportTop,
+        y: viewportTop - 8,
         width: viewportWidth,
-        height: viewportHeight,
-        viewBox: `0 0 ${viewportWidth} ${viewportHeight}`,
+        height: viewportHeight + 8,
+        viewBox: `0 -8 ${viewportWidth} ${viewportHeight + 8}`,
         overflow: "hidden",
       });
       viewport.appendChild(svgElement("rect", {
         class: "evolution-composite-band-scroll-surface",
         x: 0,
-        y: 0,
+        y: -8,
         width: viewportWidth,
-        height: viewportHeight,
+        height: viewportHeight + 8,
         fill: "transparent",
         "pointer-events": "all",
       }));
@@ -1591,14 +1569,14 @@ function renderCompositeBands(parent, layout, options) {
           nextOffset,
         );
         content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
-        eventLayouts.forEach(({ guide, anchor, item, rowY, displaced }) => {
-          const rowTop = rowY - 18 - currentScroll.offset;
-          const rowBottom = rowY + 31 - currentScroll.offset;
+        eventLayouts.forEach(({ guide, anchor, item, markerY, displaced }) => {
+          const rowTop = markerY - 8 - currentScroll.offset;
+          const rowBottom = markerY + 8 - currentScroll.offset;
           const visible = rowBottom >= 0 && rowTop <= viewportHeight;
           guide.style.display = visible && displaced ? "" : "none";
           anchor.style.display = visible && displaced ? "" : "none";
           item.style.display = visible ? "" : "none";
-          guide.setAttribute("y2", String(rowY + 4 - currentScroll.offset));
+          guide.setAttribute("y2", String(markerY - currentScroll.offset));
         });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
         thumb.setAttribute("aria-valuemax", String(currentScroll.maxScroll));
