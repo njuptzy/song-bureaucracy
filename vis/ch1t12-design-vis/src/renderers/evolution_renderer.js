@@ -1344,6 +1344,8 @@ function renderCompositeBands(parent, layout, options) {
   const { labelX, trackX, trackRight } = compositeBandTrackBounds(layout);
   const expandedIds = options.compositeExpandedEntityIds || [];
   const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
+  const eventsLoading = options.compositeEventsLoading === true;
+  const eventsError = options.compositeEventsError === true;
   const selectedId = options.compositeSelectedEvent?.id;
   const scale = (year) => {
     if (year == null || !layout.yearScale) return trackX + 4;
@@ -1412,8 +1414,8 @@ function renderCompositeBands(parent, layout, options) {
       y: bandTop + 18,
       class: "evolution-composite-band-label",
     });
-    const count = compositeBandEvents(model, band, expandedIds).length;
-    appendText(bandToggle, `${count}项`, {
+    const count = eventsLoading ? 0 : compositeBandEvents(model, band, expandedIds).length;
+    appendText(bandToggle, eventsLoading ? "载入中" : eventsError ? "加载失败" : `${count}项`, {
       x: labelX,
       y: bandTop + 36,
       class: "evolution-composite-band-count",
@@ -1436,7 +1438,9 @@ function renderCompositeBands(parent, layout, options) {
       "stroke-width": 0.8,
       opacity: 0.7,
     }));
-    const events = bandExpanded ? compositeBandEvents(model, band, expandedIds) : [];
+    const events = bandExpanded && !eventsLoading && !eventsError
+      ? compositeBandEvents(model, band, expandedIds)
+      : [];
     // 视口顶边与横向年份轴严格共线，事件引导线才能从轴线出发。
     const viewportTop = bandTop + 31;
     const viewportHeight = Math.max(48, bandHeight - 37);
@@ -1459,7 +1463,19 @@ function renderCompositeBands(parent, layout, options) {
       viewportHeight,
       options.compositeBandScrollOffsets?.[band],
     );
-    if (!bandExpanded) {
+    if (eventsError) {
+      appendText(bandGroup, "事件加载失败", {
+        x: trackX + 8,
+        y: bandTop + 66,
+        class: "evolution-composite-band-empty",
+      });
+    } else if (eventsLoading) {
+      appendText(bandGroup, "正在加载事件…", {
+        x: trackX + 8,
+        y: bandTop + 66,
+        class: "evolution-composite-band-empty",
+      });
+    } else if (!bandExpanded) {
       appendText(bandGroup, "已折叠", {
         x: trackX + 8,
         y: bandTop + 66,

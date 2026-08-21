@@ -294,7 +294,11 @@ function requestCompositeEvents(focusEntityId, year) {
       }
       return result;
     })
-    .catch(() => null);
+    .catch(() => {
+      compositeEventCache.set(key, { error: true });
+      if (compositeEvolutionModelCacheKey === key) refreshTemplate();
+      return null;
+    });
   compositeEventCache.set(key, pending);
 }
 
@@ -3554,6 +3558,10 @@ function renderDynamicEvolution(svg) {
   }
   requestCompositeEvents(compositeFocusId, compositeYear);
   const compositeApiResult = compositeEventCache.get(compositeKey);
+  const compositeEventsLoading = Boolean(compositeEvolutionModelCache)
+    && !compositeApiResult?.bands
+    && compositeApiResult?.error !== true;
+  const compositeEventsError = compositeApiResult?.error === true;
   if (compositeApiResult?.bands && compositeEvolutionModelCache) {
     compositeEvolutionModelCache.bands = compositeApiResult.bands;
     compositeEvolutionModelCache.bandEvents = Object.values(compositeApiResult.bands).flat();
@@ -3745,6 +3753,8 @@ function renderDynamicEvolution(svg) {
     compositeBandScrollOffsets: compositeBandScrollOffsets.value,
     compositeSelectedEvent: compositeSelectedEvent.value,
     compositeExpandedBands: compositeExpandedBands.value,
+    compositeEventsLoading,
+    compositeEventsError,
     handlers,
   });
 }
