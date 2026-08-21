@@ -121,7 +121,9 @@ it("机构主线在轴线上下分层并保持足够行距", () => {
   assert.ok(result.every((event) => event.displayX === 100));
   assert.ok(result.every((event) => event.displayX === event.baseX));
   const orderedYs = result.map((event) => event.y).sort((first, second) => first - second);
-  assert.ok(orderedYs.slice(1).every((y, index) => y - orderedYs[index] >= 28));
+  const gaps = orderedYs.slice(1).map((y, index) => y - orderedYs[index]);
+  assert.ok(gaps.every((gap) => gap >= 28));
+  assert.ok(gaps.every((gap) => gap <= 36));
 });
 
 it("机构主线只在真实年份相近时换到下一行且回指保持竖直", () => {

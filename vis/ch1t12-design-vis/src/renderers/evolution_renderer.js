@@ -1855,7 +1855,7 @@ export function layoutCompositeMainLaneEvents(
   const belowRowCount = Math.max(0, rows.length - 1 - (hasUpperRow ? 1 : 0));
   const availableBelow = Math.max(0, sectionBottom - axisY - bottomPadding);
   const belowGap = belowRowCount > 0
-    ? Math.min(64, availableBelow / belowRowCount)
+    ? Math.min(36, availableBelow / belowRowCount)
     : 0;
   return (events || []).map((event, index) => {
     const rowIndex = rowByIndex.get(index) || 0;
