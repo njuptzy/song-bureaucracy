@@ -10,6 +10,7 @@ import {
   evolutionLaneTitleMetrics,
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
+  compositeBandItemVisibility,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
   layoutCompositeMainLaneEvents,
@@ -99,6 +100,32 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
       assert.equal(overlaps, false);
     }
   }
+});
+
+it("编制标签会继续使用信息带下半部的空位", () => {
+  const placements = Array.from({ length: 5 }, (_, index) => ({
+    event: { displayTitle: `密集编制变化${index + 1}` },
+    x: 100 + index * 4,
+    anchorX: 100 + index * 4,
+    rowIndex: 0,
+  }));
+  const labels = layoutCompositeBandLabels(placements, 260, 18, 120)
+    .map((placement) => placement.label)
+    .filter(Boolean);
+
+  assert.ok(labels.length >= 3);
+  assert.ok(labels.some((label) => label.box.y >= 53));
+});
+
+it("标签仍在视口时不会随圆点提前隐藏", () => {
+  assert.deepEqual(compositeBandItemVisibility({
+    markerY: 10,
+    labelBox: { y: 70, bottom: 84 },
+  }, 30, 60), {
+    markerVisible: false,
+    labelVisible: true,
+    leaderVisible: true,
+  });
 });
 
 it("机构主线、机构结构和编制区域严格等高", () => {

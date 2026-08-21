@@ -1341,6 +1341,7 @@ function compositeBoxesOverlap(first, second, gap = 3) {
 
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const axisClearance = 11;
+  const labelHeight = 14;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
@@ -1359,14 +1360,14 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
   const prepared = placements.map((placement, layoutIndex) => {
     const text = shortened(placement.event.displayTitle || placement.event.subtype, 12);
     const width = Math.min(Math.max(36, text.length * 10), Math.max(36, viewportWidth - 8));
-    const height = 14;
+    const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
     const inlineY = Math.max(axisClearance, markerY - 7);
     const centeredX = Math.max(4, Math.min(
       viewportWidth - width - 4,
       placement.x - width / 2,
     ));
-    const candidates = [
+    const nearbyCandidates = [
       { x: placement.x + 12, y: inlineY, direct: true, anchor: "start" },
       { x: placement.x - width - 12, y: inlineY, direct: true, anchor: "end" },
       { x: placement.x + 12, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
@@ -1375,7 +1376,27 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       { x: placement.x - width - 12, y: markerY - 25, direct: false, anchor: "end" },
       { x: centeredX, y: Math.max(axisClearance, markerY + 14), direct: false, anchor: "start" },
     ];
+    const verticalSlots = [];
+    for (let y = axisClearance; y + height <= contentHeight; y += labelHeight + 7) {
+      verticalSlots.push(y);
+    }
+    verticalSlots.sort((first, second) => (
+      Math.abs(first + height / 2 - markerY) - Math.abs(second + height / 2 - markerY)
+      || first - second
+    ));
+    const candidates = [
+      ...nearbyCandidates,
+      ...verticalSlots.flatMap((y) => ([
+        { x: placement.x + 12, y, direct: false, anchor: "start" },
+        { x: placement.x - width - 12, y, direct: false, anchor: "end" },
+        { x: centeredX, y, direct: false, anchor: "start" },
+      ])),
+    ];
+    const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
+      const candidateKey = `${candidate.x}:${candidate.y}`;
+      if (seenCandidates.has(candidateKey)) return null;
+      seenCandidates.add(candidateKey);
       const box = {
         x: candidate.x,
         y: candidate.y,
@@ -1430,6 +1451,19 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     ...placement,
     label: labelByIndex.get(index) || null,
   }));
+}
+
+export function compositeBandItemVisibility({ markerY, labelBox }, offset, viewportHeight) {
+  const markerVisible = markerY + 8 - offset >= 0
+    && markerY - 8 - offset <= viewportHeight;
+  const labelVisible = Boolean(labelBox)
+    && labelBox.bottom - offset >= 0
+    && labelBox.y - offset <= viewportHeight;
+  return {
+    markerVisible,
+    labelVisible,
+    leaderVisible: markerVisible || labelVisible,
+  };
 }
 
 function renderCompositeBands(parent, layout, options) {
@@ -1551,6 +1585,7 @@ function renderCompositeBands(parent, layout, options) {
       item,
       labelGroup,
       labelLeader,
+      labelBox: label?.box || null,
       markerY: y + 4,
       displaced: rowIndex > 0 || x !== anchorX,
     };
@@ -1726,17 +1761,19 @@ function renderCompositeBands(parent, layout, options) {
           item,
           labelGroup,
           labelLeader,
+          labelBox,
           markerY,
           displaced,
         }) => {
-          const rowTop = markerY - 8 - currentScroll.offset;
-          const rowBottom = markerY + 8 - currentScroll.offset;
-          const visible = rowBottom >= 0 && rowTop <= viewportHeight;
-          guide.style.display = visible && displaced ? "" : "none";
-          anchor.style.display = visible && displaced ? "" : "none";
-          item.style.display = visible ? "" : "none";
-          if (labelGroup) labelGroup.style.display = visible ? "" : "none";
-          if (labelLeader) labelLeader.style.display = visible ? "" : "none";
+          const visibility = compositeBandItemVisibility({
+            markerY,
+            labelBox,
+          }, currentScroll.offset, viewportHeight);
+          guide.style.display = visibility.markerVisible && displaced ? "" : "none";
+          anchor.style.display = visibility.markerVisible && displaced ? "" : "none";
+          item.style.display = visibility.markerVisible ? "" : "none";
+          if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
+          if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
           guide.setAttribute("y2", String(markerY - currentScroll.offset));
         });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
