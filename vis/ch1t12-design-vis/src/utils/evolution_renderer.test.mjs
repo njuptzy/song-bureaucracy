@@ -68,7 +68,7 @@ it("圆点附近放不下标签时移动到空位并用引线连回事件点", (
   assert.equal(placement.label.leader.y1, 0);
 });
 
-it("自动放置的标签始终位于内容宽度内且互不重叠", () => {
+it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
   const placements = Array.from({ length: 8 }, (_, index) => ({
     event: { displayTitle: `编制事件${index + 1}` },
     x: 40 + index * 17,
@@ -79,7 +79,8 @@ it("自动放置的标签始终位于内容宽度内且互不重叠", () => {
     .map((placement) => placement.label)
     .filter(Boolean);
 
-  assert.equal(labels.length, placements.length);
+  assert.ok(labels.length > 0);
+  assert.ok(labels.length < placements.length);
   for (const label of labels) {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
@@ -89,10 +90,10 @@ it("自动放置的标签始终位于内容宽度内且互不重叠", () => {
     for (let compared = index + 1; compared < labels.length; compared += 1) {
       const first = labels[index].box;
       const second = labels[compared].box;
-      const overlaps = first.x < second.right + 3
-        && first.right + 3 > second.x
-        && first.y < second.bottom + 3
-        && first.bottom + 3 > second.y;
+      const overlaps = first.x < second.right + 7
+        && first.right + 7 > second.x
+        && first.y < second.bottom + 7
+        && first.bottom + 7 > second.y;
       assert.equal(overlaps, false);
     }
   }
