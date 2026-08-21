@@ -187,10 +187,9 @@ const compositeStaffScrollOffset = ref(0);
 const compositeBandScrollOffsets = ref({
   institution: 0,
   staff: 0,
-  duty: 0,
 });
 const compositeSelectedEvent = ref(null);
-const compositeExpandedBands = ref(new Set(["institution", "staff", "duty"]));
+const compositeExpandedBands = ref(new Set(["institution", "staff"]));
 const comparisonPaneOffsets = ref({
   hierarchy: {
     x: Number(initialState.comparisonPaneOffsets?.hierarchy?.x) || 0,
@@ -288,8 +287,8 @@ function requestCompositeEvents(focusEntityId, year) {
           .flat();
         // 新焦点的异步事件到达时必须直接可见。此前整带误触会留下
         // 折叠状态，造成接口已有几十条记录而画面看似为空。
-        compositeExpandedBands.value = new Set(["institution", "staff", "duty"]);
-        compositeBandScrollOffsets.value = { institution: 0, staff: 0, duty: 0 };
+        compositeExpandedBands.value = new Set(["institution", "staff"]);
+        compositeBandScrollOffsets.value = { institution: 0, staff: 0 };
         refreshTemplate();
       }
       return result;
@@ -458,7 +457,7 @@ function restoreCanvasState(state) {
   }
   if (Array.isArray(state.compositeExpandedBands)) {
     compositeExpandedBands.value = new Set(
-      state.compositeExpandedBands.filter((band) => ["institution", "staff", "duty"].includes(band)),
+      state.compositeExpandedBands.filter((band) => ["institution", "staff"].includes(band)),
     );
   }
   compositionFocusId.value = state.compositionFocusId ?? null;
@@ -3552,8 +3551,8 @@ function renderDynamicEvolution(svg) {
       : new Set([compositeFocusId, ...restoredExpanded]);
     compositeScopeScrollOffset.value = 0;
     compositeStaffScrollOffset.value = 0;
-    compositeExpandedBands.value = new Set(["institution", "staff", "duty"]);
-    compositeBandScrollOffsets.value = { institution: 0, staff: 0, duty: 0 };
+    compositeExpandedBands.value = new Set(["institution", "staff"]);
+    compositeBandScrollOffsets.value = { institution: 0, staff: 0 };
     compositeSelectedEvent.value = null;
   }
   requestCompositeEvents(compositeFocusId, compositeYear);

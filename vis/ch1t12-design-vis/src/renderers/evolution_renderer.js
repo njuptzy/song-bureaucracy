@@ -1267,7 +1267,6 @@ function renderEvolutionLegend(parent, layout) {
 const COMPOSITE_BAND_META = Object.freeze({
   institution: { label: "机构结构演变", color: COLORS.line },
   staff: { label: "官员 / 吏员 / 编制", color: COLORS.selected },
-  duty: { label: "职责演变", color: COLORS.olive },
 });
 
 function compositeEventVisible(event, visibleIds) {
@@ -1340,10 +1339,11 @@ function renderCompositeBands(parent, layout, options) {
   const group = svgElement("g", { class: "evolution-composite-bands" });
   // 顶部保留机构演变主线；三条信息带是补充层，不能替换主图。
   const startY = plot.y + 132;
-  const bandHeight = Math.min(142, Math.max(110, (plot.bottom - startY - 4) / 3));
+  const bandCount = Object.keys(COMPOSITE_BAND_META).length;
+  const bandHeight = Math.max(110, (plot.bottom - startY - 4) / bandCount);
   const { labelX, trackX, trackRight } = compositeBandTrackBounds(layout);
   const expandedIds = options.compositeExpandedEntityIds || [];
-  const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff", "duty"]);
+  const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff"]);
   const eventsLoading = options.compositeEventsLoading === true;
   const eventsError = options.compositeEventsError === true;
   const selectedId = options.compositeSelectedEvent?.id;
