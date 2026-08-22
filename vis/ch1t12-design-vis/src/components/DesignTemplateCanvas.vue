@@ -4826,22 +4826,21 @@ function updateEvolutionDetails(svg, payloadOverride = null) {
 
       const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       hit.classList.add("detail-evidence-action-hit");
-      hit.setAttribute("x", "355");
-      hit.setAttribute("y", String(cursorY - 23));
-      hit.setAttribute("width", "92");
-      hit.setAttribute("height", "36");
-      const surface = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      hit.setAttribute("x", "374");
+      hit.setAttribute("y", String(cursorY - 21));
+      hit.setAttribute("width", "73");
+      hit.setAttribute("height", "30");
+      const surface = document.createElementNS("http://www.w3.org/2000/svg", "line");
       surface.classList.add("detail-evidence-action-surface");
-      surface.setAttribute("x", "369");
-      surface.setAttribute("y", String(cursorY - 18));
-      surface.setAttribute("width", "78");
-      surface.setAttribute("height", "26");
-      surface.setAttribute("rx", "2");
+      surface.setAttribute("x1", "387");
+      surface.setAttribute("x2", "447");
+      surface.setAttribute("y1", String(cursorY + 5));
+      surface.setAttribute("y2", String(cursorY + 5));
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.classList.add("detail-evidence-action-text");
-      text.setAttribute("x", "408");
+      text.setAttribute("class", "cls-51 detail-evidence-action-text");
+      text.setAttribute("x", "447");
       text.setAttribute("y", String(cursorY));
-      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("text-anchor", "end");
       text.textContent = section.evidenceAction.label;
       action.append(hit, surface, text);
       const activate = (event) => {
@@ -7141,7 +7140,7 @@ onUnmounted(() => {
 
 .svg-mount :deep(.detail-evidence-action[aria-disabled="true"]) {
   cursor: default;
-  opacity: 0.72;
+  opacity: 0.48;
 }
 
 .svg-mount :deep(.detail-evidence-action-hit) {
@@ -7150,17 +7149,28 @@ onUnmounted(() => {
 }
 
 .svg-mount :deep(.detail-evidence-action-surface) {
-  fill: #f5f3ec;
-  stroke: #866d6d;
-  stroke-width: 0.8px;
+  stroke: #918069;
+  stroke-width: 0.65px;
+  stroke-dasharray: 0 1.61;
+  stroke-linecap: round;
 }
 
 .svg-mount :deep(.detail-evidence-action-text) {
   fill: #563905;
-  font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
-  font-size: 9px;
-  font-weight: 700;
+  font-family: FZQINGKBYSS-M--GB1-0, FZQingKeBenYueSongS;
+  font-size: 12px;
+  font-weight: 400;
   pointer-events: none;
+}
+
+.svg-mount :deep(.detail-evidence-action:not([aria-disabled="true"]):hover .detail-evidence-action-text) {
+  fill: #351704;
+}
+
+.svg-mount :deep(.detail-evidence-action:not([aria-disabled="true"]):hover .detail-evidence-action-surface) {
+  stroke: #563905;
+  stroke-dasharray: none;
+  stroke-width: 0.8px;
 }
 
 .svg-mount :deep(.detail-evidence-action:focus) {
@@ -7169,7 +7179,8 @@ onUnmounted(() => {
 
 .svg-mount :deep(.detail-evidence-action:focus-visible .detail-evidence-action-surface) {
   stroke: #351704;
-  stroke-width: 1.4px;
+  stroke-width: 1px;
+  stroke-dasharray: 2 2;
 }
 
 .design-template {
