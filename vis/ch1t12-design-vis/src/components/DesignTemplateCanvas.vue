@@ -4340,6 +4340,9 @@ function evolutionDetailPayload(svg) {
   const compositeEvent = compositeSelectedEvent.value;
   if (compositeEvent) {
     const subject = compositeEvent.subject || {};
+    const eventTitle = compositeEvent.displayTitle || compositeEvent.subtype || "未载事件";
+    const eventSummary = String(compositeEvent.displaySummary || "").trim();
+    const summaryAddsInformation = eventSummary && eventSummary !== String(eventTitle).trim();
     const evidence = evidenceLinesForKeys(
       compositeEvent.evidenceKeys,
       compositeEvent.quotation || compositeEvent.displaySummary,
@@ -4356,9 +4359,9 @@ function evolutionDetailPayload(svg) {
       ),
       sections: [
         { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
-        { label: "事件：", value: compositeEvent.displayTitle || compositeEvent.subtype || "未载事件" },
+        { label: "事件：", value: eventTitle },
         { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
-        { label: "摘要：", value: compositeEvent.displaySummary || "未载摘要" },
+        ...(summaryAddsInformation ? [{ label: "摘要：", value: eventSummary }] : []),
         { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
         {
           label: relationshipOriginal.count > 1
