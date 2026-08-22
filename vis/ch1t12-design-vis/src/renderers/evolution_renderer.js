@@ -1368,11 +1368,9 @@ export function compositeBandLabelWidth(text) {
 }
 
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
-  const axisClearance = 14;
   const labelHeight = 14;
   const labelGap = 4;
   const labelOffsetX = 15;
-  const maxLeaderDrop = 40;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
@@ -1396,28 +1394,11 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     );
     const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
-    const inlineY = Math.max(axisClearance, markerY - 7);
-    const nearbyCandidates = [
-      { x: placement.x + labelOffsetX, y: inlineY, direct: true, anchor: "start" },
-      { x: placement.x + labelOffsetX, y: Math.max(axisClearance, markerY + 11), direct: false, anchor: "start" },
-    ];
-    const verticalSlots = [];
-    for (let y = axisClearance; y + height <= contentHeight; y += labelHeight + labelGap) {
-      if (y + height >= markerY) verticalSlots.push(y);
-    }
-    verticalSlots.sort((first, second) => (
-      Math.abs(first + height / 2 - markerY) - Math.abs(second + height / 2 - markerY)
-      || first - second
-    ));
-    const candidates = [
-      ...nearbyCandidates,
-      ...verticalSlots.map((y) => ({
-        x: placement.x + labelOffsetX,
-        y,
-        direct: false,
-        anchor: "start",
-      })),
-    ];
+    // 标签优先级低于圆点：只允许在下沉圆点右侧同一水平线上直连。
+    // 轴线圆点或右侧空间不足时直接隐藏，禁止为了保留文字生成竖向折线。
+    const candidates = placement.rowIndex > 0
+      ? [{ x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" }]
+      : [];
     const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
       const candidateKey = `${candidate.x}:${candidate.y}`;
@@ -1430,11 +1411,9 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         bottom: candidate.y + height,
       };
       if (box.x < 0 || box.right > viewportWidth
-        || box.y < axisClearance || box.bottom > contentHeight) {
+        || box.y < 0 || box.bottom > contentHeight) {
         return null;
       }
-      const attachmentY = box.y + height / 2;
-      if (attachmentY - markerY > maxLeaderDrop) return null;
       return markerBoxes.every((markerBox) => !compositeBoxesOverlap(box, markerBox))
         ? { ...candidate, box }
         : null;
@@ -1458,7 +1437,7 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     occupiedLabels.push(box);
     const markerEdgeX = item.placement.x + 5.5;
     const targetX = Math.max(box.x, Math.min(box.right, markerEdgeX));
-    const targetY = box.y + labelHeight / 2;
+    const targetY = item.markerY;
     labelByIndex.set(item.layoutIndex, {
       text: item.text,
       x: chosen.anchor === "end" ? box.right : box.x,
@@ -1472,7 +1451,6 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         y2: targetY,
         points: [
           [markerEdgeX, item.markerY],
-          [markerEdgeX, targetY],
           [targetX, targetY],
         ],
       },
