@@ -4435,7 +4435,9 @@ async function runEvidenceReview(timepointId, citationRowId, key, expectedQuotat
       ? "本条引文支持该事件"
       : result.verdict === "contradicted"
         ? "本条引文与该事件冲突"
-        : "本条引文未能支持该事件";
+        : result.verdict === "irrelevant"
+          ? "本条引文与该事件完全无关，属于高风险错误"
+          : "本条引文相关，但证据不足";
   } catch (reason) {
     if (reason?.name === "AbortError" || generation !== evidenceReviewGeneration) return;
     evidenceReviewResults.set(key, { status: "error", code: reason?.code || "service_unavailable" });
@@ -4871,6 +4873,10 @@ function updateEvolutionDetails(svg, payloadOverride = null) {
     content.setAttribute("transform", `translate(101.29 ${cursorY})`);
     content.style.fill = section.reviewTone === "green"
       ? "#357346"
+      : section.reviewTone === "amber"
+        ? "#8a611f"
+        : section.reviewTone === "critical"
+          ? "#6f1d1b"
       : section.reviewTone === "red"
         ? "#9a3f35"
         : "#351704";

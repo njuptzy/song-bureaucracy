@@ -59,10 +59,29 @@ class EvidenceReviewTest(unittest.TestCase):
             with self.assertRaises(EvidenceReviewError):
                 validate_model_result(value, "至南宋建炎元年五月，于秘书省复建史馆。")
 
-    def test_non_supported_has_no_excerpt(self):
+    def test_non_supported_and_contradicted_require_related_excerpt(self):
+        for verdict in ("not_supported", "contradicted"):
+            result = validate_model_result({
+                "verdict": verdict,
+                "concise_quotations": ["只记秘书省"],
+                "reason": "文字相关，但不足以支持目标事件。",
+            }, "原文只记秘书省，未记复建史馆。")
+            self.assertEqual(result["concise_quotations"], ["只记秘书省"])
+            with self.assertRaises(EvidenceReviewError):
+                validate_model_result({
+                    "verdict": verdict,
+                    "concise_quotations": [],
+                    "reason": "缺少判断片段。",
+                }, "原文只记秘书省，未记复建史馆。")
+
+    def test_irrelevant_is_the_only_verdict_without_excerpt(self):
+        result = validate_model_result({
+            "verdict": "irrelevant", "concise_quotations": [], "reason": "原文与目标事件无关。",
+        }, "无关文字")
+        self.assertEqual(result["verdict"], "irrelevant")
         with self.assertRaises(EvidenceReviewError):
             validate_model_result({
-                "verdict": "not_supported", "concise_quotations": ["无关"], "reason": "未记目标事件。",
+                "verdict": "irrelevant", "concise_quotations": ["无关文字"], "reason": "无关。",
             }, "无关文字")
 
     def test_deepseek_official_defaults_and_key_file(self):

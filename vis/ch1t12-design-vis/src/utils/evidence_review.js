@@ -1,7 +1,8 @@
 export const EVIDENCE_VERDICT_META = {
-  supported: { marker: "green", symbol: "✓", label: "本条引文支持该事件" },
-  not_supported: { marker: "red", symbol: "×", label: "本条引文未能支持该事件" },
-  contradicted: { marker: "red", symbol: "×", label: "本条引文与该事件冲突" },
+  supported: { marker: "green", symbol: "✓", label: "本条引文支持该事件", excerptLabel: "支持片段：" },
+  not_supported: { marker: "amber", symbol: "!", label: "本条引文相关，但证据不足", excerptLabel: "相关片段：" },
+  contradicted: { marker: "red", symbol: "×", label: "本条引文与该事件冲突", excerptLabel: "冲突片段：" },
+  irrelevant: { marker: "critical", symbol: "×", label: "本条引文与该事件完全无关（高风险）", excerptLabel: "" },
 };
 
 export function evidenceReviewKey(timepointId, citationRowId, evidenceText = "") {
@@ -14,7 +15,7 @@ export function evidenceReviewKey(timepointId, citationRowId, evidenceText = "")
 }
 
 export function evidenceReviewQuotationHighlights(result, quotation = "") {
-  if (result?.verdict !== "supported") return [];
+  if (!EVIDENCE_VERDICT_META[result?.verdict] || result.verdict === "irrelevant") return [];
   const source = String(quotation || "");
   return [...new Set(result.concise_quotations || [])]
     .map((span) => String(span || "").trim())
@@ -39,10 +40,8 @@ export function evidenceReviewSections(result) {
     value: `${meta.symbol} ${meta.label}`,
     reviewTone: meta.marker,
   }];
-  if (result.verdict === "supported") {
-    for (const quotation of result.concise_quotations || []) {
-      sections.push({ label: "支持片段：", value: quotation, reviewTone: "green" });
-    }
+  for (const quotation of result.concise_quotations || []) {
+    sections.push({ label: meta.excerptLabel, value: quotation, reviewTone: meta.marker });
   }
   sections.push({ label: "判断理由：", value: result.reason });
   return sections;
