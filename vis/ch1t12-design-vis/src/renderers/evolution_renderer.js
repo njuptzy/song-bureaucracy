@@ -1390,7 +1390,7 @@ export function compositeBandLabelWidth(text) {
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const labelHeight = 14;
   const labelGap = 4;
-  const labelOffsetX = 15;
+  const labelOffsetX = 12;
   const markerAvoidanceRadius = 5.5;
   const markerLabelGap = 1.5;
   const markerBoxes = placements.map((placement) => {
@@ -1418,10 +1418,12 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     const markerY = placement.rowIndex * rowHeight;
     // 标签优先级低于圆点：只允许在圆点同一水平线上短距离直连。
     // 先用右侧，右侧被邻近年份图标挡住时再试左侧；两侧都放不下才隐藏。
-    const candidates = [
-      { x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" },
-      { x: placement.x - labelOffsetX - width, y: markerY - labelHeight / 2, anchor: "end" },
-    ];
+    const candidates = placement.rowIndex > 0
+      ? [
+        { x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" },
+        { x: placement.x - labelOffsetX - width, y: markerY - labelHeight / 2, anchor: "end" },
+      ]
+      : [];
     const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
       const candidateKey = `${candidate.x}:${candidate.y}`;
@@ -1434,7 +1436,7 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         bottom: candidate.y + height,
       };
       if (box.x < 0 || box.right > viewportWidth
-        || box.y < -8 || box.bottom > contentHeight) {
+        || box.y < 0 || box.bottom > contentHeight) {
         return null;
       }
       return markerBoxes.every((markerBox) => (
@@ -1470,7 +1472,6 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       x: chosen.anchor === "end" ? box.right : box.x,
       y: box.y + 11,
       textAnchor: chosen.anchor,
-      maskAxis: item.placement.rowIndex === 0,
       box,
       leader: {
         x1: markerEdgeX,
@@ -1593,7 +1594,7 @@ function renderCompositeBands(parent, layout, options) {
         y: label.box.y,
         width: label.box.right - label.box.x,
         height: label.box.bottom - label.box.y,
-        fill: label.maskAxis ? COLORS.paper : "transparent",
+        fill: "transparent",
         "pointer-events": "all",
       }));
       appendText(labelGroup, label.text, {
