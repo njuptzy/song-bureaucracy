@@ -1,5 +1,6 @@
 import { compactRelationLabel } from "../utils/evolution_layout.js";
 import {
+  compositeEvolutionSelectionFocus,
   evolutionSelectionAnchors,
   evolutionSelectionFocus,
 } from "../utils/evolution_selection.js";
@@ -1599,7 +1600,11 @@ function renderCompositeBands(parent, layout, options) {
   const expandedBands = options.compositeExpandedBands || new Set(["institution", "staff"]);
   const eventsLoading = options.compositeEventsLoading === true;
   const eventsError = options.compositeEventsError === true;
-  const selectedId = options.compositeSelectedEvent?.id;
+  const selectionFocus = compositeEvolutionSelectionFocus(
+    options.selectedItem,
+    options.compositeSelectedEvent,
+  );
+  const selectedId = selectionFocus.bandEventId;
   const scale = (year) => {
     if (year == null || !layout.yearScale) return null;
     const [domainStart, domainEnd] = layout.yearScale.domain;
@@ -1613,8 +1618,9 @@ function renderCompositeBands(parent, layout, options) {
     // 标签引线仍只允许水平直连，二者语义和样式保持分离。
     const markerY = rowIndex * rowHeight;
     const selected = selectedId === event.id;
+    const dimmed = selectionFocus.active && !selected;
     const anchor = offAxis ? null : svgElement("circle", {
-        class: "evolution-composite-event-anchor",
+        class: `evolution-composite-event-anchor${dimmed ? " is-dimmed" : ""}`,
         cx: anchorX,
         cy: 0,
         r: 1.55,
@@ -1623,7 +1629,7 @@ function renderCompositeBands(parent, layout, options) {
       });
     if (anchor) guides.appendChild(anchor);
     const item = svgElement("g", {
-      class: `evolution-composite-event${selected ? " is-selected" : ""}`,
+      class: `evolution-composite-event${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
       transform: `translate(${x} ${markerY})`,
       "data-composite-event-id": event.id,
     });
@@ -1666,7 +1672,7 @@ function renderCompositeBands(parent, layout, options) {
       const { label } = placement;
       if (label.leader) {
         labelLeader = svgElement("polyline", {
-          class: "evolution-composite-event-label-leader",
+          class: `evolution-composite-event-label-leader${dimmed ? " is-dimmed" : ""}`,
           points: label.leader.points.map((point) => point.join(",")).join(" "),
           fill: "none",
           stroke: color,
@@ -1675,7 +1681,7 @@ function renderCompositeBands(parent, layout, options) {
         leaders.appendChild(labelLeader);
       }
       labelGroup = svgElement("g", {
-        class: `evolution-composite-event-label-group${selected ? " is-selected" : ""}`,
+        class: `evolution-composite-event-label-group${selected ? " is-selected" : ""}${dimmed ? " is-dimmed" : ""}`,
         "data-composite-event-id": event.id,
       });
       labelGroup.appendChild(svgElement("rect", {
@@ -1866,9 +1872,14 @@ function renderCompositeBands(parent, layout, options) {
       const items = svgElement("g", { class: "evolution-composite-band-items" });
       const axisGuides = svgElement("g", { class: "evolution-composite-band-axis-guides" });
       const axisItems = svgElement("g", { class: "evolution-composite-band-axis-items" });
+      const selectedGuideX = placements.find((placement) => (
+        placement.event.id === selectedId
+      ))?.anchorX;
       compositeBandYearGuides(placements, rowHeight).forEach((guide) => {
+        const dimmed = selectionFocus.active
+          && (!Number.isFinite(selectedGuideX) || Math.abs(guide.x - selectedGuideX) > 0.001);
         guides.appendChild(svgElement("line", {
-          class: "evolution-composite-event-year-guide",
+          class: `evolution-composite-event-year-guide${dimmed ? " is-dimmed" : ""}`,
           x1: guide.x,
           y1: guide.y1,
           x2: guide.x,
@@ -2101,8 +2112,13 @@ function renderCompositeMainLane(parent, layout, options) {
   const sections = compositeSectionLayout(plot);
   const mainY = sections.mainTop + 31;
   const { labelX } = compositeBandTrackBounds(layout);
-  const selected = selectedKey(options.selectedItem);
-  const selectedEventId = selected?.startsWith("timepoint:") ? selected.slice(10) : null;
+  const selectionFocus = compositeEvolutionSelectionFocus(
+    options.selectedItem,
+    options.compositeSelectedEvent,
+  );
+  const selectedEventId = selectionFocus.mainTimepointId == null
+    ? null
+    : String(selectionFocus.mainTimepointId);
   const group = svgElement("g", { class: "evolution-composite-main-lane" });
 
   appendText(group, "机构演变主线", {
@@ -2127,7 +2143,7 @@ function renderCompositeMainLane(parent, layout, options) {
   }));
   for (const segment of lane.segments || []) {
     group.appendChild(svgElement("line", {
-      class: "evolution-lifecycle-segment",
+      class: `evolution-lifecycle-segment${selectionFocus.active ? " is-dimmed" : ""}`,
       x1: segment.startX,
       y1: mainY,
       x2: segment.endX,
@@ -2157,12 +2173,16 @@ function renderCompositeMainLane(parent, layout, options) {
       rangeEndX: yearToX(event.yearEnd, event.baseX),
     };
   });
-  mainEvents.forEach((event) => renderEventStem(group, event, false));
+  mainEvents.forEach((event) => renderEventStem(
+    group,
+    event,
+    selectionFocus.active && String(event.id) !== selectedEventId,
+  ));
   mainEvents.forEach((event) => renderEventMark(
     group,
     event,
     String(event.id) === selectedEventId,
-    false,
+    selectionFocus.active && String(event.id) !== selectedEventId,
     options.handlers,
   ));
   parent.appendChild(group);

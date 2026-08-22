@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  compositeEvolutionSelectionFocus,
   compositeEventDetailHeader,
   compositeEventSelection,
   evolutionDetailSelection,
@@ -10,6 +11,21 @@ import {
   evolutionSelectionFocus,
   timelineSelectionForEvolutionItem,
 } from "./evolution_selection.js";
+
+test("综合演变主线和信息带选择都建立互斥聚焦", () => {
+  assert.deepEqual(
+    compositeEvolutionSelectionFocus({ kind: "timepoint", id: 12 }, null),
+    { active: true, mainTimepointId: 12, bandEventId: null },
+  );
+  assert.deepEqual(
+    compositeEvolutionSelectionFocus(null, { id: "staff:8" }),
+    { active: true, mainTimepointId: null, bandEventId: "staff:8" },
+  );
+  assert.deepEqual(
+    compositeEvolutionSelectionFocus(null, null),
+    { active: false, mainTimepointId: null, bandEventId: null },
+  );
+});
 
 test("结构演变详情以关系为标题并显示标准化精确纪年", () => {
   assert.deepEqual(compositeEventDetailHeader({

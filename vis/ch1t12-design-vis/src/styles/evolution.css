@@ -468,6 +468,19 @@
   stroke-width: 0.7px;
 }
 
+.dynamic-evolution-layer .evolution-composite-event.is-dimmed,
+.dynamic-evolution-layer .evolution-composite-event-label-group.is-dimmed,
+.dynamic-evolution-layer .evolution-composite-event-label-leader.is-dimmed,
+.dynamic-evolution-layer .evolution-composite-event-anchor.is-dimmed,
+.dynamic-evolution-layer .evolution-composite-event-year-guide.is-dimmed {
+  opacity: 0.16;
+}
+
+.dynamic-evolution-layer .evolution-composite-event.is-dimmed:hover,
+.dynamic-evolution-layer .evolution-composite-event-label-group.is-dimmed:hover {
+  opacity: 0.52;
+}
+
 .dynamic-evolution-layer .evolution-composite-event-label-group:hover .evolution-composite-event-label,
 .dynamic-evolution-layer .evolution-composite-event-label-group:focus .evolution-composite-event-label,
 .dynamic-evolution-layer .evolution-composite-event-label-group.is-selected .evolution-composite-event-label {

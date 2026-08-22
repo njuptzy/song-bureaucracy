@@ -71,6 +71,18 @@ export function evolutionSelectionFocus(selectedItem) {
   };
 }
 
+export function compositeEvolutionSelectionFocus(selectedItem, compositeSelectedEvent) {
+  const mainTimepointId = selectedItem?.kind === "timepoint" && selectedItem.id != null
+    ? selectedItem.id
+    : null;
+  const bandEventId = compositeSelectedEvent?.id ?? null;
+  return {
+    active: mainTimepointId != null || bandEventId != null,
+    mainTimepointId,
+    bandEventId,
+  };
+}
+
 export function compositeEventSelection(event) {
   if (!event) return null;
   return {
