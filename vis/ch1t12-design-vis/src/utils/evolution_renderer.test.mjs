@@ -56,6 +56,38 @@ it("年代未明事件不生成回指年份的虚线", () => {
   ], 18), [{ x: 180, y1: 0, y2: 36 }]);
 });
 
+it("年代未明标签只能放在拉选条右侧，不能跨越竖向边界", () => {
+  const placements = layoutCompositeBandPlacements([
+    { id: "undated", yearStart: null, yearEnd: null, displayTitle: "九寺三监在南宋所指实例" },
+  ], 650, 0, 480, () => 0, 492);
+  const [laidOut] = layoutCompositeBandLabels(
+    placements,
+    650,
+    18,
+    90,
+    { dividerX: 478, dividerGap: 6 },
+  );
+
+  assert.ok(laidOut.label);
+  assert.ok(laidOut.label.box.x >= 484);
+  assert.ok(laidOut.label.leader.x1 >= 484);
+});
+
+it("年代未明标签在右侧空间不足时隐藏，不回退到拉选条左侧", () => {
+  const placements = layoutCompositeBandPlacements([
+    { id: "undated", yearStart: null, yearEnd: null, displayTitle: "九寺三监在南宋所指实例" },
+  ], 540, 0, 480, () => 0, 492);
+  const [laidOut] = layoutCompositeBandLabels(
+    placements,
+    540,
+    18,
+    90,
+    { dividerX: 478, dividerGap: 6 },
+  );
+
+  assert.equal(laidOut.label, null);
+});
+
 it("三信息带与机构主线共用完全相同的年份横轴", () => {
   const layout = {
     bounds: { x: 520 },

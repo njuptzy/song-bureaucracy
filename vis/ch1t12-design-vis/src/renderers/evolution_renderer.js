@@ -1438,12 +1438,22 @@ export function compositeBandLabelWidth(text) {
   ), 6);
 }
 
-export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
+export function layoutCompositeBandLabels(
+  placements,
+  viewportWidth,
+  rowHeight,
+  viewportHeight,
+  options = {},
+) {
   const labelHeight = 14;
   const labelGap = 4;
   const markerAvoidanceRadius = 5.5;
   const markerLabelGap = 1.5;
   const minimumLeaderLength = 2;
+  const dividerX = Number(options.dividerX);
+  const dividerGap = Number.isFinite(Number(options.dividerGap))
+    ? Math.max(0, Number(options.dividerGap))
+    : 6;
   // 标签起点由可见圆点边界统一推导，避免再叠加一个与实际图形无关的固定留白。
   const labelOffsetX = markerAvoidanceRadius + markerLabelGap + minimumLeaderLength;
   const markerBoxes = placements.map((placement) => {
@@ -1491,6 +1501,12 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       if (box.x < 0 || box.right > viewportWidth
         || box.y < 0 || box.bottom > contentHeight) {
         return null;
+      }
+      if (Number.isFinite(dividerX)) {
+        const crossesDivider = placement.offAxis
+          ? box.x < dividerX + dividerGap
+          : box.right > dividerX - dividerGap;
+        if (crossesDivider) return null;
       }
       return markerBoxes.every((markerBox) => (
         !compositeBoxesOverlap(box, markerBox, markerLabelGap)
@@ -1740,13 +1756,16 @@ function renderCompositeBands(parent, layout, options) {
     const offAxisBounds = layout.offAxisBounds;
     const viewportRight = offAxisBounds?.right ?? trackRight;
     const viewportWidth = Math.max(1, viewportRight - trackX);
+    const offAxisStartX = offAxisBounds ? offAxisBounds.x - trackX : null;
     const offAxisX = offAxisBounds
-      ? offAxisBounds.x + offAxisBounds.width / 2 - trackX
+      ? offAxisStartX + 12
       : viewportWidth - 8;
     const undatedCount = events.filter((event) => !compositeBandEventHasYear(event)).length;
     if (undatedCount) {
       appendText(bandGroup, `年代未明 ${undatedCount}项`, {
-        x: trackX + offAxisX,
+        x: offAxisBounds
+          ? offAxisBounds.x + offAxisBounds.width / 2
+          : trackX + offAxisX,
         y: bandTop + 18,
         class: "evolution-composite-offaxis-heading",
         "text-anchor": "middle",
@@ -1765,6 +1784,7 @@ function renderCompositeBands(parent, layout, options) {
       viewportWidth,
       rowHeight,
       viewportHeight,
+      offAxisBounds ? { dividerX: timelineWidth - 2, dividerGap: 6 } : {},
     );
     const rowCount = placements.reduce(
       (count, placement) => Math.max(
