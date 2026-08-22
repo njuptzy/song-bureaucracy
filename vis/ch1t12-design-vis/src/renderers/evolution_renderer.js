@@ -1350,6 +1350,25 @@ export function compositeBandLabelWidth(text) {
   ), 6);
 }
 
+export function compositeEventGuidePoints({
+  anchorX,
+  markerX,
+  markerY,
+  scrollOffset = 0,
+  guideOffset = 8,
+  markerRadius = 4,
+}) {
+  const visibleY = markerY - scrollOffset;
+  const guideX = Math.max(0, anchorX - guideOffset);
+  const markerEdgeX = Math.max(guideX, markerX - markerRadius);
+  return [
+    [anchorX, 0],
+    [guideX, 0],
+    [guideX, visibleY],
+    [markerEdgeX, visibleY],
+  ];
+}
+
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const axisClearance = 14;
   const labelHeight = 14;
@@ -1510,12 +1529,18 @@ function renderCompositeBands(parent, layout, options) {
     // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
     const y = -4 + rowIndex * rowHeight;
     const selected = selectedId === event.id;
-    const guide = svgElement("line", {
+    const guidePoints = compositeEventGuidePoints({
+      anchorX,
+      markerX: x,
+      markerY: y + 4,
+      scrollOffset: initialOffset,
+    });
+    const guide = svgElement("polyline", {
       class: "evolution-composite-event-guide",
-      x1: anchorX,
-      y1: 0,
-      x2: x,
-      y2: y + 4 - initialOffset,
+      points: guidePoints.map((point) => point.join(",")).join(" "),
+      "data-anchor-x": anchorX,
+      "data-marker-x": x,
+      fill: "none",
       stroke: color,
       "stroke-width": selected ? 1.3 : 0.8,
       opacity: selected ? 1 : 0.65,
@@ -1790,7 +1815,12 @@ function renderCompositeBands(parent, layout, options) {
           item.style.display = visibility.markerVisible ? "" : "none";
           if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
-          guide.setAttribute("y2", String(markerY - currentScroll.offset));
+          guide.setAttribute("points", compositeEventGuidePoints({
+            anchorX: Number(guide.dataset.anchorX),
+            markerX: Number(guide.dataset.markerX),
+            markerY,
+            scrollOffset: currentScroll.offset,
+          }).map((point) => point.join(",")).join(" "));
         });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
         thumb.setAttribute("aria-valuemax", String(currentScroll.maxScroll));
