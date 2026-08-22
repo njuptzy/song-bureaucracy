@@ -1414,10 +1414,13 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     );
     const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
-    // 标签优先级低于圆点：只允许在下沉圆点右侧同一水平线上直连。
-    // 轴线圆点或右侧空间不足时直接隐藏，禁止为了保留文字生成竖向折线。
+    // 标签优先级低于圆点：只允许在下沉圆点同一水平线上短距离直连。
+    // 先用右侧，右侧被邻近年份图标挡住时再试左侧；两侧都放不下才隐藏。
     const candidates = placement.rowIndex > 0
-      ? [{ x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" }]
+      ? [
+        { x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" },
+        { x: placement.x - labelOffsetX - width, y: markerY - labelHeight / 2, anchor: "end" },
+      ]
       : [];
     const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
@@ -1455,7 +1458,9 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     if (!chosen) return false;
     const { box } = chosen;
     occupiedLabels.push(box);
-    const markerEdgeX = item.placement.x + 5.5;
+    const markerEdgeX = chosen.anchor === "end"
+      ? item.placement.x - 5.5
+      : item.placement.x + 5.5;
     const targetX = Math.max(box.x, Math.min(box.right, markerEdgeX));
     const targetY = item.markerY;
     labelByIndex.set(item.layoutIndex, {

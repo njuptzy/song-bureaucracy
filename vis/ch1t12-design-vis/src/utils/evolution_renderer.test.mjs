@@ -168,6 +168,20 @@ it("标签会避开其他事件图标的扩大禁入区", () => {
   }
 });
 
+it("右侧被邻近年份圆点挡住时使用同行左侧空位", () => {
+  const placements = [
+    { event: { displayTitle: "秘书省少监编制" }, x: 120, anchorX: 120, rowIndex: 1 },
+    { event: { displayTitle: "提举秘书省编制" }, x: 145, anchorX: 145, rowIndex: 1 },
+  ];
+  const [placement] = layoutCompositeBandLabels(placements, 320, 18, 72);
+
+  assert.ok(placement.label);
+  assert.equal(placement.label.textAnchor, "end");
+  assert.ok(placement.label.box.right < placement.x);
+  assert.equal(placement.label.leader.y1, placement.label.leader.y2);
+  assert.ok(Math.abs(placement.label.leader.x2 - placement.label.leader.x1) <= 10);
+});
+
 it("圆点右侧放不下标签时直接隐藏", () => {
   const placements = [
     { event: { displayTitle: "一个很长的编制变化标签" }, x: 45, anchorX: 45, rowIndex: 0 },
@@ -195,13 +209,13 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
     assert.ok(label.box.y >= 0);
-    assert.equal(label.textAnchor, "start");
+    assert.ok(["start", "end"].includes(label.textAnchor));
     for (let index = 1; index < label.leader.points.length; index += 1) {
       const previous = label.leader.points[index - 1];
       const current = label.leader.points[index];
       assert.ok(previous[0] === current[0] || previous[1] === current[1]);
     }
-    assert.ok(label.leader.x2 >= label.leader.x1);
+    assert.ok(Math.abs(label.leader.x2 - label.leader.x1) <= 10);
     assert.equal(label.leader.y2, label.leader.y1);
   }
   for (let index = 0; index < labels.length; index += 1) {
