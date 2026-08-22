@@ -10,6 +10,7 @@ import {
   hierarchyPackingBranches,
   horizontalRangesFit,
   isHorizontalWheelGesture,
+  nextHierarchyLayerY,
   packHorizontalRanges,
   panFromScrollbarOffset,
   panScrollbarGeometry,
@@ -129,6 +130,21 @@ test("关闭虚拟节点后按真实根机构分支执行碰撞打包", () => {
   assert.deepEqual(hierarchyPackingBranches([group, category], true), [group]);
   assert.deepEqual(hierarchyPackingBranches([rootA, rootB], false), [rootA, rootB]);
   assert.deepEqual(hierarchyPackingBranches([rootA, rootB], true), []);
+});
+
+test("关闭虚拟节点后真实父子签条按实际边界留出纵向间隙", () => {
+  const parentCenterY = 250;
+  const parentBottomOffset = 180;
+  const childTopOffset = -63;
+  const childCenterY = nextHierarchyLayerY(
+    parentCenterY,
+    parentBottomOffset,
+    childTopOffset,
+    24,
+  );
+
+  assert.equal(childCenterY, 517);
+  assert.equal((childCenterY + childTopOffset) - (parentCenterY + parentBottomOffset), 24);
 });
 
 test("重叠范围向同一方向整体平移，后续范围保持相对位置", () => {

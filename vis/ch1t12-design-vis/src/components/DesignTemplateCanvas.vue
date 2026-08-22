@@ -33,6 +33,7 @@ import {
   hierarchyNodeGap,
   hierarchyPackingBranches,
   isHorizontalWheelGesture,
+  nextHierarchyLayerY,
   panFromScrollbarOffset,
   panScrollbarGeometry,
   pushOverlappingRanges,
@@ -2117,6 +2118,39 @@ function renderDynamicHierarchy(svg) {
   layer.classList.add("dynamic-tree-layer");
   viewport.appendChild(layer);
 
+  const nodeVerticalOffsets = (node) => {
+    if (node.data.isVirtual) {
+      const height = Number(emperorRect.getAttribute("height"));
+      return { top: -height / 2, bottom: height / 2 };
+    }
+    return {
+      top: expandedDetailId.value === node.data.id
+        ? INLINE_DETAIL_BOUNDS.top
+        : templatePolygonBounds.y - 196.11,
+      bottom: expandedDetailId.value === node.data.id
+        ? INLINE_DETAIL_BOUNDS.bottom
+        : templatePolygonBounds.y + templatePolygonBounds.height - 196.11,
+    };
+  };
+  const noVirtualNodeY = new Map();
+  if (!showVirtualNodes.value) {
+    for (const node of hierarchyNodes) {
+      if (!node.parent) {
+        noVirtualNodeY.set(node, 147.15);
+        continue;
+      }
+      const parentY = noVirtualNodeY.get(node.parent) ?? 147.15;
+      const parentOffsets = nodeVerticalOffsets(node.parent);
+      const childOffsets = nodeVerticalOffsets(node);
+      noVirtualNodeY.set(node, nextHierarchyLayerY(
+        parentY,
+        parentOffsets.bottom,
+        childOffsets.top,
+        24,
+      ));
+    }
+  }
+
   const nodeLayout = new Map(hierarchyNodes.map((node) => {
     let x;
     if (node.depth === 0) {
@@ -2134,11 +2168,13 @@ function renderDynamicHierarchy(svg) {
     }
     // 制度组是新增的一层导航，不能再完整占用旧树的一层高度。
     // 一级机构贴近制度组，后续真实上下级仍沿用设计稿的层间距。
-    const y = node.depth === 0
-      ? 147.15
-      : node.depth >= 2
-        ? institutionDepthY + (node.depth - 2) * depthGap
-        : 221.11 + (node.depth - 1) * depthGap;
+    const y = !showVirtualNodes.value
+      ? noVirtualNodeY.get(node) ?? 147.15
+      : node.depth === 0
+        ? 147.15
+        : node.depth >= 2
+          ? institutionDepthY + (node.depth - 2) * depthGap
+          : 221.11 + (node.depth - 1) * depthGap;
     if (node.data.isVirtual) {
       const width = virtualNodeWidth(node);
       const height = Number(emperorRect.getAttribute("height"));

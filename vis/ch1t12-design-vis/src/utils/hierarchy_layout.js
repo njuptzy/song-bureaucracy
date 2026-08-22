@@ -55,6 +55,15 @@ export function hierarchyPackingBranches(rootChildren = [], showVirtualNodes = t
   return children.filter((node) => !node?.data?.isVirtual);
 }
 
+export function nextHierarchyLayerY(
+  parentCenterY,
+  parentBottomOffset,
+  childTopOffset,
+  gap = 24,
+) {
+  return parentCenterY + parentBottomOffset - childTopOffset + gap;
+}
+
 export function fitRangeShift(contentLeft, contentRight, viewportLeft, viewportRight) {
   const contentWidth = contentRight - contentLeft;
   const viewportWidth = viewportRight - viewportLeft;
