@@ -6,6 +6,7 @@
       :data="data"
       :initial-state="canvasState"
       :revision-panel-active="revisionPanelVisible || editMode"
+      :edit-mode="editMode"
       :global-undo-available="Boolean(!revisionBusy && navigationHistory.length)"
       @state-change="handleCanvasStateChange"
       @selection-change="handleSelectionChange"

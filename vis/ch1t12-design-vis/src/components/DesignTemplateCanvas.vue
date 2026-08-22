@@ -1,6 +1,6 @@
 <template>
   <div ref="hostRef" class="design-template"
-    :class="{ loading: loading, 'revision-panel-active': revisionPanelActive }">
+    :class="{ loading: loading, 'revision-panel-active': revisionPanelActive, 'edit-mode': editMode }">
     <div v-if="error" class="template-message">{{ error }}</div>
     <div v-else-if="loading" class="template-message">载入 SVG 设计画板…</div>
     <div ref="svgMountRef" class="svg-mount"></div>
@@ -153,6 +153,7 @@ const props = defineProps({
   data: { type: Object, required: true },
   initialState: { type: Object, default: null },
   revisionPanelActive: { type: Boolean, default: false },
+  editMode: { type: Boolean, default: false },
   globalUndoAvailable: { type: Boolean, default: false },
   fixedViewMode: { type: String, default: "" },
 });
@@ -5720,6 +5721,7 @@ function bindTemplateControls(svg) {
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
+        this.classList.add("header-view-mode-label", `${targetMode}-view-mode-label`);
         const viewLabelCenter = targetMode === "hierarchy"
           ? HIERARCHY_HEADER_LAYOUT.hierarchyViewLabelX
           : HIERARCHY_HEADER_LAYOUT.compositionViewLabelX;
@@ -5729,7 +5731,7 @@ function bindTemplateControls(svg) {
           && viewMode.value === "evolution";
         const returnLabel = returningFromEvolution ? "返回层级" : "层级视图";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
-        const canActivate = !viewModeLocked.value && targetMode === "hierarchy"
+        const canActivate = !props.editMode && !viewModeLocked.value && targetMode === "hierarchy"
           && (viewMode.value === "composition"
             || viewMode.value === "evolution");
         const activateView = (event) => {
@@ -5759,7 +5761,7 @@ function bindTemplateControls(svg) {
         const bounds = elementBounds(this);
         if (canActivate && bounds && this.parentNode) {
           const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          hitArea.classList.add("view-mode-hit-area");
+          hitArea.classList.add("view-mode-hit-area", `${targetMode}-view-mode-hit-area`);
           hitArea.setAttribute("x", String(bounds.x - 12));
           hitArea.setAttribute("y", String(bounds.y - 8));
           hitArea.setAttribute("width", String(bounds.width + 24));
@@ -6856,6 +6858,14 @@ onUnmounted(() => {
 
 .design-template.revision-panel-active .svg-mount :deep(.evolution-intro-copy) {
   display: none;
+}
+
+.design-template.edit-mode .svg-mount :deep(.hierarchy-view-mode-label),
+.design-template.edit-mode .svg-mount :deep(.composition-view-mode-label),
+.design-template.edit-mode .svg-mount :deep(.hierarchy-view-mode-hit-area),
+.design-template.edit-mode .svg-mount :deep(.composition-view-mode-hit-area) {
+  display: none;
+  pointer-events: none;
 }
 
 .svg-mount :deep(.shared-category-label) {
