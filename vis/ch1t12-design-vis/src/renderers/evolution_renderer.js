@@ -1310,8 +1310,13 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
   const rows = [];
   return (events || []).map((event, index) => {
     const x = Math.max(4, Math.min(viewportWidth - 4, xForEvent(event)));
-    // 信息带暂不绘制文字，只按圆点和点击热区做碰撞检测。
-    const interval = [Math.max(0, x - 9), Math.min(viewportWidth, x + 9)];
+    // 圆点是时间定位的最高优先级：只按实际可见圆点判断是否相撞。
+    // 透明点击热区和后续文字标签不能占用轴线位置，把本可并列的圆点挤到下方。
+    const visibleMarkerHalfWidth = 4;
+    const interval = [
+      Math.max(0, x - visibleMarkerHalfWidth),
+      Math.min(viewportWidth, x + visibleMarkerHalfWidth),
+    ];
     let rowIndex = rows.findIndex((occupied) => (
       occupied.every(([occupiedLeft, occupiedRight]) => (
         interval[1] <= occupiedLeft || interval[0] >= occupiedRight

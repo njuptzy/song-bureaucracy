@@ -31,18 +31,20 @@ it("三信息带与机构主线共用完全相同的年份横轴", () => {
   });
 });
 
-it("圆点不相交的演变事件共用轴线，只有相撞时才下沉回指", () => {
+it("可见圆点不相交时优先共用轴线，点击热区和标签不挤占点位", () => {
   const events = [
     { id: "a", displayTitle: "嘉庆院 → 将作监", displaySummary: "前后演变", x: 180 },
     { id: "b", displayTitle: "少府监 → 将作监", displaySummary: "前后演变", x: 650 },
     { id: "c", displayTitle: "近邻机构 → 将作监", displaySummary: "前后演变", x: 658 },
+    { id: "d", displayTitle: "同点机构 → 将作监", displaySummary: "前后演变", x: 658 },
   ];
   const placements = layoutCompositeBandEventRows(events, 900, (event) => event.x);
   assert.equal(placements[0].rowIndex, 0);
   assert.equal(placements[1].rowIndex, 0);
-  assert.equal(placements[2].rowIndex, 1);
+  assert.equal(placements[2].rowIndex, 0);
+  assert.equal(placements[3].rowIndex, 1);
   assert.equal(placements[0].x, placements[0].anchorX);
-  assert.equal(placements[2].x, placements[2].anchorX);
+  assert.equal(placements[3].x, placements[3].anchorX);
 });
 
 it("信息带标签即使位于圆点旁也明确画线连接", () => {
