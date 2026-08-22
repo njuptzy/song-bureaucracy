@@ -93,6 +93,7 @@ import { relationshipSourceOriginal } from "../utils/relationship_source";
 import {
   evidenceHighlightMask,
   evidenceHighlightTerms,
+  preciseTimepointEvidenceTerms,
 } from "../utils/evidence_highlight";
 import { relationOriginalSections } from "../utils/relation_detail_sections";
 import {
@@ -4596,6 +4597,12 @@ function evolutionDetailPayload(svg) {
     }
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
+    const preciseHighlightTerms = preciseTimepointEvidenceTerms({
+      quotations: evidence.quotations,
+      eventText: event.event,
+      rawTime: event.rawTime,
+      entityTitle: entity?.title,
+    });
     const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
@@ -4612,7 +4619,7 @@ function evolutionDetailPayload(svg) {
         {
           label: "词条原文：",
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
-          highlightTerms: evidence.quotations,
+          highlightTerms: preciseHighlightTerms,
         },
         {
           label: "存废判定：",
