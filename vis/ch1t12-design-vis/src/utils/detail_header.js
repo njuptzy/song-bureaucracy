@@ -15,7 +15,7 @@ function finiteWidth(value) {
   return Number.isFinite(width) && width > 0 ? width : 0;
 }
 
-export function detailHeaderLayout({ titleWidth, yearWidth, ...overrides }) {
+export function detailHeaderLayout({ titleWidth, yearWidth, forceStacked = false, ...overrides }) {
   const geometry = { ...DEFAULTS, ...overrides };
   const naturalTitleWidth = finiteWidth(titleWidth);
   const naturalYearWidth = finiteWidth(yearWidth);
@@ -24,7 +24,7 @@ export function detailHeaderLayout({ titleWidth, yearWidth, ...overrides }) {
     geometry.yearMinX,
     titleRight + geometry.inlineGap,
   );
-  const inline = inlineYearX + naturalYearWidth <= geometry.panelRight;
+  const inline = !forceStacked && inlineYearX + naturalYearWidth <= geometry.panelRight;
   const yearX = inline ? inlineYearX : geometry.titleX;
   const yearY = inline ? geometry.yearY : geometry.stackedYearY;
   const headerRight = inline

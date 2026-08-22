@@ -27,6 +27,18 @@ describe("detailHeaderLayout", () => {
     assert.equal(layout.stacked, true);
   });
 
+  it("演变关系纪年不受标题宽度影响，始终固定在下一行", () => {
+    const layout = detailHeaderLayout({
+      titleWidth: 64,
+      yearWidth: 126,
+      forceStacked: true,
+    });
+
+    assert.equal(layout.yearX, 99.85);
+    assert.equal(layout.yearY, 525);
+    assert.equal(layout.stacked, true);
+  });
+
   it("顶边缺口不越过面板右边界", () => {
     const layout = detailHeaderLayout({ titleWidth: 330, yearWidth: 180 });
 

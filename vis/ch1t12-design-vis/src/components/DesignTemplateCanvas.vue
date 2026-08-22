@@ -788,7 +788,7 @@ function detailHeaderSlots(svg) {
   return { title, year };
 }
 
-function layoutDetailHeader(svg, titleText, yearText) {
+function layoutDetailHeader(svg, titleText, yearText, options = {}) {
   const slots = detailHeaderSlots(svg);
   setText(slots.title, titleText);
   setText(slots.year, yearText);
@@ -801,6 +801,7 @@ function layoutDetailHeader(svg, titleText, yearText) {
   const layout = detailHeaderLayout({
     titleWidth: slots.title.getComputedTextLength(),
     yearWidth: slots.year.getComputedTextLength(),
+    forceStacked: options.forceStacked === true,
   });
   slots.year.setAttribute("transform", `translate(${layout.yearX} ${layout.yearY})`);
 
@@ -4389,6 +4390,7 @@ function relationDetailPayload(relation) {
   return {
     title: relation.label,
     year: endpointYears.length ? endpointYears.join(" → ") : "年代未明",
+    yearBelowTitle: true,
     sections: [
       { label: "关系：", value: relation.label },
       { label: "来源：", value: sources || "来源端点未完整记录。" },
@@ -4440,6 +4442,7 @@ function evolutionDetailPayload(svg) {
     return {
       title: detailHeader.title,
       year: detailHeader.year,
+      yearBelowTitle: compositeEvent.band === "institution",
       sections: [
         { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
         { label: "事件：", value: eventTitle },
@@ -4613,7 +4616,9 @@ function evolutionDetailPayload(svg) {
 function updateEvolutionDetails(svg, payloadOverride = null) {
   const payload = payloadOverride || evolutionDetailPayload(svg);
   if (!payload) return;
-  const detailHeader = layoutDetailHeader(svg, payload.title, payload.year);
+  const detailHeader = layoutDetailHeader(svg, payload.title, payload.year, {
+    forceStacked: payload.yearBelowTitle === true,
+  });
 
   let cursorY = DETAIL_PANEL_FIRST_LABEL_Y + detailHeader.contentOffsetY;
   DETAIL_PANEL_SECTION_KEYS.forEach((key, index) => {
