@@ -31,6 +31,7 @@ import {
   fitRangeShift,
   focusPanToCenter,
   hierarchyNodeGap,
+  hierarchyPackingBranches,
   isHorizontalWheelGesture,
   panFromScrollbarOffset,
   panScrollbarGeometry,
@@ -2167,12 +2168,17 @@ function renderDynamicHierarchy(svg) {
     }];
   }));
 
-  // 制度组发生重叠时，按从左到右的方向整体推开。当前制度组以及它右侧的
-  // 制度组都继承同一累计位移，标题、后代节点和连线维持各自的相对位置。
-  if (institutionGroupNodes.length > 1) {
-    const branchRanges = institutionGroupNodes
-      .map((institutionGroupNode) => {
-        const branchNodes = institutionGroupNode.descendants();
+  // 虚拟节点开启时按制度组打包；关闭后则直接按真实根机构打包。
+  // 两种模式都必须让整条分支一起平移，否则点击展开真实机构后，各根分支
+  // 只使用 D3 的节点中心间距，详情和后代的实际范围仍可能互相覆盖。
+  const packingBranchNodes = hierarchyPackingBranches(
+    root.children,
+    showVirtualNodes.value,
+  );
+  if (packingBranchNodes.length > 1) {
+    const branchRanges = packingBranchNodes
+      .map((branchNode) => {
+        const branchNodes = branchNode.descendants();
         const bounds = branchNodes
           .map((node) => nodeLayout.get(node))
           .filter(Boolean)
@@ -2182,7 +2188,7 @@ function renderDynamicHierarchy(svg) {
           }));
         if (!bounds.length) return null;
         return {
-          id: institutionGroupNode.data.id,
+          id: branchNode.data.id,
           left: Math.min(...bounds.map((bound) => bound.left)),
           right: Math.max(...bounds.map((bound) => bound.right)),
         };
@@ -2191,7 +2197,7 @@ function renderDynamicHierarchy(svg) {
     const packedRanges = pushOverlappingRanges(branchRanges, 24);
     const originalRangeById = new Map(branchRanges.map((range) => [range.id, range]));
     const groupById = new Map(
-      institutionGroupNodes.map((node) => [node.data.id, node]),
+      packingBranchNodes.map((node) => [node.data.id, node]),
     );
     const shiftLayout = (layout, delta) => {
       if (!layout || !delta) return;
@@ -5322,6 +5328,14 @@ function bindVirtualNodeVisibilityControl(svg) {
     event.preventDefault();
     event.stopPropagation();
     showVirtualNodes.value = !showVirtualNodes.value;
+    if (!showVirtualNodes.value) {
+      // 隐藏的制度组和下属分组不能继续充当真实机构树的布局锚点。
+      expandedInstitutionGroupIds = [];
+      expandedSubordinateGroupIds = [];
+      lastExpandedInstitutionGroupId = null;
+      lastExpandedSubordinateGroupId = null;
+      collapsedHierarchyIds.clear();
+    }
     hierarchyPanFocusId = selectedId.value;
     sync();
     refreshTemplate();

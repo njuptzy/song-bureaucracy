@@ -47,6 +47,14 @@ export function hierarchyNodeGap(
   return a?.parent === b?.parent ? sibling : cousin;
 }
 
+export function hierarchyPackingBranches(rootChildren = [], showVirtualNodes = true) {
+  const children = Array.isArray(rootChildren) ? rootChildren : [];
+  const institutionGroups = children.filter((node) => node?.data?.isInstitutionGroup);
+  if (institutionGroups.length) return institutionGroups;
+  if (showVirtualNodes) return [];
+  return children.filter((node) => !node?.data?.isVirtual);
+}
+
 export function fitRangeShift(contentLeft, contentRight, viewportLeft, viewportRight) {
   const contentWidth = contentRight - contentLeft;
   const viewportWidth = viewportRight - viewportLeft;

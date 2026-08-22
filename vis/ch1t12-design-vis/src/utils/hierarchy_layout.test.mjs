@@ -7,6 +7,7 @@ import {
   fitRangeShift,
   focusPanToCenter,
   hierarchyNodeGap,
+  hierarchyPackingBranches,
   horizontalRangesFit,
   isHorizontalWheelGesture,
   packHorizontalRanges,
@@ -117,6 +118,17 @@ test("多个展开分支按原顺序排开且保留完整宽度", () => {
   assert.equal(packed[1].right - packed[1].left, 800);
   assert.equal(packed[1].left - packed[0].right, 24);
   assert.equal(packed[1].right - packed[0].left, 1624);
+});
+
+test("关闭虚拟节点后按真实根机构分支执行碰撞打包", () => {
+  const category = { data: { isVirtual: true } };
+  const group = { data: { isVirtual: true, isInstitutionGroup: true } };
+  const rootA = { data: { id: 1, isVirtual: false } };
+  const rootB = { data: { id: 2, isVirtual: false } };
+
+  assert.deepEqual(hierarchyPackingBranches([group, category], true), [group]);
+  assert.deepEqual(hierarchyPackingBranches([rootA, rootB], false), [rootA, rootB]);
+  assert.deepEqual(hierarchyPackingBranches([rootA, rootB], true), []);
 });
 
 test("重叠范围向同一方向整体平移，后续范围保持相对位置", () => {
