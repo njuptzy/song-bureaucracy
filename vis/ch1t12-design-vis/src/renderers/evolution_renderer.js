@@ -1367,20 +1367,6 @@ export function compositeBandLabelWidth(text) {
   ), 6);
 }
 
-export function compositeEventGuidePoints({
-  anchorX,
-  markerY,
-  scrollOffset = 0,
-  markerRadius = 4,
-}) {
-  const visibleY = markerY - scrollOffset;
-  const markerGap = 1.5;
-  return [
-    [anchorX, 0],
-    [anchorX, Math.max(0, visibleY - markerRadius - markerGap)],
-  ];
-}
-
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const axisClearance = 14;
   const labelHeight = 14;
@@ -1537,27 +1523,12 @@ function renderCompositeBands(parent, layout, options) {
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
-  const addEvent = (guides, leaders, content, placement, color, rowHeight, initialOffset) => {
+  const addEvent = (guides, leaders, content, placement, color, rowHeight) => {
     const { event, anchorX, x, rowIndex, showAxisAnchor } = placement;
-    // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
+    // 第一行圆点直接落在年份轴；下沉圆点保持同一年份横坐标，
+    // 不再用竖线串联，避免被误读成机构或事件关系边。
     const markerY = rowIndex * rowHeight;
     const selected = selectedId === event.id;
-    const guidePoints = compositeEventGuidePoints({
-      anchorX,
-      markerY,
-      scrollOffset: initialOffset,
-    });
-    const guide = svgElement("polyline", {
-      class: "evolution-composite-event-guide",
-      points: guidePoints.map((point) => point.join(",")).join(" "),
-      "data-anchor-x": anchorX,
-      fill: "none",
-      stroke: color,
-      "stroke-dasharray": "2 3",
-      "stroke-width": selected ? 1.3 : 0.8,
-      opacity: selected ? 0.62 : 0.34,
-      "pointer-events": "none",
-    });
     const anchor = svgElement("circle", {
       class: "evolution-composite-event-anchor",
       cx: anchorX,
@@ -1566,7 +1537,7 @@ function renderCompositeBands(parent, layout, options) {
       fill: color,
       "pointer-events": "none",
     });
-    guides.append(guide, anchor);
+    guides.appendChild(anchor);
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
       transform: `translate(${x} ${markerY})`,
@@ -1633,7 +1604,6 @@ function renderCompositeBands(parent, layout, options) {
       content.appendChild(labelGroup);
     }
     return {
-      guide,
       anchor,
       item,
       labelGroup,
@@ -1770,7 +1740,6 @@ function renderCompositeBands(parent, layout, options) {
         placement,
         meta.color,
         rowHeight,
-        scroll.offset,
       ));
       content.append(leaders, items);
       viewport.appendChild(guides);
@@ -1810,7 +1779,6 @@ function renderCompositeBands(parent, layout, options) {
         );
         content.setAttribute("transform", `translate(0 ${-currentScroll.offset})`);
         eventLayouts.forEach(({
-          guide,
           anchor,
           item,
           labelGroup,
@@ -1824,16 +1792,10 @@ function renderCompositeBands(parent, layout, options) {
             markerY,
             labelBox,
           }, currentScroll.offset, viewportHeight);
-          guide.style.display = visibility.markerVisible && displaced ? "" : "none";
           anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
           item.style.display = visibility.markerVisible ? "" : "none";
           if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
-          guide.setAttribute("points", compositeEventGuidePoints({
-            anchorX: Number(guide.dataset.anchorX),
-            markerY,
-            scrollOffset: currentScroll.offset,
-          }).map((point) => point.join(",")).join(" "));
         });
         thumb.setAttribute("y", String(viewportTop + currentScroll.thumbOffset));
         thumb.setAttribute("aria-valuemax", String(currentScroll.maxScroll));
