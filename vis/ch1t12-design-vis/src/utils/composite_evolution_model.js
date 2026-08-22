@@ -65,6 +65,9 @@ function relationEndpoint(member, fallback = {}) {
       "timepointId", "timepoint_id", "object_timepoint_id", "subject_timepoint_id",
     ])),
     year: eventYear(source),
+    month: firstDefined(source, ["month"]),
+    day: firstDefined(source, ["day"]),
+    isLeapMonth: Boolean(firstDefined(source, ["isLeapMonth", "is_leap_month"])),
     rawTime: String(firstDefined(source, ["rawTime", "raw_time", "time"]) || ""),
     timeType: String(firstDefined(source, ["timeType", "time_type"]) || ""),
     title: String(firstDefined(source, ["title", "entityTitle"]) || ""),
@@ -86,6 +89,9 @@ function relationMembers(relation, role) {
       year: firstDefined(relation, ["sourceYear", "source_year"]) ?? eventYear(endpointTime),
       rawTime: firstDefined(endpointTime, ["rawTime", "raw_time", "time"]),
       timeType: firstDefined(endpointTime, ["timeType", "time_type"]),
+      month: firstDefined(endpointTime, ["month"]),
+      day: firstDefined(endpointTime, ["day"]),
+      isLeapMonth: firstDefined(endpointTime, ["isLeapMonth", "is_leap_month"]),
     }
     : {
       entityId: firstDefined(relation, ["target", "targetEntityId", "target_entity_id"]),
@@ -93,6 +99,9 @@ function relationMembers(relation, role) {
       year: firstDefined(relation, ["targetYear", "target_year"]) ?? eventYear(endpointTime),
       rawTime: firstDefined(endpointTime, ["rawTime", "raw_time", "time"]),
       timeType: firstDefined(endpointTime, ["timeType", "time_type"]),
+      month: firstDefined(endpointTime, ["month"]),
+      day: firstDefined(endpointTime, ["day"]),
+      isLeapMonth: firstDefined(endpointTime, ["isLeapMonth", "is_leap_month"]),
     };
   const endpoint = relationEndpoint(fallback);
   return endpoint.entityId == null && endpoint.timepointId == null ? [] : [endpoint];
@@ -288,6 +297,9 @@ function buildBandEvents(changes, model) {
       targetEndpoints,
       yearStart: change.year,
       yearEnd: change.year,
+      month: change.month ?? null,
+      day: change.day ?? null,
+      isLeapMonth: Boolean(change.isLeapMonth),
       eventTime: change.eventTime || "",
       displayTitle: structuredInstitutionChange
         ? transitionTitle
@@ -514,6 +526,9 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
           ? [hierarchyChange.nextParentId]
           : (node.type === "官职" ? [node.id] : []),
         year: point.year,
+        month: point.month ?? null,
+        day: point.day ?? null,
+        isLeapMonth: Boolean(point.is_leap_month ?? point.isLeapMonth),
         eventTime: point.raw_time ?? point.time ?? "",
         eventText: point.event,
         eventType: point.eventType,
@@ -609,6 +624,9 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       sourcePoints: relation.sourceMembers,
       targetPoints: relation.targetMembers,
       year: targetMember?.year ?? null,
+      month: targetMember?.month ?? null,
+      day: targetMember?.day ?? null,
+      isLeapMonth: Boolean(targetMember?.isLeapMonth),
       eventTime: targetMember?.rawTime || relation.eventTime || "",
       eventText: relation.text || relation.type,
       relationType: relation.type,

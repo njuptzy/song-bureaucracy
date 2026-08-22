@@ -90,3 +90,21 @@ export function evolutionDetailSelection(selectedEvolutionItem, compositeSelecte
     compositeSelectedEvent: compositeSelectedEvent || null,
   };
 }
+
+export function compositeEventDetailHeader(event) {
+  const eventTitle = event?.displayTitle || event?.subtype || "未载事件";
+  return {
+    title: event?.band === "institution"
+      ? eventTitle
+      : event?.subject?.title || eventTitle,
+    year: formatStandardTime({
+      yearStart: event?.yearStart,
+      yearEnd: event?.yearEnd,
+      month: event?.month,
+      day: event?.day,
+      isLeapMonth: event?.isLeapMonth,
+      rawTime: event?.eventTime,
+    }),
+  };
+}
+import { formatStandardTime } from "./time_format.js";

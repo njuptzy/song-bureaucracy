@@ -1153,6 +1153,9 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             "targetEndpoints": target_endpoints,
             "yearStart": relation_time.get("year_start"),
             "yearEnd": relation_time.get("year_end") or relation_time.get("year_start"),
+            "month": relation_time.get("month"),
+            "day": relation_time.get("day"),
+            "isLeapMonth": bool(relation_time.get("is_leap_month")),
             "eventTime": relation_time.get("raw_time") or "",
             "displayTitle": (
                 transition_title(source_endpoints, target_endpoints)
@@ -1258,6 +1261,9 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 "targetEndpoints": target_endpoints,
                 "yearStart": point.get("year_start"),
                 "yearEnd": point.get("year_end") or point.get("year_start"),
+                "month": point.get("month"),
+                "day": point.get("day"),
+                "isLeapMonth": bool(point.get("is_leap_month")),
                 "eventTime": point.get("raw_time") or point.get("time") or "",
                 "displayTitle": (
                     transition_title(source_endpoints, target_endpoints)

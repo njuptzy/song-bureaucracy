@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  compositeEventDetailHeader,
   compositeEventSelection,
   evolutionDetailSelection,
   evolutionComparisonAfterAdd,
@@ -9,6 +10,21 @@ import {
   evolutionSelectionFocus,
   timelineSelectionForEvolutionItem,
 } from "./evolution_selection.js";
+
+test("结构演变详情以关系为标题并显示标准化精确纪年", () => {
+  assert.deepEqual(compositeEventDetailHeader({
+    band: "institution",
+    displayTitle: "国子监 → 国子学",
+    subject: { title: "国子监" },
+    yearStart: 989,
+    yearEnd: 989,
+    month: 2,
+    eventTime: "北宋端拱二年二月",
+  }), {
+    title: "国子监 → 国子学",
+    year: "公元989年2月（北宋端拱二年二月）",
+  });
+});
 
 test("机构主线选择优先于残留的信息带选择", () => {
   const main = { kind: "timepoint", id: 11, item: { id: 11 } };

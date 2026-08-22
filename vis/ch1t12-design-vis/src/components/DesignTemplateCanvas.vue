@@ -76,6 +76,7 @@ import { buildEvolutionLanes, buildEvolutionModel } from "../utils/evolution_mod
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import {
+  compositeEventDetailHeader,
   compositeEventSelection,
   evolutionComparisonAfterAdd,
   evolutionDetailSelection,
@@ -4424,6 +4425,7 @@ function evolutionDetailPayload(svg) {
   if (compositeEvent) {
     const subject = compositeEvent.subject || {};
     const eventTitle = compositeEvent.displayTitle || compositeEvent.subtype || "未载事件";
+    const detailHeader = compositeEventDetailHeader(compositeEvent);
     const eventSummary = String(compositeEvent.displaySummary || "").trim();
     const summaryAddsInformation = eventSummary && eventSummary !== String(eventTitle).trim();
     const evidence = evidenceLinesForKeys(
@@ -4436,10 +4438,8 @@ function evolutionDetailPayload(svg) {
     );
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[subject.title] || {});
     return {
-      title: subject.title || compositeEvent.displayTitle || "综合演变事件",
-      year: compositeEvent.eventTime || (
-        compositeEvent.yearStart == null ? "年代未明" : `${compositeEvent.yearStart}年`
-      ),
+      title: detailHeader.title,
+      year: detailHeader.year,
       sections: [
         { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
         { label: "事件：", value: eventTitle },
