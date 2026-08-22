@@ -15,12 +15,19 @@ import {
   compositeBandItemVisibility,
   compositeBandEventLayer,
   compositeBandAxisMarkerVisible,
+  compositeBandMarkerType,
   compositeBandLabelWidth,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
   layoutCompositeMainLaneEvents,
   compositeSectionLayout,
 } from "../renderers/evolution_renderer.js";
+
+it("机构信息带使用菱形区分改隶事件", () => {
+  assert.equal(compositeBandMarkerType({ iconType: "affiliation_change" }), "affiliation_change");
+  assert.equal(compositeBandMarkerType({ iconType: "record" }), "record");
+  assert.equal(compositeBandMarkerType({}), "record");
+});
 
 it("三信息带与机构主线共用完全相同的年份横轴", () => {
   const layout = {

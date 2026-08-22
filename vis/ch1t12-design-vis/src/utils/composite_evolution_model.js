@@ -146,6 +146,67 @@ function normalizeHierarchyEdges(data) {
   })).filter((edge) => edge.parent != null && edge.child != null);
 }
 
+function hierarchyChangeRecords(edges, timepointsByEntity) {
+  const pointById = new Map(
+    [...timepointsByEntity.values()].flat().map((point) => [normalizeId(point.id), point]),
+  );
+  const histories = new Map();
+  for (const edge of edges || []) {
+    const states = edge.states?.length
+      ? edge.states
+      : (edge.periods || []).map((period) => ({ effective_year: period.start }));
+    for (const state of states) {
+      const explicitYear = finiteYear(state.effective_year ?? state.effectiveYear);
+      const endpointYears = [state.subject_timepoint_id, state.object_timepoint_id]
+        .map((id) => pointById.get(normalizeId(id))?.year)
+        .filter((year) => year != null);
+      const year = explicitYear ?? (endpointYears.length ? Math.max(...endpointYears) : null);
+      if (year == null || edge.child == null || edge.parent == null) continue;
+      if (!histories.has(edge.child)) histories.set(edge.child, []);
+      histories.get(edge.child).push({
+        year,
+        parentId: normalizeId(edge.parent),
+        relationId: normalizeId(state.id ?? edge.id),
+        parentTimepointId: normalizeId(state.subject_timepoint_id),
+        childTimepointId: normalizeId(state.object_timepoint_id),
+      });
+    }
+  }
+  const changes = [];
+  for (const [childId, records] of histories) {
+    records.sort((first, second) => first.year - second.year
+      || String(first.relationId).localeCompare(String(second.relationId), "zh", { numeric: true }));
+    const byYear = new Map();
+    for (const record of records) {
+      if (!byYear.has(record.year)) byYear.set(record.year, []);
+      byYear.get(record.year).push(record);
+    }
+    let previous = null;
+    for (const yearRecords of byYear.values()) {
+      if (new Set(yearRecords.map((record) => record.parentId)).size !== 1) {
+        previous = null;
+        continue;
+      }
+      const record = yearRecords.at(-1);
+      if (previous && record.parentId !== previous.parentId) {
+        changes.push({
+          key: `reparent:${childId}:${record.year}:${previous.parentId}:${record.parentId}`,
+          childId: normalizeId(childId),
+          previousParentId: previous.parentId,
+          nextParentId: record.parentId,
+          year: record.year,
+          previousRelationId: previous.relationId,
+          relationId: record.relationId,
+          parentTimepointId: record.parentTimepointId,
+          childTimepointId: record.childTimepointId,
+        });
+      }
+      previous = record;
+    }
+  }
+  return changes;
+}
+
 function normalizeStaffEdges(data) {
   return (data?.staffEdges || []).map((edge) => ({
     ...edge,
@@ -231,6 +292,7 @@ function buildBandEvents(changes, model) {
       revisionStatus: change.revisionStatus || "",
       revisionId: change.revisionOriginalId || null,
       editableTarget: change.editableTarget || null,
+      iconType: change.iconType || "record",
       uncertainty: [
         change.uncertain ? "方向未定" : "",
         unclassifiedEvolution ? "具体类型未定" : "",
@@ -318,6 +380,13 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
     ? { staffEdges: snapshot.staffEdges }
     : data);
   const timepoints = normalizeTimepoints(data);
+  const hierarchyChanges = hierarchyChangeRecords(normalizeHierarchyEdges(data), timepoints);
+  const hierarchyChangeByTimepoint = new Map(
+    hierarchyChanges
+      .filter((change) => change.childTimepointId != null)
+      .map((change) => [normalizeId(change.childTimepointId), change]),
+  );
+  const consumedHierarchyChanges = new Set();
   const childrenByParent = new Map();
   for (const edge of hierarchyEdges) {
     if (!childrenByParent.has(edge.parent)) childrenByParent.set(edge.parent, []);
@@ -389,10 +458,10 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   for (const node of nodesById.values()) {
     for (const point of timepoints.get(node.id) || []) {
       if ((point.time_type || point.timeType) === "pre_song") continue;
-      const category = classifyCompositeChange({
-        text: point.event,
-        entityType: node.type,
-        eventType: point.eventType,
+      const hierarchyChange = hierarchyChangeByTimepoint.get(normalizeId(point.id));
+      if (hierarchyChange) consumedHierarchyChanges.add(hierarchyChange.key);
+      const category = hierarchyChange ? "structure" : classifyCompositeChange({
+        text: point.event, entityType: node.type, eventType: point.eventType,
       });
       const id = `T${point.id}`;
       const institutionIds = node.type === "官职"
@@ -406,13 +475,23 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
         category,
         categoryLabel: CHANGE_CATEGORIES[category],
         entityId: node.id,
-        sourceIds: institutionIds.length ? institutionIds : [node.id],
-        targetIds: node.type === "官职" ? [node.id] : [],
+        sourceIds: hierarchyChange
+          ? [hierarchyChange.previousParentId]
+          : (institutionIds.length ? institutionIds : [node.id]),
+        targetIds: hierarchyChange
+          ? [hierarchyChange.nextParentId]
+          : (node.type === "官职" ? [node.id] : []),
         year: point.year,
         eventTime: point.raw_time ?? point.time ?? "",
         eventText: point.event,
         eventType: point.eventType,
-        citationKeys: point.citationKeys,
+        relationType: hierarchyChange ? "改隶" : null,
+        iconType: hierarchyChange ? "affiliation_change" : point.iconType,
+        citationKeys: hierarchyChange ? [...new Set([
+          ...point.citationKeys,
+          `R${hierarchyChange.previousRelationId}`,
+          `R${hierarchyChange.relationId}`,
+        ])] : point.citationKeys,
         citations: citationsFor(data, point.citationKeys),
         quotation: point.quotation || "",
         revisionStatus: point._revision_status || point.revisionStatus || "",
@@ -435,6 +514,36 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
         },
       });
     }
+  }
+
+  for (const change of hierarchyChanges) {
+    if (consumedHierarchyChanges.has(change.key)) continue;
+    const child = entityMap.get(change.childId);
+    addChange(changes, nodesById, {
+      id: `H:${change.key}`,
+      kind: "hierarchy_change",
+      category: "structure",
+      categoryLabel: CHANGE_CATEGORIES.structure,
+      entityId: change.childId,
+      sourceIds: [change.previousParentId],
+      targetIds: [change.nextParentId],
+      year: change.year,
+      eventTime: `${change.year}年`,
+      eventText: `${child?.title || `#${change.childId}`}改隶`,
+      eventType: "affiliation_change",
+      relationType: "改隶",
+      iconType: "affiliation_change",
+      citationKeys: [...new Set([
+        `R${change.previousRelationId}`,
+        `R${change.relationId}`,
+        change.childTimepointId != null ? `T${change.childTimepointId}` : null,
+      ].filter(Boolean))],
+      citations: [],
+      quotation: "",
+      revisionStatus: "",
+      revisionOriginalId: null,
+      editableTarget: null,
+    });
   }
 
   const relationEntries = normalizeChangeRelations(data);

@@ -46,7 +46,7 @@
           <strong>演变校订</strong>
         </legend>
         <div class="editor-frame-scroll">
-          <template v-if="selection">
+          <template v-if="selection && isEditableSelection">
             <header class="editor-context-heading">
               <div>
                 <span class="editor-kicker">{{ editorKicker }}</span>
@@ -142,6 +142,9 @@
               <button class="primary-command" type="button" :disabled="busy" @click="submitSelection">加入草稿</button>
             </footer>
           </template>
+          <div v-else-if="selection" class="drawer-empty">
+            该改隶事件由上下级关系变化派生，请在对应关系记录中校订。
+          </div>
         </div>
       </fieldset>
     </section>
@@ -314,6 +317,9 @@ const draftCount = computed(() => props.state?.draft?.group_count || 0);
 const groups = computed(() => props.state?.draft?.groups || []);
 const activeGroupCount = computed(() => props.state?.draft?.group_count || 0);
 const editableTarget = computed(() => props.selection?.item?.editableTarget || null);
+const isEditableSelection = computed(() => (
+  props.selection?.kind !== "composite-event" || Boolean(editableTarget.value)
+));
 const targetTable = computed(() => editableTarget.value?.table
   || (props.selection?.kind === "timepoint" ? "Timepoints" : "Relationships"));
 const isTimepointSelection = computed(() => targetTable.value === "Timepoints");

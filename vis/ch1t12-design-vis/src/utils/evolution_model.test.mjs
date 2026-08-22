@@ -82,25 +82,12 @@ describe("buildEvolutionModel hierarchy changes", () => {
     return model.lanes[0].events.filter((event) => event.structuralHierarchyChange);
   }
 
-  it("被改隶机构显示原上级与新上级", () => {
-    const [event] = hierarchyEvents(3);
-    assert.equal(event.eventType, "affiliation_change");
-    assert.equal(event.iconType, "affiliation_change");
-    assert.equal(event.effectiveYear, 1050);
-    assert.equal(event.hierarchyRole, "subject");
-    assert.equal(event.event, "改隶乙司");
-    assert.equal(event.hierarchyChangeLabel, "改隶事件：甲司 → 乙司");
-    assert.equal(event.syntheticHierarchyChange, undefined);
-    assert.deepEqual(event.evidenceKeys, ["R101", "R102", "T32"]);
-  });
-
-  it("原上级和新上级分别显示下属迁出与迁入", () => {
-    const [former] = hierarchyEvents(1);
-    const [next] = hierarchyEvents(2);
-    assert.equal(former.hierarchyRole, "former_parent");
-    assert.equal(former.event, "下属迁出：丙署 → 乙司");
-    assert.equal(next.hierarchyRole, "new_parent");
-    assert.equal(next.event, "下属迁入：丙署 ← 甲司");
+  it("主线不再重复显示改隶、下属迁出和下属迁入", () => {
+    for (const focusId of [1, 2, 3]) {
+      assert.deepEqual(hierarchyEvents(focusId), []);
+      const model = buildEvolutionModel(hierarchyData, [focusId], { yearMin: 960, yearMax: 1279 });
+      assert.equal(model.lanes[0].events.some((event) => event.eventType === "affiliation_change"), false);
+    }
   });
 
   it("同一年存在多个上级时不推断改隶", () => {

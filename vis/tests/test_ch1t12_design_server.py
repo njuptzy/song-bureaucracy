@@ -107,8 +107,21 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 {"id": 1, "title": "甲机构", "type": "机构"},
                 {"id": 2, "title": "乙官职", "type": "官职"},
                 {"id": 3, "title": "丙机构", "type": "机构"},
+                {"id": 4, "title": "丁机构", "type": "机构"},
             ],
-            "hierarchyEdges": [],
+            "hierarchyEdges": [{
+                "id": 40, "parent": 3, "child": 1,
+                "periods": [{"start": 1040, "end": 1049}],
+                "states": [{
+                    "id": 40, "subject_timepoint_id": 30, "object_timepoint_id": 10,
+                }],
+            }, {
+                "id": 41, "parent": 4, "child": 1,
+                "periods": [{"start": 1050, "end": 1100}],
+                "states": [{
+                    "id": 41, "subject_timepoint_id": 40, "object_timepoint_id": 12,
+                }],
+            }],
             "staffEdges": [{
                 "id": 20, "org": 1, "official": 2,
                 "staff_quota": "二员", "staff_type": "官",
@@ -136,16 +149,30 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 "1": [{
                     "id": 10, "entity_id": 1, "year_start": 1040, "year_end": 1040,
                     "raw_time": "1040年", "event": "始置甲机构",
+                }, {
+                    "id": 12, "entity_id": 1, "year_start": 1050, "year_end": 1050,
+                    "raw_time": "1050年", "event": "改隶丁机构",
+                    "event_type": "affiliation_change",
                 }],
                 2: [{
                     "id": 20, "entity_id": 2, "year_start": 1055, "year_end": 1055,
                     "raw_time": "1055年", "event": "改为从七品",
                     "event_type": "staffing_change", "attr_grade": "从七品",
                 }],
+                3: [{
+                    "id": 30, "entity_id": 3, "year_start": 1040, "year_end": 1040,
+                    "raw_time": "1040年", "event": "丙机构统属甲机构",
+                }],
+                4: [{
+                    "id": 40, "entity_id": 4, "year_start": 1050, "year_end": 1050,
+                    "raw_time": "1050年", "event": "丁机构统属甲机构",
+                }],
             },
             "citations": {
                 "R30": [{"citation": "出处", "quotation": "甲机构移交职掌"}],
                 "R31": [{"citation": "出处二", "quotation": "甲机构旧称原文改为丙机构"}],
+                "R40": [{"citation": "旧隶属出处", "quotation": "甲机构旧隶丙机构"}],
+                "R41": [{"citation": "新隶属出处", "quotation": "甲机构改隶丁机构"}],
             },
         }
         previous = SERVER.build_payload
@@ -191,6 +218,22 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 event for event in result["bands"]["institution"] if event["id"] == "T10"
             )
             self.assertEqual(institution_point["editableTarget"]["id"], 10)
+            affiliation = next(
+                event for event in result["bands"]["institution"] if event["id"] == "T12"
+            )
+            self.assertEqual(affiliation["iconType"], "affiliation_change")
+            self.assertEqual(affiliation["displayTitle"], "丙机构 → 丁机构")
+            self.assertEqual(
+                [item["entityId"] for item in affiliation["sourceEndpoints"]], [3]
+            )
+            self.assertEqual(
+                [item["entityId"] for item in affiliation["targetEndpoints"]], [4]
+            )
+            self.assertEqual(affiliation["evidenceKeys"], ["T12", "R40", "R41"])
+            self.assertEqual(
+                [item["quotation"] for item in affiliation["citations"]],
+                ["甲机构旧隶丙机构", "甲机构改隶丁机构"],
+            )
             self.assertNotIn("旧称原文", institution["displaySummary"])
             self.assertEqual(institution["citations"][0]["quotation"], "甲机构旧称原文改为丙机构")
         finally:

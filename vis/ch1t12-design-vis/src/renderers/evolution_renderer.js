@@ -28,6 +28,10 @@ export function evolutionEventIconSize(iconType, selected = false) {
   return 4.2 + emphasis;
 }
 
+export function compositeBandMarkerType(event) {
+  return event?.iconType === "affiliation_change" ? "affiliation_change" : "record";
+}
+
 /**
  * Single visual weight for every evolution relation stroke — single relations
  * and fan branches alike. Unselected lines stay very light (0.35) so they
@@ -1194,16 +1198,7 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-linejoin": "round",
     }));
   });
-  item(x + 228, "改隶事件", (sample, itemX) => {
-    const size = evolutionEventIconSize("affiliation_change");
-    sample.appendChild(svgElement("path", {
-      d: `M${itemX} ${rowY - size}L${itemX + size} ${rowY}L${itemX} ${rowY + size}L${itemX - size} ${rowY}Z`,
-      fill: COLORS.paper,
-      stroke: COLORS.selected,
-      "stroke-width": 1.1,
-    }));
-  });
-  item(x + 308, "时间范围", (sample, itemX) => {
+  item(x + 228, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
@@ -1564,14 +1559,26 @@ function renderCompositeBands(parent, layout, options) {
       transform: `translate(${x} ${markerY})`,
       "data-composite-event-id": event.id,
     });
-    item.appendChild(svgElement("circle", {
-      cx: 0,
-      cy: 0,
-      r: selected ? 4.7 : 3.6,
-      fill: selected ? color : COLORS.paper,
-      stroke: color,
-      "stroke-width": selected ? 1.1 : 0.9,
-    }));
+    if (compositeBandMarkerType(event) === "affiliation_change") {
+      // 改隶菱形来自原机构主线；缩放到信息带行高内，避免侵入相邻标签。
+      const size = selected ? 5.6 : 5.1;
+      item.appendChild(svgElement("path", {
+        d: `M0 ${-size}L${size} 0L0 ${size}L${-size} 0Z`,
+        fill: selected ? color : COLORS.paper,
+        stroke: color,
+        "stroke-width": selected ? 1.1 : 0.9,
+        "stroke-linejoin": "round",
+      }));
+    } else {
+      item.appendChild(svgElement("circle", {
+        cx: 0,
+        cy: 0,
+        r: selected ? 4.7 : 3.6,
+        fill: selected ? color : COLORS.paper,
+        stroke: color,
+        "stroke-width": selected ? 1.1 : 0.9,
+      }));
+    }
     item.appendChild(svgElement("circle", {
       cx: 0,
       cy: 0,

@@ -948,6 +948,71 @@ def _edge_active(edge: dict, year: int | None) -> bool:
     return any(_period_active(period, year) for period in periods) if year is not None else True
 
 
+def _hierarchy_change_records(payload: dict) -> list[dict]:
+    """Derive unambiguous parent changes from consecutive hierarchy states."""
+    point_by_id = {}
+    for points in (payload.get("timepoints") or {}).values():
+        for point in points or []:
+            point_by_id[point.get("id")] = point
+
+    histories = {}
+    for edge in payload.get("hierarchyEdges") or []:
+        states = edge.get("states") or [
+            {"effective_year": period.get("start")}
+            for period in edge.get("periods") or []
+        ]
+        for state in states:
+            year = state.get("effective_year")
+            if year is None:
+                endpoint_years = [
+                    (point_by_id.get(state.get(point_key)) or {}).get("year_start")
+                    for point_key in ("subject_timepoint_id", "object_timepoint_id")
+                ]
+                endpoint_years = [item for item in endpoint_years if item is not None]
+                year = max(endpoint_years) if endpoint_years else None
+            if year is None or edge.get("parent") is None or edge.get("child") is None:
+                continue
+            histories.setdefault(int(edge["child"]), []).append({
+                "year": int(year),
+                "parentId": int(edge["parent"]),
+                "relationId": state.get("id", edge.get("id")),
+                "parentTimepointId": state.get("subject_timepoint_id"),
+                "childTimepointId": state.get("object_timepoint_id"),
+            })
+
+    changes = []
+    for child_id, records in histories.items():
+        records.sort(key=lambda item: (item["year"], str(item.get("relationId") or "")))
+        records_by_year = {}
+        for record in records:
+            records_by_year.setdefault(record["year"], []).append(record)
+        previous = None
+        for record_year in sorted(records_by_year):
+            year_records = records_by_year[record_year]
+            if len({record["parentId"] for record in year_records}) != 1:
+                # 同年存在多个上级时不能判断改隶方向，也不能跨过该年继续推断。
+                previous = None
+                continue
+            current = year_records[-1]
+            if previous is not None and current["parentId"] != previous["parentId"]:
+                changes.append({
+                    "key": (
+                        f"reparent:{child_id}:{current['year']}:"
+                        f"{previous['parentId']}:{current['parentId']}"
+                    ),
+                    "childId": child_id,
+                    "previousParentId": previous["parentId"],
+                    "nextParentId": current["parentId"],
+                    "year": current["year"],
+                    "previousRelationId": previous.get("relationId"),
+                    "relationId": current.get("relationId"),
+                    "parentTimepointId": current.get("parentTimepointId"),
+                    "childTimepointId": current.get("childTimepointId"),
+                })
+            previous = current
+    return changes
+
+
 def _composite_event_band(relation_type: str, text: str, subject_type: str) -> tuple[str, str]:
     combined = f"{relation_type} {text}"
     if (
@@ -1007,6 +1072,13 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
     ]
     citations = payload.get("citations", {})
     bands = {"institution": [], "staff": [], "duty": []}
+    hierarchy_changes = _hierarchy_change_records(payload)
+    hierarchy_change_by_timepoint = {
+        change["childTimepointId"]: change
+        for change in hierarchy_changes
+        if change.get("childTimepointId") is not None
+    }
+    consumed_hierarchy_changes = set()
 
     def endpoint(entity_id):
         entity = entities.get(int(entity_id), {})
@@ -1063,6 +1135,11 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 if band == "institution" else relation_type
             ),
             "displaySummary": display_relation_type,
+            "iconType": (
+                "affiliation_change"
+                if "改隶" in f"{relation_type} {relation.get('relation_subtype') or ''}"
+                else "record"
+            ),
             "evidenceKeys": [evidence_key],
             "citations": citations.get(evidence_key, []) if include_details else [],
             "revisionStatus": relation.get("_revision_status") or "",
@@ -1110,30 +1187,60 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             event = str(point.get("event") or point.get("quotation") or "").strip()
             if not event:
                 continue
-            band, subtype = _composite_event_band(
-                str(point.get("event_type") or ""), event, entity.get("type", "机构")
-            )
+            hierarchy_change = hierarchy_change_by_timepoint.get(point.get("id"))
+            if hierarchy_change is not None:
+                consumed_hierarchy_changes.add(hierarchy_change["key"])
+                band, subtype = "institution", "structure_change"
+            else:
+                band, subtype = _composite_event_band(
+                    str(point.get("event_type") or ""), event, entity.get("type", "机构")
+                )
             key = f"T{point.get('id')}"
             is_official = entity.get("type") == "官职"
-            source_endpoints = (
-                [endpoint(org_id) for org_id in sorted(official_orgs.get(entity_id, set()))]
-                if is_official else [endpoint(entity_id)]
-            )
+            if hierarchy_change is not None:
+                source_endpoints = [endpoint(hierarchy_change["previousParentId"])]
+                target_endpoints = [endpoint(hierarchy_change["nextParentId"])]
+                evidence_keys = list(dict.fromkeys(filter(None, [
+                    key,
+                    f"R{hierarchy_change['previousRelationId']}"
+                    if hierarchy_change.get("previousRelationId") is not None else None,
+                    f"R{hierarchy_change['relationId']}"
+                    if hierarchy_change.get("relationId") is not None else None,
+                ])))
+            else:
+                source_endpoints = (
+                    [endpoint(org_id) for org_id in sorted(official_orgs.get(entity_id, set()))]
+                    if is_official else [endpoint(entity_id)]
+                )
+                target_endpoints = [endpoint(entity_id)] if is_official else []
+                evidence_keys = [key]
             add_event({
                 "id": key,
                 "band": band,
                 "category": subtype,
-                "subtype": point.get("event_type") or subtype,
+                "subtype": "改隶" if hierarchy_change is not None else point.get("event_type") or subtype,
                 "subject": endpoint(entity_id),
                 "sourceEndpoints": source_endpoints,
-                "targetEndpoints": [endpoint(entity_id)] if is_official else [],
+                "targetEndpoints": target_endpoints,
                 "yearStart": point.get("year_start"),
                 "yearEnd": point.get("year_end") or point.get("year_start"),
                 "eventTime": point.get("raw_time") or point.get("time") or "",
-                "displayTitle": event,
-                "displaySummary": event,
-                "evidenceKeys": [key],
-                "citations": citations.get(key, []) if include_details else [],
+                "displayTitle": (
+                    transition_title(source_endpoints, target_endpoints)
+                    if hierarchy_change is not None else event
+                ),
+                "displaySummary": "改隶" if hierarchy_change is not None else event,
+                "iconType": (
+                    "affiliation_change"
+                    if hierarchy_change is not None or point.get("event_type") == "affiliation_change"
+                    else "record"
+                ),
+                "evidenceKeys": evidence_keys,
+                "citations": [
+                    citation
+                    for evidence_key in evidence_keys
+                    for citation in citations.get(evidence_key, [])
+                ] if include_details else [],
                 "revisionStatus": point.get("_revision_status") or "",
                 "revisionId": point.get("_revision_original_id"),
                 "editableTarget": {
@@ -1156,6 +1263,47 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 },
                 "uncertainty": "",
             })
+
+    # 若上下级关系已经明确发生变更、但新的下级时间点没有可显示文字，仍在
+    # 机构信息带生成一条只读事件；不要把它重新塞回机构演变主线。
+    for change in hierarchy_changes:
+        if change["key"] in consumed_hierarchy_changes or change["childId"] not in visible:
+            continue
+        child = endpoint(change["childId"])
+        source_endpoints = [endpoint(change["previousParentId"])]
+        target_endpoints = [endpoint(change["nextParentId"])]
+        evidence_keys = list(dict.fromkeys(filter(None, [
+            f"R{change['previousRelationId']}"
+            if change.get("previousRelationId") is not None else None,
+            f"R{change['relationId']}" if change.get("relationId") is not None else None,
+            f"T{change['childTimepointId']}"
+            if change.get("childTimepointId") is not None else None,
+        ])))
+        add_event({
+            "id": f"H:{change['key']}",
+            "band": "institution",
+            "category": "structure_change",
+            "subtype": "改隶",
+            "subject": child,
+            "sourceEndpoints": source_endpoints,
+            "targetEndpoints": target_endpoints,
+            "yearStart": change["year"],
+            "yearEnd": change["year"],
+            "eventTime": f"{change['year']}年",
+            "displayTitle": transition_title(source_endpoints, target_endpoints),
+            "displaySummary": "改隶",
+            "iconType": "affiliation_change",
+            "evidenceKeys": evidence_keys,
+            "citations": [
+                citation
+                for evidence_key in evidence_keys
+                for citation in citations.get(evidence_key, [])
+            ] if include_details else [],
+            "revisionStatus": "",
+            "revisionId": None,
+            "editableTarget": None,
+            "uncertainty": "",
+        })
 
     for edge in payload.get("staffEdges", []):
         if edge.get("org") not in visible:
@@ -1180,6 +1328,7 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             "eventTime": "",
             "displayTitle": f"{official['title']}编制",
             "displaySummary": f"{edge.get('staff_quota') or '员额未载'}，{edge.get('staff_type') or '人员类型未定'}",
+            "iconType": "record",
             "evidenceKeys": [key],
             "citations": citations.get(key, []) if include_details else [],
             "revisionStatus": edge.get("_revision_status") or "",

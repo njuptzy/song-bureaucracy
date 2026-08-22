@@ -108,6 +108,60 @@ test("综合模型保留多端点关系和关系级证据", () => {
   assert.equal(relation.citations[0].quotation, "甲司改隶乙司、丙署");
 });
 
+test("上下级关系变更只在机构信息带生成一条菱形改隶事件", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "甲司", type: "机构" },
+      { id: 2, title: "乙司", type: "机构" },
+      { id: 3, title: "丙署", type: "机构" },
+    ],
+    timepoints: {
+      1: [point(11, 1, 1000, "统属丙署")],
+      2: [point(21, 2, 1050, "统属丙署")],
+      3: [
+        point(31, 3, 1000, "隶甲司"),
+        point(32, 3, 1050, "改隶乙司", { event_type: "affiliation_change" }),
+      ],
+    },
+    hierarchyEdges: [
+      { id: 101, parent: 1, child: 3, states: [{ id: 101, subject_timepoint_id: 11, object_timepoint_id: 31 }] },
+      { id: 102, parent: 2, child: 3, states: [{ id: 102, subject_timepoint_id: 21, object_timepoint_id: 32 }] },
+    ],
+  }, 3, { year: 1050 });
+
+  const events = model.bands.institution.filter((event) => event.iconType === "affiliation_change");
+  assert.equal(events.length, 1);
+  assert.equal(events[0].id, "T32");
+  assert.equal(events[0].subject.title, "丙署");
+  assert.deepEqual(events[0].sourceEndpoints.map((item) => item.title), ["甲司"]);
+  assert.deepEqual(events[0].targetEndpoints.map((item) => item.title), ["乙司"]);
+  assert.deepEqual(events[0].evidenceKeys, ["T32", "R101", "R102"]);
+});
+
+test("没有显式改隶文字时仍从上下级关系派生只读菱形事件", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "甲司", type: "机构" },
+      { id: 2, title: "乙司", type: "机构" },
+      { id: 3, title: "丙署", type: "机构" },
+    ],
+    timepoints: {
+      1: [point(11, 1, 1000, "统属丙署")],
+      2: [point(21, 2, 1050, "统属丙署")],
+      3: [point(31, 3, 1000, "隶甲司")],
+    },
+    hierarchyEdges: [
+      { id: 101, parent: 1, child: 3, states: [{ id: 101, subject_timepoint_id: 11, object_timepoint_id: 31 }] },
+      { id: 102, parent: 2, child: 3, states: [{ id: 102, effective_year: 1050 }] },
+    ],
+  }, 3, { year: 1050 });
+
+  const event = model.bands.institution.find((item) => item.id.startsWith("H:reparent:"));
+  assert.equal(event.iconType, "affiliation_change");
+  assert.equal(event.displayTitle, "甲司 → 乙司");
+  assert.equal(event.editableTarget, null);
+});
+
 test("展开状态只影响可见节点，不改变节点相对父子关系", () => {
   const model = buildCompositeEvolutionModel({
     entities: [
