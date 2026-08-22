@@ -13,6 +13,14 @@ export function evidenceReviewKey(timepointId, citationRowId, evidenceText = "")
   return `${Number(timepointId)}:${Number(citationRowId)}:${(hash >>> 0).toString(16)}`;
 }
 
+export function evidenceReviewQuotationHighlights(result, quotation = "") {
+  if (result?.verdict !== "supported") return [];
+  const source = String(quotation || "");
+  return [...new Set(result.concise_quotations || [])]
+    .map((span) => String(span || "").trim())
+    .filter((span) => span && source.includes(span));
+}
+
 export function evidenceReviewSections(result) {
   if (!result) return [];
   if (result.status === "loading") {
@@ -33,7 +41,7 @@ export function evidenceReviewSections(result) {
   }];
   if (result.verdict === "supported") {
     for (const quotation of result.concise_quotations || []) {
-      sections.push({ label: "精简原文：", value: quotation });
+      sections.push({ label: "支持片段：", value: quotation, reviewTone: "green" });
     }
   }
   sections.push({ label: "判断理由：", value: result.reason });

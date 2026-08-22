@@ -98,6 +98,7 @@ import {
 import { relationOriginalSections } from "../utils/relation_detail_sections";
 import {
   evidenceReviewKey,
+  evidenceReviewQuotationHighlights,
   evidenceReviewSections,
   requestEvidenceReview,
 } from "../utils/evidence_review";
@@ -4676,6 +4677,7 @@ function evolutionDetailPayload(svg) {
         {
           label: `原文引文${suffix}：`,
           value: citation.quotation,
+          highlightTerms: evidenceReviewQuotationHighlights(state, citation.quotation),
           evidenceAction: {
             label: evidenceReviewButtonLabel(state),
             disabled: state?.status === "loading" || Boolean(state?.verdict),
