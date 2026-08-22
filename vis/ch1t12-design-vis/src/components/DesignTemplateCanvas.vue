@@ -88,6 +88,7 @@ import {
 } from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import { relationshipSourceOriginal } from "../utils/relationship_source";
+import { relationOriginalSections } from "../utils/relation_detail_sections";
 import {
   compareInstitutionIdsBySourceOrder,
   compareInstitutionsBySourceOrder,
@@ -209,6 +210,7 @@ const timetreeExpandedKeys = ref(null);
 const timetreeScroll = ref(0);
 const timetreeSelectedEventId = ref(null);
 const timetreeSelectedRelationId = ref(null);
+const timetreeSelectedRelation = ref(null);
 const selectedRange = ref(Array.isArray(initialState.selectedRange)
   ? initialState.selectedRange.slice(0, 2)
   : [1080, 1080]);
@@ -3905,6 +3907,7 @@ function renderDynamicTimetree(svg) {
       selectedId.value = entityId;
       timetreeSelectedEventId.value = null;
       timetreeSelectedRelationId.value = null;
+      timetreeSelectedRelation.value = null;
       emit("selection-change", null);
       detailPanelScrollOffset = 0;
       refreshTemplate();
@@ -3964,13 +3967,27 @@ function renderDynamicTimetree(svg) {
       selectedId.value = event.entityId;
       timetreeSelectedEventId.value = event.id;
       timetreeSelectedRelationId.value = null;
+      timetreeSelectedRelation.value = null;
+      emit("selection-change", {
+        kind: "timepoint",
+        id: event.id,
+        entityId: event.entityId,
+        item: { ...event },
+      });
       detailPanelScrollOffset = 0;
       refreshTemplate();
     },
     onSelectRelation(relation) {
-      timetreeSelectedRelationId.value = timetreeSelectedRelationId.value === relation.id
-        ? null
-        : relation.id;
+      const deselect = timetreeSelectedRelationId.value === relation.id;
+      timetreeSelectedRelationId.value = deselect ? null : relation.id;
+      timetreeSelectedRelation.value = deselect ? null : relation;
+      timetreeSelectedEventId.value = null;
+      emit("selection-change", deselect ? null : {
+        kind: "relation",
+        id: relation.id,
+        item: { ...relation },
+      });
+      detailPanelScrollOffset = 0;
       refreshTemplate();
     },
     onScroll(deltaY) {
@@ -4334,6 +4351,62 @@ function evolutionCurrentEntryText() {
   return `入口年份：${entryYear}年${suffix}`;
 }
 
+function relationEndpointDictionaryOriginal(relation) {
+  const entityIds = [...new Set(
+    [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
+      .map((member) => member.entityId)
+      .filter((entityId) => entityId != null),
+  )];
+  const entries = entityIds.map((entityId) => {
+    const entity = entityMap.get(entityId);
+    const original = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
+    return original ? `【${entity?.title || `#${entityId}`}】\n${original}` : "";
+  }).filter(Boolean);
+  return entries.join("\n\n") || "关系端点未匹配到辞典原文词条。";
+}
+
+function relationDetailPayload(relation) {
+  const evidenceKey = relation.evidenceKey || `R${relation.id}`;
+  const evidence = evidenceLines(evidenceKey, relation.quotation);
+  const relationshipOriginal = relationshipSourceOriginal(props.data, [evidenceKey]);
+  const comparison = evolutionSelectionComparison(
+    { kind: "relation", id: relation.id, item: relation },
+    evolutionEntryYear(),
+  );
+  const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
+  const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
+  const endpointYears = [...new Set(
+    [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
+      .map((member) => memberTimeLabel(member)),
+  )];
+  return {
+    title: relation.label,
+    year: endpointYears.length ? endpointYears.join(" → ") : "年代未明",
+    sections: [
+      { label: "关系：", value: relation.label },
+      { label: "来源：", value: sources || "来源端点未完整记录。" },
+      { label: "目标：", value: targets || "目标端点未完整记录。" },
+      ...relationOriginalSections({
+        relationshipLabel: relationshipOriginal.count > 1
+          ? `关系来源词条原文（${relationshipOriginal.count}条）：`
+          : "关系来源词条原文：",
+        relationshipText: relationshipOriginal.text,
+        dictionaryText: relationEndpointDictionaryOriginal(relation),
+        quotation: evidence.quotation,
+      }),
+      { label: "距入口年份：", value: evolutionComparisonText(comparison) },
+      {
+        label: "编码状态：",
+        value: relation.implementationStatus === "unclassified"
+          ? "旧前后演变关系，尚未结构化细分；界面不依据自由文本猜测。"
+          : `结构化关系${relation.groupId ? `；事件组 ${relation.groupId}` : "；未设置事件组"}。`,
+      },
+      { label: "出处：", value: evidence.source },
+      { label: "校勘说明：", value: evidence.note },
+    ],
+  };
+}
+
 function evolutionDetailPayload(svg) {
   const model = svg.__evolutionModel;
   const selected = selectedEvolutionItem.value;
@@ -4360,15 +4433,15 @@ function evolutionDetailPayload(svg) {
       sections: [
         { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
         { label: "事件：", value: eventTitle },
-        { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
-        ...(summaryAddsInformation ? [{ label: "摘要：", value: eventSummary }] : []),
-        {
-          label: relationshipOriginal.count > 1
+        ...relationOriginalSections({
+          relationshipLabel: relationshipOriginal.count > 1
             ? `关系来源词条原文（${relationshipOriginal.count}条）：`
             : "关系来源词条原文：",
-          value: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
-        },
-        { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
+          relationshipText: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
+          dictionaryText: dictionaryOriginal || "当前主体未匹配到辞典原文词条。",
+          quotation: evidence.quotation || compositeEvent.quotation || "未载引文。",
+        }),
+        ...(summaryAddsInformation ? [{ label: "摘要：", value: eventSummary }] : []),
         { label: "出处：", value: evidence.source || "当前事件没有独立出处。" },
         { label: "不确定性：", value: compositeEvent.uncertainty || "未标注不确定性。" },
         {
@@ -4477,43 +4550,7 @@ function evolutionDetailPayload(svg) {
   }
 
   if (selected?.kind === "relation") {
-    const relation = selected.item;
-    const evidence = evidenceLines(relation.evidenceKey || `R${relation.id}`, relation.quotation);
-    const relationshipOriginal = relationshipSourceOriginal(
-      props.data,
-      [relation.evidenceKey || `R${relation.id}`],
-    );
-    const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
-    const sources = (relation.sourceMembers || []).map(relationEndpointLabel).join("、");
-    const targets = (relation.targetMembers || []).map(relationEndpointLabel).join("、");
-    const endpointYears = [...new Set(
-      [...(relation.sourceMembers || []), ...(relation.targetMembers || [])]
-        .map((member) => memberTimeLabel(member)),
-    )];
-    return {
-      title: relation.label,
-      year: endpointYears.length ? endpointYears.join(" → ") : "年代未明",
-      sections: [
-        { label: "关系：", value: relation.label },
-        { label: "来源：", value: sources || "来源端点未完整记录。" },
-        { label: "目标：", value: targets || "目标端点未完整记录。" },
-        { label: "距入口年份：", value: evolutionComparisonText(comparison) },
-        {
-          label: relationshipOriginal.count > 1
-            ? `关系来源词条原文（${relationshipOriginal.count}条）：`
-            : "关系来源词条原文：",
-          value: relationshipOriginal.text,
-        },
-        {
-          label: "编码状态：",
-          value: relation.implementationStatus === "unclassified"
-            ? "旧前后演变关系，尚未结构化细分；界面不依据自由文本猜测。"
-            : `结构化关系${relation.groupId ? `；事件组 ${relation.groupId}` : "；未设置事件组"}。`,
-        },
-        { label: "出处：", value: evidence.source },
-        { label: "校勘说明：", value: evidence.note },
-      ],
-    };
+    return relationDetailPayload(selected.item);
   }
 
   const entity = selectedEntity();
@@ -4563,8 +4600,8 @@ function evolutionDetailPayload(svg) {
   };
 }
 
-function updateEvolutionDetails(svg) {
-  const payload = evolutionDetailPayload(svg);
+function updateEvolutionDetails(svg, payloadOverride = null) {
+  const payload = payloadOverride || evolutionDetailPayload(svg);
   if (!payload) return;
   const detailHeader = layoutDetailHeader(svg, payload.title, payload.year);
 
@@ -4878,6 +4915,10 @@ function updateDetails(svg) {
   }
   if (changeTrackGroup.value) {
     updateGroupChangeDetails(svg, changeTrackGroup.value);
+    return;
+  }
+  if (viewMode.value === "timetree" && timetreeSelectedRelation.value) {
+    updateEvolutionDetails(svg, relationDetailPayload(timetreeSelectedRelation.value));
     return;
   }
   if (hierarchyReturnNotice.value && !hierarchyReturnNotice.value.active) {
