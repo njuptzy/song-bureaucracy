@@ -38,6 +38,16 @@
 
 ## 启动
 
+如需启用演变详情中的“引文核验”，必须在服务进程中单独配置以下三个变量；该功能不会复用数据抽取密钥：
+
+```bash
+export SONG_EVIDENCE_LLM_API_KEY='...'
+export SONG_EVIDENCE_LLM_BASE_URL='https://example.com/v1/chat/completions'
+export SONG_EVIDENCE_LLM_MODEL='your-model-id'
+```
+
+核验只把当前时间点 ID 和引文行 ID 发送给本地后端；后端从正式只读库重新读取事件和逐字引文。结果仅表示“本条引文是否支持该结构化事件”，不代表史实确认，也不会写入数据库或浏览器持久存储。
+
 ```bash
 cd vis/ch1t12-design-vis
 ./run.sh
@@ -65,6 +75,7 @@ src/components/DesignTemplateCanvas.vue
 - `DELETE /api/revisions/commits/<hash>`：撤销并永久删除当前最新提交；基线、中间提交或草稿非空时拒绝
 - `/api/revisions/restore-preview|restore`：预览并创建恢复提交
 - `/api/revisions/normalize-time`：只解析原文纪年，不写数据库
+- `POST /api/evidence-review`：按时间点与引文行只读调用 LLM，返回逐条引文支持审核结果
 - `/api/design/hierarchy.svg`：原始可编辑层级画板
 - `/api/design/composition.svg`：原始可编辑编制画板
 - `/api/design/*.ttf|otf`：设计包字体

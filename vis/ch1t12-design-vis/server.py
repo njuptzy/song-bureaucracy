@@ -18,6 +18,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -41,6 +42,10 @@ from institution_categories import (  # noqa: E402
     resolve_source_order,
 )
 from revision_store import RevisionError, RevisionStore  # noqa: E402
+from evidence_review import (  # noqa: E402
+    EvidenceReviewError,
+    EvidenceReviewService,
+)
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch1t12.db"
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch1t12.db"
 DICT_TABLE = "chapter1t12"
@@ -70,6 +75,33 @@ PAYLOAD_SCHEMA_VERSION = "20260819-full-dictionary-sections-v1"
 _cache = {}
 _cache_lock = threading.Lock()
 _revision_store = None
+_evidence_review_service = None
+_evidence_rate_lock = threading.Lock()
+_evidence_rate_hits = {}
+
+
+def get_evidence_review_service() -> EvidenceReviewService:
+    global _evidence_review_service
+    if _evidence_review_service is None:
+        _evidence_review_service = EvidenceReviewService(ENTRIES_DB)
+    return _evidence_review_service
+
+
+def allow_evidence_request(client_ip: str, cookie: str) -> bool:
+    identity = (client_ip, hash(cookie) if cookie else None)
+    now = time.monotonic()
+    with _evidence_rate_lock:
+        hits = [stamp for stamp in _evidence_rate_hits.get(identity, []) if now - stamp < 60]
+        if len(hits) >= 10:
+            _evidence_rate_hits[identity] = hits
+            return False
+        hits.append(now)
+        _evidence_rate_hits[identity] = hits
+        if len(_evidence_rate_hits) > 2048:
+            stale = [key for key, values in _evidence_rate_hits.items() if not values or now - values[-1] >= 60]
+            for key in stale:
+                _evidence_rate_hits.pop(key, None)
+        return True
 
 
 def _database_fingerprint() -> str:
@@ -1533,6 +1565,20 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self._send_json(500, {"error": str(exc), "code": "INTERNAL_ERROR"})
 
+    def _evidence_call(self, callback):
+        try:
+            self._send_json(200, callback())
+        except EvidenceReviewError as exc:
+            self._send_json(exc.status, exc.payload())
+        except Exception:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            self._send_json(500, {
+                "error": "引文核验暂时无法完成",
+                "code": "service_unavailable",
+                "retryable": True,
+            })
+
     def do_GET(self):
         request_url = urlparse(self.path)
         path = request_url.path
@@ -1699,6 +1745,76 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/evidence-review":
+            fetch_site = self.headers.get("Sec-Fetch-Site", "").lower()
+            origin = self.headers.get("Origin", "")
+            host = self.headers.get("Host", "")
+            if fetch_site == "cross-site" or (origin and urlparse(origin).netloc != host):
+                self._send_json(403, {
+                    "error": "不允许跨站调用引文核验",
+                    "code": "forbidden",
+                    "retryable": False,
+                })
+                return
+            if not allow_evidence_request(self.client_address[0], self.headers.get("Cookie", "")):
+                self._send_json(429, {
+                    "error": "引文核验请求过于频繁，请稍后重试",
+                    "code": "busy",
+                    "retryable": True,
+                })
+                return
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if content_type != "application/json":
+                self._send_json(415, {
+                    "error": "请求必须使用 application/json",
+                    "code": "invalid_content_type",
+                    "retryable": False,
+                })
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 1024:
+                self._send_json(413 if length > 1024 else 400, {
+                    "error": "引文核验请求体不合法",
+                    "code": "invalid_request",
+                    "retryable": False,
+                })
+                return
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._send_json(400, {
+                    "error": "引文核验请求体不合法",
+                    "code": "invalid_request",
+                    "retryable": False,
+                })
+                return
+            if not isinstance(payload, dict) or set(payload) != {"timepoint_id", "citation_row_id"}:
+                self._send_json(400, {
+                    "error": "引文核验请求字段不合法",
+                    "code": "invalid_request",
+                    "retryable": False,
+                })
+                return
+            timepoint_id = payload.get("timepoint_id")
+            citation_row_id = payload.get("citation_row_id")
+            if (
+                isinstance(timepoint_id, bool) or not isinstance(timepoint_id, int)
+                or isinstance(citation_row_id, bool) or not isinstance(citation_row_id, int)
+                or timepoint_id <= 0 or citation_row_id <= 0
+            ):
+                self._send_json(400, {
+                    "error": "时间点或引文标识不合法",
+                    "code": "invalid_request",
+                    "retryable": False,
+                })
+                return
+            self._evidence_call(lambda: get_evidence_review_service().review(
+                timepoint_id, citation_row_id
+            ))
+            return
         payload_cache = None
 
         def body():
@@ -1742,6 +1858,48 @@ class Handler(BaseHTTPRequestHandler):
         self._revision_call(lambda: get_revision_store().remove_group(match.group(1)))
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """在创建处理线程前执行有界准入，避免慢请求无限堆积线程。"""
+
+    daemon_threads = True
+
+    def __init__(self, *args, max_workers=32, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._worker_slots = threading.BoundedSemaphore(max_workers)
+
+    def process_request(self, request, client_address):
+        if not self._worker_slots.acquire(timeout=0.25):
+            body = json.dumps({
+                "error": "服务正忙，请稍后重试",
+                "code": "busy",
+                "retryable": True,
+            }, ensure_ascii=False).encode("utf-8")
+            response = (
+                b"HTTP/1.1 503 Service Unavailable\r\n"
+                b"Content-Type: application/json; charset=utf-8\r\n"
+                b"Cache-Control: no-store\r\n"
+                + f"Content-Length: {len(body)}\r\n".encode("ascii")
+                + b"Connection: close\r\n\r\n"
+                + body
+            )
+            try:
+                request.sendall(response)
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._worker_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._worker_slots.release()
+
+
 def main():
     global ENTRIES_DB, DICT_DB, DICT_TABLE, _revision_store
 
@@ -1764,7 +1922,7 @@ def main():
     DICT_TABLE = args.dict_table
     revisions_db = args.revisions_db.expanduser().resolve() if args.revisions_db else None
     _revision_store = RevisionStore(ENTRIES_DB, _normalized_time_payload, revisions_db)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server = BoundedThreadingHTTPServer((args.host, args.port), Handler)
     print(f"[server] 结构化数据源: {ENTRIES_DB}")
     print(f"[server] 辞典数据源: {DICT_DB}（表 {DICT_TABLE}）")
     print(f"[server] 版本工作区: {_revision_store.revisions_db}")

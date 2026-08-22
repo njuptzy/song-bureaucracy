@@ -4,6 +4,7 @@
     <div v-if="error" class="template-message">{{ error }}</div>
     <div v-else-if="loading" class="template-message">载入 SVG 设计画板…</div>
     <div ref="svgMountRef" class="svg-mount"></div>
+    <span class="sr-only" aria-live="polite">{{ evidenceReviewAnnouncement }}</span>
   </div>
 </template>
 
@@ -95,6 +96,11 @@ import {
   evidenceHighlightTerms,
 } from "../utils/evidence_highlight";
 import { relationOriginalSections } from "../utils/relation_detail_sections";
+import {
+  evidenceReviewKey,
+  evidenceReviewSections,
+  requestEvidenceReview,
+} from "../utils/evidence_review";
 import {
   compareInstitutionIdsBySourceOrder,
   compareInstitutionsBySourceOrder,
@@ -188,6 +194,18 @@ const evolutionEntityIds = ref(Array.isArray(initialState.evolutionEntityIds)
 const selectedEvolutionItem = ref(initialState.selectedEvolutionItem
   ? { ...initialState.selectedEvolutionItem, item: null }
   : null);
+const evidenceReviewAnnouncement = ref("");
+const evidenceReviewResults = new Map();
+let evidenceReviewGeneration = 0;
+let evidenceReviewController = null;
+watch(
+  () => `${selectedEvolutionItem.value?.kind || ""}:${selectedEvolutionItem.value?.id || ""}`,
+  () => {
+    evidenceReviewGeneration += 1;
+    evidenceReviewController?.abort();
+    evidenceReviewController = null;
+  },
+);
 const evolutionLanePage = ref(Number.isFinite(initialState.evolutionLanePage)
   ? Math.max(1, Math.floor(initialState.evolutionLanePage))
   : 1);
@@ -4383,6 +4401,50 @@ function evidenceLines(key, fallbackQuotation = "") {
   return evidenceLinesForKeys([key], fallbackQuotation);
 }
 
+function evidenceReviewButtonLabel(state) {
+  if (state?.status === "loading") return "核验中…";
+  if (state?.status === "error") return "重试";
+  if (state?.verdict) return "已核验";
+  return "引文核验";
+}
+
+async function runEvidenceReview(timepointId, citationRowId, key, expectedQuotation) {
+  const existing = evidenceReviewResults.get(key);
+  if (existing?.status === "loading" || existing?.verdict) return;
+  const generation = evidenceReviewGeneration;
+  evidenceReviewController?.abort();
+  const controller = new AbortController();
+  evidenceReviewController = controller;
+  evidenceReviewResults.set(key, { status: "loading" });
+  refreshTemplate();
+  try {
+    const result = await requestEvidenceReview(timepointId, citationRowId, controller.signal);
+    const selected = selectedEvolutionItem.value;
+    if (
+      generation !== evidenceReviewGeneration
+      || selected?.kind !== "timepoint"
+      || Number(selected.id) !== Number(timepointId)
+      || Number(result.timepoint_id) !== Number(timepointId)
+      || Number(result.citation_row_id) !== Number(citationRowId)
+      || (props.data.citations?.[`T${timepointId}`] || [])
+        .find((citation) => Number(citation.id) === Number(citationRowId))?.quotation !== expectedQuotation
+    ) return;
+    evidenceReviewResults.set(key, { ...result, status: "complete" });
+    evidenceReviewAnnouncement.value = result.verdict === "supported"
+      ? "本条引文支持该事件"
+      : result.verdict === "contradicted"
+        ? "本条引文与该事件冲突"
+        : "本条引文未能支持该事件";
+  } catch (reason) {
+    if (reason?.name === "AbortError" || generation !== evidenceReviewGeneration) return;
+    evidenceReviewResults.set(key, { status: "error", code: reason?.code || "service_unavailable" });
+    evidenceReviewAnnouncement.value = "引文核验未完成，可以重试";
+  } finally {
+    if (evidenceReviewController === controller) evidenceReviewController = null;
+    if (generation === evidenceReviewGeneration) refreshTemplate();
+  }
+}
+
 function memberTimeLabel(member) {
   const row = timepointRowById.get(member?.timepointId) || {};
   return formatStandardTime({
@@ -4596,10 +4658,35 @@ function evolutionDetailPayload(svg) {
     }
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[entity?.title] || {});
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
+    const citationRows = (props.data.citations?.[`T${event.id}`] || [])
+      .filter((citation) => citation.id != null && citation.quotation);
     const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
     ));
+    const citationSections = citationRows.flatMap((citation, index) => {
+      const reviewKey = evidenceReviewKey(
+        event.id,
+        citation.id,
+        `${event.event || ""}\u0000${citation.citation || ""}\u0000${citation.quotation}`,
+      );
+      const state = evidenceReviewResults.get(reviewKey);
+      const suffix = citationRows.length > 1 ? `（${index + 1}/${citationRows.length}）` : "";
+      return [
+        {
+          label: `原文引文${suffix}：`,
+          value: citation.quotation,
+          evidenceAction: {
+            label: evidenceReviewButtonLabel(state),
+            disabled: state?.status === "loading" || Boolean(state?.verdict),
+            ariaLabel: `核验第 ${index + 1} 条引文是否支持当前事件`,
+            run: () => runEvidenceReview(event.id, citation.id, reviewKey, citation.quotation),
+          },
+        },
+        ...evidenceReviewSections(state),
+        { label: `出处${suffix}：`, value: citation.citation || "当前记录没有单列出处。" },
+      ];
+    });
     return {
       title: entity?.title || "时间节点",
       year: eventTimeLabel(event),
@@ -4629,8 +4716,10 @@ function evolutionDetailPayload(svg) {
             ? related.map((relation) => relation.label).join("；")
             : "当前时间点没有结构化演变关系。",
         },
-        { label: "原文引文：", value: evidence.quotation },
-        { label: "出处：", value: evidence.source },
+        ...(citationSections.length ? citationSections : [
+          { label: "原文引文：", value: evidence.quotation },
+          { label: "出处：", value: evidence.source },
+        ]),
         { label: "校勘说明：", value: evidence.note },
       ],
     };
@@ -4694,10 +4783,25 @@ function updateEvolutionDetails(svg, payloadOverride = null) {
     forceStacked: payload.yearBelowTitle === true,
   });
 
+  const sectionLayer = svg.querySelector(".detail-panel-sections");
+  if (!sectionLayer) return;
+  let labels = [...sectionLayer.querySelectorAll("[data-detail-section-label]")];
+  let contents = [...sectionLayer.querySelectorAll("[data-detail-section-content]")];
+  while (labels.length < payload.sections.length && labels[0] && contents[0]) {
+    const index = labels.length;
+    const label = labels[0].cloneNode(false);
+    const content = contents[0].cloneNode(false);
+    label.dataset.detailSectionLabel = `dynamic-${index}`;
+    content.dataset.detailSectionContent = `dynamic-${index}`;
+    sectionLayer.append(label, content);
+    labels.push(label);
+    contents.push(content);
+  }
+  sectionLayer.querySelectorAll(".detail-evidence-action").forEach((node) => node.remove());
+
   let cursorY = DETAIL_PANEL_FIRST_LABEL_Y + detailHeader.contentOffsetY;
-  DETAIL_PANEL_SECTION_KEYS.forEach((key, index) => {
-    const label = svg.querySelector(`[data-detail-section-label='${key}']`);
-    const content = svg.querySelector(`[data-detail-section-content='${key}']`);
+  labels.forEach((label, index) => {
+    const content = contents[index];
     const section = payload.sections[index];
     if (!label || !content) return;
     if (!section) {
@@ -4712,8 +4816,54 @@ function updateEvolutionDetails(svg, payloadOverride = null) {
     label.style.cursor = "default";
     d3.select(label).on("click.detail-field-link", null);
     setText(label, section.label);
-    cursorY += 25;
+    if (section.evidenceAction) {
+      const action = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      action.classList.add("detail-evidence-action");
+      action.setAttribute("role", "button");
+      action.setAttribute("tabindex", section.evidenceAction.disabled ? "-1" : "0");
+      action.setAttribute("aria-label", section.evidenceAction.ariaLabel);
+      action.setAttribute("aria-disabled", section.evidenceAction.disabled ? "true" : "false");
+
+      const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      hit.classList.add("detail-evidence-action-hit");
+      hit.setAttribute("x", "355");
+      hit.setAttribute("y", String(cursorY - 23));
+      hit.setAttribute("width", "92");
+      hit.setAttribute("height", "36");
+      const surface = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      surface.classList.add("detail-evidence-action-surface");
+      surface.setAttribute("x", "369");
+      surface.setAttribute("y", String(cursorY - 18));
+      surface.setAttribute("width", "78");
+      surface.setAttribute("height", "26");
+      surface.setAttribute("rx", "2");
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.classList.add("detail-evidence-action-text");
+      text.setAttribute("x", "408");
+      text.setAttribute("y", String(cursorY));
+      text.setAttribute("text-anchor", "middle");
+      text.textContent = section.evidenceAction.label;
+      action.append(hit, surface, text);
+      const activate = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (section.evidenceAction.disabled) return;
+        section.evidenceAction.run();
+      };
+      action.addEventListener("click", activate);
+      action.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") activate(event);
+      });
+      sectionLayer.appendChild(action);
+    }
+    cursorY += section.evidenceAction ? 31 : 25;
     content.setAttribute("transform", `translate(101.29 ${cursorY})`);
+    content.style.fill = section.reviewTone === "green"
+      ? "#357346"
+      : section.reviewTone === "red"
+        ? "#9a3f35"
+        : "#351704";
+    content.style.fontWeight = section.reviewTone && section.reviewTone !== "neutral" ? "700" : "";
     const lines = section.highlightTerms?.length
       ? wrapEvidenceText(content, section.value, section.highlightTerms, 28, 18)
       : wrapText(content, section.value, 28, 18, Infinity);
@@ -6959,6 +7109,7 @@ onMounted(async () => {
   renderTemplate();
 });
 onUnmounted(() => {
+  evidenceReviewController?.abort();
   const svg = svgMountRef.value?.querySelector("svg.live-design-svg");
   if (svg) cancelHierarchyTransition(svg);
   else {
@@ -6972,6 +7123,55 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.svg-mount :deep(.detail-evidence-action) {
+  cursor: pointer;
+}
+
+.svg-mount :deep(.detail-evidence-action[aria-disabled="true"]) {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.svg-mount :deep(.detail-evidence-action-hit) {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.svg-mount :deep(.detail-evidence-action-surface) {
+  fill: #f5f3ec;
+  stroke: #866d6d;
+  stroke-width: 0.8px;
+}
+
+.svg-mount :deep(.detail-evidence-action-text) {
+  fill: #563905;
+  font-family: AdobeSongStd-Light-GBpc-EUC-H, Songti SC, serif;
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.svg-mount :deep(.detail-evidence-action:focus) {
+  outline: none;
+}
+
+.svg-mount :deep(.detail-evidence-action:focus-visible .detail-evidence-action-surface) {
+  stroke: #351704;
+  stroke-width: 1.4px;
+}
+
 .design-template {
   width: 100%;
   height: 100%;
