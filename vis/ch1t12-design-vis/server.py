@@ -1135,11 +1135,9 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 if band == "institution" else relation_type
             ),
             "displaySummary": display_relation_type,
-            "iconType": (
-                "affiliation_change"
-                if "改隶" in f"{relation_type} {relation.get('relation_subtype') or ''}"
-                else "record"
-            ),
+            # 机构关系在信息带以原主线的菱形表示；它不仅包括字面写明的
+            # “改隶”，也包括“秘书监 → 秘书省”这类明确前后演变。
+            "iconType": "affiliation_change" if band == "institution" else "record",
             "evidenceKeys": [evidence_key],
             "citations": citations.get(evidence_key, []) if include_details else [],
             "revisionStatus": relation.get("_revision_status") or "",

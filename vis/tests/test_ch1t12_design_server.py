@@ -211,6 +211,7 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
             )
             self.assertEqual(institution["displayTitle"], "甲机构 → 丙机构")
             self.assertEqual(institution["displaySummary"], "前后演变")
+            self.assertEqual(institution["iconType"], "affiliation_change")
             self.assertEqual(institution["uncertainty"], "具体类型未定")
             self.assertEqual(institution["editableTarget"]["table"], "Relationships")
             self.assertEqual(institution["editableTarget"]["id"], 31)

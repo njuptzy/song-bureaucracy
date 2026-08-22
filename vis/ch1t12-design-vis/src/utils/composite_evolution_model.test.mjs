@@ -106,6 +106,7 @@ test("综合模型保留多端点关系和关系级证据", () => {
   assert.equal(relation.uncertain, true);
   assert.deepEqual(relation.citationKeys, ["R501"]);
   assert.equal(relation.citations[0].quotation, "甲司改隶乙司、丙署");
+  assert.equal(relation.iconType, "affiliation_change");
 });
 
 test("上下级关系变更只在机构信息带生成一条菱形改隶事件", () => {

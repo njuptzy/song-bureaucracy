@@ -576,6 +576,7 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       eventTime: relation.eventTime || "",
       eventText: relation.text || relation.type,
       relationType: relation.type,
+      iconType: category === "structure" ? "affiliation_change" : "record",
       citationKeys: relationCitationKeys,
       citations: citationsFor(data, relationCitationKeys),
       quotation: relation.quotation || "",

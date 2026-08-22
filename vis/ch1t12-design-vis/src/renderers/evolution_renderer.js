@@ -1198,7 +1198,17 @@ function renderEvolutionLegend(parent, layout) {
       "stroke-linejoin": "round",
     }));
   });
-  item(x + 228, "时间范围", (sample, itemX) => {
+  item(x + 228, "结构演变", (sample, itemX) => {
+    const size = evolutionEventIconSize("affiliation_change");
+    sample.appendChild(svgElement("path", {
+      d: `M${itemX} ${rowY - size}L${itemX + size} ${rowY}L${itemX} ${rowY + size}L${itemX - size} ${rowY}Z`,
+      fill: COLORS.paper,
+      stroke: COLORS.selected,
+      "stroke-width": 1.1,
+      "stroke-linejoin": "round",
+    }));
+  });
+  item(x + 308, "时间范围", (sample, itemX) => {
     sample.appendChild(svgElement("path", {
       d: `M${itemX - 6} ${rowY + 3}V${rowY - 4}H${itemX + 6}V${rowY + 3}`,
       fill: "none",
