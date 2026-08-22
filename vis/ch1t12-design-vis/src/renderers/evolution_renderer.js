@@ -1480,14 +1480,16 @@ export function layoutCompositeBandLabels(
     );
     const height = labelHeight;
     const markerY = placement.rowIndex * rowHeight;
-    // 标签优先级低于圆点：只允许在圆点同一水平线上短距离直连。
-    // 先用右侧，右侧被邻近年份图标挡住时再试左侧；两侧都放不下才隐藏。
-    const candidates = placement.rowIndex > 0
-      ? [
-        { x: placement.x + labelOffsetX, y: markerY - labelHeight / 2, anchor: "start" },
-        { x: placement.x - labelOffsetX - width, y: markerY - labelHeight / 2, anchor: "end" },
-      ]
-      : [];
+    // 标签优先级低于圆点：先用右侧，右侧被邻近年份图标挡住时再试左侧；
+    // 两侧都放不下才隐藏。轴线圆点的文字贴轴下方放置，不能仅因 rowIndex=0
+    // 就整批丢弃；它们仍与其他圆点、标签和分隔线进行同一套碰撞检测。
+    const labelY = placement.rowIndex === 0
+      ? markerY + 1
+      : markerY - labelHeight / 2;
+    const candidates = [
+      { x: placement.x + labelOffsetX, y: labelY, anchor: "start" },
+      { x: placement.x - labelOffsetX - width, y: labelY, anchor: "end" },
+    ];
     const seenCandidates = new Set();
     const validCandidates = candidates.map((candidate) => {
       const candidateKey = `${candidate.x}:${candidate.y}`;

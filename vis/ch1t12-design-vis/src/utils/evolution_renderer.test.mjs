@@ -176,7 +176,7 @@ it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {
   assert.equal(placement.label.box.x, placement.x + 9);
 });
 
-it("轴线圆点不显示文字标签", () => {
+it("轴线圆点有空间时显示文字标签", () => {
   const placements = [80, 160, 240].map((x, index) => ({
     event: { displayTitle: `国子监事件${index + 1}` },
     x,
@@ -186,7 +186,9 @@ it("轴线圆点不显示文字标签", () => {
   const labels = layoutCompositeBandLabels(placements, 400, 18, 100)
     .map((placement) => placement.label);
 
-  assert.deepEqual(labels, [null, null, null]);
+  assert.ok(labels.every(Boolean));
+  assert.ok(labels.every((label) => label.box.y === 1));
+  assert.ok(labels.every((label) => label.textAnchor === "start"));
 });
 
 it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
@@ -200,7 +202,7 @@ it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
     .map((placement) => placement.label)
     .filter(Boolean);
 
-  assert.equal(labels.length, placements.length - 1);
+  assert.equal(labels.length, placements.length);
   assert.ok(labels.every((label) => label.leader.y2 === label.leader.y1));
   assert.ok(labels.every((label) => label.leader.points.length === 2));
 });
