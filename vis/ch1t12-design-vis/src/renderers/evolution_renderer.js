@@ -1364,7 +1364,7 @@ export function assignCompositeAxisAnchors(placements = []) {
 export function compositeBandYearGuides(placements = [], rowHeight = 18) {
   const deepestRowByYear = new Map();
   placements.forEach((placement) => {
-    if (placement.rowIndex <= 0) return;
+    if (placement.offAxis || placement.rowIndex <= 0) return;
     const key = placement.anchorX.toFixed(3);
     const current = deepestRowByYear.get(key);
     if (!current || placement.rowIndex > current.rowIndex) {
@@ -1378,6 +1378,47 @@ export function compositeBandYearGuides(placements = [], rowHeight = 18) {
     x,
     y1: 0,
     y2: rowIndex * rowHeight,
+  }));
+}
+
+export function compositeBandEventHasYear(event) {
+  const value = event?.yearStart ?? event?.yearEnd;
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
+export function layoutCompositeBandPlacements(
+  events,
+  viewportWidth,
+  timelineOffset,
+  timelineWidth,
+  xForDatedEvent,
+) {
+  const datedEvents = (events || []).filter(compositeBandEventHasYear);
+  const undatedEvents = (events || []).filter((event) => !compositeBandEventHasYear(event));
+  const dated = assignCompositeAxisAnchors(layoutCompositeBandEventRows(
+    datedEvents,
+    timelineWidth,
+    xForDatedEvent,
+  )).map((placement) => ({
+    ...placement,
+    anchorX: placement.anchorX + timelineOffset,
+    x: placement.x + timelineOffset,
+    offAxis: false,
+  }));
+  const undated = undatedEvents.map((event, index) => ({
+    event,
+    index: dated.length + index,
+    anchorX: 8,
+    x: 8,
+    // 第一行留给年份轴，第二行留给“年代未明”标题。
+    rowIndex: index + 2,
+    showAxisAnchor: false,
+    offAxis: true,
+  }));
+  return [...dated, ...undated].map((placement) => ({
+    ...placement,
+    x: Math.max(4, Math.min(viewportWidth - 4, placement.x)),
+    anchorX: Math.max(4, Math.min(viewportWidth - 4, placement.anchorX)),
   }));
 }
 
@@ -1543,27 +1584,27 @@ function renderCompositeBands(parent, layout, options) {
   const eventsError = options.compositeEventsError === true;
   const selectedId = options.compositeSelectedEvent?.id;
   const scale = (year) => {
-    if (year == null || !layout.yearScale) return trackX + 4;
+    if (year == null || !layout.yearScale) return null;
     const [domainStart, domainEnd] = layout.yearScale.domain;
     const [rangeStart, rangeEnd] = layout.yearScale.range;
     return rangeStart + (year - domainStart) / Math.max(1, domainEnd - domainStart)
       * (rangeEnd - rangeStart);
   };
   const addEvent = (guides, leaders, content, placement, color, rowHeight) => {
-    const { event, anchorX, x, rowIndex, showAxisAnchor } = placement;
+    const { event, anchorX, x, rowIndex, showAxisAnchor, offAxis } = placement;
     // 第一行圆点直接落在年份轴；同年下沉点由该年份唯一的一根虚线串联。
     // 标签引线仍只允许水平直连，二者语义和样式保持分离。
     const markerY = rowIndex * rowHeight;
     const selected = selectedId === event.id;
-    const anchor = svgElement("circle", {
-      class: "evolution-composite-event-anchor",
-      cx: anchorX,
-      cy: 0,
-      r: 1.55,
-      fill: color,
-      "pointer-events": "none",
-    });
-    guides.appendChild(anchor);
+    const anchor = offAxis ? null : svgElement("circle", {
+        class: "evolution-composite-event-anchor",
+        cx: anchorX,
+        cy: 0,
+        r: 1.55,
+        fill: color,
+        "pointer-events": "none",
+      });
+    if (anchor) guides.appendChild(anchor);
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
       transform: `translate(${x} ${markerY})`,
@@ -1648,9 +1689,10 @@ function renderCompositeBands(parent, layout, options) {
       labelLeader,
       labelBox: placement.label?.box || null,
       markerY,
-      axisFixed: rowIndex === 0,
+      axisFixed: !offAxis && rowIndex === 0,
       displaced: rowIndex > 0 || x !== anchorX,
       showAxisAnchor,
+      offAxis,
     };
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
@@ -1693,12 +1735,24 @@ function renderCompositeBands(parent, layout, options) {
     const viewportTop = bandTop + 31;
     const viewportHeight = Math.max(48, bandHeight - 37);
     const rowHeight = 18;
-    const viewportWidth = Math.max(1, trackRight - trackX);
-    const pointPlacements = assignCompositeAxisAnchors(layoutCompositeBandEventRows(
+    const timelineWidth = Math.max(1, trackRight - trackX);
+    const timelineOffset = Math.max(0, trackX - labelX);
+    const viewportWidth = Math.max(1, trackRight - labelX);
+    const undatedCount = events.filter((event) => !compositeBandEventHasYear(event)).length;
+    if (undatedCount) {
+      appendText(bandGroup, `年代未明 ${undatedCount}项`, {
+        x: labelX,
+        y: bandTop + 54,
+        class: "evolution-composite-offaxis-heading",
+      });
+    }
+    const pointPlacements = layoutCompositeBandPlacements(
       events,
       viewportWidth,
+      timelineOffset,
+      timelineWidth,
       (event) => scale(event.yearStart ?? event.yearEnd) - trackX,
-    ));
+    );
     const placements = layoutCompositeBandLabels(
       pointPlacements,
       viewportWidth,
@@ -1749,7 +1803,7 @@ function renderCompositeBands(parent, layout, options) {
       // 第三信息带中被错误裁掉，只留下计数和滚动条。
       const viewport = svgElement("svg", {
         class: "evolution-composite-band-viewport",
-        x: trackX,
+        x: labelX,
         y: viewportTop - 8,
         width: viewportWidth,
         height: viewportHeight + 8,
@@ -1859,7 +1913,9 @@ function renderCompositeBands(parent, layout, options) {
             markerY,
             labelBox,
           }, currentScroll.offset, viewportHeight);
-          anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
+          if (anchor) {
+            anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
+          }
           item.style.display = axisFixed
             ? (compositeBandAxisMarkerVisible(currentScroll.offset) ? "" : "none")
             : (visibility.markerVisible ? "" : "none");

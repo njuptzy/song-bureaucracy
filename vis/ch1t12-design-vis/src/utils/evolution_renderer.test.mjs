@@ -16,9 +16,11 @@ import {
   compositeBandEventLayer,
   compositeBandAxisMarkerVisible,
   compositeBandMarkerType,
+  compositeBandEventHasYear,
   compositeBandLabelWidth,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
+  layoutCompositeBandPlacements,
   layoutCompositeMainLaneEvents,
   compositeSectionLayout,
 } from "../renderers/evolution_renderer.js";
@@ -27,6 +29,31 @@ it("机构信息带使用菱形区分改隶事件", () => {
   assert.equal(compositeBandMarkerType({ iconType: "affiliation_change" }), "affiliation_change");
   assert.equal(compositeBandMarkerType({ iconType: "record" }), "record");
   assert.equal(compositeBandMarkerType({}), "record");
+});
+
+it("未解析具体年份的记录进入离轴列，不占用时间轴最左端", () => {
+  const events = [
+    { id: "dated", yearStart: 1082, displayTitle: "元丰改制" },
+    { id: "undated", yearStart: null, yearEnd: null, displayTitle: "宋代记载" },
+  ];
+  assert.equal(compositeBandEventHasYear(events[0]), true);
+  assert.equal(compositeBandEventHasYear(events[1]), false);
+
+  const placements = layoutCompositeBandPlacements(events, 600, 120, 480, () => 200);
+  const dated = placements.find((placement) => placement.event.id === "dated");
+  const undated = placements.find((placement) => placement.event.id === "undated");
+  assert.equal(dated.offAxis, false);
+  assert.equal(dated.x, 320);
+  assert.equal(undated.offAxis, true);
+  assert.ok(undated.x < 120);
+  assert.equal(undated.showAxisAnchor, false);
+});
+
+it("年代未明事件不生成回指年份的虚线", () => {
+  assert.deepEqual(compositeBandYearGuides([
+    { anchorX: 8, rowIndex: 2, offAxis: true },
+    { anchorX: 180, rowIndex: 2, offAxis: false },
+  ], 18), [{ x: 180, y1: 0, y2: 36 }]);
 });
 
 it("三信息带与机构主线共用完全相同的年份横轴", () => {
