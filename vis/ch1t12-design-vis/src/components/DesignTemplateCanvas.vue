@@ -4661,6 +4661,14 @@ function evolutionDetailPayload(svg) {
     const evidence = evidenceLines(`T${event.id}`, event.quotation);
     const citationRows = (props.data.citations?.[`T${event.id}`] || [])
       .filter((citation) => citation.id != null && citation.quotation);
+    const reviewStateForCitation = (citation) => evidenceReviewResults.get(evidenceReviewKey(
+      event.id,
+      citation.id,
+      `${event.event || ""}\u0000${citation.citation || ""}\u0000${citation.quotation}`,
+    ));
+    const dictionaryReviewHighlights = citationRows.flatMap((citation) => (
+      evidenceReviewQuotationHighlights(reviewStateForCitation(citation), dictionaryOriginal)
+    ));
     const comparison = evolutionSelectionComparison(selected, evolutionEntryYear());
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
@@ -4671,7 +4679,7 @@ function evolutionDetailPayload(svg) {
         citation.id,
         `${event.event || ""}\u0000${citation.citation || ""}\u0000${citation.quotation}`,
       );
-      const state = evidenceReviewResults.get(reviewKey);
+      const state = reviewStateForCitation(citation);
       const suffix = citationRows.length > 1 ? `（${index + 1}/${citationRows.length}）` : "";
       return [
         {
@@ -4701,7 +4709,9 @@ function evolutionDetailPayload(svg) {
         {
           label: "词条原文：",
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
-          highlightTerms: evidence.quotations,
+          highlightTerms: dictionaryReviewHighlights.length
+            ? dictionaryReviewHighlights
+            : evidence.quotations,
         },
         {
           label: "存废判定：",
