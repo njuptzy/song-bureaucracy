@@ -1517,6 +1517,10 @@ export function compositeBandEventLayer(rowIndex) {
   return rowIndex === 0 ? "axis" : "scroll";
 }
 
+export function compositeBandAxisMarkerVisible(scrollOffset) {
+  return Number(scrollOffset) <= 0;
+}
+
 function renderCompositeBands(parent, layout, options) {
   const plot = layout?.plotBounds;
   const model = options.compositeModel;
@@ -1746,8 +1750,8 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-content",
         transform: `translate(0 ${-scroll.offset})`,
       });
-      // 轴线圆点固定在独立图层；其余节点放入从 y=0 开始的嵌套视口。
-      // 这样滚动节点一到坐标轴边界就被裁掉，不会借外层的 -8px 余量穿到轴线上方。
+      // 轴线圆点只在滚动顶部使用外层余量完整显示；开始滚动后立即隐藏。
+      // 其余节点放入从 y=0 开始的嵌套视口，到坐标轴边界即被裁掉。
       const scrollingViewport = svgElement("svg", {
         class: "evolution-composite-band-scrolling-viewport",
         x: 0,
@@ -1837,7 +1841,9 @@ function renderCompositeBands(parent, layout, options) {
             labelBox,
           }, currentScroll.offset, viewportHeight);
           anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
-          item.style.display = axisFixed || visibility.markerVisible ? "" : "none";
+          item.style.display = axisFixed
+            ? (compositeBandAxisMarkerVisible(currentScroll.offset) ? "" : "none")
+            : (visibility.markerVisible ? "" : "none");
           if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
         });

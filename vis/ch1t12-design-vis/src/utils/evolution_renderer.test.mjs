@@ -14,6 +14,7 @@ import {
   compositeBandTrackBounds,
   compositeBandItemVisibility,
   compositeBandEventLayer,
+  compositeBandAxisMarkerVisible,
   compositeBandLabelWidth,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
@@ -288,10 +289,13 @@ it("标签仍在视口时不会随圆点提前隐藏", () => {
   });
 });
 
-it("轴线圆点固定，下沉节点进入受坐标轴裁剪的滚动层", () => {
+it("轴线圆点只在滚动顶部显示，下沉节点进入受坐标轴裁剪的滚动层", () => {
   assert.equal(compositeBandEventLayer(0), "axis");
   assert.equal(compositeBandEventLayer(1), "scroll");
   assert.equal(compositeBandEventLayer(12), "scroll");
+  assert.equal(compositeBandAxisMarkerVisible(0), true);
+  assert.equal(compositeBandAxisMarkerVisible(0.01), false);
+  assert.equal(compositeBandAxisMarkerVisible(36), false);
 });
 
 it("机构主线、机构结构和编制区域严格等高", () => {
