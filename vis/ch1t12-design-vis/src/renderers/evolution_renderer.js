@@ -1390,9 +1390,11 @@ export function compositeBandLabelWidth(text) {
 export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, viewportHeight) {
   const labelHeight = 14;
   const labelGap = 4;
-  const labelOffsetX = 12;
   const markerAvoidanceRadius = 5.5;
   const markerLabelGap = 1.5;
+  const minimumLeaderLength = 2;
+  // 标签起点由可见圆点边界统一推导，避免再叠加一个与实际图形无关的固定留白。
+  const labelOffsetX = markerAvoidanceRadius + markerLabelGap + minimumLeaderLength;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {

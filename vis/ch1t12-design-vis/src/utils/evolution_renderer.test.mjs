@@ -105,7 +105,7 @@ it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {
 
   assert.ok(placement.label);
   assert.equal(placement.label.leader.y2, placement.label.leader.y1);
-  assert.equal(placement.label.box.x, placement.x + 12);
+  assert.equal(placement.label.box.x, placement.x + 9);
 });
 
 it("轴线圆点不显示文字标签", () => {
@@ -177,21 +177,24 @@ it("标签与右侧圆点视觉上仍有间距时不会被点击热区提前隐�
 
   assert.ok(placement.label);
   assert.equal(placement.label.textAnchor, "start");
-  assert.equal(placement.label.box.right, 177);
+  assert.equal(placement.label.box.right, 174);
 });
 
-it("1135年著作郎与1164年圆点之间可使用更短的右侧引线", () => {
-  const placements = [
-    { event: { displayTitle: "邻近前一年事件" }, x: 514, anchorX: 514, rowIndex: 1 },
-    { event: { displayTitle: "著作郎编制" }, x: 526, anchorX: 526, rowIndex: 1 },
-    { event: { displayTitle: "邻近后一年事件" }, x: 613, anchorX: 613, rowIndex: 1 },
-  ];
-  const placement = layoutCompositeBandLabels(placements, 760, 18, 72)[1];
+it("各种标题只要真实几何空间足够就不会被重复留白误判", () => {
+  for (const title of ["正字编制", "著作郎编制", "秘书省少监编制"]) {
+    const labelWidth = Math.max(40, compositeBandLabelWidth(title));
+    const nextMarkerX = 100 + 9 + labelWidth + 7;
+    const placements = [
+      { event: { displayTitle: title }, x: 100, anchorX: 100, rowIndex: 1 },
+      { event: { displayTitle: "邻近年份事件" }, x: nextMarkerX, anchorX: nextMarkerX, rowIndex: 1 },
+    ];
+    const [placement] = layoutCompositeBandLabels(placements, 400, 18, 72);
 
-  assert.ok(placement.label);
-  assert.equal(placement.label.textAnchor, "start");
-  assert.equal(placement.label.box.x, 538);
-  assert.equal(placement.label.leader.y1, placement.label.leader.y2);
+    assert.ok(placement.label, title);
+    assert.equal(placement.label.textAnchor, "start");
+    assert.equal(placement.label.box.x, 109);
+    assert.equal(placement.label.leader.y1, placement.label.leader.y2);
+  }
 });
 
 it("右侧被邻近年份圆点挡住时使用同行左侧空位", () => {
