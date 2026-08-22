@@ -63,24 +63,16 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);
 });
 
-it("同年下沉事件从圆点左侧正交接入，不穿过上方圆点", () => {
+it("下沉事件使用垂直虚线回指并在圆点前留出间隙", () => {
   const points = compositeEventGuidePoints({
     anchorX: 80,
-    markerX: 80,
     markerY: 58,
   });
 
   assert.deepEqual(points, [
     [80, 0],
-    [72, 0],
-    [72, 58],
-    [76, 58],
+    [80, 52.5],
   ]);
-  assert.ok(points.every((point, index) => (
-    index === 0
-      || point[0] === points[index - 1][0]
-      || point[1] === points[index - 1][1]
-  )));
 });
 
 it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {

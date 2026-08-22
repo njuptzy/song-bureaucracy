@@ -1352,20 +1352,15 @@ export function compositeBandLabelWidth(text) {
 
 export function compositeEventGuidePoints({
   anchorX,
-  markerX,
   markerY,
   scrollOffset = 0,
-  guideOffset = 8,
   markerRadius = 4,
 }) {
   const visibleY = markerY - scrollOffset;
-  const guideX = Math.max(0, anchorX - guideOffset);
-  const markerEdgeX = Math.max(guideX, markerX - markerRadius);
+  const markerGap = 1.5;
   return [
     [anchorX, 0],
-    [guideX, 0],
-    [guideX, visibleY],
-    [markerEdgeX, visibleY],
+    [anchorX, Math.max(0, visibleY - markerRadius - markerGap)],
   ];
 }
 
@@ -1531,7 +1526,6 @@ function renderCompositeBands(parent, layout, options) {
     const selected = selectedId === event.id;
     const guidePoints = compositeEventGuidePoints({
       anchorX,
-      markerX: x,
       markerY: y + 4,
       scrollOffset: initialOffset,
     });
@@ -1539,11 +1533,11 @@ function renderCompositeBands(parent, layout, options) {
       class: "evolution-composite-event-guide",
       points: guidePoints.map((point) => point.join(",")).join(" "),
       "data-anchor-x": anchorX,
-      "data-marker-x": x,
       fill: "none",
       stroke: color,
+      "stroke-dasharray": "2 3",
       "stroke-width": selected ? 1.3 : 0.8,
-      opacity: selected ? 1 : 0.65,
+      opacity: selected ? 0.62 : 0.34,
       "pointer-events": "none",
     });
     const anchor = svgElement("circle", {
@@ -1817,7 +1811,6 @@ function renderCompositeBands(parent, layout, options) {
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
           guide.setAttribute("points", compositeEventGuidePoints({
             anchorX: Number(guide.dataset.anchorX),
-            markerX: Number(guide.dataset.markerX),
             markerY,
             scrollOffset: currentScroll.offset,
           }).map((point) => point.join(",")).join(" "));
