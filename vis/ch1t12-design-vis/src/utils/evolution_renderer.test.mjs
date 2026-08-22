@@ -142,30 +142,42 @@ it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
   assert.equal(compositeBandLabelWidth("A1编制"), 42);
 });
 
-it("标签会避开其他事件图标的扩大禁入区", () => {
+it("标签按可见圆点轮廓和安全间距避让，不被透明点击热区误挡", () => {
   const placements = [
     { event: { displayTitle: "国子监祭酒编制" }, x: 40, anchorX: 40, rowIndex: 1 },
     { event: { displayTitle: "博士编制" }, x: 130, anchorX: 130, rowIndex: 1 },
   ];
   const laidOut = layoutCompositeBandLabels(placements, 280, 18, 100);
   const markerBoxes = placements.map((placement) => ({
-    x: placement.x - 10,
-    y: placement.rowIndex * 18 - 10,
-    right: placement.x + 10,
-    bottom: placement.rowIndex * 18 + 10,
+    x: placement.x - 5.5,
+    y: placement.rowIndex * 18 - 5.5,
+    right: placement.x + 5.5,
+    bottom: placement.rowIndex * 18 + 5.5,
   }));
 
   for (const placement of laidOut) {
     if (!placement.label) continue;
     for (const marker of markerBoxes) {
       const box = placement.label.box;
-      const overlaps = box.x < marker.right + 3
-        && box.right + 3 > marker.x
-        && box.y < marker.bottom + 3
-        && box.bottom + 3 > marker.y;
+      const overlaps = box.x < marker.right + 1.5
+        && box.right + 1.5 > marker.x
+        && box.y < marker.bottom + 1.5
+        && box.bottom + 1.5 > marker.y;
       assert.equal(overlaps, false);
     }
   }
+});
+
+it("标签与右侧圆点视觉上仍有间距时不会被点击热区提前隐藏", () => {
+  const placements = [
+    { event: { displayTitle: "著作佐郎编制" }, x: 87, anchorX: 87, rowIndex: 1 },
+    { event: { displayTitle: "邻近年份事件" }, x: 187, anchorX: 187, rowIndex: 1 },
+  ];
+  const [placement] = layoutCompositeBandLabels(placements, 280, 18, 72);
+
+  assert.ok(placement.label);
+  assert.equal(placement.label.textAnchor, "start");
+  assert.equal(placement.label.box.right, 180);
 });
 
 it("右侧被邻近年份圆点挡住时使用同行左侧空位", () => {

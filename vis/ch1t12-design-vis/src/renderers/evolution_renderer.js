@@ -1391,13 +1391,15 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
   const labelHeight = 14;
   const labelGap = 4;
   const labelOffsetX = 15;
+  const markerAvoidanceRadius = 5.5;
+  const markerLabelGap = 1.5;
   const markerBoxes = placements.map((placement) => {
     const markerY = placement.rowIndex * rowHeight;
     return {
-      x: placement.x - 10,
-      y: markerY - 10,
-      right: placement.x + 10,
-      bottom: markerY + 10,
+      x: placement.x - markerAvoidanceRadius,
+      y: markerY - markerAvoidanceRadius,
+      right: placement.x + markerAvoidanceRadius,
+      bottom: markerY + markerAvoidanceRadius,
     };
   });
   const contentHeight = Math.max(
@@ -1437,7 +1439,9 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
         || box.y < 0 || box.bottom > contentHeight) {
         return null;
       }
-      return markerBoxes.every((markerBox) => !compositeBoxesOverlap(box, markerBox))
+      return markerBoxes.every((markerBox) => (
+        !compositeBoxesOverlap(box, markerBox, markerLabelGap)
+      ))
         ? { ...candidate, box }
         : null;
     }).filter(Boolean);
