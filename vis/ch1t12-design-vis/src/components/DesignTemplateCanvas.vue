@@ -4362,13 +4362,13 @@ function evolutionDetailPayload(svg) {
         { label: "事件：", value: eventTitle },
         { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
         ...(summaryAddsInformation ? [{ label: "摘要：", value: eventSummary }] : []),
-        { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
         {
           label: relationshipOriginal.count > 1
             ? `关系来源词条原文（${relationshipOriginal.count}条）：`
             : "关系来源词条原文：",
           value: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
         },
+        { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
         { label: "出处：", value: evidence.source || "当前事件没有独立出处。" },
         { label: "不确定性：", value: compositeEvent.uncertainty || "未标注不确定性。" },
         {
