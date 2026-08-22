@@ -2,11 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  compositeEventSelection,
   evolutionComparisonAfterAdd,
   evolutionSelectionAnchors,
   evolutionSelectionFocus,
   timelineSelectionForEvolutionItem,
 } from "./evolution_selection.js";
+
+test("综合演变事件选择向外传递关系证据键和主体", () => {
+  const event = {
+    id: "R5919",
+    subject: { entityId: 2001, title: "秘书监" },
+    evidenceKeys: ["R5919"],
+  };
+  assert.deepEqual(compositeEventSelection(event), {
+    kind: "composite-event",
+    id: "R5919",
+    entityId: 2001,
+    item: event,
+  });
+  assert.equal(compositeEventSelection(null), null);
+});
 
 test("添加对象会保留当前实体并直接进入对比模式", () => {
   assert.deepEqual(evolutionComparisonAfterAdd([174], 201), {

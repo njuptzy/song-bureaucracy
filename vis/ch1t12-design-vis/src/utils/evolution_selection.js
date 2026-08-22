@@ -70,3 +70,13 @@ export function evolutionSelectionFocus(selectedItem) {
     timepointIds,
   };
 }
+
+export function compositeEventSelection(event) {
+  if (!event) return null;
+  return {
+    kind: "composite-event",
+    id: event.id,
+    entityId: event.subject?.entityId ?? null,
+    item: event,
+  };
+}

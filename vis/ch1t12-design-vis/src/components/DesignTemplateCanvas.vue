@@ -76,6 +76,7 @@ import { buildEvolutionLanes, buildEvolutionModel } from "../utils/evolution_mod
 import { layoutEvolutionModel } from "../utils/evolution_layout";
 import { windowEvolutionModel } from "../utils/evolution_window";
 import {
+  compositeEventSelection,
   evolutionComparisonAfterAdd,
 } from "../utils/evolution_selection";
 import {
@@ -3708,9 +3709,11 @@ function renderDynamicEvolution(svg) {
     },
     onSelectCompositeEvent(event) {
       const current = compositeSelectedEvent.value;
-      compositeSelectedEvent.value = current?.id === event.id ? null : event;
+      const next = current?.id === event.id ? null : event;
+      compositeSelectedEvent.value = next;
       selectedEvolutionItem.value = null;
       detailPanelScrollOffset = 0;
+      emit("selection-change", compositeEventSelection(next));
       refreshTemplate();
     },
     onToggleCompositeBand(band) {
