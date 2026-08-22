@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assignCompositeAxisAnchors,
   EVOLUTION_SELECTOR_SLOT_STEP,
   evolutionEventIconSize,
   evolutionEndpointClearance,
@@ -48,6 +49,20 @@ it("可见圆点不相交时优先共用轴线，点击热区和标签不挤占�
   assert.equal(placements[3].x, placements[3].anchorX);
 });
 
+it("同年已有轴线圆点时不重复绘制下沉事件锚点", () => {
+  const placements = assignCompositeAxisAnchors([
+    { anchorX: 80, rowIndex: 0 },
+    { anchorX: 80, rowIndex: 1 },
+    { anchorX: 80, rowIndex: 2 },
+    { anchorX: 96, rowIndex: 1 },
+    { anchorX: 96, rowIndex: 2 },
+  ]);
+
+  assert.deepEqual(placements.map((placement) => placement.showAxisAnchor), [
+    false, false, false, true, false,
+  ]);
+});
+
 it("信息带标签即使位于圆点旁也明确画线连接", () => {
   const placements = [
     { event: { displayTitle: "增置官职" }, x: 80, anchorX: 80, rowIndex: 0 },
@@ -57,7 +72,7 @@ it("信息带标签即使位于圆点旁也明确画线连接", () => {
 
   assert.ok(labels.every((placement) => placement.label));
   assert.ok(labels.every((placement) => placement.label.leader));
-  assert.ok(labels.every((placement) => placement.label.leader.x1 === placement.x));
+  assert.ok(labels.every((placement) => placement.label.leader.x1 === placement.x + 5.5));
   assert.ok(labels.every((placement) => placement.label.box.x > placement.x));
   assert.ok(labels.every((placement) => placement.label.box.y >= 14));
   assert.ok(labels[0].label.box.right < labels[1].label.box.x);

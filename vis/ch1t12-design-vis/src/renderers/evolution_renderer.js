@@ -1337,6 +1337,23 @@ export function layoutCompositeBandEventRows(events, viewportWidth, xForEvent) {
   });
 }
 
+export function assignCompositeAxisAnchors(placements = []) {
+  const axisMarkerKeys = new Set(
+    placements
+      .filter((placement) => placement.rowIndex === 0)
+      .map((placement) => placement.anchorX.toFixed(3)),
+  );
+  const emittedAnchorKeys = new Set();
+  return placements.map((placement) => {
+    const key = placement.anchorX.toFixed(3);
+    const showAxisAnchor = placement.rowIndex > 0
+      && !axisMarkerKeys.has(key)
+      && !emittedAnchorKeys.has(key);
+    if (showAxisAnchor) emittedAnchorKeys.add(key);
+    return { ...placement, showAxisAnchor };
+  });
+}
+
 function compositeBoxesOverlap(first, second, gap = 3) {
   return first.x < second.right + gap
     && first.right + gap > second.x
@@ -1453,7 +1470,8 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
     if (!chosen) return false;
     const { box } = chosen;
     occupiedLabels.push(box);
-    const targetX = Math.max(box.x, Math.min(box.right, item.placement.x));
+    const markerEdgeX = item.placement.x + 5.5;
+    const targetX = Math.max(box.x, Math.min(box.right, markerEdgeX));
     const targetY = box.y + labelHeight / 2;
     labelByIndex.set(item.layoutIndex, {
       text: item.text,
@@ -1462,13 +1480,13 @@ export function layoutCompositeBandLabels(placements, viewportWidth, rowHeight, 
       textAnchor: chosen.anchor,
       box,
       leader: {
-        x1: item.placement.x,
+        x1: markerEdgeX,
         y1: item.markerY,
         x2: targetX,
         y2: targetY,
         points: [
-          [item.placement.x, item.markerY],
-          [item.placement.x, targetY],
+          [markerEdgeX, item.markerY],
+          [markerEdgeX, targetY],
           [targetX, targetY],
         ],
       },
@@ -1520,13 +1538,13 @@ function renderCompositeBands(parent, layout, options) {
       * (rangeEnd - rangeStart);
   };
   const addEvent = (guides, leaders, content, placement, color, rowHeight, initialOffset) => {
-    const { event, anchorX, x, rowIndex } = placement;
+    const { event, anchorX, x, rowIndex, showAxisAnchor } = placement;
     // 第一行圆点直接落在年份轴；只有碰撞下沉的事件才需要回指。
-    const y = -4 + rowIndex * rowHeight;
+    const markerY = rowIndex * rowHeight;
     const selected = selectedId === event.id;
     const guidePoints = compositeEventGuidePoints({
       anchorX,
-      markerY: y + 4,
+      markerY,
       scrollOffset: initialOffset,
     });
     const guide = svgElement("polyline", {
@@ -1551,12 +1569,12 @@ function renderCompositeBands(parent, layout, options) {
     guides.append(guide, anchor);
     const item = svgElement("g", {
       class: `evolution-composite-event${selected ? " is-selected" : ""}`,
-      transform: `translate(${x} ${y})`,
+      transform: `translate(${x} ${markerY})`,
       "data-composite-event-id": event.id,
     });
     item.appendChild(svgElement("circle", {
       cx: 0,
-      cy: 4,
+      cy: 0,
       r: selected ? 4.7 : 3.6,
       fill: selected ? color : COLORS.paper,
       stroke: color,
@@ -1564,7 +1582,7 @@ function renderCompositeBands(parent, layout, options) {
     }));
     item.appendChild(svgElement("circle", {
       cx: 0,
-      cy: 4,
+      cy: 0,
       r: 8,
       fill: "transparent",
       "pointer-events": "all",
@@ -1621,8 +1639,9 @@ function renderCompositeBands(parent, layout, options) {
       labelGroup,
       labelLeader,
       labelBox: placement.label?.box || null,
-      markerY: y + 4,
+      markerY,
       displaced: rowIndex > 0 || x !== anchorX,
+      showAxisAnchor,
     };
   };
   Object.entries(COMPOSITE_BAND_META).forEach(([band, meta], bandIndex) => {
@@ -1666,11 +1685,11 @@ function renderCompositeBands(parent, layout, options) {
     const viewportHeight = Math.max(48, bandHeight - 37);
     const rowHeight = 18;
     const viewportWidth = Math.max(1, trackRight - trackX);
-    const pointPlacements = layoutCompositeBandEventRows(
+    const pointPlacements = assignCompositeAxisAnchors(layoutCompositeBandEventRows(
       events,
       viewportWidth,
       (event) => scale(event.yearStart ?? event.yearEnd) - trackX,
-    );
+    ));
     const placements = layoutCompositeBandLabels(
       pointPlacements,
       viewportWidth,
@@ -1799,13 +1818,14 @@ function renderCompositeBands(parent, layout, options) {
           labelBox,
           markerY,
           displaced,
+          showAxisAnchor,
         }) => {
           const visibility = compositeBandItemVisibility({
             markerY,
             labelBox,
           }, currentScroll.offset, viewportHeight);
           guide.style.display = visibility.markerVisible && displaced ? "" : "none";
-          anchor.style.display = visibility.markerVisible && displaced ? "" : "none";
+          anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
           item.style.display = visibility.markerVisible ? "" : "none";
           if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
