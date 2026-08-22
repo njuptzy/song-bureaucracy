@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assignCompositeAxisAnchors,
+  compositeBandYearGuides,
   EVOLUTION_SELECTOR_SLOT_STEP,
   evolutionEventIconSize,
   evolutionEndpointClearance,
@@ -59,6 +60,21 @@ it("同年已有轴线圆点时不重复绘制下沉事件锚点", () => {
 
   assert.deepEqual(placements.map((placement) => placement.showAxisAnchor), [
     false, false, false, true, false,
+  ]);
+});
+
+it("同一年只生成一根虚线并串到最深事件点", () => {
+  const guides = compositeBandYearGuides([
+    { anchorX: 80, rowIndex: 0 },
+    { anchorX: 80, rowIndex: 1 },
+    { anchorX: 80, rowIndex: 3 },
+    { anchorX: 160, rowIndex: 0 },
+    { anchorX: 160, rowIndex: 2 },
+  ], 18);
+
+  assert.deepEqual(guides, [
+    { x: 80, y1: 0, y2: 54 },
+    { x: 160, y1: 0, y2: 36 },
   ]);
 });
 

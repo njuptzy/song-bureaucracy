@@ -1354,6 +1354,26 @@ export function assignCompositeAxisAnchors(placements = []) {
   });
 }
 
+export function compositeBandYearGuides(placements = [], rowHeight = 18) {
+  const deepestRowByYear = new Map();
+  placements.forEach((placement) => {
+    if (placement.rowIndex <= 0) return;
+    const key = placement.anchorX.toFixed(3);
+    const current = deepestRowByYear.get(key);
+    if (!current || placement.rowIndex > current.rowIndex) {
+      deepestRowByYear.set(key, {
+        x: placement.anchorX,
+        rowIndex: placement.rowIndex,
+      });
+    }
+  });
+  return Array.from(deepestRowByYear.values()).map(({ x, rowIndex }) => ({
+    x,
+    y1: 0,
+    y2: rowIndex * rowHeight,
+  }));
+}
+
 function compositeBoxesOverlap(first, second, gap = 3) {
   return first.x < second.right + gap
     && first.right + gap > second.x
@@ -1503,8 +1523,8 @@ function renderCompositeBands(parent, layout, options) {
   };
   const addEvent = (guides, leaders, content, placement, color, rowHeight) => {
     const { event, anchorX, x, rowIndex, showAxisAnchor } = placement;
-    // 第一行圆点直接落在年份轴；下沉圆点保持同一年份横坐标，
-    // 不再用竖线串联，避免被误读成机构或事件关系边。
+    // 第一行圆点直接落在年份轴；同年下沉点由该年份唯一的一根虚线串联。
+    // 标签引线仍只允许水平直连，二者语义和样式保持分离。
     const markerY = rowIndex * rowHeight;
     const selected = selectedId === event.id;
     const anchor = svgElement("circle", {
@@ -1711,6 +1731,20 @@ function renderCompositeBands(parent, layout, options) {
       const guides = svgElement("g", { class: "evolution-composite-band-guides" });
       const leaders = svgElement("g", { class: "evolution-composite-band-label-leaders" });
       const items = svgElement("g", { class: "evolution-composite-band-items" });
+      compositeBandYearGuides(placements, rowHeight).forEach((guide) => {
+        guides.appendChild(svgElement("line", {
+          class: "evolution-composite-event-year-guide",
+          x1: guide.x,
+          y1: guide.y1,
+          x2: guide.x,
+          y2: guide.y2,
+          stroke: meta.color,
+          "stroke-width": 0.7,
+          "stroke-dasharray": "3 3",
+          opacity: 0.72,
+          "pointer-events": "none",
+        }));
+      });
       const eventLayouts = placements.map((placement) => addEvent(
         guides,
         leaders,
@@ -1719,8 +1753,7 @@ function renderCompositeBands(parent, layout, options) {
         meta.color,
         rowHeight,
       ));
-      content.append(leaders, items);
-      viewport.appendChild(guides);
+      content.append(guides, leaders, items);
       viewport.appendChild(content);
       bandGroup.appendChild(viewport);
 
