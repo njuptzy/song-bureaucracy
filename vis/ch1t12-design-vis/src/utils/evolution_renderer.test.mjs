@@ -108,7 +108,7 @@ it("圆点右侧原位可用时优先水平直连，不上下挪动", () => {
   assert.equal(placement.label.box.x, placement.x + 15);
 });
 
-it("轴线圆点不为文字生成竖向折线，标签直接隐藏", () => {
+it("轴线圆点有同行空位时显示标签且不生成竖向折线", () => {
   const placements = [80, 160, 240].map((x, index) => ({
     event: { displayTitle: `国子监事件${index + 1}` },
     x,
@@ -118,7 +118,11 @@ it("轴线圆点不为文字生成竖向折线，标签直接隐藏", () => {
   const labels = layoutCompositeBandLabels(placements, 400, 18, 100)
     .map((placement) => placement.label);
 
-  assert.deepEqual(labels, [null, null, null]);
+  assert.equal(labels[0], null);
+  assert.equal(labels[1], null);
+  assert.ok(labels[2]);
+  assert.equal(labels[2].maskAxis, true);
+  assert.equal(labels[2].leader.y1, labels[2].leader.y2);
 });
 
 it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
@@ -132,7 +136,7 @@ it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
     .map((placement) => placement.label)
     .filter(Boolean);
 
-  assert.equal(labels.length, placements.length - 1);
+  assert.equal(labels.length, placements.length);
   assert.ok(labels.every((label) => label.leader.y2 === label.leader.y1));
   assert.ok(labels.every((label) => label.leader.points.length === 2));
 });
@@ -220,7 +224,7 @@ it("密集信息带贪心保留清晰标签并隐藏其余冲突项", () => {
   for (const label of labels) {
     assert.ok(label.box.x >= 0);
     assert.ok(label.box.right <= 240);
-    assert.ok(label.box.y >= 0);
+    assert.ok(label.box.y >= -8);
     assert.ok(["start", "end"].includes(label.textAnchor));
     for (let index = 1; index < label.leader.points.length; index += 1) {
       const previous = label.leader.points[index - 1];
