@@ -1513,6 +1513,10 @@ export function compositeBandItemVisibility({ markerY, labelBox }, offset, viewp
   };
 }
 
+export function compositeBandEventLayer(rowIndex) {
+  return rowIndex === 0 ? "axis" : "scroll";
+}
+
 function renderCompositeBands(parent, layout, options) {
   const plot = layout?.plotBounds;
   const model = options.compositeModel;
@@ -1621,6 +1625,7 @@ function renderCompositeBands(parent, layout, options) {
       labelLeader,
       labelBox: placement.label?.box || null,
       markerY,
+      axisFixed: rowIndex === 0,
       displaced: rowIndex > 0 || x !== anchorX,
       showAxisAnchor,
     };
@@ -1741,9 +1746,22 @@ function renderCompositeBands(parent, layout, options) {
         class: "evolution-composite-band-content",
         transform: `translate(0 ${-scroll.offset})`,
       });
+      // 轴线圆点固定在独立图层；其余节点放入从 y=0 开始的嵌套视口。
+      // 这样滚动节点一到坐标轴边界就被裁掉，不会借外层的 -8px 余量穿到轴线上方。
+      const scrollingViewport = svgElement("svg", {
+        class: "evolution-composite-band-scrolling-viewport",
+        x: 0,
+        y: 0,
+        width: viewportWidth,
+        height: viewportHeight,
+        viewBox: `0 0 ${viewportWidth} ${viewportHeight}`,
+        overflow: "hidden",
+      });
       const guides = svgElement("g", { class: "evolution-composite-band-guides" });
       const leaders = svgElement("g", { class: "evolution-composite-band-label-leaders" });
       const items = svgElement("g", { class: "evolution-composite-band-items" });
+      const axisGuides = svgElement("g", { class: "evolution-composite-band-axis-guides" });
+      const axisItems = svgElement("g", { class: "evolution-composite-band-axis-items" });
       compositeBandYearGuides(placements, rowHeight).forEach((guide) => {
         guides.appendChild(svgElement("line", {
           class: "evolution-composite-event-year-guide",
@@ -1759,15 +1777,16 @@ function renderCompositeBands(parent, layout, options) {
         }));
       });
       const eventLayouts = placements.map((placement) => addEvent(
-        guides,
+        compositeBandEventLayer(placement.rowIndex) === "axis" ? axisGuides : guides,
         leaders,
-        items,
+        compositeBandEventLayer(placement.rowIndex) === "axis" ? axisItems : items,
         placement,
         meta.color,
         rowHeight,
       ));
       content.append(guides, leaders, items);
-      viewport.appendChild(content);
+      scrollingViewport.appendChild(content);
+      viewport.append(scrollingViewport, axisGuides, axisItems);
       bandGroup.appendChild(viewport);
 
       const scrollX = trackRight - 2;
@@ -1809,6 +1828,7 @@ function renderCompositeBands(parent, layout, options) {
           labelLeader,
           labelBox,
           markerY,
+          axisFixed,
           displaced,
           showAxisAnchor,
         }) => {
@@ -1817,7 +1837,7 @@ function renderCompositeBands(parent, layout, options) {
             labelBox,
           }, currentScroll.offset, viewportHeight);
           anchor.style.display = visibility.markerVisible && displaced && showAxisAnchor ? "" : "none";
-          item.style.display = visibility.markerVisible ? "" : "none";
+          item.style.display = axisFixed || visibility.markerVisible ? "" : "none";
           if (labelGroup) labelGroup.style.display = visibility.labelVisible ? "" : "none";
           if (labelLeader) labelLeader.style.display = visibility.leaderVisible ? "" : "none";
         });

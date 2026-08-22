@@ -13,6 +13,7 @@ import {
   compositeTreeScrollMetrics,
   compositeBandTrackBounds,
   compositeBandItemVisibility,
+  compositeBandEventLayer,
   compositeBandLabelWidth,
   layoutCompositeBandEventRows,
   layoutCompositeBandLabels,
@@ -285,6 +286,12 @@ it("标签仍在视口时不会随圆点提前隐藏", () => {
     labelVisible: true,
     leaderVisible: true,
   });
+});
+
+it("轴线圆点固定，下沉节点进入受坐标轴裁剪的滚动层", () => {
+  assert.equal(compositeBandEventLayer(0), "axis");
+  assert.equal(compositeBandEventLayer(1), "scroll");
+  assert.equal(compositeBandEventLayer(12), "scroll");
 });
 
 it("机构主线、机构结构和编制区域严格等高", () => {
