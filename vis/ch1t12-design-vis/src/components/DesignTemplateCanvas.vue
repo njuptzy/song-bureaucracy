@@ -327,6 +327,10 @@ const DETAIL_PANEL_BOUNDS = {
   width: 393.72,
   height: 380.1,
 };
+// 设计稿正文裁剪框从 y=524.81 开始；原首行基线 536.92 只留约 12px，
+// 大字号标签的字面上沿会被裁掉。统一增加 8px 顶部安全区，所有详情状态
+// 和滚动定位共用同一基线。
+const DETAIL_PANEL_FIRST_LABEL_Y = 544.92;
 
 // 原画板4-02右侧完整制度构成区域。进入具体机构后，该机构按原稿“省级总框”
 // 语法使用整块空间，不再把中书/门下示例区当成独立静态内容保留。
@@ -4170,7 +4174,7 @@ function setupDetailPanel(svg) {
   if (scrollThumb) panelGroup.appendChild(scrollThumb);
 
   const updateScroll = () => {
-    const contentBottom = Number(scrollContent.dataset.contentBottom || 536.92);
+    const contentBottom = Number(scrollContent.dataset.contentBottom || DETAIL_PANEL_FIRST_LABEL_Y);
     const viewportBottom = 872;
     const maxScroll = Math.max(0, contentBottom - viewportBottom);
     detailPanelScrollOffset = Math.max(0, Math.min(maxScroll, detailPanelScrollOffset));
@@ -4178,8 +4182,8 @@ function setupDetailPanel(svg) {
     if (!scrollTrack || !scrollThumb) return;
     const trackY = Number(scrollTrack.getAttribute("y"));
     const trackHeight = Number(scrollTrack.getAttribute("height"));
-    const contentHeight = Math.max(1, contentBottom - 536.92);
-    const viewportHeight = viewportBottom - 536.92;
+    const contentHeight = Math.max(1, contentBottom - DETAIL_PANEL_FIRST_LABEL_Y);
+    const viewportHeight = viewportBottom - DETAIL_PANEL_FIRST_LABEL_Y;
     const proportionalThumbHeight = trackHeight * viewportHeight / contentHeight;
     const thumbHeight = Math.max(30, Math.min(96, trackHeight, proportionalThumbHeight));
     const thumbTravel = trackHeight - thumbHeight;
@@ -4212,7 +4216,7 @@ function setupDetailPanel(svg) {
           scrollThumb.style.cursor = "grabbing";
         })
         .on("drag", (event) => {
-          const contentBottom = Number(scrollContent.dataset.contentBottom || 536.92);
+          const contentBottom = Number(scrollContent.dataset.contentBottom || DETAIL_PANEL_FIRST_LABEL_Y);
           const maxScroll = Math.max(0, contentBottom - 872);
           const trackHeight = Number(scrollTrack?.getAttribute("height") || 352.41);
           const thumbHeight = Number(scrollThumb.getAttribute("height"));
@@ -4351,7 +4355,7 @@ function evolutionDetailPayload(svg) {
         compositeEvent.yearStart == null ? "年代未明" : `${compositeEvent.yearStart}年`
       ),
       sections: [
-        { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员、吏员、员额和职级演变" : "职责演变" },
+        { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
         { label: "事件：", value: compositeEvent.displayTitle || compositeEvent.subtype || "未载事件" },
         { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
         { label: "摘要：", value: compositeEvent.displaySummary || "未载摘要" },
@@ -4561,7 +4565,7 @@ function updateEvolutionDetails(svg) {
   if (!payload) return;
   const detailHeader = layoutDetailHeader(svg, payload.title, payload.year);
 
-  let cursorY = 536.92 + detailHeader.contentOffsetY;
+  let cursorY = DETAIL_PANEL_FIRST_LABEL_Y + detailHeader.contentOffsetY;
   DETAIL_PANEL_SECTION_KEYS.forEach((key, index) => {
     const label = svg.querySelector(`[data-detail-section-label='${key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${key}']`);
@@ -4814,7 +4818,7 @@ function updateGroupChangeDetails(svg, group) {
   const unusedExtraContent = svg.querySelector("[data-detail-section-content='extra-3']");
   if (unusedExtra) unusedExtra.style.display = "none";
   if (unusedExtraContent) unusedExtraContent.style.display = "none";
-  let cursorY = 536.92 + detailSlots.contentOffsetY;
+  let cursorY = DETAIL_PANEL_FIRST_LABEL_Y + detailSlots.contentOffsetY;
   const summaryLabel = svg.querySelector("[data-detail-section-label='extra-1']");
   const summaryContent = svg.querySelector("[data-detail-section-content='extra-1']");
   if (summaryLabel && summaryContent) {
@@ -4858,7 +4862,7 @@ function updateGroupChangeDetails(svg, group) {
       `[data-detail-section-label='${pendingDetailSectionKey}']`,
     );
     const targetY = position(target)?.y;
-    if (Number.isFinite(targetY)) detailPanelScrollOffset = Math.max(0, targetY - 536.92);
+    if (Number.isFinite(targetY)) detailPanelScrollOffset = Math.max(0, targetY - DETAIL_PANEL_FIRST_LABEL_Y);
     pendingDetailSectionKey = null;
   }
   svg.querySelector(".detail-panel-group")?.__updateDetailScroll?.();
@@ -4886,7 +4890,7 @@ function updateDetails(svg) {
     if (label && content) {
       label.style.display = "";
       content.style.display = "";
-      label.setAttribute("transform", `translate(100.33 ${536.92 + detailHeader.contentOffsetY})`);
+      label.setAttribute("transform", `translate(100.33 ${DETAIL_PANEL_FIRST_LABEL_Y + detailHeader.contentOffsetY})`);
       setText(label, "当前实体：");
       content.setAttribute("transform", `translate(101.29 ${561.92 + detailHeader.contentOffsetY})`);
       wrapText(
@@ -4921,7 +4925,7 @@ function updateDetails(svg) {
     if (label && content) {
       label.style.display = "";
       content.style.display = "";
-      label.setAttribute("transform", `translate(100.33 ${536.92 + contentOffsetY})`);
+      label.setAttribute("transform", `translate(100.33 ${DETAIL_PANEL_FIRST_LABEL_Y + contentOffsetY})`);
       content.setAttribute("transform", `translate(101.29 ${561.92 + contentOffsetY})`);
       setText(label, "当前截面：");
       wrapText(
@@ -4961,7 +4965,7 @@ function updateDetails(svg) {
   });
 
   const detailSlots = layoutDetailHeader(svg, entity.title, selectedRangeLabel());
-  let cursorY = 536.92 + detailSlots.contentOffsetY;
+  let cursorY = DETAIL_PANEL_FIRST_LABEL_Y + detailSlots.contentOffsetY;
   for (const field of INLINE_DETAIL_FIELDS) {
     const label = svg.querySelector(`[data-detail-section-label='${field.key}']`);
     const content = svg.querySelector(`[data-detail-section-content='${field.key}']`);
@@ -5038,7 +5042,7 @@ function updateDetails(svg) {
     );
     const targetY = position(target)?.y;
     if (Number.isFinite(targetY)) {
-      detailPanelScrollOffset = Math.max(0, targetY - 536.92);
+      detailPanelScrollOffset = Math.max(0, targetY - DETAIL_PANEL_FIRST_LABEL_Y);
     }
     pendingDetailSectionKey = null;
   }
