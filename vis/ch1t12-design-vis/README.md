@@ -38,13 +38,16 @@
 
 ## 启动
 
-如需启用演变详情中的“引文核验”，必须在服务进程中单独配置以下三个变量；该功能不会复用数据抽取密钥：
+演变详情中的“引文核验”默认使用 DeepSeek 官方 Chat Completions：
 
 ```bash
 export SONG_EVIDENCE_LLM_API_KEY='...'
-export SONG_EVIDENCE_LLM_BASE_URL='https://example.com/v1/chat/completions'
-export SONG_EVIDENCE_LLM_MODEL='your-model-id'
+# 默认值，只有需要显式覆盖时才设置：
+export SONG_EVIDENCE_LLM_BASE_URL='https://api.deepseek.com/chat/completions'
+export SONG_EVIDENCE_LLM_MODEL='deepseek-chat'
 ```
+
+也可以设置 `SONG_EVIDENCE_LLM_ENV_FILE`，从指定环境文件中只读取 `DEEPSEEK_API_KEY`；服务不会加载文件中的其他配置。直接设置 `DEEPSEEK_API_KEY` 同样可用。前端和 Git 构建产物都不会包含密钥。
 
 核验只把当前时间点 ID 和引文行 ID 发送给本地后端；后端从正式只读库重新读取事件和逐字引文。结果仅表示“本条引文是否支持该结构化事件”，不代表史实确认，也不会写入数据库或浏览器持久存储。
 

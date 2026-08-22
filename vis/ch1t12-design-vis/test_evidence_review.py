@@ -2,8 +2,16 @@ import tempfile
 import unittest
 from pathlib import Path
 import sqlite3
+from unittest.mock import patch
 
-from evidence_review import EvidenceReviewError, load_evidence, validate_model_result
+from evidence_review import (
+    DEEPSEEK_DEFAULT_MODEL,
+    DEEPSEEK_OFFICIAL_URL,
+    EvidenceReviewError,
+    EvidenceReviewService,
+    load_evidence,
+    validate_model_result,
+)
 
 
 class EvidenceReviewTest(unittest.TestCase):
@@ -56,6 +64,33 @@ class EvidenceReviewTest(unittest.TestCase):
             validate_model_result({
                 "verdict": "not_supported", "concise_quotations": ["无关"], "reason": "未记目标事件。",
             }, "无关文字")
+
+    def test_deepseek_official_defaults_and_key_file(self):
+        env_file = self.path.with_suffix(".env")
+        env_file.write_text("OTHER_SECRET=ignored\nDEEPSEEK_API_KEY='test-key'\n", encoding="utf-8")
+        service = EvidenceReviewService(self.path)
+        with patch.dict("os.environ", {"SONG_EVIDENCE_LLM_ENV_FILE": str(env_file)}, clear=True):
+            self.assertEqual(service._config(), (
+                "test-key", DEEPSEEK_OFFICIAL_URL, DEEPSEEK_DEFAULT_MODEL,
+            ))
+        env_file.unlink()
+
+    def test_valid_result_is_reused_from_memory_cache(self):
+        service = EvidenceReviewService(self.path)
+        model_result = {
+            "verdict": "supported",
+            "concise_quotations": ["南宋建炎元年五月，于秘书省复建史馆"],
+            "reason": "引文明示目标事件。",
+        }
+        with (
+            patch.dict("os.environ", {"DEEPSEEK_API_KEY": "test-key"}, clear=True),
+            patch.object(service, "_call_model", return_value=model_result) as call_model,
+        ):
+            first = service.review(2, 3)
+            second = service.review(2, 3)
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        call_model.assert_called_once()
 
 
 if __name__ == "__main__":
