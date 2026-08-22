@@ -4344,9 +4344,6 @@ function evolutionDetailPayload(svg) {
       props.data,
       compositeEvent.evidenceKeys || [],
     );
-    const endpointText = (items) => (items || [])
-      .map((item) => `${item.title || titleOf(item.entityId)}（${item.type || ""}）`)
-      .join("、") || "未完整记录";
     const dictionaryOriginal = dictionaryEntryText(props.data.dictionary?.[subject.title] || {});
     return {
       title: subject.title || compositeEvent.displayTitle || "综合演变事件",
@@ -4356,9 +4353,8 @@ function evolutionDetailPayload(svg) {
       sections: [
         { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
         { label: "事件：", value: compositeEvent.displayTitle || compositeEvent.subtype || "未载事件" },
+        { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
         { label: "摘要：", value: compositeEvent.displaySummary || "未载摘要" },
-        { label: "来源端点：", value: endpointText(compositeEvent.sourceEndpoints) },
-        { label: "目标端点：", value: endpointText(compositeEvent.targetEndpoints) },
         { label: "词条原文：", value: dictionaryOriginal || "当前主体未匹配到辞典原文词条。" },
         {
           label: relationshipOriginal.count > 1
@@ -4366,7 +4362,6 @@ function evolutionDetailPayload(svg) {
             : "关系来源词条原文：",
           value: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
         },
-        { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
         { label: "出处：", value: evidence.source || "当前事件没有独立出处。" },
         { label: "不确定性：", value: compositeEvent.uncertainty || "未标注不确定性。" },
         {
