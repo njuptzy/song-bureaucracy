@@ -49,13 +49,13 @@
           <template v-if="selection">
             <header class="editor-context-heading">
               <div>
-                <span class="editor-kicker">{{ selection.kind === 'timepoint' ? '时间点校订' : '演变关系校订' }}</span>
+                <span class="editor-kicker">{{ editorKicker }}</span>
                 <strong>{{ selectionTitle }}</strong>
               </div>
               <button type="button" class="icon-command" title="清空当前选择" @click="$emit('clear-selection')">×</button>
             </header>
 
-            <template v-if="selection.kind === 'timepoint'">
+            <template v-if="isTimepointSelection">
               <div class="editor-tabs" role="tablist">
                 <button v-for="item in timepointActions" :key="item.value" type="button"
                   :class="{ active: action === item.value }" @click="action = item.value">{{ item.label }}</button>
@@ -107,13 +107,17 @@
                 <button type="button" :class="{ active: action === 'delete' }" @click="action = 'delete'">删除</button>
               </div>
               <div v-if="action === 'update'" class="relation-endpoints">
-                <label class="field field-wide"><span>来源时间点</span><select v-model="relationForm.subject_id">
-                  <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
+                <label class="field field-wide"><span>{{ isStaffRelationSelection ? '所属机构时间点' : '来源时间点' }}</span><select v-model="relationForm.subject_id">
+                  <option v-for="point in compatibleSourceTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
                 </select></label>
-                <button type="button" class="swap-command" title="交换来源和目标方向" @click="swapRelation">⇄ 交换方向</button>
-                <label class="field field-wide"><span>目标时间点</span><select v-model="relationForm.object_id">
-                  <option v-for="point in compatibleTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
+                <button v-if="!isStaffRelationSelection" type="button" class="swap-command" title="交换来源和目标方向" @click="swapRelation">⇄ 交换方向</button>
+                <label class="field field-wide"><span>{{ isStaffRelationSelection ? '官职时间点' : '目标时间点' }}</span><select v-model="relationForm.object_id">
+                  <option v-for="point in compatibleTargetTimepoints" :key="point.id" :value="point.id">{{ point.label }}</option>
                 </select></label>
+                <template v-if="isStaffRelationSelection">
+                  <label class="field"><span>员额</span><input v-model="relationForm.staff_quota" type="text" placeholder="未载则留空" /></label>
+                  <label class="field"><span>人员类型</span><input v-model="relationForm.staff_type" type="text" placeholder="未定则留空" /></label>
+                </template>
               </div>
               <p v-else class="impact-copy">删除关系不会删除端点时间点；关系引用会作为自动联动一并移除。</p>
             </template>
@@ -297,42 +301,79 @@ const timeForm = reactive({
   attr_officer_type: "",
   attr_grade: "",
 });
-const relationForm = reactive({ subject_id: null, object_id: null });
+const relationForm = reactive({
+  subject_id: null,
+  object_id: null,
+  staff_quota: "",
+  staff_type: "",
+});
 const evidence = reactive({ citation: "", quotation: "", note: "" });
 let normalizeTimer = null;
 
 const draftCount = computed(() => props.state?.draft?.group_count || 0);
 const groups = computed(() => props.state?.draft?.groups || []);
 const activeGroupCount = computed(() => props.state?.draft?.group_count || 0);
+const editableTarget = computed(() => props.selection?.item?.editableTarget || null);
+const targetTable = computed(() => editableTarget.value?.table
+  || (props.selection?.kind === "timepoint" ? "Timepoints" : "Relationships"));
+const isTimepointSelection = computed(() => targetTable.value === "Timepoints");
+const isStaffRelationSelection = computed(() => editableTarget.value?.editorType === "staff_relation");
 const originalSelectionId = computed(() => (
-  props.selection?.item?._revision_original_id
+  editableTarget.value?.id
+  ?? props.selection?.item?._revision_original_id
   ?? props.selection?.item?.revisionOriginalId
   ?? props.selection?.id
 ));
 const selectionTitle = computed(() => {
-  if (props.selection?.kind === "timepoint") {
+  if (isTimepointSelection.value) {
     const entity = (props.data?.entities || []).find((item) => item.id === props.selection.entityId);
-    return `${entity?.title || "时间点"} · ${props.selection.item?.rawTime || props.selection.item?.time || "年代未明"}`;
+    const values = editableTarget.value?.values || props.selection?.item || {};
+    return `${entity?.title || props.selection?.item?.subject?.title || "时间点"} · ${values.rawTime || values.raw_time || values.time || props.selection?.item?.eventTime || "年代未明"}`;
   }
-  return props.selection?.item?.label || "前后演变";
+  return props.selection?.item?.displayTitle || props.selection?.item?.label
+    || (isStaffRelationSelection.value ? "编制隶属" : "前后演变");
 });
-const evidenceKey = computed(() => `${props.selection?.kind === "timepoint" ? "T" : "R"}${originalSelectionId.value}`);
+const editorKicker = computed(() => {
+  const editorType = editableTarget.value?.editorType;
+  return {
+    institution_timepoint: "机构时间点校订",
+    staff_timepoint: "官职与职级校订",
+    institution_relation: "机构演变关系校订",
+    staff_relation: "编制隶属校订",
+  }[editorType] || (isTimepointSelection.value ? "时间点校订" : "演变关系校订");
+});
+const evidenceKey = computed(() => `${isTimepointSelection.value ? "T" : "R"}${originalSelectionId.value}`);
 const existingEvidence = computed(() => (props.data?.citations?.[evidenceKey.value] || []).filter((item) => item.id != null));
-const compatibleTimepoints = computed(() => {
+const allEditableTimepoints = computed(() => {
   const points = [];
-  const selectedRelation = props.selection?.item;
-  const selectedSource = selectedRelation?.sourceEntityId;
-  const entityType = (props.data?.entities || []).find((entity) => entity.id === selectedSource)?.type;
   const entityMap = new Map((props.data?.entities || []).map((entity) => [entity.id, entity]));
   for (const [entityId, rows] of Object.entries(props.data?.timepoints || {})) {
     const entity = entityMap.get(Number(entityId)) || entityMap.get(entityId);
-    if (entityType && entity?.type !== entityType) continue;
     for (const row of rows || []) {
       if (String(row.id).includes(":")) continue;
-      points.push({ id: row.id, label: `${entity?.title || entityId} · ${row.time || row.raw_time || "年代未明"}` });
+      points.push({
+        id: row.id,
+        entityType: entity?.type || "",
+        label: `${entity?.title || entityId} · ${row.time || row.raw_time || "年代未明"}`,
+      });
     }
   }
   return points;
+});
+const relationEndpointType = (role) => {
+  if (isStaffRelationSelection.value) return role === "source" ? "机构" : "官职";
+  const endpoints = role === "source"
+    ? props.selection?.item?.sourceEndpoints
+    : props.selection?.item?.targetEndpoints;
+  return endpoints?.[0]?.type || "";
+};
+const compatibleSourceTimepoints = computed(() => {
+  const type = relationEndpointType("source");
+  return allEditableTimepoints.value.filter((point) => !type || point.entityType === type);
+});
+const compatibleTargetTimepoints = computed(() => {
+  const type = relationEndpointType("target");
+  return allEditableTimepoints.value.filter((point) => !type || point.entityType === type);
 });
 const normalizedLabel = computed(() => {
   const item = normalizedTime.value;
@@ -355,20 +396,23 @@ watch(() => props.selection, (selection) => {
   localError.value = "";
   evidenceMode.value = "new";
   const item = selection?.item || {};
-  if (selection?.kind === "timepoint") {
+  const values = item.editableTarget?.values || item;
+  if ((item.editableTarget?.table || (selection?.kind === "timepoint" ? "Timepoints" : "Relationships")) === "Timepoints") {
     Object.assign(timeForm, {
-      time: item.rawTime || item.time || "",
-      event: item.event || "",
-      event_type: item.event_type || item.eventType || "record",
-      lifecycle_effect: item.lifecycle_effect || item.effect || "preserve",
-      attr_category: item.attr_category || "",
-      attr_officer_type: item.attr_officer_type || "",
-      attr_grade: item.attr_grade || "",
+      time: values.rawTime || values.raw_time || values.time || item.eventTime || "",
+      event: values.event || item.displayTitle || "",
+      event_type: values.event_type || values.eventType || item.subtype || "record",
+      lifecycle_effect: values.lifecycle_effect || values.effect || "preserve",
+      attr_category: values.attr_category || "",
+      attr_officer_type: values.attr_officer_type || "",
+      attr_grade: values.attr_grade || "",
     });
     normalizeTime();
-  } else if (selection?.kind === "relation") {
-    relationForm.subject_id = item.sourceTimepointId ?? item.source_timepoint_id;
-    relationForm.object_id = item.targetTimepointId ?? item.target_timepoint_id;
+  } else {
+    relationForm.subject_id = values.subject_id ?? item.sourceTimepointId ?? item.source_timepoint_id;
+    relationForm.object_id = values.object_id ?? item.targetTimepointId ?? item.target_timepoint_id;
+    relationForm.staff_quota = values.staff_quota ?? "";
+    relationForm.staff_type = values.staff_type ?? "";
   }
   if (existingEvidence.value.length) {
     evidenceMode.value = "existing";
@@ -406,7 +450,7 @@ function submitSelection() {
   }
   const id = originalSelectionId.value;
   let operation;
-  if (props.selection.kind === "timepoint") {
+  if (isTimepointSelection.value) {
     if (action.value === "insert") {
       const selected = props.selection.item || {};
       const prevId = selected.prevId ?? selected.prev_id ?? null;
@@ -414,7 +458,7 @@ function submitSelection() {
       operation = {
         action: "insert", target_table: "Timepoints",
         after: {
-          entity_id: props.selection.entityId,
+          entity_id: editableTarget.value?.values?.entity_id ?? props.selection.entityId,
           ...timeForm,
           prev_id: insertPosition.value === "after" ? id : prevId,
           succ_id: insertPosition.value === "after" ? succId : id,
@@ -429,12 +473,16 @@ function submitSelection() {
   } else {
     operation = {
       action: action.value, target_table: "Relationships", target_id: id,
-      ...(action.value === "update" ? { after: { ...relationForm } } : {}),
+      ...(action.value === "update" ? {
+        after: isStaffRelationSelection.value
+          ? { ...relationForm }
+          : { subject_id: relationForm.subject_id, object_id: relationForm.object_id },
+      } : {}),
     };
   }
   operation.evidence = evidencePayload();
   emit("add-operation", {
-    label: `${action.value === "insert" ? "新增" : action.value === "delete" ? "删除" : "修改"}${props.selection.kind === "timepoint" ? "时间点" : "演变关系"}`,
+    label: `${action.value === "insert" ? "新增" : action.value === "delete" ? "删除" : "修改"}${isTimepointSelection.value ? "时间点" : isStaffRelationSelection.value ? "编制关系" : "演变关系"}`,
     reason: reason.value,
     operations: [operation],
   });
@@ -481,6 +529,7 @@ const fieldNames = {
   time: "纪年", event: "事件", event_type: "事件类型", lifecycle_effect: "存废影响",
   attr_category: "属性分类",
   attr_officer_type: "官员类型", attr_grade: "品级", quotation: "逐字引文",
+  staff_quota: "员额", staff_type: "人员类型",
   subject_id: "来源端点", object_id: "目标端点", prev_id: "前序指针",
   succ_id: "后继指针", raw_time: "标准化原文", year_start: "起始年", year_end: "结束年",
 };

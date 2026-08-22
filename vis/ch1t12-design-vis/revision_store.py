@@ -20,7 +20,9 @@ EDITABLE_FIELDS = {
         "time", "event", "event_type", "lifecycle_effect", "attr_category",
         "attr_officer_type", "attr_grade", "quotation",
     },
-    "Relationships": {"subject_id", "object_id", "quotation"},
+    "Relationships": {
+        "subject_id", "object_id", "staff_quota", "staff_type", "quotation",
+    },
 }
 EVENT_TYPES = {
     "establish", "restore", "abolish", "rename", "reorganize", "merge", "split",
@@ -52,6 +54,15 @@ def token(value) -> str:
 
 def is_temp(value) -> bool:
     return isinstance(value, str) and value.startswith("tmp:")
+
+
+def editable_relation_kind(relation_type: str | None) -> str | None:
+    """Return the supported editor family without changing relation semantics."""
+    if relation_type == "编制隶属":
+        return "staff"
+    if relation_type == "前后演变" or str(relation_type or "").startswith("演变·"):
+        return "evolution"
+    return None
 
 
 class RevisionError(RuntimeError):
@@ -565,14 +576,20 @@ class RevisionStore:
             elif action == "update":
                 after = dict(after_input)
                 current = state["Relationships"].get(token(target_id))
-                if not current or current.get("relation_type") != "前后演变":
-                    raise RevisionError("第一阶段只能修改前后演变关系", code="RELATION_NOT_EDITABLE")
+                if not current or editable_relation_kind(current.get("relation_type")) is None:
+                    raise RevisionError(
+                        "当前仅支持修改前后演变、结构演变和编制隶属关系",
+                        code="RELATION_NOT_EDITABLE",
+                    )
                 if evidence and evidence[0]["mode"] == "new" and evidence[0]["quotation"]:
                     after.setdefault("quotation", evidence[0]["quotation"])
             else:
                 current = state["Relationships"].get(token(target_id))
-                if not current or current.get("relation_type") != "前后演变":
-                    raise RevisionError("第一阶段只能删除前后演变关系", code="RELATION_NOT_EDITABLE")
+                if not current or editable_relation_kind(current.get("relation_type")) is None:
+                    raise RevisionError(
+                        "当前仅支持删除前后演变、结构演变和编制隶属关系",
+                        code="RELATION_NOT_EDITABLE",
+                    )
                 for citation_row in list(state["Citations"].values()):
                     if (
                         citation_row.get("target_table") == "Relationships"
@@ -878,8 +895,9 @@ class RevisionStore:
             row = state["Relationships"].get(relation_id)
             if not row:
                 continue
-            if row.get("relation_type") != "前后演变":
-                errors.append(f"关系 {relation_id} 不是前后演变")
+            relation_kind = editable_relation_kind(row.get("relation_type"))
+            if relation_kind is None:
+                errors.append(f"关系 {relation_id} 不属于可校订的演变或编制关系")
                 continue
             source = state["Timepoints"].get(token(row.get("subject_id")))
             target = state["Timepoints"].get(token(row.get("object_id")))
@@ -888,7 +906,12 @@ class RevisionStore:
                 continue
             source_entity = state["Entities"].get(token(source.get("entity_id")))
             target_entity = state["Entities"].get(token(target.get("entity_id")))
-            if source_entity and target_entity and source_entity.get("type") != target_entity.get("type"):
+            if relation_kind == "staff":
+                if not source_entity or source_entity.get("type") != "机构":
+                    errors.append(f"编制关系 {relation_id} 的来源必须是机构")
+                if not target_entity or target_entity.get("type") != "官职":
+                    errors.append(f"编制关系 {relation_id} 的目标必须是官职")
+            elif source_entity and target_entity and source_entity.get("type") != target_entity.get("type"):
                 errors.append(f"关系 {relation_id} 两端实体类型不一致")
         return errors
 

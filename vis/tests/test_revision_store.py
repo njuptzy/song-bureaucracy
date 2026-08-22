@@ -440,6 +440,35 @@ class RevisionStoreTest(unittest.TestCase):
         with sqlite3.connect(self.database) as connection:
             self.assertEqual(connection.execute("SELECT subject_id,object_id FROM Relationships WHERE id=100").fetchone(), (20, 10))
 
+    def test_staff_relation_quota_type_and_endpoints_are_editable(self):
+        database = self.root / "staff.db"
+        make_database(database)
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "INSERT INTO Relationships VALUES (102,10,30,'编制隶属',1,'官','甲官一员')"
+            )
+            connection.commit()
+        store = REVISION.RevisionStore(database, normalize_time)
+        store.add_group({
+            "reason": "复核原文后校正员额与人员类型",
+            "operations": [{
+                "action": "update",
+                "target_table": "Relationships",
+                "target_id": 102,
+                "after": {"staff_quota": 2, "staff_type": "吏"},
+                "evidence": [{
+                    "mode": "new",
+                    "citation": "《测试志》卷五",
+                    "quotation": "甲官二员，属吏额",
+                }],
+            }],
+        })
+        preview = store.preview()
+        self.assertTrue(preview["validation"]["valid"])
+        changed = next(row for row in preview["patch"]["relationships"]["upsert"] if row["id"] == 102)
+        self.assertEqual(changed["staff_quota"], 2)
+        self.assertEqual(changed["staff_type"], "吏")
+
     def test_reason_evidence_and_external_change_are_hard_validation_boundaries(self):
         with self.assertRaisesRegex(REVISION.RevisionError, "理由"):
             self.store.add_group({"operations": [{}]})

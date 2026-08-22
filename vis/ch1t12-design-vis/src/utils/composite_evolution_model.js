@@ -230,6 +230,7 @@ function buildBandEvents(changes, model) {
       quotation: change.quotation || "",
       revisionStatus: change.revisionStatus || "",
       revisionId: change.revisionOriginalId || null,
+      editableTarget: change.editableTarget || null,
       uncertainty: [
         change.uncertain ? "方向未定" : "",
         unclassifiedEvolution ? "具体类型未定" : "",
@@ -270,6 +271,19 @@ function buildBandEvents(changes, model) {
         quotation: edge.quotation || "",
         revisionStatus: edge._revision_status || "",
         revisionId: edge._revision_original_id || null,
+        editableTarget: {
+          table: "Relationships",
+          id: edge._revision_original_id ?? edge.states?.[0]?.id ?? edge.id,
+          editorType: "staff_relation",
+          values: {
+            subject_id: edge.states?.[0]?.subject_timepoint_id ?? null,
+            object_id: edge.states?.[0]?.object_timepoint_id ?? null,
+            relation_type: "编制隶属",
+            staff_quota: edge.staff_quota ?? "",
+            staff_type: edge.staff_type ?? "",
+            quotation: edge.quotation || "",
+          },
+        },
         uncertainty: start == null ? "年代未定" : "",
         sourceChange: null,
       });
@@ -374,20 +388,26 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   const changes = [];
   for (const node of nodesById.values()) {
     for (const point of timepoints.get(node.id) || []) {
+      if ((point.time_type || point.timeType) === "pre_song") continue;
       const category = classifyCompositeChange({
         text: point.event,
         entityType: node.type,
         eventType: point.eventType,
       });
       const id = `T${point.id}`;
+      const institutionIds = node.type === "官职"
+        ? [...new Set((staffEdges || [])
+          .filter((edge) => edge.official === node.id && visibleIds.has(edge.org))
+          .map((edge) => edge.org))]
+        : [node.id];
       addChange(changes, nodesById, {
         id,
         kind: "timepoint",
         category,
         categoryLabel: CHANGE_CATEGORIES[category],
         entityId: node.id,
-        sourceIds: [node.id],
-        targetIds: [],
+        sourceIds: institutionIds.length ? institutionIds : [node.id],
+        targetIds: node.type === "官职" ? [node.id] : [],
         year: point.year,
         eventTime: point.raw_time ?? point.time ?? "",
         eventText: point.event,
@@ -397,6 +417,22 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
         quotation: point.quotation || "",
         revisionStatus: point._revision_status || point.revisionStatus || "",
         revisionOriginalId: point._revision_original_id || point.revisionOriginalId || null,
+        editableTarget: {
+          table: "Timepoints",
+          id: point._revision_original_id ?? point.id,
+          editorType: node.type === "官职" ? "staff_timepoint" : "institution_timepoint",
+          values: {
+            entity_id: point.entityId,
+            time: point.time ?? point.raw_time ?? "",
+            event: point.event || "",
+            event_type: point.event_type || point.eventType || "record",
+            lifecycle_effect: point.lifecycle_effect || point.effect || "preserve",
+            attr_category: point.attr_category || "",
+            attr_officer_type: point.attr_officer_type || "",
+            attr_grade: point.attr_grade || "",
+            quotation: point.quotation || "",
+          },
+        },
       });
     }
   }
@@ -437,6 +473,17 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       uncertain: sourceIds.length !== 1 || targetIds.length !== 1,
       revisionStatus: relation._revision_status || relation.revisionStatus || "",
       revisionOriginalId: relation._revision_original_id || relation.revisionOriginalId || null,
+      editableTarget: {
+        table: "Relationships",
+        id: relation._revision_original_id ?? relation.id,
+        editorType: category === "staff" ? "staff_relation" : "institution_relation",
+        values: {
+          subject_id: relation.sourceMembers[0]?.timepointId ?? null,
+          object_id: relation.targetMembers[0]?.timepointId ?? null,
+          relation_type: relation.relation_type || relation.type || "前后演变",
+          quotation: relation.quotation || "",
+        },
+      },
     });
   }
 

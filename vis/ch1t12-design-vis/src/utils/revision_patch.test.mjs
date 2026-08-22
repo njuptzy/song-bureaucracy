@@ -84,6 +84,58 @@ test("引用补丁按目标键增量合并", () => {
   assert.equal(result.citations.T10[0].citation, "新出处");
 });
 
+test("编制关系补丁同步更新信息带所用的编制边并保留修改前虚影", () => {
+  const staffingBase = {
+    ...base,
+    entities: [...base.entities, { id: 4, title: "甲官", type: "官职" }],
+    timepoints: {
+      ...base.timepoints,
+      4: [{ id: 40, entity_id: 4, time: "1010年", year_start: 1010, year_end: 1010 }],
+    },
+    staffEdges: [{
+      id: 200,
+      org: 1,
+      official: 4,
+      staff_quota: "一员",
+      staff_type: "官",
+      periods: [{ start: 1000, end: 1010 }],
+      states: [{ id: 200, subject_timepoint_id: 10, object_timepoint_id: 40 }],
+    }],
+  };
+  const preview = {
+    patch: {
+      timepoints: { upsert: [], delete: [] },
+      relationships: {
+        upsert: [{
+          id: 200, subject_id: 10, object_id: 40, relation_type: "编制隶属",
+          staff_quota: "二员", staff_type: "吏",
+        }],
+        delete: [],
+      },
+      citations: { upsert: [], delete: [] },
+    },
+    differences: [{
+      action: "update", target_table: "Relationships", target_id: 200, automatic: false,
+      before: {
+        id: 200, subject_id: 10, object_id: 40, relation_type: "编制隶属",
+        staff_quota: "一员", staff_type: "官",
+      },
+      after: {
+        id: 200, subject_id: 10, object_id: 40, relation_type: "编制隶属",
+        staff_quota: "二员", staff_type: "吏",
+      },
+    }],
+  };
+  const result = applyRevisionPreview(staffingBase, preview);
+  const modified = result.staffEdges.find((edge) => edge.id === 200);
+  const before = result.staffEdges.find((edge) => edge.id === "before:200");
+  assert.equal(modified.staff_quota, "二员");
+  assert.equal(modified.staff_type, "吏");
+  assert.equal(modified._revision_status, "modified");
+  assert.equal(before.staff_quota, "一员");
+  assert.equal(before._revision_status, "before");
+});
+
 test("删除虚影仍可显示但不再终止实体生命周期", () => {
   const data = {
     entities: [{ id: 1, title: "甲司", type: "机构" }],

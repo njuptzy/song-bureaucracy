@@ -8,7 +8,9 @@ function normalizedTime(row = {}) {
     "end_month", "end_is_leap_month", "end_day", "month_text", "day_text",
     "end_month_text", "end_day_text", "sort_order", "time_type", "parse_note",
   ];
-  return Object.fromEntries(keys.map((key) => [key, row[key] ?? null]));
+  const normalized = Object.fromEntries(keys.map((key) => [key, row[key] ?? null]));
+  normalized.raw_time = row.raw_time ?? row.time ?? null;
+  return normalized;
 }
 
 function timepointIndex(data) {
@@ -36,10 +38,55 @@ function relationPayload(row, points, revisionStatus = "") {
     target_timepoint_id: row.object_id,
     source_time: normalizedTime(sourcePoint),
     target_time: normalizedTime(targetPoint),
-    display_relation_type: "前后演变（未分类）",
-    classification_status: "unclassified",
+    display_relation_type: row.relation_type === "前后演变"
+      ? "前后演变（未分类）"
+      : row.relation_subtype || row.relation_type,
+    classification_status: row.relation_type === "前后演变" ? "unclassified" : "classified",
     evidence_key: `R${row.id}`,
     _revision_status: revisionStatus || row._revision_status || "",
+  };
+}
+
+function isEvolutionRelation(row = {}) {
+  return row.relation_type === "前后演变" || String(row.relation_type || "").startsWith("演变·");
+}
+
+function relationPeriod(row, points) {
+  const sourcePoint = points.get(idKey(row.subject_id))?.row;
+  const targetPoint = points.get(idKey(row.object_id))?.row;
+  const start = sourcePoint?.year_start ?? targetPoint?.year_start ?? null;
+  const end = targetPoint?.year_end ?? targetPoint?.year_start
+    ?? sourcePoint?.year_end ?? sourcePoint?.year_start ?? null;
+  if (start == null || end == null) return [];
+  return [{
+    start: Math.min(Number(start), Number(end)),
+    end: Math.max(Number(start), Number(end)),
+    time_type: sourcePoint?.time_type || targetPoint?.time_type || "",
+  }];
+}
+
+function staffEdge(row, points, revisionStatus = "") {
+  const sourceEntry = points.get(idKey(row.subject_id));
+  const targetEntry = points.get(idKey(row.object_id));
+  const sourcePoint = sourceEntry?.row;
+  const targetPoint = targetEntry?.row;
+  return {
+    id: row.id,
+    org: sourcePoint?.entity_id ?? sourcePoint?.entityId
+      ?? (sourceEntry?.entityId != null ? Number(sourceEntry.entityId) : null),
+    official: targetPoint?.entity_id ?? targetPoint?.entityId
+      ?? (targetEntry?.entityId != null ? Number(targetEntry.entityId) : null),
+    staff_quota: row.staff_quota ?? "",
+    staff_type: row.staff_type ?? "",
+    quotation: row.quotation || "",
+    periods: relationPeriod(row, points),
+    states: [{
+      id: row.id,
+      subject_timepoint_id: row.subject_id,
+      object_timepoint_id: row.object_id,
+    }],
+    _revision_status: revisionStatus || row._revision_status || "",
+    _revision_original_id: row._revision_original_id,
   };
 }
 
@@ -51,10 +98,10 @@ function evolutionEdge(row, points, revisionStatus = "") {
   return {
     id: row.id,
     source: sourcePoint?.entity_id ?? sourcePoint?.entityId
-      ?? (sourceEntry?.entityId != null ? Number(sourceEntry.entityId) : null),
+      ?? (sourceEntry?.entityId != null ? Number(sourceEntry.entityId) : row.source ?? null),
     target: targetPoint?.entity_id ?? targetPoint?.entityId
-      ?? (targetEntry?.entityId != null ? Number(targetEntry.entityId) : null),
-    periods: [],
+      ?? (targetEntry?.entityId != null ? Number(targetEntry.entityId) : row.target ?? null),
+    periods: relationPeriod(row, points).length ? relationPeriod(row, points) : row.periods || [],
     states: [{
       id: row.id,
       subject_timepoint_id: row.subject_id,
@@ -142,18 +189,53 @@ function applyRelationPatch(data, preview, points) {
   const manual = manualDifferenceMap(preview?.differences, "Relationships");
   const changeRelations = (data.changeRelations || [])
     .filter((row) => !deleted.has(idKey(row.id)) && !upserts.has(idKey(row.id)))
-    .map((row) => ({ ...row }));
+    .map((row) => relationPayload({
+      ...row,
+      subject_id: row.subject_id ?? row.source_timepoint_id,
+      object_id: row.object_id ?? row.target_timepoint_id,
+    }, points, row._revision_status || ""));
   const evolutionEdges = (data.evolutionEdges || [])
     .filter((row) => !deleted.has(idKey(row.id)) && !upserts.has(idKey(row.id)))
-    .map((row) => ({ ...row }));
+    .map((row) => {
+      const state = row.states?.[0] || {};
+      return evolutionEdge({
+        ...row,
+        subject_id: state.subject_timepoint_id ?? row.subject_id,
+        object_id: state.object_timepoint_id ?? row.object_id,
+      }, points, row._revision_status || "");
+    });
+  const staffEdges = (data.staffEdges || [])
+    .filter((row) => {
+      const relationIds = new Set([
+        row.id,
+        ...(row.states || []).map((state) => state.id),
+      ].map(idKey));
+      return ![...relationIds].some((id) => deleted.has(id) || upserts.has(id));
+    })
+    .map((row) => {
+      const periods = (row.states || []).flatMap((state) => relationPeriod({
+        subject_id: state.subject_timepoint_id,
+        object_id: state.object_timepoint_id,
+      }, points));
+      return {
+        ...row,
+        periods: periods.filter((period, index) => periods.findIndex((candidate) => (
+          candidate.start === period.start && candidate.end === period.end
+          && candidate.time_type === period.time_type
+        )) === index),
+      };
+    });
 
   for (const row of upserts.values()) {
-    if (row.relation_type !== "前后演变") continue;
     const difference = manual.get(idKey(row.id));
     const status = difference?.action === "insert" ? "added"
       : difference?.action === "update" ? "modified" : "";
-    changeRelations.push(relationPayload(row, points, status));
-    evolutionEdges.push(evolutionEdge(row, points, status));
+    if (isEvolutionRelation(row)) {
+      changeRelations.push(relationPayload(row, points, status));
+      evolutionEdges.push(evolutionEdge(row, points, status));
+    } else if (row.relation_type === "编制隶属") {
+      staffEdges.push(staffEdge(row, points, status));
+    }
   }
   for (const difference of preview?.differences || []) {
     if (difference.target_table !== "Relationships" || !difference.before) continue;
@@ -163,19 +245,27 @@ function applyRelationPatch(data, preview, points) {
         id: `before:${difference.target_id}`,
         _revision_original_id: difference.target_id,
       };
-      changeRelations.push(relationPayload(before, points, "before"));
-      evolutionEdges.push(evolutionEdge(before, points, "before"));
+      if (isEvolutionRelation(before)) {
+        changeRelations.push(relationPayload(before, points, "before"));
+        evolutionEdges.push(evolutionEdge(before, points, "before"));
+      } else if (before.relation_type === "编制隶属") {
+        staffEdges.push(staffEdge(before, points, "before"));
+      }
     } else if (difference.action === "delete") {
       const before = {
         ...difference.before,
         id: `deleted:${difference.target_id}`,
         _revision_original_id: difference.target_id,
       };
-      changeRelations.push(relationPayload(before, points, "deleted"));
-      evolutionEdges.push(evolutionEdge(before, points, "deleted"));
+      if (isEvolutionRelation(before)) {
+        changeRelations.push(relationPayload(before, points, "deleted"));
+        evolutionEdges.push(evolutionEdge(before, points, "deleted"));
+      } else if (before.relation_type === "编制隶属") {
+        staffEdges.push(staffEdge(before, points, "deleted"));
+      }
     }
   }
-  return { changeRelations, evolutionEdges };
+  return { changeRelations, evolutionEdges, staffEdges };
 }
 
 function citationKey(row) {

@@ -1067,6 +1067,17 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             "citations": citations.get(evidence_key, []) if include_details else [],
             "revisionStatus": relation.get("_revision_status") or "",
             "revisionId": relation.get("_revision_original_id"),
+            "editableTarget": {
+                "table": "Relationships",
+                "id": relation.get("_revision_original_id") or relation.get("id"),
+                "editorType": "institution_relation" if band == "institution" else "staff_relation",
+                "values": {
+                    "subject_id": relation.get("source_timepoint_id"),
+                    "object_id": relation.get("target_timepoint_id"),
+                    "relation_type": relation.get("relation_type") or "前后演变",
+                    "quotation": relation.get("quotation") or "",
+                },
+            },
             "uncertainty": "；".join(filter(None, [
                 "方向未定" if source_id is None or target_id is None else "",
                 "具体类型未定" if unclassified_evolution else "",
@@ -1074,9 +1085,28 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
         })
 
     # Timepoints supply lifecycle, ordinary duty records and official/rank changes.
-    for entity_id in visible:
+    # 机构树的 visible 不包含官职，但编制带必须继续读取当前可见机构所属官职
+    # 的时间点，否则职级和官/吏类型变化永远不会进入事件带。
+    event_entity_ids = set(visible)
+    official_orgs = {}
+    for edge in staff_edges:
+        if edge.get("org") not in visible or edge.get("official") is None:
+            continue
+        official_orgs.setdefault(int(edge["official"]), set()).add(int(edge["org"]))
+    event_entity_ids.update(
+        int(edge["official"])
+        for edge in staff_edges
+        if edge.get("org") in visible and edge.get("official") is not None
+    )
+    for entity_id in event_entity_ids:
         entity = entities.get(entity_id, {})
-        for point in (payload.get("timepoints", {}).get(str(entity_id), []) or []):
+        point_buckets = payload.get("timepoints", {})
+        entity_points = point_buckets.get(entity_id)
+        if entity_points is None:
+            entity_points = point_buckets.get(str(entity_id), [])
+        for point in entity_points or []:
+            if point.get("time_type") == "pre_song":
+                continue
             event = str(point.get("event") or point.get("quotation") or "").strip()
             if not event:
                 continue
@@ -1084,14 +1114,19 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 str(point.get("event_type") or ""), event, entity.get("type", "机构")
             )
             key = f"T{point.get('id')}"
+            is_official = entity.get("type") == "官职"
+            source_endpoints = (
+                [endpoint(org_id) for org_id in sorted(official_orgs.get(entity_id, set()))]
+                if is_official else [endpoint(entity_id)]
+            )
             add_event({
                 "id": key,
                 "band": band,
                 "category": subtype,
                 "subtype": point.get("event_type") or subtype,
                 "subject": endpoint(entity_id),
-                "sourceEndpoints": [endpoint(entity_id)],
-                "targetEndpoints": [],
+                "sourceEndpoints": source_endpoints,
+                "targetEndpoints": [endpoint(entity_id)] if is_official else [],
                 "yearStart": point.get("year_start"),
                 "yearEnd": point.get("year_end") or point.get("year_start"),
                 "eventTime": point.get("raw_time") or point.get("time") or "",
@@ -1101,6 +1136,24 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 "citations": citations.get(key, []) if include_details else [],
                 "revisionStatus": point.get("_revision_status") or "",
                 "revisionId": point.get("_revision_original_id"),
+                "editableTarget": {
+                    "table": "Timepoints",
+                    "id": point.get("_revision_original_id") or point.get("id"),
+                    "editorType": (
+                        "staff_timepoint" if band == "staff" else "institution_timepoint"
+                    ),
+                    "values": {
+                        "entity_id": point.get("entity_id") or entity_id,
+                        "time": point.get("time") or point.get("raw_time") or "",
+                        "event": point.get("event") or "",
+                        "event_type": point.get("event_type") or "record",
+                        "lifecycle_effect": point.get("lifecycle_effect") or "preserve",
+                        "attr_category": point.get("attr_category") or "",
+                        "attr_officer_type": point.get("attr_officer_type") or "",
+                        "attr_grade": point.get("attr_grade") or "",
+                        "quotation": point.get("quotation") or "",
+                    },
+                },
                 "uncertainty": "",
             })
 
@@ -1109,6 +1162,11 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             continue
         official = endpoint(edge["official"])
         key = f"R{edge.get('id')}"
+        states = edge.get("states") or []
+        editable_state = next(
+            (state for state in states if state.get("id") == edge.get("id")),
+            states[0] if states else {},
+        )
         add_event({
             "id": f"S{edge.get('id')}",
             "band": "staff",
@@ -1126,6 +1184,18 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             "citations": citations.get(key, []) if include_details else [],
             "revisionStatus": edge.get("_revision_status") or "",
             "revisionId": edge.get("_revision_original_id"),
+            "editableTarget": {
+                "table": "Relationships",
+                "id": edge.get("_revision_original_id") or editable_state.get("id") or edge.get("id"),
+                "editorType": "staff_relation",
+                "values": {
+                    "subject_id": editable_state.get("subject_timepoint_id"),
+                    "object_id": editable_state.get("object_timepoint_id"),
+                    "relation_type": "编制隶属",
+                    "staff_quota": edge.get("staff_quota") or "",
+                    "staff_type": edge.get("staff_type") or "",
+                },
+            },
             "uncertainty": "年代未定" if not edge.get("periods") else "",
         })
 

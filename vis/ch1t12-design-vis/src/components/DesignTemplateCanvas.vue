@@ -3577,7 +3577,12 @@ function renderDynamicEvolution(svg) {
   }
   const compositeFocusId = selectedId.value ?? focusIds[0] ?? null;
   const compositeYear = Number(selectedRange.value?.[0]);
-  const compositeKey = `${String(compositeFocusId ?? "")}:${Number.isFinite(compositeYear) ? compositeYear : "all"}`;
+  const compositeApiKey = `${String(compositeFocusId ?? "")}:${Number.isFinite(compositeYear) ? compositeYear : "all"}`;
+  // 服务端事件缓存只代表正式库。草稿预览时必须使用 props.data 中已应用
+  // 补丁的本地模型，否则编制/职级修改会被旧接口结果重新覆盖。
+  const compositeKey = props.data?.revisionPreview
+    ? `${compositeApiKey}:draft`
+    : compositeApiKey;
   if (compositeEvolutionModelCacheKey !== compositeKey) {
     compositeEvolutionModelCache = compositeFocusId == null
       ? null
@@ -3600,9 +3605,11 @@ function renderDynamicEvolution(svg) {
     compositeBandScrollOffsets.value = { institution: 0, staff: 0 };
     compositeSelectedEvent.value = null;
   }
-  requestCompositeEvents(compositeFocusId, compositeYear);
-  const compositeApiResult = compositeEventCache.get(compositeKey);
-  const compositeEventsLoading = Boolean(compositeEvolutionModelCache)
+  if (!props.data?.revisionPreview) requestCompositeEvents(compositeFocusId, compositeYear);
+  const compositeApiResult = props.data?.revisionPreview
+    ? null
+    : compositeEventCache.get(compositeApiKey);
+  const compositeEventsLoading = !props.data?.revisionPreview && Boolean(compositeEvolutionModelCache)
     && !compositeApiResult?.bands
     && compositeApiResult?.error !== true;
   const compositeEventsError = compositeApiResult?.error === true;

@@ -148,4 +148,8 @@ test("综合模型输出三条信息带并保留编制端点", () => {
   assert.equal(staff.subject.title, "尚书左丞");
   assert.equal(staff.displaySummary, "二员，官");
   assert.equal(staff.sourceEndpoints[0].title, "吏部");
+  const rankChange = model.bands.staff.find((event) => event.id === "T31");
+  assert.equal(rankChange.sourceEndpoints[0].title, "吏部");
+  assert.equal(rankChange.targetEndpoints[0].title, "尚书左丞");
+  assert.equal(rankChange.editableTarget.editorType, "staff_timepoint");
 });

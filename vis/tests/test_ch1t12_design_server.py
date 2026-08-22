@@ -113,6 +113,9 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 "id": 20, "org": 1, "official": 2,
                 "staff_quota": "二员", "staff_type": "官",
                 "periods": [{"start": 1000, "end": 1100}],
+                "states": [{
+                    "id": 20, "subject_timepoint_id": 10, "object_timepoint_id": 20,
+                }],
             }],
             "changeRelations": [{
                 "id": 30, "relation_type": "职掌·移交",
@@ -129,10 +132,17 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 "target_time": {"year_start": 1050, "year_end": 1050},
                 "evidence_key": "R31", "quotation": "甲机构旧称原文改为丙机构",
             }],
-            "timepoints": {"1": [{
-                "id": 10, "year_start": 1040, "year_end": 1040,
-                "raw_time": "1040年", "event": "始置甲机构",
-            }]},
+            "timepoints": {
+                "1": [{
+                    "id": 10, "entity_id": 1, "year_start": 1040, "year_end": 1040,
+                    "raw_time": "1040年", "event": "始置甲机构",
+                }],
+                2: [{
+                    "id": 20, "entity_id": 2, "year_start": 1055, "year_end": 1055,
+                    "raw_time": "1055年", "event": "改为从七品",
+                    "event_type": "staffing_change", "attr_grade": "从七品",
+                }],
+            },
             "citations": {
                 "R30": [{"citation": "出处", "quotation": "甲机构移交职掌"}],
                 "R31": [{"citation": "出处二", "quotation": "甲机构旧称原文改为丙机构"}],
@@ -151,6 +161,23 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
             self.assertEqual(response.status, 200)
             self.assertEqual(set(result["bands"]), {"institution", "staff", "duty"})
             self.assertEqual(result["bands"]["staff"][0]["displaySummary"], "二员，官")
+            self.assertEqual(result["bands"]["staff"][0]["editableTarget"], {
+                "table": "Relationships",
+                "id": 20,
+                "editorType": "staff_relation",
+                "values": {
+                    "subject_id": 10,
+                    "object_id": 20,
+                    "relation_type": "编制隶属",
+                    "staff_quota": "二员",
+                    "staff_type": "官",
+                },
+            })
+            rank_event = next(event for event in result["bands"]["staff"] if event["id"] == "T20")
+            self.assertEqual(rank_event["editableTarget"]["editorType"], "staff_timepoint")
+            self.assertEqual(rank_event["editableTarget"]["values"]["attr_grade"], "从七品")
+            self.assertEqual(rank_event["sourceEndpoints"][0]["entityId"], 1)
+            self.assertEqual(rank_event["targetEndpoints"][0]["entityId"], 2)
             self.assertEqual(result["bands"]["duty"][0]["evidenceKeys"], ["R30"])
             institution = next(
                 event for event in result["bands"]["institution"] if event["id"] == "R31"
@@ -158,6 +185,12 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
             self.assertEqual(institution["displayTitle"], "甲机构 → 丙机构")
             self.assertEqual(institution["displaySummary"], "前后演变")
             self.assertEqual(institution["uncertainty"], "具体类型未定")
+            self.assertEqual(institution["editableTarget"]["table"], "Relationships")
+            self.assertEqual(institution["editableTarget"]["id"], 31)
+            institution_point = next(
+                event for event in result["bands"]["institution"] if event["id"] == "T10"
+            )
+            self.assertEqual(institution_point["editableTarget"]["id"], 10)
             self.assertNotIn("旧称原文", institution["displaySummary"])
             self.assertEqual(institution["citations"][0]["quotation"], "甲机构旧称原文改为丙机构")
         finally:
