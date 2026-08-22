@@ -1182,6 +1182,12 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
         for point in entity_points or []:
             if point.get("time_type") == "pre_song":
                 continue
+            if (
+                entity.get("type") == "机构"
+                and point.get("event_type") in {"establish", "restore", "abolish"}
+            ):
+                # 机构存废由上方主线的三角形完整表达，信息带不再重复。
+                continue
             event = str(point.get("event") or point.get("quotation") or "").strip()
             if not event:
                 continue

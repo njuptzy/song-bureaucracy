@@ -163,6 +163,23 @@ test("没有显式改隶文字时仍从上下级关系派生只读菱形事件",
   assert.equal(event.editableTarget, null);
 });
 
+test("机构存废事件只留在主线，不重复进入机构结构信息带", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [{ id: 1, title: "甲司", type: "机构" }],
+    timepoints: {
+      1: [
+        point(11, 1, 1000, "始置", { event_type: "establish" }),
+        point(12, 1, 1050, "罢置", { event_type: "abolish" }),
+        point(13, 1, 1060, "复置", { event_type: "restore" }),
+        point(14, 1, 1070, "改置为甲司", { event_type: "record" }),
+      ],
+    },
+  }, 1);
+
+  assert.equal(model.bands.institution.some((event) => ["T11", "T12", "T13"].includes(event.id)), false);
+  assert.ok(model.bands.institution.some((event) => event.id === "T14"));
+});
+
 test("展开状态只影响可见节点，不改变节点相对父子关系", () => {
   const model = buildCompositeEvolutionModel({
     entities: [

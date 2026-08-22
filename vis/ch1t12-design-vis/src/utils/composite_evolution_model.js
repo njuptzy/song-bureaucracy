@@ -458,6 +458,10 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   for (const node of nodesById.values()) {
     for (const point of timepoints.get(node.id) || []) {
       if ((point.time_type || point.timeType) === "pre_song") continue;
+      if (
+        node.type === "机构"
+        && ["establish", "restore", "abolish"].includes(point.eventType)
+      ) continue;
       const hierarchyChange = hierarchyChangeByTimepoint.get(normalizeId(point.id));
       if (hierarchyChange) consumedHierarchyChanges.add(hierarchyChange.key);
       const category = hierarchyChange ? "structure" : classifyCompositeChange({

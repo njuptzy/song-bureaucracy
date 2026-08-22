@@ -153,6 +153,10 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                     "id": 12, "entity_id": 1, "year_start": 1050, "year_end": 1050,
                     "raw_time": "1050年", "event": "改隶丁机构",
                     "event_type": "affiliation_change",
+                }, {
+                    "id": 13, "entity_id": 1, "year_start": 1060, "year_end": 1060,
+                    "raw_time": "1060年", "event": "罢置",
+                    "event_type": "abolish",
                 }],
                 2: [{
                     "id": 20, "entity_id": 2, "year_start": 1055, "year_end": 1055,
@@ -231,6 +235,9 @@ class Ch1t12DesignServerContractTest(unittest.TestCase):
                 [item["entityId"] for item in affiliation["targetEndpoints"]], [4]
             )
             self.assertEqual(affiliation["evidenceKeys"], ["T12", "R40", "R41"])
+            self.assertFalse(any(
+                event["id"] == "T13" for event in result["bands"]["institution"]
+            ))
             self.assertEqual(
                 [item["quotation"] for item in affiliation["citations"]],
                 ["甲机构旧隶丙机构", "甲机构改隶丁机构"],
