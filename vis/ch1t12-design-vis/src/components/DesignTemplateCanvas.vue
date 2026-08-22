@@ -90,6 +90,7 @@ import {
   staffEdgesForEvolutionTimepoint,
 } from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
+import { timepointContextSections } from "../utils/evolution_detail_metadata";
 import { relationshipSourceOriginal } from "../utils/relationship_source";
 import {
   evidenceHighlightMask,
@@ -4708,6 +4709,15 @@ function evolutionDetailPayload(svg) {
     const related = (model?.relations || []).filter((relation) => (
       relation.sourceTimepointId === event.id || relation.targetTimepointId === event.id
     ));
+    const contextSections = timepointContextSections({
+      timeType: event.timeType,
+      timeTypeLabel: EVOLUTION_TIME_TYPE_LABELS[event.timeType] || event.timeType,
+      parseNote: event.parse_note,
+      entryComparisonText: evolutionComparisonText(comparison),
+      relatedRelationshipLabels: related.map((relation) => relation.label),
+    });
+    const citationNotes = [...new Set(citationRows.map((citation) => citation.note).filter(Boolean))]
+      .join("；");
     const citationSections = citationRows.flatMap((citation, index) => {
       const reviewKey = evidenceReviewKey(
         event.id,
@@ -4746,26 +4756,12 @@ function evolutionDetailPayload(svg) {
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
           highlightTerms: dictionaryReviewHighlights,
         },
-        {
-          label: "存废判定：",
-          value: `${EVOLUTION_EFFECT_LABELS[event.effect] || event.effect || "普通记载"}。关系箭头不参与这一判定。`,
-        },
-        {
-          label: "时间精度：",
-          value: `${EVOLUTION_TIME_TYPE_LABELS[event.timeType] || event.timeType || "未标注"}${event.parse_note ? `；${event.parse_note}` : ""}`,
-        },
-        { label: "距入口年份：", value: evolutionComparisonText(comparison) },
-        {
-          label: "相关关系：",
-          value: related.length
-            ? related.map((relation) => relation.label).join("；")
-            : "当前时间点没有结构化演变关系。",
-        },
+        ...contextSections,
         ...(citationSections.length ? citationSections : [
           { label: "原文引文：", value: evidence.quotation },
           { label: "出处：", value: evidence.source },
         ]),
-        { label: "校勘说明：", value: evidence.note },
+        ...(citationNotes ? [{ label: "校勘说明：", value: citationNotes }] : []),
       ],
     };
   }
