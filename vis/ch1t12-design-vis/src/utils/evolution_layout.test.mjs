@@ -20,6 +20,25 @@ const timepoint = (id, year, event = "普通记载", overrides = {}) => ({
 });
 
 describe("layoutEvolutionModel", () => {
+  it("信息带有年代未明记录时可统一预留年份轴右侧离轴区", () => {
+    const model = buildEvolutionModel({
+      entities: [entity(1)],
+      timepoints: { 1: [timepoint(11, 1082, "普通记载")] },
+      changeRelations: [],
+    }, [1]);
+    const ordinary = layoutEvolutionModel(model, { x: 0, y: 0, width: 1000, height: 400 });
+    const reserved = layoutEvolutionModel(
+      model,
+      { x: 0, y: 0, width: 1000, height: 400 },
+      { reserveOffAxis: true },
+    );
+
+    assert.equal(ordinary.offAxisBounds, null);
+    assert.ok(reserved.offAxisBounds.x > reserved.plotBounds.right);
+    assert.equal(reserved.offAxisBounds.right, 1000);
+    assert.ok(reserved.yearScale.range[1] < ordinary.yearScale.range[1]);
+  });
+
   it("明确与模糊区间事件的图标锚在区间中点而不冒充端点", () => {
     assert.equal(evolutionEventVisualYear({
       timeType: "range", yearStart: 1000, yearEnd: 1020, effectiveYear: 1000,

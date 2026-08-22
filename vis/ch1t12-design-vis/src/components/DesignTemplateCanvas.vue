@@ -3627,14 +3627,17 @@ function renderDynamicEvolution(svg) {
   if (windowedModel.laneWindow.page !== evolutionLanePage.value) {
     evolutionLanePage.value = windowedModel.laneWindow.page;
   }
-  const layoutKey = `${modelKey}:${windowedModel.laneWindow.page}`;
+  const compositeHasOffAxis = Object.values(compositeEvolutionModelCache?.bands || {})
+    .flat()
+    .some((event) => event.yearStart == null && event.yearEnd == null);
+  const layoutKey = `${modelKey}:${windowedModel.laneWindow.page}:${compositeHasOffAxis ? "off-axis" : "dated"}`;
   if (!evolutionLayoutCache || evolutionLayoutCacheKey !== layoutKey) {
     evolutionLayoutCache = layoutEvolutionModel(windowedModel, {
       x: 520,
       y: 258,
       width: 1278,
       height: 568,
-    });
+    }, { reserveOffAxis: compositeHasOffAxis });
     evolutionLayoutCacheKey = layoutKey;
   }
   const model = windowedModel;

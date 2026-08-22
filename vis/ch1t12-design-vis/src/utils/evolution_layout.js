@@ -475,11 +475,11 @@ function layoutEvolutionLabels(labelItems, bounds, plotBounds) {
  * original start/end years. `displayX`/`displayY` only add collision avoidance
  * and must never be read back as historical data.
  */
-export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS) {
+export function layoutEvolutionModel(model, requestedBounds = DEFAULT_BOUNDS, options = {}) {
   const bounds = normalizeBounds(requestedBounds);
   const lanesSource = model?.lanes || [];
   const laneCount = lanesSource.length;
-  const hasOffAxis = displayableOffAxis(model) > 0;
+  const hasOffAxis = displayableOffAxis(model) > 0 || options.reserveOffAxis === true;
   const outerGap = Math.min(clamp(bounds.width * 0.012, 4, 16), bounds.width * 0.06);
   const labelWidth = Math.min(
     clamp(bounds.width * 0.095, 56, 126),

@@ -1392,6 +1392,7 @@ export function layoutCompositeBandPlacements(
   timelineOffset,
   timelineWidth,
   xForDatedEvent,
+  offAxisX = 8,
 ) {
   const datedEvents = (events || []).filter(compositeBandEventHasYear);
   const undatedEvents = (events || []).filter((event) => !compositeBandEventHasYear(event));
@@ -1408,8 +1409,8 @@ export function layoutCompositeBandPlacements(
   const undated = undatedEvents.map((event, index) => ({
     event,
     index: dated.length + index,
-    anchorX: 8,
-    x: 8,
+    anchorX: offAxisX,
+    x: offAxisX,
     // 第一行留给年份轴，第二行留给“年代未明”标题。
     rowIndex: index + 2,
     showAxisAnchor: false,
@@ -1736,22 +1737,28 @@ function renderCompositeBands(parent, layout, options) {
     const viewportHeight = Math.max(48, bandHeight - 37);
     const rowHeight = 18;
     const timelineWidth = Math.max(1, trackRight - trackX);
-    const timelineOffset = Math.max(0, trackX - labelX);
-    const viewportWidth = Math.max(1, trackRight - labelX);
+    const offAxisBounds = layout.offAxisBounds;
+    const viewportRight = offAxisBounds?.right ?? trackRight;
+    const viewportWidth = Math.max(1, viewportRight - trackX);
+    const offAxisX = offAxisBounds
+      ? offAxisBounds.x + offAxisBounds.width / 2 - trackX
+      : viewportWidth - 8;
     const undatedCount = events.filter((event) => !compositeBandEventHasYear(event)).length;
     if (undatedCount) {
       appendText(bandGroup, `年代未明 ${undatedCount}项`, {
-        x: labelX,
-        y: bandTop + 54,
+        x: trackX + offAxisX,
+        y: bandTop + 18,
         class: "evolution-composite-offaxis-heading",
+        "text-anchor": "middle",
       });
     }
     const pointPlacements = layoutCompositeBandPlacements(
       events,
       viewportWidth,
-      timelineOffset,
+      0,
       timelineWidth,
       (event) => scale(event.yearStart ?? event.yearEnd) - trackX,
+      offAxisX,
     );
     const placements = layoutCompositeBandLabels(
       pointPlacements,
@@ -1803,7 +1810,7 @@ function renderCompositeBands(parent, layout, options) {
       // 第三信息带中被错误裁掉，只留下计数和滚动条。
       const viewport = svgElement("svg", {
         class: "evolution-composite-band-viewport",
-        x: labelX,
+        x: trackX,
         y: viewportTop - 8,
         width: viewportWidth,
         height: viewportHeight + 8,

@@ -39,13 +39,13 @@ it("未解析具体年份的记录进入离轴列，不占用时间轴最左端"
   assert.equal(compositeBandEventHasYear(events[0]), true);
   assert.equal(compositeBandEventHasYear(events[1]), false);
 
-  const placements = layoutCompositeBandPlacements(events, 600, 120, 480, () => 200);
+  const placements = layoutCompositeBandPlacements(events, 700, 0, 480, () => 200, 610);
   const dated = placements.find((placement) => placement.event.id === "dated");
   const undated = placements.find((placement) => placement.event.id === "undated");
   assert.equal(dated.offAxis, false);
-  assert.equal(dated.x, 320);
+  assert.equal(dated.x, 200);
   assert.equal(undated.offAxis, true);
-  assert.ok(undated.x < 120);
+  assert.ok(undated.x > 480);
   assert.equal(undated.showAxisAnchor, false);
 });
 
