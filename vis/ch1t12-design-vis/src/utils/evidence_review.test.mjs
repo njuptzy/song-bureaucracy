@@ -5,6 +5,7 @@ import {
   evidenceReviewKey,
   evidenceReviewQuotationHighlights,
   evidenceReviewSections,
+  requestCachedEvidenceReview,
 } from "./evidence_review.js";
 
 test("review key separates citation rows on one timepoint", () => {
@@ -71,4 +72,25 @@ test("runtime error is neutral rather than red evidence verdict", () => {
   const sections = evidenceReviewSections({ status: "error" });
   assert.equal(sections[0].reviewTone, "neutral");
   assert.match(sections[1].value, /重试/);
+});
+
+test("persistent review lookup restores a result without invoking model generation", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      verdict: "supported",
+      concise_quotations: ["甲司改隶乙司"],
+      reason: "支持。",
+      timepoint_id: 2,
+      citation_row_id: 3,
+      cached: true,
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+    const restored = await requestCachedEvidenceReview(2, 3);
+    assert.equal(restored.cached, true);
+
+    globalThis.fetch = async () => new Response("{}", { status: 404 });
+    assert.equal(await requestCachedEvidenceReview(2, 4), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

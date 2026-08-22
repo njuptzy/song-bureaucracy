@@ -47,6 +47,7 @@ from evidence_review import (  # noqa: E402
     EvidenceReviewService,
 )
 ENTRIES_DB = REPO_ROOT / "data/database/song_bureaucracy_entries_ch1t12.db"
+EVIDENCE_REVIEWS_DB = ENTRIES_DB.with_name(f"{ENTRIES_DB.stem}.evidence-reviews.db")
 DICT_DB = REPO_ROOT / "data/database/song_bureaucracy_dictionary_ch1t12.db"
 DICT_TABLE = "chapter1t12"
 DIST_DIR = HERE / "dist"
@@ -83,7 +84,10 @@ _evidence_rate_hits = {}
 def get_evidence_review_service() -> EvidenceReviewService:
     global _evidence_review_service
     if _evidence_review_service is None:
-        _evidence_review_service = EvidenceReviewService(ENTRIES_DB)
+        _evidence_review_service = EvidenceReviewService(
+            ENTRIES_DB,
+            cache_db_path=EVIDENCE_REVIEWS_DB,
+        )
     return _evidence_review_service
 
 
@@ -1723,6 +1727,32 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             self._send(200, b'{"ok":true}', "application/json")
             return
+        if path == "/api/evidence-review":
+            timepoint_text = query.get("timepoint_id", [""])[0]
+            citation_text = query.get("citation_row_id", [""])[0]
+            if not re.fullmatch(r"[1-9]\d*", timepoint_text) or not re.fullmatch(r"[1-9]\d*", citation_text):
+                self._send_json(400, {
+                    "error": "时间点或引文标识不合法",
+                    "code": "invalid_request",
+                    "retryable": False,
+                })
+                return
+            try:
+                cached = get_evidence_review_service().cached_review(
+                    int(timepoint_text), int(citation_text)
+                )
+            except EvidenceReviewError as exc:
+                self._send_json(exc.status, exc.payload())
+                return
+            if cached is None:
+                self._send_json(404, {
+                    "error": "尚无持久化核验结果",
+                    "code": "review_not_found",
+                    "retryable": False,
+                })
+                return
+            self._send_json(200, cached)
+            return
 
         # 静态文件：dist/
         if path in ("", "/"):
@@ -1901,7 +1931,8 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
 
 def main():
-    global ENTRIES_DB, DICT_DB, DICT_TABLE, _revision_store
+    global ENTRIES_DB, DICT_DB, DICT_TABLE, EVIDENCE_REVIEWS_DB
+    global _revision_store, _evidence_review_service
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8650)
@@ -1914,18 +1945,33 @@ def main():
         type=Path,
         help="旁路版本库路径；默认由 --entries-db 推导为 *.revisions.db",
     )
+    parser.add_argument(
+        "--evidence-reviews-db",
+        type=Path,
+        help="引文核验旁路缓存库；默认由 --entries-db 推导为 *.evidence-reviews.db",
+    )
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", args.dict_table):
         parser.error("--dict-table 必须是合法的 SQLite 表名")
     ENTRIES_DB = args.entries_db.expanduser().resolve()
     DICT_DB = args.dict_db.expanduser().resolve()
     DICT_TABLE = args.dict_table
+    EVIDENCE_REVIEWS_DB = (
+        args.evidence_reviews_db.expanduser().resolve()
+        if args.evidence_reviews_db
+        else ENTRIES_DB.with_name(f"{ENTRIES_DB.stem}.evidence-reviews.db")
+    )
     revisions_db = args.revisions_db.expanduser().resolve() if args.revisions_db else None
     _revision_store = RevisionStore(ENTRIES_DB, _normalized_time_payload, revisions_db)
+    _evidence_review_service = EvidenceReviewService(
+        ENTRIES_DB,
+        cache_db_path=EVIDENCE_REVIEWS_DB,
+    )
     server = BoundedThreadingHTTPServer((args.host, args.port), Handler)
     print(f"[server] 结构化数据源: {ENTRIES_DB}")
     print(f"[server] 辞典数据源: {DICT_DB}（表 {DICT_TABLE}）")
     print(f"[server] 版本工作区: {_revision_store.revisions_db}")
+    print(f"[server] 引文核验缓存: {EVIDENCE_REVIEWS_DB}")
     print(f"[server] 服务地址: http://{args.host}:{args.port}/", flush=True)
     try:
         server.serve_forever()

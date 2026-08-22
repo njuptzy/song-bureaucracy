@@ -72,3 +72,24 @@ export async function requestEvidenceReview(timepointId, citationRowId, signal) 
   }
   return payload;
 }
+
+export async function requestCachedEvidenceReview(timepointId, citationRowId, signal) {
+  const query = new URLSearchParams({
+    timepoint_id: String(Number(timepointId)),
+    citation_row_id: String(Number(citationRowId)),
+  });
+  const response = await fetch(`/api/evidence-review?${query}`, {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+  if (response.status === 404) return null;
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    // 读取失败不触发模型，也不覆盖当前界面。
+  }
+  if (!response.ok) return null;
+  return payload;
+}

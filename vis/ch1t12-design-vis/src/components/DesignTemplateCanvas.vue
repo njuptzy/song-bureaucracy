@@ -100,6 +100,7 @@ import {
   evidenceReviewKey,
   evidenceReviewQuotationHighlights,
   evidenceReviewSections,
+  requestCachedEvidenceReview,
   requestEvidenceReview,
 } from "../utils/evidence_review";
 import {
@@ -197,6 +198,7 @@ const selectedEvolutionItem = ref(initialState.selectedEvolutionItem
   : null);
 const evidenceReviewAnnouncement = ref("");
 const evidenceReviewResults = new Map();
+const evidenceReviewHydratedKeys = new Set();
 let evidenceReviewGeneration = 0;
 let evidenceReviewController = null;
 watch(
@@ -4448,6 +4450,29 @@ async function runEvidenceReview(timepointId, citationRowId, key, expectedQuotat
   }
 }
 
+async function hydrateEvidenceReview(timepointId, citation, key) {
+  if (evidenceReviewResults.has(key) || evidenceReviewHydratedKeys.has(key)) return;
+  evidenceReviewHydratedKeys.add(key);
+  try {
+    const result = await requestCachedEvidenceReview(timepointId, citation.id);
+    if (!result) return;
+    const currentQuotation = (props.data.citations?.[`T${timepointId}`] || [])
+      .find((item) => Number(item.id) === Number(citation.id))?.quotation;
+    if (
+      currentQuotation !== citation.quotation
+      || Number(result.timepoint_id) !== Number(timepointId)
+      || Number(result.citation_row_id) !== Number(citation.id)
+    ) return;
+    evidenceReviewResults.set(key, { ...result, status: "complete" });
+    const selected = selectedEvolutionItem.value;
+    if (selected?.kind === "timepoint" && Number(selected.id) === Number(timepointId)) {
+      refreshTemplate();
+    }
+  } catch {
+    // 持久化缓存读取失败时保留手动核验按钮，不自动调用模型。
+  }
+}
+
 function memberTimeLabel(member) {
   const row = timepointRowById.get(member?.timepointId) || {};
   return formatStandardTime({
@@ -4668,6 +4693,14 @@ function evolutionDetailPayload(svg) {
       citation.id,
       `${event.event || ""}\u0000${citation.citation || ""}\u0000${citation.quotation}`,
     ));
+    citationRows.forEach((citation) => {
+      const key = evidenceReviewKey(
+        event.id,
+        citation.id,
+        `${event.event || ""}\u0000${citation.citation || ""}\u0000${citation.quotation}`,
+      );
+      void hydrateEvidenceReview(event.id, citation, key);
+    });
     const dictionaryReviewHighlights = citationRows.flatMap((citation) => (
       evidenceReviewQuotationHighlights(reviewStateForCitation(citation), dictionaryOriginal)
     ));
@@ -4711,9 +4744,7 @@ function evolutionDetailPayload(svg) {
         {
           label: "词条原文：",
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
-          highlightTerms: dictionaryReviewHighlights.length
-            ? dictionaryReviewHighlights
-            : evidence.quotations,
+          highlightTerms: dictionaryReviewHighlights,
         },
         {
           label: "存废判定：",

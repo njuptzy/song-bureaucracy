@@ -19,6 +19,7 @@ class EvidenceReviewTest(unittest.TestCase):
         handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         handle.close()
         self.path = Path(handle.name)
+        self.cache_path = self.path.with_suffix(".evidence-reviews.db")
         conn = sqlite3.connect(self.path)
         conn.executescript("""
         CREATE TABLE Entities(id INTEGER PRIMARY KEY, title TEXT);
@@ -34,6 +35,9 @@ class EvidenceReviewTest(unittest.TestCase):
 
     def tearDown(self):
         self.path.unlink(missing_ok=True)
+        self.cache_path.unlink(missing_ok=True)
+        Path(f"{self.cache_path}-wal").unlink(missing_ok=True)
+        Path(f"{self.cache_path}-shm").unlink(missing_ok=True)
 
     def test_loads_only_citation_owned_by_timepoint(self):
         evidence = load_evidence(self.path, 2, 3)
@@ -87,7 +91,7 @@ class EvidenceReviewTest(unittest.TestCase):
     def test_deepseek_official_defaults_and_key_file(self):
         env_file = self.path.with_suffix(".env")
         env_file.write_text("OTHER_SECRET=ignored\nDEEPSEEK_API_KEY='test-key'\n", encoding="utf-8")
-        service = EvidenceReviewService(self.path)
+        service = EvidenceReviewService(self.path, cache_db_path=self.cache_path)
         with patch.dict("os.environ", {"SONG_EVIDENCE_LLM_ENV_FILE": str(env_file)}, clear=True):
             self.assertEqual(service._config(), (
                 "test-key", DEEPSEEK_OFFICIAL_URL, DEEPSEEK_DEFAULT_MODEL,
@@ -95,7 +99,7 @@ class EvidenceReviewTest(unittest.TestCase):
         env_file.unlink()
 
     def test_valid_result_is_reused_from_memory_cache(self):
-        service = EvidenceReviewService(self.path)
+        service = EvidenceReviewService(self.path, cache_db_path=self.cache_path)
         model_result = {
             "verdict": "supported",
             "concise_quotations": ["南宋建炎元年五月，于秘书省复建史馆"],
@@ -110,6 +114,25 @@ class EvidenceReviewTest(unittest.TestCase):
         self.assertFalse(first["cached"])
         self.assertTrue(second["cached"])
         call_model.assert_called_once()
+
+    def test_result_survives_service_restart_and_cached_lookup_never_calls_model(self):
+        model_result = {
+            "verdict": "supported",
+            "concise_quotations": ["南宋建炎元年五月，于秘书省复建史馆"],
+            "reason": "引文明示目标事件。",
+        }
+        first_service = EvidenceReviewService(self.path, cache_db_path=self.cache_path)
+        with (
+            patch.dict("os.environ", {"DEEPSEEK_API_KEY": "test-key"}, clear=True),
+            patch.object(first_service, "_call_model", return_value=model_result),
+        ):
+            first_service.review(2, 3)
+
+        restarted_service = EvidenceReviewService(self.path, cache_db_path=self.cache_path)
+        restored = restarted_service.cached_review(2, 3)
+        self.assertIsNotNone(restored)
+        self.assertTrue(restored["cached"])
+        self.assertEqual(restored["concise_quotations"], model_result["concise_quotations"])
 
 
 if __name__ == "__main__":

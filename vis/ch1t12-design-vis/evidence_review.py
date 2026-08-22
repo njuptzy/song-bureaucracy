@@ -155,14 +155,106 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 class EvidenceReviewService:
-    def __init__(self, db_path: Path, *, cache_size: int = 4096, ttl_seconds: int = 86400):
+    def __init__(
+        self,
+        db_path: Path,
+        *,
+        cache_db_path: Path | None = None,
+        cache_size: int = 4096,
+        ttl_seconds: int = 86400,
+    ):
         self.db_path = db_path
+        self.cache_db_path = cache_db_path or db_path.with_name(
+            f"{db_path.stem}.evidence-reviews.db"
+        )
         self.cache_size = cache_size
         self.ttl_seconds = ttl_seconds
         self._cache = OrderedDict()
         self._lock = threading.Lock()
         self._llm_slots = threading.BoundedSemaphore(4)
         self._flights = {}
+        self._initialize_persistent_cache()
+
+    def _initialize_persistent_cache(self) -> None:
+        self.cache_db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self.cache_db_path, timeout=5)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS EvidenceReviews(
+                    fingerprint TEXT NOT NULL,
+                    review_version TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY(fingerprint, review_version, model)
+                )
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _model_name(self) -> str:
+        return os.getenv("SONG_EVIDENCE_LLM_MODEL", DEEPSEEK_DEFAULT_MODEL).strip()
+
+    def _persistent_result(self, cache_key: tuple[str, str, str]) -> dict | None:
+        conn = sqlite3.connect(self.cache_db_path, timeout=5)
+        try:
+            row = conn.execute(
+                """
+                SELECT result_json FROM EvidenceReviews
+                WHERE fingerprint = ? AND review_version = ? AND model = ?
+                """,
+                cache_key,
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return None
+        try:
+            value = json.loads(row[0])
+        except (TypeError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _store_persistent_result(self, cache_key: tuple[str, str, str], response: dict) -> None:
+        conn = sqlite3.connect(self.cache_db_path, timeout=5)
+        try:
+            conn.execute(
+                """
+                INSERT INTO EvidenceReviews(
+                    fingerprint, review_version, model, result_json, created_at
+                ) VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(fingerprint, review_version, model) DO UPDATE SET
+                    result_json = excluded.result_json,
+                    created_at = excluded.created_at
+                """,
+                (*cache_key, json.dumps(response, ensure_ascii=False), int(time.time())),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _remember_unlocked(self, cache_key: tuple[str, str, str], response: dict) -> None:
+        self._cache[cache_key] = (time.monotonic(), response)
+        self._cache.move_to_end(cache_key)
+        while len(self._cache) > self.cache_size:
+            self._cache.popitem(last=False)
+
+    def cached_review(self, timepoint_id: int, citation_row_id: int) -> dict | None:
+        evidence = load_evidence(self.db_path, timepoint_id, citation_row_id)
+        cache_key = (evidence.fingerprint(), REVIEW_VERSION, self._model_name())
+        with self._lock:
+            cached = self._cache.get(cache_key)
+            if cached:
+                self._cache.move_to_end(cache_key)
+                return dict(cached[1], cached=True)
+        persisted = self._persistent_result(cache_key)
+        if not persisted:
+            return None
+        with self._lock:
+            self._remember_unlocked(cache_key, persisted)
+        return dict(persisted, cached=True)
 
     @staticmethod
     def _key_from_env_file() -> str:
@@ -249,6 +341,10 @@ class EvidenceReviewService:
                 return dict(cached[1], cached=True)
             if cached:
                 self._cache.pop(cache_key, None)
+            persisted = self._persistent_result(cache_key)
+            if persisted:
+                self._remember_unlocked(cache_key, persisted)
+                return dict(persisted, cached=True)
             flight = self._flights.get(cache_key)
             owner = flight is None
             if owner:
@@ -291,11 +387,9 @@ class EvidenceReviewService:
             "review_version": REVIEW_VERSION,
             "cached": False,
         }
+        self._store_persistent_result(cache_key, response)
         with self._lock:
-            self._cache[cache_key] = (time.monotonic(), response)
-            self._cache.move_to_end(cache_key)
-            while len(self._cache) > self.cache_size:
-                self._cache.popitem(last=False)
+            self._remember_unlocked(cache_key, response)
             self._flights.pop(cache_key, None)
             flight.set()
         return dict(response)
