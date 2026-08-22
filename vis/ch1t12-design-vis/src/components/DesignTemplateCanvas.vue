@@ -90,6 +90,10 @@ import {
 } from "../utils/evolution_context";
 import { dictionaryEntryText } from "../utils/dictionary_entry";
 import { relationshipSourceOriginal } from "../utils/relationship_source";
+import {
+  evidenceHighlightMask,
+  evidenceHighlightTerms,
+} from "../utils/evidence_highlight";
 import { relationOriginalSections } from "../utils/relation_detail_sections";
 import {
   compareInstitutionIdsBySourceOrder,
@@ -598,6 +602,68 @@ function wrapText(element, text, charsPerLine = 28, lineHeight = 24, maxLines = 
     tspan.textContent = line;
     element.appendChild(tspan);
   }
+  return lines.length;
+}
+
+function wrapEvidenceText(
+  element,
+  text,
+  highlightTerms = [],
+  charsPerLine = 28,
+  lineHeight = 18,
+) {
+  if (!element) return 0;
+  const content = String(text || "暂无资料").replace(/\r\n?/g, "\n").trim();
+  const terms = evidenceHighlightTerms(highlightTerms);
+  if (!terms.length) return wrapText(element, content, charsPerLine, lineHeight, Infinity);
+  const closingPunctuation = /[，。；：！？、〉》）】」』]/;
+  const lines = [];
+  content.split("\n").forEach((paragraph, paragraphIndex, paragraphs) => {
+    const normalized = paragraph.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      if (paragraphIndex < paragraphs.length - 1) lines.push({ text: "", mask: [] });
+      return;
+    }
+    const paragraphMask = evidenceHighlightMask(normalized, terms);
+    let offset = 0;
+    while (offset < normalized.length) {
+      let end = Math.min(normalized.length, offset + charsPerLine);
+      while (end < normalized.length && closingPunctuation.test(normalized[end])) end += 1;
+      lines.push({
+        text: normalized.slice(offset, end),
+        mask: paragraphMask.slice(offset, end),
+      });
+      offset = end;
+    }
+    if (paragraphIndex < paragraphs.length - 1) lines.push({ text: "", mask: [] });
+  });
+  if (!lines.length) lines.push({ text: "暂无资料", mask: [] });
+  element.replaceChildren();
+  lines.forEach((line, lineIndex) => {
+    const segments = [];
+    Array.from(line.text).forEach((character, characterIndex) => {
+      const highlighted = Boolean(line.mask[characterIndex]);
+      const previous = segments.at(-1);
+      if (previous?.highlighted === highlighted) previous.text += character;
+      else segments.push({ text: character, highlighted });
+    });
+    if (!segments.length) segments.push({ text: "", highlighted: false });
+    segments.forEach((segment, segmentIndex) => {
+      const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      if (segmentIndex === 0) {
+        tspan.setAttribute("x", "0");
+        tspan.setAttribute("y", String(lineIndex * lineHeight));
+      }
+      tspan.textContent = segment.text;
+      if (segment.highlighted) {
+        tspan.classList.add("detail-evidence-highlight");
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = "该片段是当前关系的逐字原文证据";
+        tspan.appendChild(title);
+      }
+      element.appendChild(tspan);
+    });
+  });
   return lines.length;
 }
 
@@ -4304,6 +4370,10 @@ function evidenceLinesForKeys(keys, fallbackQuotation = "") {
   const note = uniqueValues("note").join("；");
   return {
     quotation: quotation || "当前记录没有可展示的逐字引文。",
+    quotations: evidenceHighlightTerms([
+      ...uniqueValues("quotation"),
+      ...(fallbackQuotation ? [fallbackQuotation] : []),
+    ]),
     source: source || "当前记录没有单列出处。",
     note: note || "无补充校勘说明。",
   };
@@ -4402,6 +4472,7 @@ function relationDetailPayload(relation) {
         relationshipText: relationshipOriginal.text,
         dictionaryText: relationEndpointDictionaryOriginal(relation),
         quotation: evidence.quotation,
+        highlightTerms: evidence.quotations,
       }),
       { label: "距入口年份：", value: evolutionComparisonText(comparison) },
       {
@@ -4453,6 +4524,7 @@ function evolutionDetailPayload(svg) {
           relationshipText: relationshipOriginal.text || compositeEvent.quotation || "当前事件没有关系级原文。",
           dictionaryText: dictionaryOriginal || "当前主体未匹配到辞典原文词条。",
           quotation: evidence.quotation || compositeEvent.quotation || "未载引文。",
+          highlightTerms: evidence.quotations,
         }),
         ...(summaryAddsInformation ? [{ label: "摘要：", value: eventSummary }] : []),
         { label: "出处：", value: evidence.source || "当前事件没有独立出处。" },
@@ -4505,6 +4577,7 @@ function evolutionDetailPayload(svg) {
               ? `关系来源词条原文（${relationshipOriginal.count}条）：`
               : "关系来源词条原文：",
             value: relationshipOriginal.text,
+            highlightTerms: evidence.quotations,
           },
           {
             label: "存废判定：",
@@ -4640,7 +4713,9 @@ function updateEvolutionDetails(svg, payloadOverride = null) {
     setText(label, section.label);
     cursorY += 25;
     content.setAttribute("transform", `translate(101.29 ${cursorY})`);
-    const lines = wrapText(content, section.value, 28, 18, Infinity);
+    const lines = section.highlightTerms?.length
+      ? wrapEvidenceText(content, section.value, section.highlightTerms, 28, 18)
+      : wrapText(content, section.value, 28, 18, Infinity);
     cursorY += Math.max(1, lines) * 18 + 13;
   });
   const scrollContent = svg.querySelector(".detail-panel-scroll-content");
