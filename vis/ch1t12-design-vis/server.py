@@ -1019,6 +1019,7 @@ def _composite_event_band(relation_type: str, text: str, subject_type: str) -> t
         "职掌" in combined
         or "职责" in combined
         or "移交" in combined
+        or re.search(r"(?:职事|事务).{0,8}(?:并入|转归|移交)", combined)
         or re.search(r"掌[\u4e00-\u9fff]{1,8}", combined)
     ):
         return "duty", "duty_transfer"
@@ -1029,6 +1030,20 @@ def _composite_event_band(relation_type: str, text: str, subject_type: str) -> t
     if any(token in combined for token in ("改隶", "改置", "始置", "初置", "复置", "罢置", "罢废", "废置")):
         return "institution", "structure_change"
     return "institution", "evolution"
+
+
+def _relation_event_time(relation: dict) -> dict | None:
+    """Use the successor state as the effective time of a directed change."""
+    source_time = relation.get("source_time") or {}
+    target_time = relation.get("target_time") or {}
+    endpoint_times = [time for time in (source_time, target_time) if time]
+    if endpoint_times and all(time.get("time_type") == "pre_song" for time in endpoint_times):
+        return None
+    if target_time and target_time.get("time_type") != "pre_song":
+        return target_time
+    if source_time and source_time.get("time_type") != "pre_song":
+        return source_time
+    return target_time or source_time or {}
 
 
 def build_composite_events_payload(focus_entity_id: int, year: int | None, include_details: bool) -> dict:
@@ -1079,6 +1094,7 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
         if change.get("childTimepointId") is not None
     }
     consumed_hierarchy_changes = set()
+    explicit_institution_timepoint_ids = set()
 
     def endpoint(entity_id):
         entity = entities.get(int(entity_id), {})
@@ -1116,6 +1132,14 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             text,
             (source or {}).get("type", "机构"),
         )
+        relation_time = _relation_event_time(relation)
+        if relation_time is None:
+            continue
+        if band == "institution":
+            explicit_institution_timepoint_ids.update(filter(None, [
+                relation.get("source_timepoint_id"),
+                relation.get("target_timepoint_id"),
+            ]))
         evidence_key = relation.get("evidence_key") or f"R{relation.get('id')}"
         source_endpoints = [source] if source else []
         target_endpoints = [target] if target else []
@@ -1127,9 +1151,9 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
             "subject": source or target,
             "sourceEndpoints": source_endpoints,
             "targetEndpoints": target_endpoints,
-            "yearStart": (relation.get("source_time") or {}).get("year_start"),
-            "yearEnd": (relation.get("target_time") or {}).get("year_end"),
-            "eventTime": ((relation.get("source_time") or {}).get("raw_time") or ""),
+            "yearStart": relation_time.get("year_start"),
+            "yearEnd": relation_time.get("year_end") or relation_time.get("year_start"),
+            "eventTime": relation_time.get("raw_time") or "",
             "displayTitle": (
                 transition_title(source_endpoints, target_endpoints)
                 if band == "institution" else relation_type
@@ -1199,6 +1223,12 @@ def build_composite_events_payload(focus_entity_id: int, year: int | None, inclu
                 band, subtype = _composite_event_band(
                     str(point.get("event_type") or ""), event, entity.get("type", "机构")
                 )
+                if entity.get("type") == "机构" and band == "institution" and subtype == "evolution":
+                    # 普通机构记载不是结构演变，不能仅因主体是机构就放上结构时间轴。
+                    continue
+            if band == "institution" and point.get("id") in explicit_institution_timepoint_ids:
+                # 同一演变已有关系级事件时，关系优先；时间点只作为该关系的端点证据。
+                continue
             key = f"T{point.get('id')}"
             is_official = entity.get("type") == "官职"
             if hierarchy_change is not None:

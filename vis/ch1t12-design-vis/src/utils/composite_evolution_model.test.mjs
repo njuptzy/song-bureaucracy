@@ -180,6 +180,81 @@ test("机构存废事件只留在主线，不重复进入机构结构信息带",
   assert.ok(model.bands.institution.some((event) => event.id === "T14"));
 });
 
+test("普通机构记载不冒充结构演变事件", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [{ id: 1, title: "秘书省", type: "机构" }],
+    timepoints: {
+      1: [
+        point(11, 1, 1135, "仿唐十八学士制扩馆职，总计二十一人"),
+        point(12, 1, 1136, "改置秘书省"),
+      ],
+    },
+  }, 1);
+
+  assert.equal(model.bands.institution.some((event) => event.id === "T11"), false);
+  assert.equal(model.bands.institution.some((event) => event.id === "T12"), true);
+});
+
+test("前后演变点使用目标端点生效时间并排除纯宋前关系", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "旧机构", type: "机构" },
+      { id: 2, title: "新机构", type: "机构" },
+    ],
+    timepoints: {},
+    changeRelations: [
+      {
+        id: 501,
+        relation_type: "前后演变",
+        source: 1,
+        target: 2,
+        source_timepoint_id: 11,
+        target_timepoint_id: 21,
+        source_time: { year_start: 1126, raw_time: "北宋靖康元年", time_type: "exact" },
+        target_time: { year_start: 1129, raw_time: "南宋建炎三年", time_type: "exact" },
+      },
+      {
+        id: 502,
+        relation_type: "前后演变",
+        source: 1,
+        target: 2,
+        source_time: { year_start: 607, raw_time: "隋大业三年", time_type: "pre_song" },
+        target_time: { year_start: 607, raw_time: "隋大业三年", time_type: "pre_song" },
+      },
+    ],
+  }, 1);
+
+  const event = model.bands.institution.find((item) => item.id === "R501");
+  assert.equal(event.yearStart, 1129);
+  assert.equal(event.eventTime, "南宋建炎三年");
+  assert.equal(model.bands.institution.some((item) => item.id === "R502"), false);
+});
+
+test("明确前后演变关系优先于同源端点时间点，机构带不重复生成两个点", () => {
+  const model = buildCompositeEvolutionModel({
+    entities: [
+      { id: 1, title: "国子监", type: "机构" },
+      { id: 2, title: "国子学", type: "机构" },
+    ],
+    timepoints: {
+      1: [point(11, 1, 989, "沿置")],
+      2: [point(21, 2, 989, "改称国子学")],
+    },
+    changeRelations: [{
+      id: 501,
+      relation_type: "前后演变",
+      source: 1,
+      target: 2,
+      source_timepoint_id: 11,
+      target_timepoint_id: 21,
+      source_time: { year_start: 989, raw_time: "北宋端拱二年", time_type: "exact" },
+      target_time: { year_start: 989, raw_time: "北宋端拱二年", time_type: "exact" },
+    }],
+  }, 1);
+
+  assert.deepEqual(model.bands.institution.map((event) => event.id), ["R501"]);
+});
+
 test("展开状态只影响可见节点，不改变节点相对父子关系", () => {
   const model = buildCompositeEvolutionModel({
     entities: [

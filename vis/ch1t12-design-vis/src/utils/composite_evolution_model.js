@@ -65,6 +65,8 @@ function relationEndpoint(member, fallback = {}) {
       "timepointId", "timepoint_id", "object_timepoint_id", "subject_timepoint_id",
     ])),
     year: eventYear(source),
+    rawTime: String(firstDefined(source, ["rawTime", "raw_time", "time"]) || ""),
+    timeType: String(firstDefined(source, ["timeType", "time_type"]) || ""),
     title: String(firstDefined(source, ["title", "entityTitle"]) || ""),
   };
 }
@@ -74,16 +76,23 @@ function relationMembers(relation, role) {
     ? firstDefined(relation, ["sourceMembers", "source_members"])
     : firstDefined(relation, ["targetMembers", "target_members"]);
   if (Array.isArray(explicit)) return explicit.map((member) => relationEndpoint(member));
+  const endpointTime = role === "source"
+    ? firstDefined(relation, ["source_time", "sourceTime"])
+    : firstDefined(relation, ["target_time", "targetTime"]);
   const fallback = role === "source"
     ? {
       entityId: firstDefined(relation, ["source", "sourceEntityId", "source_entity_id"]),
       timepointId: firstDefined(relation, ["sourceTimepointId", "source_timepoint_id"]),
-      year: firstDefined(relation, ["sourceYear", "source_year"]),
+      year: firstDefined(relation, ["sourceYear", "source_year"]) ?? eventYear(endpointTime),
+      rawTime: firstDefined(endpointTime, ["rawTime", "raw_time", "time"]),
+      timeType: firstDefined(endpointTime, ["timeType", "time_type"]),
     }
     : {
       entityId: firstDefined(relation, ["target", "targetEntityId", "target_entity_id"]),
       timepointId: firstDefined(relation, ["targetTimepointId", "target_timepoint_id"]),
-      year: firstDefined(relation, ["targetYear", "target_year"]),
+      year: firstDefined(relation, ["targetYear", "target_year"]) ?? eventYear(endpointTime),
+      rawTime: firstDefined(endpointTime, ["rawTime", "raw_time", "time"]),
+      timeType: firstDefined(endpointTime, ["timeType", "time_type"]),
     };
   const endpoint = relationEndpoint(fallback);
   return endpoint.entityId == null && endpoint.timepointId == null ? [] : [endpoint];
@@ -106,7 +115,7 @@ function classifyCompositeChange({ text = "", relationType: type = "", entityTyp
     || STRUCTURE_PATTERN.test(text)
     || ["establish", "restore", "abolish", "affiliation_change"].includes(kind)
   ) return "structure";
-  return entityType === "官职" ? "staff" : "structure";
+  return entityType === "官职" ? "staff" : "record";
 }
 
 function normalizeTimepoints(data) {
@@ -455,6 +464,22 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
   );
 
   const changes = [];
+  const relationEntries = normalizeChangeRelations(data);
+  const explicitInstitutionTimepointIds = new Set();
+  for (const relation of relationEntries) {
+    const relationEntityType = relation.sourceMembers.some(
+      (member) => entityMap.get(member.entityId)?.type === "官职",
+    ) ? "官职" : "机构";
+    const category = classifyCompositeChange({
+      text: relation.text,
+      relationType: relation.type,
+      entityType: relationEntityType,
+    });
+    if (!["name", "structure"].includes(category)) continue;
+    [...relation.sourceMembers, ...relation.targetMembers].forEach((member) => {
+      if (member.timepointId != null) explicitInstitutionTimepointIds.add(member.timepointId);
+    });
+  }
   for (const node of nodesById.values()) {
     for (const point of timepoints.get(node.id) || []) {
       if ((point.time_type || point.timeType) === "pre_song") continue;
@@ -467,6 +492,9 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       const category = hierarchyChange ? "structure" : classifyCompositeChange({
         text: point.event, entityType: node.type, eventType: point.eventType,
       });
+      if (category === "record") continue;
+      if (["name", "structure"].includes(category)
+        && explicitInstitutionTimepointIds.has(normalizeId(point.id))) continue;
       const id = `T${point.id}`;
       const institutionIds = node.type === "官职"
         ? [...new Set((staffEdges || [])
@@ -550,16 +578,20 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
     });
   }
 
-  const relationEntries = normalizeChangeRelations(data);
   for (const relation of relationEntries) {
     // 关系端点不能因为不在当前树的展开范围内而被裁掉；渲染层可以
     // 将外部端点作为关系上下文显示，但不得替关系擅自选择一个去向。
     const sourceIds = relation.sourceMembers.map((member) => member.entityId).filter((id) => id != null);
     const targetIds = relation.targetMembers.map((member) => member.entityId).filter((id) => id != null);
     if (!sourceIds.length && !targetIds.length) continue;
-    const endpointYears = [...relation.sourceMembers, ...relation.targetMembers]
-      .map((member) => member.year)
-      .filter((year) => year != null);
+    const endpointMembers = [...relation.sourceMembers, ...relation.targetMembers];
+    if (endpointMembers.length && endpointMembers.every((member) => member.timeType === "pre_song")) {
+      continue;
+    }
+    const targetMember = relation.targetMembers.find((member) => member.timeType !== "pre_song")
+      || relation.sourceMembers.find((member) => member.timeType !== "pre_song")
+      || relation.targetMembers[0]
+      || relation.sourceMembers[0];
     const category = classifyCompositeChange({
       text: relation.text,
       relationType: relation.type,
@@ -576,8 +608,8 @@ export function buildCompositeEvolutionModel(data, focusEntityId, options = {}) 
       targetIds,
       sourcePoints: relation.sourceMembers,
       targetPoints: relation.targetMembers,
-      year: endpointYears.length ? Math.min(...endpointYears) : null,
-      eventTime: relation.eventTime || "",
+      year: targetMember?.year ?? null,
+      eventTime: targetMember?.rawTime || relation.eventTime || "",
       eventText: relation.text || relation.type,
       relationType: relation.type,
       iconType: category === "structure" ? "affiliation_change" : "record",
