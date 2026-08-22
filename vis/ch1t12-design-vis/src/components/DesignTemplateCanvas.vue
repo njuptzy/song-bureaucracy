@@ -4351,7 +4351,7 @@ function evolutionDetailPayload(svg) {
         compositeEvent.yearStart == null ? "年代未明" : `${compositeEvent.yearStart}年`
       ),
       sections: [
-        { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员 / 吏员 / 编制演变" : "职责演变" },
+        { label: "信息带：", value: compositeEvent.band === "institution" ? "机构结构演变" : compositeEvent.band === "staff" ? "官员、吏员、员额和职级演变" : "职责演变" },
         { label: "事件：", value: compositeEvent.displayTitle || compositeEvent.subtype || "未载事件" },
         { label: "原文引文：", value: evidence.quotation || compositeEvent.quotation || "未载引文。" },
         { label: "摘要：", value: compositeEvent.displaySummary || "未载摘要" },
