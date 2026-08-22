@@ -80,3 +80,13 @@ export function compositeEventSelection(event) {
     item: event,
   };
 }
+
+export function evolutionDetailSelection(selectedEvolutionItem, compositeSelectedEvent) {
+  if (selectedEvolutionItem) {
+    return { selectedEvolutionItem, compositeSelectedEvent: null };
+  }
+  return {
+    selectedEvolutionItem: null,
+    compositeSelectedEvent: compositeSelectedEvent || null,
+  };
+}

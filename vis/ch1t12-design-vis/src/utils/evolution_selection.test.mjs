@@ -3,11 +3,25 @@ import test from "node:test";
 
 import {
   compositeEventSelection,
+  evolutionDetailSelection,
   evolutionComparisonAfterAdd,
   evolutionSelectionAnchors,
   evolutionSelectionFocus,
   timelineSelectionForEvolutionItem,
 } from "./evolution_selection.js";
+
+test("机构主线选择优先于残留的信息带选择", () => {
+  const main = { kind: "timepoint", id: 11, item: { id: 11 } };
+  const composite = { id: "R5919" };
+  assert.deepEqual(evolutionDetailSelection(main, composite), {
+    selectedEvolutionItem: main,
+    compositeSelectedEvent: null,
+  });
+  assert.deepEqual(evolutionDetailSelection(null, composite), {
+    selectedEvolutionItem: null,
+    compositeSelectedEvent: composite,
+  });
+});
 
 test("综合演变事件选择向外传递关系证据键和主体", () => {
   const event = {

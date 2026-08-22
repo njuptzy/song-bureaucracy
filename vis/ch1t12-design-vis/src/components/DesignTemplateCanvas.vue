@@ -78,6 +78,7 @@ import { windowEvolutionModel } from "../utils/evolution_window";
 import {
   compositeEventSelection,
   evolutionComparisonAfterAdd,
+  evolutionDetailSelection,
 } from "../utils/evolution_selection";
 import {
   evolutionSelectionComparison,
@@ -3750,6 +3751,7 @@ function renderDynamicEvolution(svg) {
       refreshTemplate();
     },
     onSelectEvent(event) {
+      compositeSelectedEvent.value = null;
       const current = selectedEvolutionItem.value;
       if (current?.kind === "timepoint" && current.id === event.id) {
         // 再次点击已选中的事件 = 取消选择；入口年份线保持不动。
@@ -3770,6 +3772,7 @@ function renderDynamicEvolution(svg) {
       refreshTemplate();
     },
     onSelectRelation(relation) {
+      compositeSelectedEvent.value = null;
       const current = selectedEvolutionItem.value;
       if (current?.kind === "relation" && current.id === relation.id) {
         // 再次点击已选中的关系 = 取消选择；入口年份线保持不动。
@@ -4412,8 +4415,12 @@ function relationDetailPayload(relation) {
 
 function evolutionDetailPayload(svg) {
   const model = svg.__evolutionModel;
-  const selected = selectedEvolutionItem.value;
-  const compositeEvent = compositeSelectedEvent.value;
+  const detailSelection = evolutionDetailSelection(
+    selectedEvolutionItem.value,
+    compositeSelectedEvent.value,
+  );
+  const selected = detailSelection.selectedEvolutionItem;
+  const compositeEvent = detailSelection.compositeSelectedEvent;
   if (compositeEvent) {
     const subject = compositeEvent.subject || {};
     const eventTitle = compositeEvent.displayTitle || compositeEvent.subtype || "未载事件";
