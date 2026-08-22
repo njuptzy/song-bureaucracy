@@ -1382,8 +1382,10 @@ function compositeBoxesOverlap(first, second, gap = 3) {
 }
 
 export function compositeBandLabelWidth(text) {
+  // 与 .evolution-composite-event-label 的 10px 实际字号一致；额外 6px
+  // 只用于两侧描边余量。不能再用 12px 字号估算，否则长一字就会误判溢出。
   return Array.from(String(text || "")).reduce((width, character) => (
-    width + (/^[\x00-\x7F]$/.test(character) ? 6 : 12)
+    width + (/^[\x00-\x7F]$/.test(character) ? 6 : 10)
   ), 6);
 }
 

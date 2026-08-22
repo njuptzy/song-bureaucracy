@@ -138,8 +138,8 @@ it("同一年纵向相邻圆点可按18像素行距连续接标签", () => {
 });
 
 it("信息带按汉字实际宽度和描边余量计算标签碰撞框", () => {
-  assert.equal(compositeBandLabelWidth("国子监录编制"), 78);
-  assert.equal(compositeBandLabelWidth("A1编制"), 42);
+  assert.equal(compositeBandLabelWidth("国子监录编制"), 66);
+  assert.equal(compositeBandLabelWidth("A1编制"), 38);
 });
 
 it("标签按可见圆点轮廓和安全间距避让，不被透明点击热区误挡", () => {
@@ -177,11 +177,11 @@ it("标签与右侧圆点视觉上仍有间距时不会被点击热区提前隐�
 
   assert.ok(placement.label);
   assert.equal(placement.label.textAnchor, "start");
-  assert.equal(placement.label.box.right, 174);
+  assert.equal(placement.label.box.right, 162);
 });
 
 it("各种标题只要真实几何空间足够就不会被重复留白误判", () => {
-  for (const title of ["正字编制", "著作郎编制", "秘书省少监编制"]) {
+  for (const title of ["正字编制", "著作郎编制", "著作佐郎编制", "秘书省少监编制"]) {
     const labelWidth = Math.max(40, compositeBandLabelWidth(title));
     const nextMarkerX = 100 + 9 + labelWidth + 7;
     const placements = [
