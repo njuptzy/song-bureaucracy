@@ -4609,10 +4609,13 @@ function evolutionDetailPayload(svg) {
           label: "事件类型：",
           value: EVOLUTION_EVENT_TYPE_LABELS[event.eventType] || event.eventType || "一般记载",
         },
+        { label: "Citation／出处：", value: evidence.source },
         {
-          label: "词条原文：",
+          label: "词条原文（证据高亮）：",
           value: dictionaryOriginal || "当前实体未匹配到辞典原文词条。",
+          highlightTerms: evidence.quotations,
         },
+        { label: "原文证据：", value: evidence.quotation },
         {
           label: "存废判定：",
           value: `${EVOLUTION_EFFECT_LABELS[event.effect] || event.effect || "普通记载"}。关系箭头不参与这一判定。`,
@@ -4628,8 +4631,6 @@ function evolutionDetailPayload(svg) {
             ? related.map((relation) => relation.label).join("；")
             : "当前时间点没有结构化演变关系。",
         },
-        { label: "原文引文：", value: evidence.quotation },
-        { label: "出处：", value: evidence.source },
         { label: "校勘说明：", value: evidence.note },
       ],
     };
