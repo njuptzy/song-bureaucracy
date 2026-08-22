@@ -535,7 +535,9 @@ export const COMPOSITE_SCOPE_LAYOUT = Object.freeze({
 function renderCompositeScope(parent, options) {
   const model = options.compositeModel;
   if (!model?.root) return;
-  const group = svgElement("g", { class: "evolution-composite-scope" });
+  const group = svgElement("g", {
+    class: "evolution-composite-scope evolution-composite-browser-panel",
+  });
   const x = 82;
   const right = 475;
   const top = 160;

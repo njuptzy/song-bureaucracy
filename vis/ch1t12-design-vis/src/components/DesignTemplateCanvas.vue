@@ -5721,7 +5721,6 @@ function bindTemplateControls(svg) {
       const text = normalizeText(this);
       if (text === "层级视图" || text === "编制视图") {
         const targetMode = text === "层级视图" ? "hierarchy" : "composition";
-        this.classList.add("header-view-mode-label", `${targetMode}-view-mode-label`);
         const viewLabelCenter = targetMode === "hierarchy"
           ? HIERARCHY_HEADER_LAYOUT.hierarchyViewLabelX
           : HIERARCHY_HEADER_LAYOUT.compositionViewLabelX;
@@ -5731,7 +5730,7 @@ function bindTemplateControls(svg) {
           && viewMode.value === "evolution";
         const returnLabel = returningFromEvolution ? "返回层级" : "层级视图";
         // 编制视图只能从层级机构词条的右下角入口进入；顶栏只承担返回层级。
-        const canActivate = !props.editMode && !viewModeLocked.value && targetMode === "hierarchy"
+        const canActivate = !viewModeLocked.value && targetMode === "hierarchy"
           && (viewMode.value === "composition"
             || viewMode.value === "evolution");
         const activateView = (event) => {
@@ -5761,7 +5760,7 @@ function bindTemplateControls(svg) {
         const bounds = elementBounds(this);
         if (canActivate && bounds && this.parentNode) {
           const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          hitArea.classList.add("view-mode-hit-area", `${targetMode}-view-mode-hit-area`);
+          hitArea.classList.add("view-mode-hit-area");
           hitArea.setAttribute("x", String(bounds.x - 12));
           hitArea.setAttribute("y", String(bounds.y - 8));
           hitArea.setAttribute("width", String(bounds.width + 24));
@@ -6860,10 +6859,7 @@ onUnmounted(() => {
   display: none;
 }
 
-.design-template.edit-mode .svg-mount :deep(.hierarchy-view-mode-label),
-.design-template.edit-mode .svg-mount :deep(.composition-view-mode-label),
-.design-template.edit-mode .svg-mount :deep(.hierarchy-view-mode-hit-area),
-.design-template.edit-mode .svg-mount :deep(.composition-view-mode-hit-area) {
+.design-template.edit-mode .svg-mount :deep(.evolution-composite-browser-panel) {
   display: none;
   pointer-events: none;
 }
